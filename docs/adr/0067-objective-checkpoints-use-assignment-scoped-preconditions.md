@@ -43,7 +43,7 @@ The production adapters are actor-scoped closures. Resolving a worker reference 
 its canonical assignment commitment and current coordination permission. Current
 versions inspect the original resource root and use the earlier of its cutoff and
 the assignment cutoff. Accepted retries do not require the source or fence provider
-to be available again.
+to be available again. Composed ownership transactions lock the resource root before the session row, matching session mutations and avoiding a root/session lock inversion.
 
 Session operation keys are scoped by session, whereas objective command receipts are
 scoped by objective. The adapter derives its objective-side key from the source

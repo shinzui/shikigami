@@ -47,7 +47,8 @@ import Shikigami.Execution.Store qualified as Execution
 import Shikigami.Execution.Transcript (executionIdFor)
 import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Prelude hiding ((.=))
-import Shikigami.WorkerSession.Checkpoint (CheckpointProvider (..), ObjectiveVersion (..))
+import Shikigami.WorkerSession.Checkpoint (CheckpointIntent, CheckpointProvider (..), ObjectiveVersion (..))
+import Shikigami.WorkerSession.CheckpointAuthority (RejectionAuthority)
 import Shikigami.WorkerSession.Identity
 import Shikigami.WorkerSession.Input
 import Shikigami.WorkerSession.Store qualified as Store
@@ -58,7 +59,8 @@ data SessionRuntime = SessionRuntime
     agents :: ![AgentDecl],
     directory :: !DirectoryHandle,
     authorize :: !(AgentIdentity -> IO (Either Text ())),
-    checkpoints :: !(Maybe CheckpointProvider)
+    checkpoints :: !(Maybe (AgentIdentity -> CheckpointProvider)),
+    rejections :: !(Maybe (AgentIdentity -> CheckpointIntent -> IO (Either Text RejectionAuthority)))
   }
   deriving stock (Generic)
 
@@ -228,7 +230,8 @@ selectAssignment runtime session = do
 currentAssignmentAuthority :: SessionRuntime -> SessionAdmission -> SessionState -> Instruction -> IO (Either Text ())
 currentAssignmentAuthority runtime admission state instruction = case runtime.checkpoints of
   Nothing -> pure (Left "objective provider unavailable")
-  Just provider -> do
+  Just providers -> do
+    let provider = providers admission.context.identity
     now <- getCurrentTime
     authority <- runtime.authorize admission.context.identity
     snapshot <- provider.current admission.objective

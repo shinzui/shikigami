@@ -22,7 +22,7 @@ import Shikigami.WorkerSession.Bindings qualified as Bindings
 
 
 workerSessionLifecycleEventTypes :: NonEmpty EventType
-workerSessionLifecycleEventTypes = EventType "WorkerSessionAdmitted" :| [EventType "SessionMessageAccepted", EventType "SessionAssignmentStarted", EventType "SessionAssignmentParked", EventType "SessionAssignmentResumed", EventType "SessionResultRecorded", EventType "SessionBecameUnresolved", EventType "SessionAssignmentReconciled", EventType "SessionTransferRequested", EventType "SessionTransferReconciled", EventType "SessionOwnerEstablished", EventType "SessionEventsSubscribed", EventType "WorkerSessionObserved", EventType "SessionCheckpointPrepared", EventType "SessionEventsConsumed", EventType "WorkerSessionFailed", EventType "WorkerSessionCancelled"]
+workerSessionLifecycleEventTypes = EventType "WorkerSessionAdmitted" :| [EventType "SessionMessageAccepted", EventType "SessionAssignmentStarted", EventType "SessionAssignmentParked", EventType "SessionAssignmentResumed", EventType "SessionResultRecorded", EventType "SessionBecameUnresolved", EventType "SessionAssignmentReconciled", EventType "SessionTransferRequested", EventType "SessionTransferReconciled", EventType "SessionOwnerEstablished", EventType "SessionEventsSubscribed", EventType "WorkerSessionObserved", EventType "SessionCheckpointPrepared", EventType "SessionEventsConsumed", EventType "WorkerSessionFailed", EventType "WorkerSessionCancelled", EventType "SessionCheckpointSuperseded"]
 
 workerSessionLifecycleCodec :: Codec WorkerSessionLifecycleEvent
 workerSessionLifecycleCodec =
@@ -46,6 +46,7 @@ workerSessionLifecycleCodec =
         SessionEventsConsumed{} -> EventType "SessionEventsConsumed"
         WorkerSessionFailed{} -> EventType "WorkerSessionFailed"
         WorkerSessionCancelled{} -> EventType "WorkerSessionCancelled"
+        SessionCheckpointSuperseded{} -> EventType "SessionCheckpointSuperseded"
     , schemaVersion = 1
     , encode = encodeWorkerSessionLifecycleEvent
     , decode = parseWorkerSessionLifecycleEvent
@@ -172,6 +173,13 @@ encodeWorkerSessionLifecycleEvent = \case
       , "expected" .= payload.expected
       , "revision" .= payload.revision
       ]
+  SessionCheckpointSuperseded payload ->
+    object
+      [ "kind" .= ("SessionCheckpointSuperseded" :: Text)
+      , "sessionId" .= nominalToRepresentation Bindings.workerSessionIdentityBinding payload.sessionId
+      , "expected" .= payload.expected
+      , "revision" .= payload.revision
+      ]
 
 parseWorkerSessionLifecycleEvent :: EventType -> Value -> Either Text WorkerSessionLifecycleEvent
 parseWorkerSessionLifecycleEvent (EventType tag) = mapLeftText . parseEither (withObject "WorkerSessionLifecycleEvent" go)
@@ -292,6 +300,13 @@ parseWorkerSessionLifecycleEvent (EventType tag) = mapLeftText . parseEither (wi
         "WorkerSessionCancelled" ->
           WorkerSessionCancelled
             <$> ( WorkerSessionCancelledData
+                    <$> (nominalFromRepresentation Bindings.workerSessionIdentityBinding <$> o .: "sessionId")
+                    <*> o .: "expected"
+                    <*> o .: "revision"
+                )
+        "SessionCheckpointSuperseded" ->
+          SessionCheckpointSuperseded
+            <$> ( SessionCheckpointSupersededData
                     <$> (nominalFromRepresentation Bindings.workerSessionIdentityBinding <$> o .: "sessionId")
                     <*> o .: "expected"
                     <*> o .: "revision"

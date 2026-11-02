@@ -54,10 +54,10 @@ import Shikigami.Execution.Transcript (PayloadRef (..))
 import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.StateRevision
-import Shikigami.WorkerSession.Checkpoint (CheckpointProvider (..), ObjectiveVersion (..))
+import Shikigami.WorkerSession.Checkpoint (CheckpointProvider (..), CheckpointRevalidation, ObjectiveVersion (..))
 import Shikigami.WorkerSession.Handoff (TransferOutcome, TransferServices (..), requestHandoff, resumeHandoff)
 import Shikigami.WorkerSession.Input
-import Shikigami.WorkerSession.Integration (IntegrationOutcome, integrateEvents)
+import Shikigami.WorkerSession.Integration (IntegrationOutcome, integrateEvents, reconcileEvents)
 import Shikigami.WorkerSession.Position
 import Shikigami.WorkerSession.Store qualified as Store
 import Shikigami.WorkerSession.Transfer (TransferIntent, WorkspaceRef)
@@ -151,6 +151,7 @@ data WorkerCommand
   | TransferWorker {sessionId :: !WorkerSessionId, expectedRevision :: !(StateRevision "worker-session"), epoch :: !(StateRevision "worker-owner"), workspace :: !WorkspaceRef, target :: !AgentName}
   | ReconcileWorker {sessionId :: !WorkerSessionId}
   | IntegrateWorkerEvents {sessionId :: !WorkerSessionId}
+  | ReconcileWorkerCheckpoint {sessionId :: !WorkerSessionId, expectedRevision :: !(StateRevision "worker-session"), epoch :: !(StateRevision "worker-owner"), previousOperation :: !OperationId, revalidation :: !CheckpointRevalidation}
   deriving stock (Eq, Generic)
 
 instance ToJSON WorkerCommand where
@@ -178,6 +179,7 @@ data WorkerReply
   | TransferAccepted !TransferIntent
   | TransferObserved !TransferOutcome
   | EventsIntegratedReply !IntegrationOutcome
+  | CheckpointReconciledReply !OperationId
   deriving stock (Eq, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
@@ -279,6 +281,7 @@ executeAdmittedCommand host authorizer (CoordinationGrant scope) operation comma
       TransferWorker {expectedRevision, epoch, workspace, target} -> fmap TransferAccepted <$> requestHandoff host.services session expectedRevision epoch operation workspace target
       ReconcileWorker {} -> fmap TransferObserved <$> resumeHandoff host.services session
       IntegrateWorkerEvents {} -> fmap EventsIntegratedReply <$> integrateEvents host.services.sessions session operation
+      ReconcileWorkerCheckpoint {expectedRevision, epoch, previousOperation, revalidation} -> fmap CheckpointReconciledReply <$> reconcileEvents host.services.sessions session expectedRevision epoch operation previousOperation revalidation
       FindWorker {} -> pure (Left SessionCommandRefused)
     send access session expected epoch instruction = do
       Store.readMessageAcceptance access operation >>= \case
@@ -308,7 +311,8 @@ executeAdmittedCommand host authorizer (CoordinationGrant scope) operation comma
             (_, Left err) -> pure (Left err)
             _ -> pure (Left SessionMissing)
     currentSlot slot = case (host.services.sessions.checkpoints, find (\decl -> decl.name == slot.target && agentEnabled decl.enabled) host.services.sessions.agents) of
-      (Just provider, Just decl) -> do
+      (Just providers, Just decl) -> do
+        let provider = providers scope.run.identity
         actual <- liftIO (Directory.identityAdmission host.services.sessions.directory ((.principal) <$> decl.identity) slot.target)
         version <- trySync (liftIO (provider.current slot.objective))
         now <- liftIO getCurrentTime
@@ -358,6 +362,7 @@ commandTag = \case
   TransferWorker {} -> "transfer"
   ReconcileWorker {} -> "reconcile"
   IntegrateWorkerEvents {} -> "integrate"
+  ReconcileWorkerCheckpoint {} -> "reconcile-checkpoint"
 
 commandSession :: WorkerCommand -> WorkerSessionId
 commandSession = \case
@@ -371,6 +376,7 @@ commandSession = \case
   TransferWorker {sessionId} -> sessionId
   ReconcileWorker {sessionId} -> sessionId
   IntegrateWorkerEvents {sessionId} -> sessionId
+  ReconcileWorkerCheckpoint {sessionId} -> sessionId
 
 -- | Only the Flow interpreter supplies this listener; it is absent from model
 -- command input and must belong to the admitted parent run.

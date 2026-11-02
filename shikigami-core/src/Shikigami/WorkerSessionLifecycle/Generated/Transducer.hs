@@ -165,6 +165,20 @@ workerSessionLifecycleTransducer =
           , revision = d.revision
           })
         B.goto WorkerSessionLifecycleIdle
+      B.onCmd inCtorSupersedeSessionCheckpoint $ \d -> B.do
+        let commandSessionId = K.inpProj NominalProjections.workerSessionIdentityWitness inCtorSupersedeSessionCheckpoint (#sessionId :: K.Index (RegFieldsOf SupersedeSessionCheckpointData) WorkerSessionId)
+            registerSessionId = K.regProj NominalProjections.workerSessionIdentityWitness (#sessionId :: K.Index WorkerSessionLifecycleRegs WorkerSessionId)
+        B.requireGuard $
+          (commandSessionId .== registerSessionId
+          .&& d.expected .== B.reg @"revision")
+          .&& d.revision .> B.reg @"revision"
+        B.slot @"revision" =: d.revision
+        B.emit wireSessionCheckpointSuperseded (SessionCheckpointSupersededTermFields
+          { sessionId = d.sessionId
+          , expected = d.expected
+          , revision = d.revision
+          })
+        B.goto WorkerSessionLifecycleIdle
     B.from WorkerSessionLifecycleActive do
       B.onCmd inCtorAcceptSessionMessage $ \d -> B.do
         let commandSessionId = K.inpProj NominalProjections.workerSessionIdentityWitness inCtorAcceptSessionMessage (#sessionId :: K.Index (RegFieldsOf AcceptSessionMessageData) WorkerSessionId)
@@ -292,6 +306,20 @@ workerSessionLifecycleTransducer =
           , revision = d.revision
           })
         B.goto WorkerSessionLifecycleActive
+      B.onCmd inCtorSupersedeSessionCheckpoint $ \d -> B.do
+        let commandSessionId = K.inpProj NominalProjections.workerSessionIdentityWitness inCtorSupersedeSessionCheckpoint (#sessionId :: K.Index (RegFieldsOf SupersedeSessionCheckpointData) WorkerSessionId)
+            registerSessionId = K.regProj NominalProjections.workerSessionIdentityWitness (#sessionId :: K.Index WorkerSessionLifecycleRegs WorkerSessionId)
+        B.requireGuard $
+          (commandSessionId .== registerSessionId
+          .&& d.expected .== B.reg @"revision")
+          .&& d.revision .> B.reg @"revision"
+        B.slot @"revision" =: d.revision
+        B.emit wireSessionCheckpointSuperseded (SessionCheckpointSupersededTermFields
+          { sessionId = d.sessionId
+          , expected = d.expected
+          , revision = d.revision
+          })
+        B.goto WorkerSessionLifecycleActive
     B.from WorkerSessionLifecycleParked do
       B.onCmd inCtorAcceptSessionMessage $ \d -> B.do
         let commandSessionId = K.inpProj NominalProjections.workerSessionIdentityWitness inCtorAcceptSessionMessage (#sessionId :: K.Index (RegFieldsOf AcceptSessionMessageData) WorkerSessionId)
@@ -405,6 +433,20 @@ workerSessionLifecycleTransducer =
           , revision = d.revision
           })
         B.goto WorkerSessionLifecycleParked
+      B.onCmd inCtorSupersedeSessionCheckpoint $ \d -> B.do
+        let commandSessionId = K.inpProj NominalProjections.workerSessionIdentityWitness inCtorSupersedeSessionCheckpoint (#sessionId :: K.Index (RegFieldsOf SupersedeSessionCheckpointData) WorkerSessionId)
+            registerSessionId = K.regProj NominalProjections.workerSessionIdentityWitness (#sessionId :: K.Index WorkerSessionLifecycleRegs WorkerSessionId)
+        B.requireGuard $
+          (commandSessionId .== registerSessionId
+          .&& d.expected .== B.reg @"revision")
+          .&& d.revision .> B.reg @"revision"
+        B.slot @"revision" =: d.revision
+        B.emit wireSessionCheckpointSuperseded (SessionCheckpointSupersededTermFields
+          { sessionId = d.sessionId
+          , expected = d.expected
+          , revision = d.revision
+          })
+        B.goto WorkerSessionLifecycleParked
     B.from WorkerSessionLifecycleUnresolved do
       B.onCmd inCtorAcceptSessionMessage $ \d -> B.do
         let commandSessionId = K.inpProj NominalProjections.workerSessionIdentityWitness inCtorAcceptSessionMessage (#sessionId :: K.Index (RegFieldsOf AcceptSessionMessageData) WorkerSessionId)
@@ -504,6 +546,20 @@ workerSessionLifecycleTransducer =
           , revision = d.revision
           })
         B.goto WorkerSessionLifecycleUnresolved
+      B.onCmd inCtorSupersedeSessionCheckpoint $ \d -> B.do
+        let commandSessionId = K.inpProj NominalProjections.workerSessionIdentityWitness inCtorSupersedeSessionCheckpoint (#sessionId :: K.Index (RegFieldsOf SupersedeSessionCheckpointData) WorkerSessionId)
+            registerSessionId = K.regProj NominalProjections.workerSessionIdentityWitness (#sessionId :: K.Index WorkerSessionLifecycleRegs WorkerSessionId)
+        B.requireGuard $
+          (commandSessionId .== registerSessionId
+          .&& d.expected .== B.reg @"revision")
+          .&& d.revision .> B.reg @"revision"
+        B.slot @"revision" =: d.revision
+        B.emit wireSessionCheckpointSuperseded (SessionCheckpointSupersededTermFields
+          { sessionId = d.sessionId
+          , expected = d.expected
+          , revision = d.revision
+          })
+        B.goto WorkerSessionLifecycleUnresolved
     B.from WorkerSessionLifecycleFailed do
       B.onCmd inCtorConsumeSessionEvents $ \d -> B.do
         let commandSessionId = K.inpProj NominalProjections.workerSessionIdentityWitness inCtorConsumeSessionEvents (#sessionId :: K.Index (RegFieldsOf ConsumeSessionEventsData) WorkerSessionId)
@@ -547,6 +603,20 @@ workerSessionLifecycleTransducer =
           , revision = d.revision
           })
         B.goto WorkerSessionLifecycleFailed
+      B.onCmd inCtorSupersedeSessionCheckpoint $ \d -> B.do
+        let commandSessionId = K.inpProj NominalProjections.workerSessionIdentityWitness inCtorSupersedeSessionCheckpoint (#sessionId :: K.Index (RegFieldsOf SupersedeSessionCheckpointData) WorkerSessionId)
+            registerSessionId = K.regProj NominalProjections.workerSessionIdentityWitness (#sessionId :: K.Index WorkerSessionLifecycleRegs WorkerSessionId)
+        B.requireGuard $
+          (commandSessionId .== registerSessionId
+          .&& d.expected .== B.reg @"revision")
+          .&& d.revision .> B.reg @"revision"
+        B.slot @"revision" =: d.revision
+        B.emit wireSessionCheckpointSuperseded (SessionCheckpointSupersededTermFields
+          { sessionId = d.sessionId
+          , expected = d.expected
+          , revision = d.revision
+          })
+        B.goto WorkerSessionLifecycleFailed
     B.from WorkerSessionLifecycleCancelled do
       B.onCmd inCtorConsumeSessionEvents $ \d -> B.do
         let commandSessionId = K.inpProj NominalProjections.workerSessionIdentityWitness inCtorConsumeSessionEvents (#sessionId :: K.Index (RegFieldsOf ConsumeSessionEventsData) WorkerSessionId)
@@ -585,6 +655,20 @@ workerSessionLifecycleTransducer =
           .&& d.revision .> B.reg @"revision"
         B.slot @"revision" =: d.revision
         B.emit wireSessionEventsSubscribed (SessionEventsSubscribedTermFields
+          { sessionId = d.sessionId
+          , expected = d.expected
+          , revision = d.revision
+          })
+        B.goto WorkerSessionLifecycleCancelled
+      B.onCmd inCtorSupersedeSessionCheckpoint $ \d -> B.do
+        let commandSessionId = K.inpProj NominalProjections.workerSessionIdentityWitness inCtorSupersedeSessionCheckpoint (#sessionId :: K.Index (RegFieldsOf SupersedeSessionCheckpointData) WorkerSessionId)
+            registerSessionId = K.regProj NominalProjections.workerSessionIdentityWitness (#sessionId :: K.Index WorkerSessionLifecycleRegs WorkerSessionId)
+        B.requireGuard $
+          (commandSessionId .== registerSessionId
+          .&& d.expected .== B.reg @"revision")
+          .&& d.revision .> B.reg @"revision"
+        B.slot @"revision" =: d.revision
+        B.emit wireSessionCheckpointSuperseded (SessionCheckpointSupersededTermFields
           { sessionId = d.sessionId
           , expected = d.expected
           , revision = d.revision
@@ -703,13 +787,27 @@ workerSessionLifecycleTransducer =
           , revision = d.revision
           })
         B.goto WorkerSessionLifecycleTransferring
+      B.onCmd inCtorSupersedeSessionCheckpoint $ \d -> B.do
+        let commandSessionId = K.inpProj NominalProjections.workerSessionIdentityWitness inCtorSupersedeSessionCheckpoint (#sessionId :: K.Index (RegFieldsOf SupersedeSessionCheckpointData) WorkerSessionId)
+            registerSessionId = K.regProj NominalProjections.workerSessionIdentityWitness (#sessionId :: K.Index WorkerSessionLifecycleRegs WorkerSessionId)
+        B.requireGuard $
+          (commandSessionId .== registerSessionId
+          .&& d.expected .== B.reg @"revision")
+          .&& d.revision .> B.reg @"revision"
+        B.slot @"revision" =: d.revision
+        B.emit wireSessionCheckpointSuperseded (SessionCheckpointSupersededTermFields
+          { sessionId = d.sessionId
+          , expected = d.expected
+          , revision = d.revision
+          })
+        B.goto WorkerSessionLifecycleTransferring
  where
   isTerminal = \case
 
     _ -> False
 
 workerSessionLifecycleFoldFingerprint :: Text
-workerSessionLifecycleFoldFingerprint = "837966c8889d6f3acec8c67a761887c9"
+workerSessionLifecycleFoldFingerprint = "01d83f83bf2150612208683c070191ee"
 
 data BehaviorOwnership = GeneratedOwned | HoleOwned
   deriving stock (Eq, Show)
@@ -728,6 +826,7 @@ workerSessionLifecyclePredicateVerifications = sequence
   , verifyTransition "transition30IdleCancelWorkerSession" GeneratedOwned WorkerSessionLifecycleIdle 6
   , verifyTransition "transition38IdleRequestSessionTransfer" GeneratedOwned WorkerSessionLifecycleIdle 7
   , verifyTransition "transition42IdleSubscribeSessionEvents" GeneratedOwned WorkerSessionLifecycleIdle 8
+  , verifyTransition "transition49IdleSupersedeSessionCheckpoint" GeneratedOwned WorkerSessionLifecycleIdle 9
   , verifyTransition "transition3ActiveAcceptSessionMessage" GeneratedOwned WorkerSessionLifecycleActive 0
   , verifyTransition "transition7ActiveConsumeSessionEvents" GeneratedOwned WorkerSessionLifecycleActive 1
   , verifyTransition "transition13ActivePrepareSessionCheckpoint" GeneratedOwned WorkerSessionLifecycleActive 2
@@ -737,6 +836,7 @@ workerSessionLifecyclePredicateVerifications = sequence
   , verifyTransition "transition26ActiveMarkSessionUnresolved" GeneratedOwned WorkerSessionLifecycleActive 6
   , verifyTransition "transition39ActiveRequestSessionTransfer" GeneratedOwned WorkerSessionLifecycleActive 7
   , verifyTransition "transition43ActiveSubscribeSessionEvents" GeneratedOwned WorkerSessionLifecycleActive 8
+  , verifyTransition "transition50ActiveSupersedeSessionCheckpoint" GeneratedOwned WorkerSessionLifecycleActive 9
   , verifyTransition "transition4ParkedAcceptSessionMessage" GeneratedOwned WorkerSessionLifecycleParked 0
   , verifyTransition "transition8ParkedConsumeSessionEvents" GeneratedOwned WorkerSessionLifecycleParked 1
   , verifyTransition "transition14ParkedPrepareSessionCheckpoint" GeneratedOwned WorkerSessionLifecycleParked 2
@@ -745,6 +845,7 @@ workerSessionLifecyclePredicateVerifications = sequence
   , verifyTransition "transition27ParkedMarkSessionUnresolved" GeneratedOwned WorkerSessionLifecycleParked 5
   , verifyTransition "transition40ParkedRequestSessionTransfer" GeneratedOwned WorkerSessionLifecycleParked 6
   , verifyTransition "transition44ParkedSubscribeSessionEvents" GeneratedOwned WorkerSessionLifecycleParked 7
+  , verifyTransition "transition51ParkedSupersedeSessionCheckpoint" GeneratedOwned WorkerSessionLifecycleParked 8
   , verifyTransition "transition5UnresolvedAcceptSessionMessage" GeneratedOwned WorkerSessionLifecycleUnresolved 0
   , verifyTransition "transition9UnresolvedConsumeSessionEvents" GeneratedOwned WorkerSessionLifecycleUnresolved 1
   , verifyTransition "transition15UnresolvedPrepareSessionCheckpoint" GeneratedOwned WorkerSessionLifecycleUnresolved 2
@@ -752,12 +853,15 @@ workerSessionLifecyclePredicateVerifications = sequence
   , verifyTransition "transition28UnresolvedReconcileSessionAssignment" GeneratedOwned WorkerSessionLifecycleUnresolved 4
   , verifyTransition "transition41UnresolvedRequestSessionTransfer" GeneratedOwned WorkerSessionLifecycleUnresolved 5
   , verifyTransition "transition45UnresolvedSubscribeSessionEvents" GeneratedOwned WorkerSessionLifecycleUnresolved 6
+  , verifyTransition "transition52UnresolvedSupersedeSessionCheckpoint" GeneratedOwned WorkerSessionLifecycleUnresolved 7
   , verifyTransition "transition10FailedConsumeSessionEvents" GeneratedOwned WorkerSessionLifecycleFailed 0
   , verifyTransition "transition16FailedPrepareSessionCheckpoint" GeneratedOwned WorkerSessionLifecycleFailed 1
   , verifyTransition "transition47FailedSubscribeSessionEvents" GeneratedOwned WorkerSessionLifecycleFailed 2
+  , verifyTransition "transition54FailedSupersedeSessionCheckpoint" GeneratedOwned WorkerSessionLifecycleFailed 3
   , verifyTransition "transition11CancelledConsumeSessionEvents" GeneratedOwned WorkerSessionLifecycleCancelled 0
   , verifyTransition "transition17CancelledPrepareSessionCheckpoint" GeneratedOwned WorkerSessionLifecycleCancelled 1
   , verifyTransition "transition48CancelledSubscribeSessionEvents" GeneratedOwned WorkerSessionLifecycleCancelled 2
+  , verifyTransition "transition55CancelledSupersedeSessionCheckpoint" GeneratedOwned WorkerSessionLifecycleCancelled 3
   , verifyTransition "transition31TransferringAcceptSessionMessage" GeneratedOwned WorkerSessionLifecycleTransferring 0
   , verifyTransition "transition32TransferringConsumeSessionEvents" GeneratedOwned WorkerSessionLifecycleTransferring 1
   , verifyTransition "transition33TransferringPrepareSessionCheckpoint" GeneratedOwned WorkerSessionLifecycleTransferring 2
@@ -766,6 +870,7 @@ workerSessionLifecyclePredicateVerifications = sequence
   , verifyTransition "transition36TransferringReconcileSessionTransfer" GeneratedOwned WorkerSessionLifecycleTransferring 5
   , verifyTransition "transition37TransferringEstablishSessionOwner" GeneratedOwned WorkerSessionLifecycleTransferring 6
   , verifyTransition "transition46TransferringSubscribeSessionEvents" GeneratedOwned WorkerSessionLifecycleTransferring 7
+  , verifyTransition "transition53TransferringSupersedeSessionCheckpoint" GeneratedOwned WorkerSessionLifecycleTransferring 8
   ]
  where
   verifyTransition label owner source edgeIndex =

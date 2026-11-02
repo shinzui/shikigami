@@ -52,6 +52,7 @@ commandFor name revision = case name of
   "PrepareSessionCheckpoint" -> PrepareSessionCheckpoint (PrepareSessionCheckpointData (workerSessionId "fixture-session") revision (revision + 1))
   "ConsumeSessionEvents" -> ConsumeSessionEvents (ConsumeSessionEventsData (workerSessionId "fixture-session") revision (revision + 1))
   "FailWorkerSession" -> FailWorkerSession (FailWorkerSessionData (workerSessionId "fixture-session") revision (revision + 1))
+  "SupersedeSessionCheckpoint" -> SupersedeSessionCheckpoint (SupersedeSessionCheckpointData (workerSessionId "fixture-session") revision (revision + 1))
   "CancelWorkerSession" -> CancelWorkerSession (CancelWorkerSessionData (workerSessionId "fixture-session") revision (revision + 1))
   _ -> error "unknown worker session command"
 
@@ -73,6 +74,7 @@ eventFor name revision = case name of
   "PrepareSessionCheckpoint" -> SessionCheckpointPrepared (SessionCheckpointPreparedData (workerSessionId "fixture-session") revision (revision + 1))
   "ConsumeSessionEvents" -> SessionEventsConsumed (SessionEventsConsumedData (workerSessionId "fixture-session") revision (revision + 1))
   "FailWorkerSession" -> WorkerSessionFailed (WorkerSessionFailedData (workerSessionId "fixture-session") revision (revision + 1))
+  "SupersedeSessionCheckpoint" -> SessionCheckpointSuperseded (SessionCheckpointSupersededData (workerSessionId "fixture-session") revision (revision + 1))
   "CancelWorkerSession" -> WorkerSessionCancelled (WorkerSessionCancelledData (workerSessionId "fixture-session") revision (revision + 1))
   _ -> error "unknown worker session event"
 

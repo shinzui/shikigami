@@ -27,7 +27,7 @@ import Shikigami.Fixture.ExecutionIdentity (fixtureOperationId)
 import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
 import Shikigami.Objective.Capability qualified as O
-import Shikigami.Objective.Checkpoint (checkpointOperation, checkpointProvider)
+import Shikigami.Objective.Checkpoint (checkpointOperation, checkpointProvider, checkpointRejection)
 import Shikigami.Objective.Command
 import Shikigami.Objective.Ownership (ownershipProvider)
 import Shikigami.Objective.Store qualified as Objectives
@@ -120,6 +120,66 @@ tests fixture =
           access <- right =<< run env (Sessions.authorizeSession intent.sessionId actor (pure (Right ())))
           run env (Sessions.readCheckpointIntent access intent.operationId) >>= (@?= Right intent)
           run env (O.readInternalReceipt (host (RecordedAgent actor)) objective intent.expected.revision (checkpointOperation intent) (ProjectCheckpoint (assignment "a") intent)) >>= (@?= Right (Just (Left ObjectiveConflict))),
+      testCase "explicit revalidation supersedes only a retained rejection and advances no consumed cursor" $
+        withPair fixture \env objective actor a _ -> do
+          let agentHost = host (RecordedAgent actor)
+              provider = checkpointProvider env actor agentHost
+              qualified = runtime env provider & #rejections .~ Just (\identity -> checkpointRejection env identity agentHost)
+              session = WS.sessionIdFor a
+              oldKey = fixtureOperationId "checkpoint"
+              replacementKey = fixtureOperationId "revalidated-checkpoint"
+          original <- prepare env provider a
+          _ <- right =<< run env (O.executeCommand ownerHost objective original.expected.revision (fixtureOperationId "change") (ReviseInstructions (instructions "revised meaning")))
+          run env (Integration.integrateEvents qualified session oldKey) >>= (@?= Right Integration.EventsConflict)
+          current <- right =<< provider.current a.objective
+          before <- state env a
+          let decision = CP.CheckpointRevalidation current.revision current.assignmentRevision current.criteriaRevision (checked Input.parseInstructionText "I rechecked the retained results against the revised instructions")
+              reconcile runtimeValue selected = run env (Integration.reconcileEvents runtimeValue session before.revision before.epoch replacementKey oldKey selected)
+          reconcile qualified (decision & #assignmentRevision .~ advanceRevision decision.assignmentRevision) >>= assertLeft
+          consumed env a >>= (@?= initialRevision)
+          sql env "CREATE FUNCTION shikigami.reject_supersession_fixture() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'injected supersession publication failure'; END $$; CREATE TRIGGER reject_supersession_fixture BEFORE INSERT ON shikigami.worker_session_commands FOR EACH ROW EXECUTE FUNCTION shikigami.reject_supersession_fixture()"
+          reconcile qualified decision >>= assertLeft
+          afterFailure <- state env a
+          afterFailure @?= before
+          sql env "DROP TRIGGER reject_supersession_fixture ON shikigami.worker_session_commands"
+          reconcile qualified decision >>= (@?= Right replacementKey)
+          retained <- state env a
+          retained.checkpointIntent @?= Just replacementKey
+          retained.consumedCursor @?= initialRevision
+          retained.eventCursor @?= advanceRevision before.eventCursor
+          -- An accepted reconciliation retry keeps its original replacement even
+          -- if fresh proof/configuration is subsequently unavailable.
+          reconcile (qualified & #rejections .~ Nothing & #checkpoints .~ Nothing) decision >>= (@?= Right replacementKey)
+          access <- right =<< run env (Sessions.authorizeSession session actor (pure (Right ())))
+          run env (Sessions.readCheckpointIntent access oldKey) >>= (@?= Right original)
+          accepted <- integrated =<< run env (Integration.integrateEvents qualified session (fixtureOperationId "new-integrator-call"))
+          accepted.operationId @?= replacementKey
+          updated <- get env objective
+          length updated.reportedResults @?= 1
+          updated.revision @?= advanceRevision current.revision
+          consumed env a >>= (@?= revision 3)
+          -- The supersession notification remains a separate later source fact.
+          following <- run env (Integration.integrateEvents qualified session (fixtureOperationId "consume-supersession-event"))
+          case following of Right (Integration.EventsIntegrated _ cursor) -> cursor @?= revision 4; _ -> assertFailure (show following),
+      testCase "an accepted or unknown checkpoint cannot be superseded" $
+        withPair fixture \env _ actor a _ -> do
+          let agentHost = host (RecordedAgent actor)
+              provider = checkpointProvider env actor agentHost
+              qualified = runtime env provider & #rejections .~ Just (\identity -> checkpointRejection env identity agentHost)
+              session = WS.sessionIdFor a
+          original <- prepare env provider a
+          before <- state env a
+          let decision = CP.CheckpointRevalidation original.expected.revision original.expected.assignmentRevision original.expected.criteriaRevision (checked Input.parseInstructionText "explicit review")
+              attempt = run env (Integration.reconcileEvents qualified session before.revision before.epoch (fixtureOperationId "supersede") original.operationId decision)
+          attempt >>= assertLeft
+          getPending <- state env a
+          getPending.checkpointIntent @?= Just original.operationId
+          accepted <- provider.commit original
+          case accepted of CP.CheckpointAccepted _ -> pure (); _ -> assertFailure (show accepted)
+          attempt >>= assertLeft
+          retained <- state env a
+          retained.checkpointIntent @?= Just original.operationId
+          retained.consumedCursor @?= initialRevision,
       testCase "current reads require coordinator authority and the original live resource root" $
         withPair fixture \env objective actor a _ -> do
           let agentHost = host (RecordedAgent actor)
@@ -242,7 +302,7 @@ prepare env provider admission = do
   snd <$> (right =<< run env (Sessions.prepareCheckpoint access (revision 3) initialRevision (fixtureOperationId "checkpoint") version initialRevision (revision 3)))
 
 runtime :: AppEnv -> CP.CheckpointProvider -> SessionRuntime
-runtime env provider = SessionRuntime env [] disabledDirectoryHandle (const (pure (Right ()))) (Just provider)
+runtime env provider = SessionRuntime env [] disabledDirectoryHandle (const (pure (Right ()))) (Just (const provider)) Nothing
 
 consumed :: AppEnv -> WS.SessionAdmission -> IO (StateRevision "worker-event")
 consumed env admission = do
@@ -292,3 +352,6 @@ artifact = checked parseArtifactRef
 
 revision :: Integer -> StateRevision scope
 revision = checked parseRevision
+
+assertLeft :: (Show a) => Either WS.SessionError a -> IO ()
+assertLeft = either (const (pure ())) (assertFailure . show)

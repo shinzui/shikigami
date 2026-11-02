@@ -131,6 +131,13 @@ data CancelWorkerSessionData = CancelWorkerSessionData
   }
   deriving stock (Generic, Eq, Show)
 
+data SupersedeSessionCheckpointData = SupersedeSessionCheckpointData
+  { sessionId :: !WorkerSessionId
+  , expected :: !Int
+  , revision :: !Int
+  }
+  deriving stock (Generic, Eq, Show)
+
 data WorkerSessionLifecycleCommand = AdmitWorkerSession !AdmitWorkerSessionData
   | AcceptSessionMessage !AcceptSessionMessageData
   | StartSessionAssignment !StartSessionAssignmentData
@@ -148,6 +155,7 @@ data WorkerSessionLifecycleCommand = AdmitWorkerSession !AdmitWorkerSessionData
   | ConsumeSessionEvents !ConsumeSessionEventsData
   | FailWorkerSession !FailWorkerSessionData
   | CancelWorkerSession !CancelWorkerSessionData
+  | SupersedeSessionCheckpoint !SupersedeSessionCheckpointData
   deriving stock (Generic, Eq, Show)
 
 data WorkerSessionAdmittedData = WorkerSessionAdmittedData
@@ -268,6 +276,13 @@ data WorkerSessionCancelledData = WorkerSessionCancelledData
   }
   deriving stock (Generic, Eq, Show)
 
+data SessionCheckpointSupersededData = SessionCheckpointSupersededData
+  { sessionId :: !WorkerSessionId
+  , expected :: !Int
+  , revision :: !Int
+  }
+  deriving stock (Generic, Eq, Show)
+
 data WorkerSessionLifecycleEvent = WorkerSessionAdmitted !WorkerSessionAdmittedData
   | SessionMessageAccepted !SessionMessageAcceptedData
   | SessionAssignmentStarted !SessionAssignmentStartedData
@@ -285,6 +300,7 @@ data WorkerSessionLifecycleEvent = WorkerSessionAdmitted !WorkerSessionAdmittedD
   | SessionEventsConsumed !SessionEventsConsumedData
   | WorkerSessionFailed !WorkerSessionFailedData
   | WorkerSessionCancelled !WorkerSessionCancelledData
+  | SessionCheckpointSuperseded !SessionCheckpointSupersededData
   deriving stock (Generic, Eq, Show)
 
 type WorkerSessionLifecycleRegs =

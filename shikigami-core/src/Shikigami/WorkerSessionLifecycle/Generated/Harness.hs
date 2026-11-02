@@ -36,6 +36,7 @@ harnessAssertions =
   , ("golden round-trip: SessionEventsConsumed", roundTrips sampleEventSessionEventsConsumed)
   , ("golden round-trip: WorkerSessionFailed", roundTrips sampleEventWorkerSessionFailed)
   , ("golden round-trip: WorkerSessionCancelled", roundTrips sampleEventWorkerSessionCancelled)
+  , ("golden round-trip: SessionCheckpointSuperseded", roundTrips sampleEventSessionCheckpointSuperseded)
   , ("accepts AdmitWorkerSession from WorkerSessionLifecycleMissing", acceptAdmitWorkerSession)
   ]
   ++ nominalConformanceAssertions
@@ -94,6 +95,9 @@ sampleEventWorkerSessionFailed = WorkerSessionFailed (WorkerSessionFailedData (n
 
 sampleEventWorkerSessionCancelled :: WorkerSessionLifecycleEvent
 sampleEventWorkerSessionCancelled = WorkerSessionCancelled (WorkerSessionCancelledData (nominalFixtureDomain (NonEmpty.head (nominalFixtureCases Bindings.workerSessionIdentityCases))) 0 0)
+
+sampleEventSessionCheckpointSuperseded :: WorkerSessionLifecycleEvent
+sampleEventSessionCheckpointSuperseded = SessionCheckpointSuperseded (SessionCheckpointSupersededData (nominalFixtureDomain (NonEmpty.head (nominalFixtureCases Bindings.workerSessionIdentityCases))) 0 0)
 
 acceptAdmitWorkerSession :: Bool
 acceptAdmitWorkerSession =

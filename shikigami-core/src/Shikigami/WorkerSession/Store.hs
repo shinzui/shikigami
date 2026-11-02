@@ -32,6 +32,8 @@ module Shikigami.WorkerSession.Store
     consumeEventsWith,
     prepareCheckpoint,
     readCheckpointIntent,
+    supersedeCheckpoint,
+    readCheckpointSupersession,
     acceptCheckpointWith,
     observeSession,
     subscribeEvents,
@@ -57,6 +59,7 @@ import Data.ByteString.Lazy qualified as Lazy
 import Data.Functor.Contravariant ((>$<))
 import Data.Generics.Labels ()
 import Data.Int (Int64)
+import Data.List.NonEmpty (NonEmpty (..))
 import Data.Maybe (catMaybes, listToMaybe)
 import Data.Text qualified as Text
 import Data.Time (addUTCTime)
@@ -84,7 +87,7 @@ import Shikigami.Agent.Principal (AgentIdentity, identityText)
 import Shikigami.App (CommandEffects, commandOptions)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Decision.ModelAlias (ModelAlias, modelAliasText)
-import Shikigami.Execution.Identity (ExecutionRootId, OperationId, operationIdText)
+import Shikigami.Execution.Identity (ExecutionRootId, OperationId, operationIdText, operationIdWithPrefix)
 import Shikigami.Execution.Payload
 import Shikigami.Execution.Resources (Admission (..))
 import Shikigami.Execution.Resources qualified as Resources
@@ -95,6 +98,7 @@ import Shikigami.Prelude hiding ((.=))
 import Shikigami.StateRevision
 import Shikigami.WorkerSession.Catalog (withLiveSession)
 import Shikigami.WorkerSession.Checkpoint
+import Shikigami.WorkerSession.CheckpointAuthority (CheckpointRejection (..), RejectionAuthority (..))
 import Shikigami.WorkerSession.Identity (assignmentChildWorkflowIdV2, sessionWorkflowId, sessionWorkflowName)
 import Shikigami.WorkerSession.Input
 import Shikigami.WorkerSession.Position
@@ -556,6 +560,46 @@ getCheckpointIntent session operation = do
       _ -> abort SessionBindingConflict
     _ -> abort AssignmentMissing
 
+-- | Accepted reconciliation recovery precedes any new proof/provider lookup.
+readCheckpointSupersession :: (SessionReadEffects es) => SessionAccess -> StateRevision "worker-owner" -> OperationId -> OperationId -> CheckpointRevalidation -> Eff es (Either SessionError (Maybe CheckpointIntent))
+readCheckpointSupersession access@(SessionAccess session _ _) epoch operation previous decision = protected do
+  (state, binding) <- getSession session
+  checkAccess access state binding
+  stored <- Tx.statement (session.value, operationKey operation) selectCommand
+  forM stored \(fingerprint, value) -> do
+    unless (fingerprint == workerCommitmentText (commandFingerprint "checkpoint-supersede" (toJSON (epoch, previous, decision)))) (abort MessageConflict)
+    case Aeson.fromJSON value of
+      Aeson.Success intent | intent.operationId == operation && intent.sessionId == session -> pure intent
+      _ -> abort SessionBindingConflict
+
+-- | Supersession replaces the pending request, never its source events or the
+-- consumed cursor. The old intent, its rejection and the parent's revalidation
+-- remain in protected audit payloads and a retained session event.
+supersedeCheckpoint :: (SessionEffects es) => SessionAccess -> StateRevision "worker-session" -> StateRevision "worker-owner" -> OperationId -> OperationId -> CheckpointRevalidation -> ObjectiveVersion -> RejectionAuthority -> Eff es (Either SessionError (Admission, CheckpointIntent))
+supersedeCheckpoint access expected epoch operation previous decision version (RejectionAuthority proof) = guarded $
+  mutate
+    access
+    expected
+    epoch
+    operation
+    "checkpoint-supersede"
+    (toJSON (epoch, previous, decision))
+    False
+    (\session revision -> Generated.SupersedeSessionCheckpoint (Generated.SupersedeSessionCheckpointData session revision (revision + 1)))
+    \state binding _ -> do
+      original <- getCheckpointIntent state.sessionId previous
+      unless (proof.format == V1 && proof.intent == original && state.checkpointIntent == Just previous && original.actor == binding.parentIdentity && original.objective == binding.objective && original.previousCursor == state.consumedCursor && operation /= previous) (abort AssignmentConflict)
+      unless (version.revision == decision.objectiveRevision && version.assignmentRevision == decision.assignmentRevision && version.criteriaRevision == decision.criteriaRevision && version.owner == state.owner && version.ownerEpoch == epoch && version.rootId == binding.rootId) (abort SessionBindingConflict)
+      events <- readRows (state.sessionId.value, fromInteger (revisionNumber original.previousCursor), fromInteger (revisionNumber original.throughCursor - revisionNumber original.previousCursor)) listEvents
+      unless (events == original.events) (abort SessionBindingConflict)
+      let replacement = original & #operationId .~ operation & #expected .~ version & #epoch .~ epoch
+          auditKey = operationIdWithPrefix ('c' :| "heckpoint-supersession:") (versionedDigest "shikigami.checkpoint-supersession-key/1" (toJSON (state.sessionId, operation)))
+          audit = Aeson.object ["format" .= (1 :: Int), "original" .= original, "rejection" .= proof, "revalidation" .= decision, "replacement" .= replacement]
+      reference <- writePayload state.sessionId (body "checkpoint-supersession" audit)
+      Tx.statement (state.sessionId.value, operationKey auditKey, workerCommitmentText (commandFingerprint "checkpoint-supersession-audit" audit), toJSON reference) insertCommand
+      appendEvent state (CheckpointSuperseded previous operation)
+      pure (replacement, state & #checkpointIntent .~ Just operation & #eventCursor .~ advanceRevision state.eventCursor)
+
 -- | Only a receipt for this immutable request permits local integration. An
 -- exception or refusal in the hook rolls back receipt, cursor and progress.
 acceptCheckpointWith :: (SessionEffects es) => SessionAccess -> StateRevision "worker-session" -> StateRevision "worker-owner" -> OperationId -> OperationId -> CheckpointReceipt -> Transaction (Either SessionError ()) -> Eff es (Either SessionError (Admission, StateRevision "worker-event"))
@@ -699,7 +743,8 @@ readTransferFence access@(SessionAccess session _ _) = protected do
 
 -- | The session owner validates its own immutable intent and fence payloads
 -- inside the objective owner's transaction. Locking the session prevents an
--- owner/phase transition from racing the objective-side handoff commit.
+-- owner/phase transition from racing the objective-side handoff commit. The
+-- composing owner locks the retained resource root first, as session mutations do.
 verifyTransferSourceTx :: TransferIntent -> FenceProof -> Transaction (Either SessionError ())
 verifyTransferSourceTx intent proof = do
   saved <- Tx.statement intent.sessionId.value lockSession

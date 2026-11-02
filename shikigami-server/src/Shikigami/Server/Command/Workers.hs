@@ -75,7 +75,7 @@ runWorkersControl key command config = do
   let run = CoordinatorRun (WorkflowId ("operator-workers:" <> session.value)) admission.context.identity memory admission.context.executionRootId admission.context.executionPermissions
       scope = CoordinationScope V1 run admission.scope.parent admission.delegator admission.context [WorkerSlot admission.scope.workerKey admission.worker admission.identity admission.objective (Just session)] maximumSessionCapacity admission.maximumAssignments admission.mailboxLimit
       authority = CoordinationAuthority (\requested -> pure (if requested == run then Right (Just scope) else Left "foreign control scope")) (\requested pinned -> pure (if requested == run && pinned == scopeFingerprint scope then Right scope else Left "control scope unavailable"))
-      sessions = SessionRuntime env agents directory.handle (Directory.identityLifecycleAdmission directory.handle) Nothing
+      sessions = SessionRuntime env agents directory.handle (Directory.identityLifecycleAdmission directory.handle) Nothing Nothing
       host = CoordinationHost (TransferServices sessions Nothing Nothing) authority
   result <- executeWorkerControl host authorizer scope key command
   case result of
@@ -120,3 +120,4 @@ sessionOf = \case
   TransferWorker {sessionId} -> sessionId
   ReconcileWorker {sessionId} -> sessionId
   IntegrateWorkerEvents {sessionId} -> sessionId
+  ReconcileWorkerCheckpoint {sessionId} -> sessionId

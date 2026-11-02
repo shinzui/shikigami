@@ -60,7 +60,7 @@ tests fixture =
         withFixture fixture \env admission access -> do
           version <- checkpointVersion admission
           (provider, _) <- fixtureCheckpoints version False
-          let runtime = Session.SessionRuntime env [admission.delegator & #name .~ fixtureAgentName "worker" & #delegates .~ map fixtureAgentName []] disabledDirectoryHandle (const (pure (Right ()))) (Just provider)
+          let runtime = Session.SessionRuntime env [admission.delegator & #name .~ fixtureAgentName "worker" & #delegates .~ map fixtureAgentName []] disabledDirectoryHandle (const (pure (Right ()))) (Just (const provider)) Nothing
               session = sessionIdFor admission
               options = shikigamiWorkflowRunOptions env
               drive initial = run env (runWorkflowWith options sessionWorkflowName (sessionWorkflowId session) (Session.sessionWorkflow runtime initial))
@@ -111,7 +111,7 @@ tests fixture =
           (provider, _) <- fixtureCheckpoints version False
           behavior <- newBehaviorEnv
           let worker = Fixture.successSpecialist "worker"
-              runtime = Session.SessionRuntime env [worker] disabledDirectoryHandle (const (pure (Right ()))) (Just provider)
+              runtime = Session.SessionRuntime env [worker] disabledDirectoryHandle (const (pure (Right ()))) (Just (const provider)) Nothing
               session = sessionIdFor admission
               parentId = sessionWorkflowId session
               options = shikigamiWorkflowRunOptions env
@@ -151,7 +151,7 @@ tests fixture =
           (_, message) <- expectRight =<< run env (Store.acceptMessage access (fixtureRevision 0) (fixtureRevision 0) (fixtureOperationId "send") (Instruction V1 FollowUp (fixtureInstruction "no capacity") (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) Nothing))
           version <- checkpointVersion limited
           (provider, _) <- fixtureCheckpoints version False
-          let runtime = Session.SessionRuntime env [Fixture.successSpecialist "worker"] disabledDirectoryHandle (const (pure (Right ()))) (Just provider)
+          let runtime = Session.SessionRuntime env [Fixture.successSpecialist "worker"] disabledDirectoryHandle (const (pure (Right ()))) (Just (const provider)) Nothing
           run env (runWorkflowWith (shikigamiWorkflowRunOptions env) sessionWorkflowName (sessionWorkflowId (sessionIdFor limited)) (Session.sessionWorkflow runtime (Just (Session.WorkerSessionStart (sessionIdFor limited))))) >>= (@?= ContinuedAsNew)
           stored <- expectRight =<< run env (Store.readResult access message.assignmentId)
           case stored of Just (_, value) -> value.disposition @?= AssignmentFailed; _ -> assertFailure "refusal not retained"
@@ -161,7 +161,7 @@ tests fixture =
         withFixture fixture \env admission access -> do
           version <- checkpointVersion admission
           (provider, _) <- fixtureCheckpoints version False
-          let runtime = Session.SessionRuntime env [] disabledDirectoryHandle (const (pure (Right ()))) (Just provider)
+          let runtime = Session.SessionRuntime env [] disabledDirectoryHandle (const (pure (Right ()))) (Just (const provider)) Nothing
               session = sessionIdFor admission
               drive = run env (runWorkflowWith (shikigamiWorkflowRunOptions env) sessionWorkflowName (sessionWorkflowId session) (Session.sessionWorkflow runtime (Just (Session.WorkerSessionStart session))))
           drive >>= (@?= Suspended)
@@ -177,7 +177,7 @@ tests fixture =
           _ <- expectRight =<< run env (Store.acceptMessage access (fixtureRevision 0) (fixtureRevision 0) (fixtureOperationId "first") (Instruction V1 FollowUp (fixtureInstruction "first") (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) Nothing))
           version <- checkpointVersion admission
           (provider, count) <- fixtureCheckpoints version True
-          let runtime = Session.SessionRuntime env [] disabledDirectoryHandle (const (pure (Right ()))) (Just provider)
+          let runtime = Session.SessionRuntime env [] disabledDirectoryHandle (const (pure (Right ()))) (Just (const provider)) Nothing
               integrate = run env (Integration.integrateEvents runtime (sessionIdFor admission) (fixtureOperationId "checkpoint"))
           integrate >>= (@?= Right Integration.EventsPending)
           integrated <- expectRight =<< integrate
@@ -190,9 +190,9 @@ tests fixture =
           (_, message) <- expectRight =<< run env (Store.acceptMessage access (fixtureRevision 0) (fixtureRevision 0) (fixtureOperationId "first") (Instruction V1 FollowUp (fixtureInstruction "first") (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) Nothing))
           version <- checkpointVersion admission
           let provider = Checkpoint.CheckpointProvider (\_ -> pure (Right (version & #ownerEpoch .~ (fixtureRevision 99)))) (\_ -> fail "denied checkpoint callback")
-              unavailable = Session.SessionRuntime env [] disabledDirectoryHandle (const (pure (Right ()))) Nothing
+              unavailable = Session.SessionRuntime env [] disabledDirectoryHandle (const (pure (Right ()))) Nothing Nothing
           run env (Session.selectAssignment unavailable (sessionIdFor admission)) >>= (@?= Right Session.SessionBlocked)
-          run env (Session.selectAssignment (unavailable & #checkpoints .~ Just provider) (sessionIdFor admission)) >>= (@?= Right Session.SessionBlocked)
+          run env (Session.selectAssignment (unavailable & #checkpoints .~ Just (const provider)) (sessionIdFor admission)) >>= (@?= Right Session.SessionBlocked)
           stored <- expectRight =<< run env (Store.readAssignment access message.assignmentId)
           stored.phase @?= Queued
           stored.childWorkflowId @?= Nothing

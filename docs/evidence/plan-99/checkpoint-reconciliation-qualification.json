@@ -1,0 +1,37 @@
+{
+  "scope": "Plan 99 milestone 3 partial: explicit checkpoint supersession, actor-scoped runtime callbacks, native-tool compatibility and CLI command. Retained coordination scopes and production wiring remain unfinished.",
+  "baseline": "482d815",
+  "qualified_at": "2026-11-02 UTC",
+  "suites": {
+    "shikigami-core-test": 632,
+    "shikigami-core-postgres-test": 487,
+    "shikigami-server-test": 96,
+    "shikigami-workers-test": 280,
+    "shikigami-agent-test": 37
+  },
+  "focused_provider_scenarios": 8,
+  "focused_worker_capability_cases": 13,
+  "checks": [
+    "cabal build all --offline",
+    "just keiro-gate 482d815",
+    "python3 tools/style/check_haskell.py",
+    "bash tools/check-migration-schema-isolation.sh",
+    "shikigami workers reconcile-checkpoint --help"
+  ],
+  "native_conformance_checks": 168,
+  "native_diff": "additive SessionCheckpointSuperseded; expected AggFoldSurfaceChanged advisory; no breaking findings",
+  "replay_impact": "replay-neutral",
+  "notes": [
+    "Supersession retains an exact owner non-commit proof and explicit parent revalidation; no consumed cursor advance.",
+    "A trigger-induced publication failure rolls back supersession, audit and pending pointer.",
+    "Old accepted native worker schemas retain their original command set.",
+    "Runtime callback factories select the retained parent identity; production wiring remains absent.",
+    "Native gate rerun serially after concurrent Cabal builds raced on a shared object file."
+  ],
+  "remaining": [
+    "retained coordination scopes",
+    "enablement-aware production composition",
+    "plan 84 real-provider completion evidence",
+    "later MasterPlan children"
+  ]
+}

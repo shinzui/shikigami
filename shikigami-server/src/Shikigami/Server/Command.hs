@@ -75,6 +75,8 @@ import Shikigami.Server.Command.Workers (runWorkersControl, runWorkersInspect, r
 import Shikigami.StateRevision (StateRevision, parseRevision)
 import Shikigami.Trigger.RequestKey qualified as Addressed
 import Shikigami.WorkerSession.Capability (WorkerCommand (..))
+import Shikigami.WorkerSession.Checkpoint (CheckpointRevalidation (..))
+import Shikigami.WorkerSession.Input (parseInstructionText)
 import Shikigami.WorkerSession.Position (MessagePosition, beforeMessages, parseMessagePosition)
 import Shikigami.WorkerSession.Transfer (WorkspaceRef (..))
 import Shikigami.WorkerSession.Types (WorkerSessionId, workerSessionId)
@@ -180,6 +182,7 @@ workersInfo = info (subparser commands <**> helper) (progDesc "Inspect continuin
         <> command "cancel" (info (cancel <**> helper) (progDesc "Close an idle worker with no queued or unresolved work"))
         <> command "transfer" (info (transfer <**> helper) (progDesc "Request transfer; requires real workspace and objective ownership providers"))
         <> command "reconcile" (info (reconcile <**> helper) (progDesc "Reconcile the retained transfer without replacing its operation"))
+        <> command "reconcile-checkpoint" (info (reconcileCheckpoint <**> helper) (progDesc "Explicitly revalidate a definitively rejected checkpoint against the named revisions"))
         <> command "integrate" (info (integrate <**> helper) (progDesc "Integrate retained events through the authoritative checkpoint owner"))
     session = strArgument (metavar "SESSION" <> help "Retained worker session id")
     operation = option (eitherReader (either (Left . Text.unpack) Right . parseOperationId . Text.pack)) (long "operation" <> metavar "KEY" <> help "Stable caller operation key; reuse it after a lost acknowledgement")
@@ -199,6 +202,17 @@ workersInfo = info (subparser commands <**> helper) (progDesc "Inspect continuin
     transfer = (\key op rev owner provider resource target -> action (runWorkersControl op (TransferWorker (workerSessionId key) rev owner (WorkspaceRef (workspaceCoordinate provider) (workspaceCoordinate resource)) target))) <$> session <*> operation <*> revision <*> epoch <*> strOption (long "workspace-provider" <> metavar "PROVIDER") <*> strOption (long "workspace-resource" <> metavar "RESOURCE") <*> option agentReader (long "target" <> metavar "AGENT")
     reconcile = (\key op -> action (runWorkersControl op (ReconcileWorker (workerSessionId key)))) <$> session <*> operation
     integrate = (\key op -> action (runWorkersControl op (IntegrateWorkerEvents (workerSessionId key)))) <$> session <*> operation
+    reconcileCheckpoint =
+      (\key op rev owner previous objective assignment criteria statement -> action (runWorkersControl op (ReconcileWorkerCheckpoint (workerSessionId key) rev owner previous (CheckpointRevalidation objective assignment criteria statement))))
+        <$> session
+        <*> operation
+        <*> revision
+        <*> epoch
+        <*> option (eitherReader (either (Left . Text.unpack) Right . parseOperationId . Text.pack)) (long "checkpoint-operation" <> metavar "KEY" <> help "Rejected retained checkpoint operation")
+        <*> option revisionReader (long "objective-revision" <> metavar "REVISION")
+        <*> option revisionReader (long "assignment-revision" <> metavar "REVISION")
+        <*> option revisionReader (long "criteria-revision" <> metavar "REVISION")
+        <*> option (eitherReader (either (Left . Text.unpack) Right . parseInstructionText . Text.pack)) (long "reason" <> metavar "TEXT" <> help "Explicit parent decision revalidating the retained events")
 
 executionsInfo :: ParserInfo AdminAction
 executionsInfo = info (subparser (command "inspect" inspectInfo) <**> helper) (progDesc "Inspect accepted execution progress without replay payloads")

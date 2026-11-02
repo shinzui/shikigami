@@ -256,7 +256,7 @@ withTransferFixture fixture loseAcknowledgement callback = withConfiguredFixture
               pure (if intent.expected /= version then Checkpoint.CheckpointConflict else Checkpoint.CheckpointUnavailable)
           )
       workspace = WorkspaceProvider reconcile admitWrite
-      runtime = Session.SessionRuntime env [Fixture.successSpecialist "worker", Fixture.successSpecialist "successor"] disabledDirectoryHandle (const (pure (Right ()))) (Just checkpoints)
+      runtime = Session.SessionRuntime env [Fixture.successSpecialist "worker", Fixture.successSpecialist "successor"] disabledDirectoryHandle (const (pure (Right ()))) (Just (const checkpoints)) Nothing
   callback env admission access (Owners (Handoff.TransferServices runtime (Just workspace) (Just ownership)) workspace ownership checkpoints inFlight writes ownershipUpdates)
 
 current :: AppEnv -> SessionAdmission -> IO SessionState

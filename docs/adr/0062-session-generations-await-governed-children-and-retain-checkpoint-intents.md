@@ -51,10 +51,29 @@ transaction. A local integration fault preserves the pending intent even when
 the external owner has already committed. A duplicate accepted receipt skips
 the local integration callback.
 
+The objective provider exposes a package-private, process-local rejection authority
+only after reading an exact immutable non-commit under current permission. It has no
+wire decoder. Explicit checkpoint reconciliation requires this authority plus a
+parent decision naming the objective, assignment and criteria revisions and a bounded
+revalidation statement. Unknown and accepted outcomes cannot produce that authority.
+
+The checked `SupersedeSessionCheckpoint` command retains the old intent and rejection,
+stores the parent decision and replacement in a protected audit payload, publishes the
+new pending intent and a `CheckpointSuperseded` session event atomically. It never
+advances the consumed cursor. The audit notification is a separate later source fact.
+Its command receipt recovers the original replacement before consulting changed
+provider configuration or versions. New integration calls recover the active retained
+intent; a known caller operation still recovers its own original request first.
+
+Session runtime checkpoint callbacks are factories scoped to the retained parent
+identity. Public provider records and existing intent/receipt codecs remain unchanged.
+The new native lifecycle event preserves all old event interpretations; its regenerated
+fold fingerprint intentionally invalidates old aggregate snapshots for reconstruction.
+No workflow step shape changes. Fresh worker-tool schemas expose reconciliation, while
+preparation retains an older accepted schema and its original closed command set.
+
 The checkpoint types are a consumer adapter contract. They neither select nor
-implement the separately owned IR-13 task store. Production has no provider
-until that prerequisite supplies and qualifies one. Deterministic adapters
-prove ordering and lost-acknowledgement mechanics only.
+implement the separately owned IR-13 task store. Plan 99 qualifies objective-backed checkpoint and ownership adapters; retained coordination scopes and production composition remain separate acceptance. Deterministic fence adapters prove only the objective-side protocol and never workspace containment.
 
 ## Alternatives rejected
 

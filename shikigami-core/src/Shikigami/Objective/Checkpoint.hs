@@ -2,10 +2,11 @@
 
 -- | Actor-scoped adapter over the objective command owner. The session retains
 -- the immutable request; neither the callback nor an ObjectiveRef is a grant.
-module Shikigami.Objective.Checkpoint (checkpointProvider, checkpointOperation) where
+module Shikigami.Objective.Checkpoint (checkpointProvider, checkpointOperation, checkpointRejection, RejectionAuthority) where
 
 import Data.Generics.Labels ()
 import Data.List.NonEmpty (NonEmpty (..))
+import Data.Text qualified as Text
 import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.App (AppEnv, runAppIO)
 import Shikigami.Decision.Contract (versionedDigest)
@@ -17,6 +18,8 @@ import Shikigami.Objective.Reference (ObjectiveAssociation (..))
 import Shikigami.Objective.Types
 import Shikigami.Prelude
 import Shikigami.WorkerSession.Checkpoint qualified as CP
+import Shikigami.WorkerSession.CheckpointAuthority (CheckpointRejection (..), RejectionAuthority (..))
+import Shikigami.WorkerSession.Input (providerReceiptFor)
 import Shikigami.WorkerSession.Store qualified as Sessions
 import Shikigami.WorkerSession.Types (SessionError (..))
 
@@ -72,3 +75,23 @@ checkpointProvider env identity supplied = CP.CheckpointProvider current commit
 -- objective. Bind both coordinates rather than requiring global source keys.
 checkpointOperation :: CP.CheckpointIntent -> OperationId
 checkpointOperation intent = operationIdWithPrefix ('o' :| "bjective-checkpoint:") (versionedDigest "shikigami.objective-checkpoint-operation/1" (toJSON (intent.sessionId, intent.operationId)))
+
+-- The only constructor path observes an exact immutable rejection under current
+-- permission. Unknown, accepted and mismatched requests cannot supply a grant.
+checkpointRejection :: AppEnv -> AgentIdentity -> Capability.ObjectiveHost -> CP.CheckpointIntent -> IO (Either Text RejectionAuthority)
+checkpointRejection env identity supplied intent
+  | intent.actor /= identity = pure (Left "foreign checkpoint actor")
+  | otherwise = do
+      let host = supplied & #authenticate .~ (supplied.authenticate <&> (\result -> result >>= \actor -> if actor == RecordedAgent identity then Right actor else Left ObjectiveDenied))
+      result <- runAppIO env do
+        resolved <- Capability.resolveAssignment host intent.objective
+        case resolved of
+          Left err -> pure (Left err)
+          Right reference -> do
+            let command = ProjectCheckpoint reference.assignmentId intent
+            Capability.readInternalReceipt host reference.objectiveId intent.expected.revision (checkpointOperation intent) command
+      pure case result of
+        Right (Right (Just (Left refusal)))
+          | refusal `notElem` [ObjectiveDenied, ObjectiveUnavailable, ObjectiveUnresolved] ->
+              Right (RejectionAuthority (CheckpointRejection V1 intent (providerReceiptFor "shikigami.objective-checkpoint-rejection/1" (toJSON (intent, refusal))) (Text.pack (show refusal))))
+        _ -> Left "checkpoint has no definitive non-commit proof"

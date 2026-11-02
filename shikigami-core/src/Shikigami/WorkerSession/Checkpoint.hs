@@ -6,6 +6,7 @@
 -- acknowledgement, and atomically reject stale owner/revision updates.
 module Shikigami.WorkerSession.Checkpoint where
 
+import Data.Aeson qualified as Aeson
 import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Identity (ExecutionRootId, OperationId)
@@ -72,3 +73,17 @@ matchesReceipt intent receipt =
     && receipt.operationId == intent.operationId
     && receipt.fingerprint == intentFingerprint intent
     && receipt.revision > intent.expected.revision
+
+-- | The parent explicitly revalidates retained events against these versions.
+-- Fresh provider reads must match all three; they never replace this decision.
+data CheckpointRevalidation = CheckpointRevalidation
+  { objectiveRevision :: !(StateRevision "objective"),
+    assignmentRevision :: !(StateRevision "objective-assignment"),
+    criteriaRevision :: !(StateRevision "objective-criteria"),
+    statement :: !InstructionText
+  }
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (ToJSON)
+
+instance FromJSON CheckpointRevalidation where
+  parseJSON = Aeson.genericParseJSON (Aeson.defaultOptions {Aeson.rejectUnknownFields = True})

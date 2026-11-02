@@ -345,6 +345,7 @@ library
     Shikigami.RunJobs.Generated.QueuePolicy
     Shikigami.Sink.Auth.Internal
     Shikigami.WorkerSession.Bindings
+    Shikigami.WorkerSession.CheckpointAuthority
     Shikigami.WorkerSessionLifecycle.BehaviorHoles
     Shikigami.WorkerSessionLifecycle.Generated.BehaviorContract
     Shikigami.WorkerSessionLifecycle.Generated.Codec

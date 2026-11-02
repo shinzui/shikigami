@@ -520,7 +520,7 @@ executionTools deps = WorkerTools.appendNativeFactory (ExecutionTools.staticNati
 workerSessionRuntime :: AgentRunDeps -> WorkerSession.SessionRuntime
 workerSessionRuntime deps = case deps.coordination of
   Just host -> host.services.sessions
-  Nothing -> WorkerSession.SessionRuntime deps.appEnv deps.agents deps.directory (Directory.identityLifecycleAdmission deps.directory) Nothing
+  Nothing -> WorkerSession.SessionRuntime deps.appEnv deps.agents deps.directory (Directory.identityLifecycleAdmission deps.directory) Nothing Nothing
 
 selectionRuntime :: AgentRunDeps -> RunJob -> Maybe ResolvedProfile -> SelectionRuntime.SelectionRuntime
 selectionRuntime deps job profile =

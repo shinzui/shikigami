@@ -51,13 +51,13 @@ requestHandoff services session revision epoch operation workspace target =
         Left err -> pure (Left err)
   where
     begin access = case (services.workspaces, services.ownership, services.sessions.checkpoints) of
-      (Just _, Just _, Just checkpoints) ->
+      (Just _, Just _, Just providers) ->
         Store.inspectSession session >>= \case
           Right (Just (_, binding)) -> case find (\decl -> decl.name == target && agentEnabled decl.enabled) services.sessions.agents of
             Nothing -> pure (Left SessionOwnerRefused)
             Just declaration -> do
               identity <- liftIO (Directory.identityAdmission services.sessions.directory ((.principal) <$> declaration.identity) target)
-              current <- trySync (liftIO (checkpoints.current binding.objective))
+              current <- trySync (liftIO ((providers binding.parentIdentity).current binding.objective))
               now <- liftIO getCurrentTime
               case (identity, current) of
                 (Right successor, Right (Right version)) | now < version.cutoff -> fmap snd <$> Store.requestTransfer access revision epoch operation version workspace target successor

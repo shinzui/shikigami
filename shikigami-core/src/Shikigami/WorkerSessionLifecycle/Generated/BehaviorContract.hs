@@ -167,6 +167,30 @@ behaviorRequirements =
       , target = Nothing
       , eventKinds = []
       }
+  , -- WorkerSessionLifecycleUnresolved x SupersedeSessionCheckpoint: live transition
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-0926c92042049af1"
+      , kind = LiveTransition
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardUnknown
+      , source = WorkerSessionLifecycleUnresolved
+      , commandName = "SupersedeSessionCheckpoint"
+      , expectedEdge = (Just (K.EdgeRef WorkerSessionLifecycleUnresolved 7))
+      , target = Just WorkerSessionLifecycleUnresolved
+      , eventKinds = ["SessionCheckpointSuperseded"]
+      }
+  , -- WorkerSessionLifecycleTransferring x SupersedeSessionCheckpoint: live transition
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-0961816d9f52abc5"
+      , kind = LiveTransition
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardUnknown
+      , source = WorkerSessionLifecycleTransferring
+      , commandName = "SupersedeSessionCheckpoint"
+      , expectedEdge = (Just (K.EdgeRef WorkerSessionLifecycleTransferring 8))
+      , target = Just WorkerSessionLifecycleTransferring
+      , eventKinds = ["SessionCheckpointSuperseded"]
+      }
   , -- WorkerSessionLifecycleMissing x AcceptSessionMessage: required rejection
     BehaviorRequirement
       { key = BehaviorKey "behavior-v1-09e3c8f3dc33874e"
@@ -202,6 +226,18 @@ behaviorRequirements =
       , expectedEdge = Nothing
       , target = Nothing
       , eventKinds = []
+      }
+  , -- WorkerSessionLifecycleFailed x SupersedeSessionCheckpoint: live transition
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-14045de2e90d7f01"
+      , kind = LiveTransition
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardUnknown
+      , source = WorkerSessionLifecycleFailed
+      , commandName = "SupersedeSessionCheckpoint"
+      , expectedEdge = (Just (K.EdgeRef WorkerSessionLifecycleFailed 3))
+      , target = Just WorkerSessionLifecycleFailed
+      , eventKinds = ["SessionCheckpointSuperseded"]
       }
   , -- WorkerSessionLifecycleFailed x MarkSessionUnresolved: required rejection
     BehaviorRequirement
@@ -463,6 +499,18 @@ behaviorRequirements =
       , guardCoverage = GuardNotApplicable
       , source = WorkerSessionLifecycleCancelled
       , commandName = "MarkSessionUnresolved"
+      , expectedEdge = Nothing
+      , target = Nothing
+      , eventKinds = []
+      }
+  , -- WorkerSessionLifecycleMissing x SupersedeSessionCheckpoint: required rejection
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-37a8f96af868ca93"
+      , kind = RequiredRejection
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardNotApplicable
+      , source = WorkerSessionLifecycleMissing
+      , commandName = "SupersedeSessionCheckpoint"
       , expectedEdge = Nothing
       , target = Nothing
       , eventKinds = []
@@ -755,6 +803,18 @@ behaviorRequirements =
       , target = Just WorkerSessionLifecycleIdle
       , eventKinds = ["SessionEventsSubscribed"]
       }
+  , -- WorkerSessionLifecycleIdle x SupersedeSessionCheckpoint: live transition
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-70aa9de9e02b7ea1"
+      , kind = LiveTransition
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardUnknown
+      , source = WorkerSessionLifecycleIdle
+      , commandName = "SupersedeSessionCheckpoint"
+      , expectedEdge = (Just (K.EdgeRef WorkerSessionLifecycleIdle 9))
+      , target = Just WorkerSessionLifecycleIdle
+      , eventKinds = ["SessionCheckpointSuperseded"]
+      }
   , -- WorkerSessionLifecycleFailed x FailWorkerSession: required rejection
     BehaviorRequirement
       { key = BehaviorKey "behavior-v1-73d7448b4cdb129a"
@@ -850,6 +910,18 @@ behaviorRequirements =
       , expectedEdge = (Just (K.EdgeRef WorkerSessionLifecycleActive 5))
       , target = Just WorkerSessionLifecycleIdle
       , eventKinds = ["SessionResultRecorded"]
+      }
+  , -- WorkerSessionLifecycleActive x SupersedeSessionCheckpoint: live transition
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-7a8529fcafd50935"
+      , kind = LiveTransition
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardUnknown
+      , source = WorkerSessionLifecycleActive
+      , commandName = "SupersedeSessionCheckpoint"
+      , expectedEdge = (Just (K.EdgeRef WorkerSessionLifecycleActive 9))
+      , target = Just WorkerSessionLifecycleActive
+      , eventKinds = ["SessionCheckpointSuperseded"]
       }
   , -- WorkerSessionLifecycleIdle x RecordSessionResult: required rejection
     BehaviorRequirement
@@ -1067,6 +1139,18 @@ behaviorRequirements =
       , target = Nothing
       , eventKinds = []
       }
+  , -- WorkerSessionLifecycleParked x SupersedeSessionCheckpoint: live transition
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-903d594afcdccb6d"
+      , kind = LiveTransition
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardUnknown
+      , source = WorkerSessionLifecycleParked
+      , commandName = "SupersedeSessionCheckpoint"
+      , expectedEdge = (Just (K.EdgeRef WorkerSessionLifecycleParked 8))
+      , target = Just WorkerSessionLifecycleParked
+      , eventKinds = ["SessionCheckpointSuperseded"]
+      }
   , -- WorkerSessionLifecycleTransferring x MarkSessionUnresolved: required rejection
     BehaviorRequirement
       { key = BehaviorKey "behavior-v1-91aa9f772da2b410"
@@ -1222,6 +1306,18 @@ behaviorRequirements =
       , expectedEdge = Nothing
       , target = Nothing
       , eventKinds = []
+      }
+  , -- WorkerSessionLifecycleCancelled x SupersedeSessionCheckpoint: live transition
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-a20203762ffd49d9"
+      , kind = LiveTransition
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardUnknown
+      , source = WorkerSessionLifecycleCancelled
+      , commandName = "SupersedeSessionCheckpoint"
+      , expectedEdge = (Just (K.EdgeRef WorkerSessionLifecycleCancelled 3))
+      , target = Just WorkerSessionLifecycleCancelled
+      , eventKinds = ["SessionCheckpointSuperseded"]
       }
   , -- WorkerSessionLifecycleParked x RequestSessionTransfer: live transition
     BehaviorRequirement
@@ -1938,6 +2034,7 @@ commandKind command = case command of
   ConsumeSessionEvents _ -> "ConsumeSessionEvents"
   FailWorkerSession _ -> "FailWorkerSession"
   CancelWorkerSession _ -> "CancelWorkerSession"
+  SupersedeSessionCheckpoint _ -> "SupersedeSessionCheckpoint"
 
 eventKind :: WorkerSessionLifecycleEvent -> Text
 eventKind event = case Codec.eventType workerSessionLifecycleCodec event of Codec.EventType tag -> tag

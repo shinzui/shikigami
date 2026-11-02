@@ -601,13 +601,15 @@ validateSources objective mutation = do
     _ -> pure []
   checkpoint <- case mutation of
     Internal (TransferSessionOwnership key intent proof) -> do
+      -- Session mutations lock their resource root before the session row.
+      -- Keep that order while composing the ownership source check.
+      root <- Roots.inspectRootTx intent.rootId >>= either (const (abort ObjectiveUnavailable)) pure
       settled <- Sessions.verifyTransferSourceTx intent proof
       case settled of
         Left WS.AssignmentConflict -> pure (Left ObjectiveConflict)
         Left _ -> abort ObjectiveUnavailable
         Right () -> case find ((== key) . (.definition.assignmentId)) objective.assignments of
           Just assignment -> do
-            root <- Roots.inspectRootTx intent.rootId >>= either (const (abort ObjectiveUnavailable)) pure
             now <- Tx.statement () currentTime
             pure do
               cutoff <- maybe (Left ObjectiveConflict) Right assignment.definition.cutoff

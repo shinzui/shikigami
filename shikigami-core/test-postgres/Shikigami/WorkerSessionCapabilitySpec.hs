@@ -76,7 +76,7 @@ import Shikigami.WorkerSessionStoreSpec (checkpointVersion, fixtureCheckpoints, 
 import Shikigami.Workflow.Versioning (shikigamiWorkflowRunOptions)
 import Shikumi.Error (ShikumiError)
 import Shikumi.LLM (runLLM)
-import Shikumi.Tool (lowerSomeTool, runErasedOutput)
+import Shikumi.Tool (SomeTool (DynTool), lowerSomeTool, runErasedOutput)
 import Shikumi.Tool.Output (ToolOutput (..))
 import System.Mem (performGC)
 import Test.Tasty (TestTree, testGroup)
@@ -257,6 +257,28 @@ tests fixture =
           run env (executeCommand selected authorizer grant (fixtureOperationId "disjoint-permissions") (SendWorker (Session.sessionIdFor admission) (fixtureRevision 0) (fixtureRevision 0) (draft "refused"))) >>= (@?= Left Session.SessionOwnerRefused)
           Just (state, _) <- expectRight =<< run env (Store.inspectSession (Session.sessionIdFor admission))
           state.nextSequence @?= (fixtureRevision 0),
+      testCase "accepted worker schemas retain their original command set during checkpoint reconciliation rollout" $
+        withCapabilityFixture fixture \_env admission host scope authorizer _ _ -> do
+          snapshot <- snapshotFor scope
+          let factory = Tools.coordinationTools (Just host) authorizer
+          [described] <- expectRight =<< factory.describe snapshot
+          let currentSchema = case described.tool of DynTool _ _ value _ -> value; _ -> error "native worker tool must be dynamic"
+              legacySchema = case currentSchema of
+                Aeson.Object fields -> case KeyMap.lookup "properties" fields of
+                  Just (Aeson.Object properties) ->
+                    let oldTags = ["FindWorker", "SendWorker", "InspectWorker", "ReadWorkerEvents", "ReadWorkerResult", "InterruptWorker", "CancelWorker", "TransferWorker", "ReconcileWorker", "IntegrateWorkerEvents"] :: [Text]
+                        next = KeyMap.insert "tag" (Aeson.object ["type" .= ("string" :: Text), "enum" .= oldTags]) (KeyMap.delete "previousOperation" (KeyMap.delete "revalidation" properties))
+                     in Aeson.Object (KeyMap.insert "properties" (Aeson.Object next) fields)
+                  _ -> error "worker properties missing"
+                _ -> error "worker schema missing"
+              binding = described.binding & #schemaDigest .~ ExecutionValue.executionDigestFor "shikigami.tool-schema/1" legacySchema
+              accepted = snapshot & #toolBindings .~ [binding]
+              context = OperationContext accepted.executionId (fixtureOperationId "trusted-old-operation") (fixtureOperationId "trusted-old-key") (ExecutionValue.executionDigest "fingerprint") (ExecutionValue.executionDigest "scope")
+              command = Aeson.object ["tag" .= ("ReconcileWorkerCheckpoint" :: Text), "sessionId" .= Session.sessionIdFor admission, "expectedRevision" .= (0 :: Int), "epoch" .= (0 :: Int), "previousOperation" .= fixtureOperationId "old-checkpoint", "revalidation" .= Aeson.object ["objectiveRevision" .= (1 :: Int), "assignmentRevision" .= (1 :: Int), "criteriaRevision" .= (1 :: Int), "statement" .= ("reviewed" :: Text)]]
+          [prepared] <- expectRight =<< factory.prepare accepted context (Just (ExecutionValue.executionCoordinate "workers"))
+          prepared.binding @?= binding
+          bad <- runEff (runErrorNoCallStack @ShikumiError (runLLM (runErasedOutput prepared.tool command)))
+          case bad of Right (Left _) -> pure (); _ -> assertFailure "accepted old menu gained a new mutation",
       testCase "native tools pin a scope across replay and never accept model operation or root coordinates" $
         withCapabilityFixture fixture \env admission host scope authorizer _ current -> do
           snapshot <- snapshotFor scope
@@ -298,7 +320,7 @@ withCapabilityFixture fixture callback = withFixture fixture \env admission _ ->
   (checkpoints, _) <- fixtureCheckpoints version False
   let run = CoordinatorRun (WorkflowId "capability-parent") admission.context.identity memory admission.context.executionRootId admission.context.executionPermissions
       scope = CoordinationScope V1 run admission.scope.parent (admission.delegator & #behavior .~ CoordinatingSkill (declarationCoordinate ("fixture-coordinator"))) admission.context [WorkerSlot admission.scope.workerKey admission.worker admission.identity admission.objective (Just (Session.sessionIdFor admission))] (fixtureLimit 8) admission.maximumAssignments admission.mailboxLimit
-      sessions = SessionRuntime env [admission.delegator & #name .~ fixtureAgentName "worker" & #delegates .~ map fixtureAgentName []] disabledDirectoryHandle (const (pure (Right ()))) (Just checkpoints)
+      sessions = SessionRuntime env [admission.delegator & #name .~ fixtureAgentName "worker" & #delegates .~ map fixtureAgentName []] disabledDirectoryHandle (const (pure (Right ()))) (Just (const checkpoints)) Nothing
   current <- newIORef (Just scope)
   revoked <- newIORef False
   let authority = CoordinationAuthority (\requested -> readIORef current <&> \value -> if requested == run then Right value else Left "foreign run") (\requested pinned -> pure (if requested == run && pinned == scopeFingerprint scope then Right scope else Left "retained scope unavailable"))

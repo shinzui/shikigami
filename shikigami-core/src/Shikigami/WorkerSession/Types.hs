@@ -301,7 +301,7 @@ data ResultReceipt = ResultReceipt
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
-data SessionEvent = MessageAccepted !MessageReceipt | AssignmentStarted !MessageReceipt | ResultAvailable !ResultReceipt | AssignmentStatusChanged !AssignmentId !AssignmentPhase | TransferStatusChanged !OperationId !HandoffStage | SessionClosedEvent !SessionPhase
+data SessionEvent = MessageAccepted !MessageReceipt | AssignmentStarted !MessageReceipt | ResultAvailable !ResultReceipt | AssignmentStatusChanged !AssignmentId !AssignmentPhase | TransferStatusChanged !OperationId !HandoffStage | SessionClosedEvent !SessionPhase | CheckpointSuperseded !OperationId !OperationId
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 

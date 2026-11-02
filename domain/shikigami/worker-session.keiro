@@ -97,6 +97,7 @@ aggregate WorkerSessionLifecycle
   command ConsumeSessionEvents { sessionId:WorkerSessionIdentity expected:Int revision:Int }
   command FailWorkerSession { sessionId:WorkerSessionIdentity expected:Int revision:Int }
   command CancelWorkerSession { sessionId:WorkerSessionIdentity expected:Int revision:Int }
+  command SupersedeSessionCheckpoint { sessionId:WorkerSessionIdentity expected:Int revision:Int }
   event WorkerSessionAdmitted = fields(AdmitWorkerSession)
   event SessionMessageAccepted = fields(AcceptSessionMessage)
   event SessionAssignmentStarted = fields(StartSessionAssignment)
@@ -114,6 +115,7 @@ aggregate WorkerSessionLifecycle
   event SessionEventsConsumed = fields(ConsumeSessionEvents)
   event WorkerSessionFailed = fields(FailWorkerSession)
   event WorkerSessionCancelled = fields(CancelWorkerSession)
+  event SessionCheckpointSuperseded = fields(SupersedeSessionCheckpoint)
 
   Missing -- AdmitWorkerSession -->
     write sessionId := cmd.sessionId
@@ -401,6 +403,48 @@ aggregate WorkerSessionLifecycle
     guard cmd.sessionId == reg.sessionId && cmd.expected == reg.revision && cmd.revision > reg.revision
     write revision := cmd.revision
     emit SessionEventsSubscribed
+    goto Cancelled
+
+  Idle -- SupersedeSessionCheckpoint -->
+    guard cmd.sessionId == reg.sessionId && cmd.expected == reg.revision && cmd.revision > reg.revision
+    write revision := cmd.revision
+    emit SessionCheckpointSuperseded
+    goto Idle
+
+  Active -- SupersedeSessionCheckpoint -->
+    guard cmd.sessionId == reg.sessionId && cmd.expected == reg.revision && cmd.revision > reg.revision
+    write revision := cmd.revision
+    emit SessionCheckpointSuperseded
+    goto Active
+
+  Parked -- SupersedeSessionCheckpoint -->
+    guard cmd.sessionId == reg.sessionId && cmd.expected == reg.revision && cmd.revision > reg.revision
+    write revision := cmd.revision
+    emit SessionCheckpointSuperseded
+    goto Parked
+
+  Unresolved -- SupersedeSessionCheckpoint -->
+    guard cmd.sessionId == reg.sessionId && cmd.expected == reg.revision && cmd.revision > reg.revision
+    write revision := cmd.revision
+    emit SessionCheckpointSuperseded
+    goto Unresolved
+
+  Transferring -- SupersedeSessionCheckpoint -->
+    guard cmd.sessionId == reg.sessionId && cmd.expected == reg.revision && cmd.revision > reg.revision
+    write revision := cmd.revision
+    emit SessionCheckpointSuperseded
+    goto Transferring
+
+  Failed -- SupersedeSessionCheckpoint -->
+    guard cmd.sessionId == reg.sessionId && cmd.expected == reg.revision && cmd.revision > reg.revision
+    write revision := cmd.revision
+    emit SessionCheckpointSuperseded
+    goto Failed
+
+  Cancelled -- SupersedeSessionCheckpoint -->
+    guard cmd.sessionId == reg.sessionId && cmd.expected == reg.revision && cmd.revision > reg.revision
+    write revision := cmd.revision
+    emit SessionCheckpointSuperseded
     goto Cancelled
 
   wire kind=ctorName fields=camelCase schemaVersion=1
