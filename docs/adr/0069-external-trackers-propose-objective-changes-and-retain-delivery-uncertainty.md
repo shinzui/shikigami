@@ -2,7 +2,7 @@
 
 Date: 2026-10-29
 
-Status: accepted; provider-neutral implementation in qualification, Rei integration pending
+Status: accepted; provider-neutral implementation qualified, Rei integration pending
 
 ## Context
 
@@ -78,7 +78,7 @@ interpreted by the legacy sink handler as delivery. The engine is tested with st
 providers; Rei is additionally tested against its real disposable API server, including
 lost responses and projection lag. The provider-neutral implementation declares a separate preserved tracker projection group, with one writer per target. Both the objective and tracker projections consume the same ObjectiveLifecycle source and execute under both catalog fences in one append transaction. A technical tracker event does not advance the objective semantic revision. Proposal application uses an actor-pinned callback through the existing objective command owner; it cannot write objective rows independently or change public command fingerprints.
 
-Publication records retain their original timestamp, full request digest and destination fence. Attempt claims are separate from immutable provider attempts, so claim renewal cannot change a replayed request. Receipt lookup uses a protected typed command result; dispatch barriers and the latest export base use bounded indexed queries independently of the public inspection limit. Provider-neutral store and recovery qualification is in progress; the concrete Rei adapter and public serving gate remain pending.
+Publication records retain their original timestamp, full request digest and destination fence. Attempt claims are separate from immutable provider attempts, so claim renewal cannot change a replayed request. Receipt lookup uses a protected typed command result; dispatch barriers and the latest export base use bounded indexed queries independently of the public inspection limit. [Provider-neutral qualification](../evidence/plan-103/qualification.json) passes 22 focused unit cases, 34 PostgreSQL cases, the broader package regression, complete build and 177 native conformance checks. The technical event adds a fold-surface warning without changing existing registers or old-event folding; generated fingerprints invalidate native snapshots automatically. The concrete Rei adapter and public serving gate remain pending.
 MasterPlan 17's no-Rei feature and acceptance gate remain independently useful.
 
 ## References

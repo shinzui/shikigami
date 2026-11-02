@@ -63,7 +63,7 @@ Upstream decisions were discovered through Mori: `mori://shinzui/rei/okf/adrs/co
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|---|---|---|---|---|
-| EP-1 | Persist provider-neutral bindings and synchronization receipts | [103-persist-provider-neutral-objective-tracker-bindings-and-synchronization-receipts.md](../plans/103-persist-provider-neutral-objective-tracker-bindings-and-synchronization-receipts.md) | MasterPlan 17 Complete | None | In Progress |
+| EP-1 | Persist provider-neutral bindings and synchronization receipts | [103-persist-provider-neutral-objective-tracker-bindings-and-synchronization-receipts.md](../plans/103-persist-provider-neutral-objective-tracker-bindings-and-synchronization-receipts.md) | MasterPlan 17 Complete | None | Complete |
 | EP-2 | Adapt Rei intentions and actions | [104-adapt-rei-intentions-and-actions-to-objective-tracker-contracts.md](../plans/104-adapt-rei-intentions-and-actions-to-objective-tracker-contracts.md) | EP-1 | None | Not Started |
 | EP-3 | Expose and qualify external synchronization | [105-expose-and-qualify-recoverable-external-objective-synchronization.md](../plans/105-expose-and-qualify-recoverable-external-objective-synchronization.md) | EP-1, EP-2 | None | Not Started |
 
@@ -98,6 +98,8 @@ EP-1 consumes the delivered objective transaction and authorization owner. EP-2 
 
 ## Progress
 
+2026-11-02 EP-1 Complete: candidate `9b34e4e5` passes final 22 tracker unit and 34 PostgreSQL cases, complete build, convention/migration checks and the native gate (177 checks; 11 additive findings, one understood fold-surface warning, neutral replay). [Plan 103 evidence](../evidence/plan-103/qualification.json) retains the broad regression run and recovery boundary. EP-2 is now eligible; EP-3 still requires EP-2 Complete. The real disposable Rei and public-control gates remain open.
+
 2026-11-02 EP-1 qualification: the provider-neutral engine and shared objective transaction seam are implemented. The four-package regression run passes 660 core, 533 PostgreSQL, 103 server and 280 worker cases; final focused qualification passes 22 tracker unit and 34 PostgreSQL cases. Complete build, migration isolation and convention checks pass. EP-1 remains In Progress pending its committed-candidate native gate; EP-2 and EP-3 retain their whole-child prerequisites. No Rei runtime or public tracker controls are claimed.
 
 2026-11-02: MasterPlan 17 and all five children are Complete, with retained no-Rei serving qualification in `docs/evidence/plan-102/qualification.json`. Verified at implementation baseline `6d816d5ed49292ff48f985e066d787a1ac146a41`. EP-1 is In Progress; its delivered objective owner is `Objective/Capability.hs` and `Objective/Store.hs`, and the current checked domain is `domain/shikigami/objective.keiro`. EP-2 and EP-3 retain whole-child prerequisites.
@@ -107,6 +109,8 @@ EP-1 consumes the delivered objective transaction and authorization owner. EP-2 
 
 
 ## Surprises & Discoveries
+
+2026-11-02: EP-1 required separate objective/tracker projection ownership on the same ObjectiveLifecycle source; both group fences and callbacks now share one append transaction. Connection incarnation labels alone cannot detect endpoint/account edits, so retained target fingerprints prevent redirection and configuration permits historical incarnations for read-only recovery. ADR 0069 records these shared constraints.
 
 
 The existing ReiAction sink claims Rei has no HTTP API and posts to `/v1/agent-actions`; Mori-discovered source now exposes a v2 API. The current action handler generates a fresh remote action ID on every request, while its request type has no idempotency key. This prevents safe automatic replay after an ambiguous send and determines EP-2’s quarantine requirement. No live interoperability test has yet run.

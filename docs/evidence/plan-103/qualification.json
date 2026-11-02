@@ -1,0 +1,52 @@
+{
+  "baseline": "6d816d5ed49292ff48f985e066d787a1ac146a41",
+  "qualified_candidate": "9b34e4e5",
+  "qualified_at": "2026-11-02T11:24:16.663916+00:00",
+  "scope": "Provider-neutral objective tracker bindings, explicit imports, atomic publications and production dispatch/reconciliation with deterministic providers; no Rei runtime or public tracker routes.",
+  "regression_suites": {
+    "shikigami-core-test": 660,
+    "shikigami-core-postgres-test": 533,
+    "shikigami-server-test": 103,
+    "shikigami-workers-test": 280
+  },
+  "final_focused_suites": {
+    "ObjectiveTracker": 22,
+    "ObjectiveTrackerStore": 34
+  },
+  "native_conformance_checks": 177,
+  "native_diff": {
+    "breaking": false,
+    "additive_findings": 11,
+    "warnings": [
+      "AggFoldSurfaceChanged: additive technical event; existing objective fold and registers unchanged; regenerated fingerprint invalidates native snapshots"
+    ]
+  },
+  "replay_impact": "replay-neutral",
+  "checks": [
+    "cabal build all -j2",
+    "four-package serial-test regression",
+    "final ObjectiveTracker unit/PostgreSQL suites",
+    "just haskell-conventions",
+    "just migration-schema-isolation",
+    "just keiro-gate 6d816d5ed49292ff48f985e066d787a1ac146a41",
+    "git diff --check"
+  ],
+  "qualified_behaviors": [
+    "Binding admission requires current objective and connection-use authority; passive external links confer none.",
+    "Source versions, payload digests and connection target fingerprints fence observations and publications; old incarnations remain configurable for reconciliation.",
+    "Proposal decisions use the actor-pinned existing objective owner and share one append transaction with tracker receipts/publications. Local divergence requires explicit rebasing; imports invalidate real checkpoint versions.",
+    "A child process exits after commit and reconnect recovers one binding, objective receipt and publication with provider access poisoned.",
+    "Concurrent admissions and dispatch claims serialize. Rollback and corruption cannot retain a false objective receipt or publication.",
+    "Strong providers replay the immutable request only under retained unexpired server keys. Weak providers quarantine unknown effects without another send.",
+    "Unknown work blocks later sends only for its binding; suppression preserves uncertainty. Settled non-application and definitely-not-sent are distinct from empty eventual reads.",
+    "Operator attestation requires explicit local-operator reconciliation permission and retained provider-read evidence matching publication, attempt, incarnation, resource, digest and receipt revision.",
+    "Late exact acknowledgements settle their original attempt; current revocation precedes receipt disclosure."
+  ],
+  "boundaries": [
+    "No production Rei dependency or interoperability is claimed.",
+    "No public tracker API, CLI or process composition is enabled in this child.",
+    "No workflow journal step or patch changes.",
+    "Public history remains bounded; immutable retained tracker data is not compacted."
+  ],
+  "friction": "No new qualifying friction; no entries logged under plan 103."
+}
