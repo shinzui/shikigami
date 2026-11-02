@@ -17,6 +17,7 @@ import Shikigami.InspectionSocketSpec qualified as InspectionSocketSpec
 import Shikigami.InspectionSpec qualified as InspectionSpec
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations.TestSupport (withShikigamiMigratedSuite)
+import Shikigami.Objective.HandlerSpec qualified as ObjectiveSpec
 import Shikigami.Server.AgentsSpec qualified as AgentsSpec
 import Shikigami.Server.App (shikigamiApplication)
 import Shikigami.Server.Boot (newServerEnvWith)
@@ -41,6 +42,7 @@ main = withShikigamiMigratedSuite \databaseFixture ->
           AgentsSpec.tests databaseFixture,
           HandlerSpec.tests,
           RunHandlerSpec.tests databaseFixture,
+          ObjectiveSpec.tests databaseFixture,
           VerifierSpec.tests,
           CommandSpec.tests,
           DispatchSpec.tests,

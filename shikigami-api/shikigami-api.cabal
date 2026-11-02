@@ -43,6 +43,7 @@ library
     Shikigami.Api.Problem
     Shikigami.Caller.Api
     Shikigami.Health.Api
+    Shikigami.Objective.Api
 
   build-depends:
     aeson >=2.2,
@@ -89,6 +90,7 @@ test-suite shikigami-api-test
     Shikigami.Agent.ApiSpec
     Shikigami.AgentRun.ApiSpec
     Shikigami.Api.OpenApiSpec
+    Shikigami.Objective.ApiSpec
 
   ghc-options:
     -threaded

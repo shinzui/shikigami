@@ -22,6 +22,7 @@ module Shikigami.Client
     shikigamiClient,
     healthClient,
     agentsClient,
+    objectivesClient,
     Credential,
     credentialFor,
 
@@ -43,6 +44,7 @@ import Shikigami.Agent.Api (AgentApi)
 import Shikigami.Api (ShikigamiApi (..))
 import Shikigami.Caller.Api (Authenticated)
 import Shikigami.Health.Api (HealthApi)
+import Shikigami.Objective.Api (ObjectiveApi)
 
 -- | Every endpoint, as a record of callable functions.
 shikigamiClient :: ShikigamiApi (AsClientT ClientM)
@@ -84,3 +86,6 @@ credentialFor token = mkAuthenticatedRequest token \value request ->
   case value of
     Nothing -> request
     Just secret -> addHeader "Authorization" ("Bearer " <> secret) request
+
+objectivesClient :: Credential -> ObjectiveApi (AsClientT ClientM)
+objectivesClient = (.objectives) shikigamiClient

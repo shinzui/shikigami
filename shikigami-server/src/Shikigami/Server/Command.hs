@@ -62,6 +62,7 @@ import Shikigami.Server.Command.DanwaSpike (runDanwaSpike)
 import Shikigami.Server.Command.EnqueueRun (runEnqueueRun)
 import Shikigami.Server.Command.Executions (runExecutionsInspect)
 import Shikigami.Server.Command.Grants (runGrantsGrant, runGrantsList, runGrantsRevoke)
+import Shikigami.Server.Command.Objectives
 import Shikigami.Server.Command.Ops (opsConfigSources, opsInvocationParser, runOps)
 import Shikigami.Server.Command.PublishFixture (runPublishFixture)
 import Shikigami.Server.Command.RenderLifecycle (runRenderLifecycle)
@@ -169,8 +170,26 @@ adminSubcommands =
     ("runs", command "runs" runsInfo),
     ("resources", command "resources" resourcesInfo),
     ("executions", command "executions" executionsInfo),
-    ("workers", command "workers" workersInfo)
+    ("workers", command "workers" workersInfo),
+    ("objectives", command "objectives" objectivesInfo)
   ]
+
+objectivesInfo :: ParserInfo AdminAction
+objectivesInfo = info (subparser commands <**> helper) (progDesc "Create, inspect and update authoritative objectives as the configured operator")
+  where
+    commands =
+      command "create" (info (create <**> helper) (progDesc "Create or replay an objective"))
+        <> command "inspect" (info (inspect <**> helper) (progDesc "Read objective metadata"))
+        <> command "history" (info (history <**> helper) (progDesc "Page through attributed command receipts"))
+        <> command "command" (info (mutate <**> helper) (progDesc "Submit a closed command at an expected revision"))
+    operation = option (eitherReader (either (Left . Text.unpack) Right . parseOperationId . Text.pack)) (long "operation-key" <> metavar "KEY")
+    identifier = strArgument (metavar "OBJECTIVE")
+    file = strOption (long "file" <> metavar "FILE")
+    json = switch (long "json")
+    create = (\key path format -> (runObjectivesCreate key path format, [])) <$> operation <*> file <*> json
+    inspect = (\key after limit format -> (runObjectivesInspect key after limit format, [])) <$> identifier <*> option auto (long "after" <> value 0 <> metavar "OFFSET") <*> option auto (long "limit" <> value 20 <> metavar "N") <*> json
+    history = (\key after limit format -> (runObjectivesHistory key after limit format, [])) <$> identifier <*> optional (option auto (long "after" <> metavar "REVISION")) <*> option auto (long "limit" <> value 20 <> metavar "N") <*> json
+    mutate = (\key op revision path format -> (runObjectivesCommand key op revision path format, [])) <$> identifier <*> operation <*> option revisionReader (long "expected-revision" <> metavar "REVISION") <*> file <*> json
 
 workersInfo :: ParserInfo AdminAction
 workersInfo = info (subparser commands <**> helper) (progDesc "Inspect continuing workers and issue scoped, explicitly keyed commands")

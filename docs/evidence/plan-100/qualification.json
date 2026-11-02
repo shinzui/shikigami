@@ -1,0 +1,47 @@
+{
+  "baseline": "afc2a28",
+  "qualified_at": "2026-11-02 UTC",
+  "scope": "Plan 100: authenticated objective API, typed client, configured operator CLI and bounded attributed inspection through one command owner.",
+  "suites": {
+    "shikigami-api-test": 35,
+    "shikigami-server-test": 103,
+    "shikigami-core-test": 632,
+    "shikigami-core-postgres-test": 490
+  },
+  "native_conformance_checks": 169,
+  "native_diff": "neutral; no findings",
+  "replay_impact": "replay-neutral",
+  "checks": [
+    "just hurl",
+    "cabal run shikigami -- objectives --help",
+    "just keiro-gate afc2a28",
+    "python3 tools/style/check_haskell.py",
+    "bash tools/check-migration-schema-isolation.sh",
+    "just user-docs-validate",
+    "git diff --check"
+  ],
+  "http_objective_smoke_requests": 8,
+  "operator_smoke": [
+    "create and exact replay",
+    "inspect",
+    "command and exact replay",
+    "history with operator attribution"
+  ],
+  "limits": {
+    "document_bytes": 1048576,
+    "page_default": 20,
+    "page_maximum": 100
+  },
+  "notes": [
+    "Current membership and exact command authority precede protected receipt recovery.",
+    "Only the typed run selector supplies association; an ordinary objective-looking payload remains unassociated.",
+    "Injected ledger failure after queue send rolls back objective association and queued work.",
+    "Revoked worker membership refuses fresh runs; the current authorized caller may recover a previously accepted run receipt.",
+    "Actual indexed memory-session ownership qualifies HTTP conversation binding.",
+    "No workflow body, step shape, migration, dependency bounds or pins changed."
+  ],
+  "remaining": [
+    "plan 101 durable objective tools and Flow/conversation admission",
+    "plan 102 no-Rei continuity and IR-13 lifecycle closure"
+  ]
+}

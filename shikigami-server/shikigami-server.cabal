@@ -35,6 +35,7 @@ library
     Shikigami.Caller.Verifier
     Shikigami.Health.Handler
     Shikigami.Inspection.Server
+    Shikigami.Objective.Handler
     Shikigami.Server.App
     Shikigami.Server.Boot
     Shikigami.Server.Command
@@ -43,6 +44,7 @@ library
     Shikigami.Server.Command.EnqueueRun
     Shikigami.Server.Command.Executions
     Shikigami.Server.Command.Grants
+    Shikigami.Server.Command.Objectives
     Shikigami.Server.Command.Ops
     Shikigami.Server.Command.PublishFixture
     Shikigami.Server.Command.RenderLifecycle
@@ -151,6 +153,7 @@ test-suite shikigami-server-test
     Shikigami.InspectionHttpSpec
     Shikigami.InspectionSocketSpec
     Shikigami.InspectionSpec
+    Shikigami.Objective.HandlerSpec
     Shikigami.Server.AgentsSpec
     Shikigami.Server.CommandSpec
     Shikigami.Server.DispatchSpec
@@ -190,6 +193,8 @@ test-suite shikigami-server-test
     keiro-ops,
     keiro-ops-http,
     keiro-pgmq,
+    kioku-api,
+    kioku-core,
     kiroku-metrics,
     kiroku-otel,
     kiroku-store,

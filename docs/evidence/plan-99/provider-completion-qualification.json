@@ -17,7 +17,7 @@
     "cabal build all --offline",
     "git diff --check"
   ],
-  "native_conformance_checks": 168,
+  "native_conformance_checks": 169,
   "native_diff": "neutral; no findings",
   "replay_impact": "replay-neutral",
   "notes": [

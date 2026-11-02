@@ -6,6 +6,9 @@
 module Shikigami.Objective.Store
   ( ObjectiveEffects,
     create,
+    createWithDisposition,
+    listObjectives,
+    history,
     read,
     readVersion,
     resolveAssignment,
@@ -34,13 +37,15 @@ where
 import Contravariant.Extras (contrazip2, contrazip3, contrazip4, contrazip6)
 import Control.Exception (Exception, fromException, throw)
 import Data.Aeson qualified as Aeson
-import Data.Aeson.Types qualified as Aeson
+import Data.Aeson.KeyMap qualified as KeyMap
 import Data.ByteString.Lazy qualified as Lazy
 import Data.Functor.Contravariant ((>$<))
 import Data.Generics.Labels ()
 import Data.Int (Int64)
 import Data.KindID qualified as KindID
 import Data.List (find, nub)
+import Data.Text qualified as Text
+import Data.Vector qualified as Vector
 import Effectful (Eff, IOE, (:>))
 import Effectful.Error.Static (Error, tryError)
 import Effectful.Exception (catchSync, throwIO)
@@ -75,6 +80,7 @@ import Shikigami.Objective.Authority (Access (..))
 import Shikigami.Objective.Catalog (withLiveObjective, withLiveObjectiveTurn)
 import Shikigami.Objective.Command
 import Shikigami.Objective.Conversation qualified as Conversation
+import Shikigami.Objective.Inspection (HistoryEntry (..))
 import Shikigami.Objective.Reference (ObjectiveAssociation (..))
 import Shikigami.Objective.Types
 import Shikigami.ObjectiveLifecycle.Generated.Domain qualified as G
@@ -317,6 +323,58 @@ admitConversationTurn access run turn conversation = guarded case access.actor o
       checkAccess access current
       pure (Right ())
 
+-- SQL selects only currently visible rows before applying the page bound.
+listObjectives :: (ObjectiveEffects es) => Access -> Maybe ObjectiveId -> Int -> Eff es (Either ObjectiveError [Objective])
+listObjectives access after limit = protected do
+  checkPage access limit
+  rows <- Tx.statement (administrates access, toJSON access.actor, maybe "" objectiveIdText after, fromIntegral limit) selectObjectives
+  forM rows \(key, value) -> do
+    objective <- requireDecoded value
+    requireDecoded (validateSnapshot objective)
+    unless (objectiveIdText objective.objectiveId == key) (abort ObjectiveConflict)
+    checkAccess access objective
+    pure objective
+
+history :: (ObjectiveEffects es) => Access -> ObjectiveId -> Maybe (StateRevision "objective") -> Int -> Eff es (Either ObjectiveError [HistoryEntry])
+history access objective after limit = protected do
+  checkPage access limit
+  current <- locked objective
+  checkAccess access current
+  rows <- Tx.statement (objectiveIdText objective, maybe "-1" (Text.pack . show . revisionNumber) after, fromIntegral limit) selectHistory
+  forM rows \(key, fingerprint, result, storedPayload) -> do
+    payload <- maybe (abort ObjectiveConflict) pure storedPayload
+    outcome <- requireDecoded result
+    receipt <- either (const (abort ObjectiveConflict)) pure outcome
+    unless (receipt.objectiveId == objective && operationKey receipt.operationId == key && mutationFingerprintText receipt.fingerprint == fingerprint && objectivePayloadDigest payload == receipt.payloadDigest) (abort ObjectiveConflict)
+    (actor, tag) <- require (historyAttribution receipt payload)
+    pure (HistoryEntry receipt actor tag)
+
+checkPage :: Access -> Int -> Transaction ()
+checkPage access limit = do
+  now <- Tx.statement () currentTime
+  unless (now < access.expiresAt && validPrincipal access.actor) (abort ObjectiveDenied)
+  unless (limit >= 1 && limit <= 101) (abort (ObjectiveInvalid "page size must be 1..100"))
+
+historyAttribution :: Receipt -> Aeson.Value -> Either ObjectiveError (AccessPrincipal, Text)
+historyAttribution receipt (Aeson.Array values)
+  | [actorValue, commandValue, snapshotValue] <- Vector.toList values =
+      if receipt.revision == initialRevision
+        then do
+          objective <- (decoded snapshotValue :: Either ObjectiveError Objective)
+          pure (objective.owner, "create")
+        else do
+          actor <- decoded actorValue
+          tag <- case commandValue of
+            Aeson.Object mutation -> case lookupTag mutation of Just value -> Right value; _ -> Left ObjectiveConflict
+            _ -> Left ObjectiveConflict
+          pure (actor, tag)
+  where
+    decoded value = case Aeson.fromJSON value of Aeson.Success answer -> Right answer; _ -> Left ObjectiveConflict
+    lookupTag fields = case KeyMap.lookup "contents" fields of
+      Just (Aeson.Object command) -> case KeyMap.lookup "tag" command of Just (Aeson.String value) -> Just value; _ -> Nothing
+      _ -> case KeyMap.lookup "tag" fields of Just (Aeson.String value) -> Just value; _ -> Nothing
+historyAttribution _ _ = Left ObjectiveConflict
+
 readReceipt :: (ObjectiveEffects es) => Access -> ObjectiveId -> OperationId -> Eff es (Either ObjectiveError (Maybe (Either ObjectiveError Receipt)))
 readReceipt access objective operation = protected do
   current <- locked objective
@@ -340,7 +398,12 @@ readMutationReceipt access objective expected operation mutation = protected do
   forM stored \(actual, outcome) -> if actual == wanted then pure outcome else abort ObjectiveConflict
 
 create :: (ObjectiveEffects es) => Access -> OperationId -> Maybe CreationOrigin -> CreateRequest -> IO (Either ObjectiveError ()) -> Eff es (Either ObjectiveError Receipt)
-create access operation origin request verifyOrigin = guarded do
+create access operation origin request verifyOrigin = fmap (fmap snd) (createWithDisposition access operation origin request verifyOrigin)
+
+-- The allocation identifies which concurrent request published the creation.
+-- This does not add a read-before-write race to HTTP disposition reporting.
+createWithDisposition :: (ObjectiveEffects es) => Access -> OperationId -> Maybe CreationOrigin -> CreateRequest -> IO (Either ObjectiveError ()) -> Eff es (Either ObjectiveError (Bool, Receipt))
+createWithDisposition access operation origin request verifyOrigin = guarded do
   unless (validKey (operationKey operation)) (throwIO (Abort (ObjectiveInvalid "invalid operation key")))
   allocated <- KindID.toText <$> KindID.genKindID @"shikigami_objective"
   identifier <- either (const (throwIO (Abort ObjectiveUnavailable))) pure (parseObjectiveId allocated)
@@ -363,7 +426,7 @@ create access operation origin request verifyOrigin = guarded do
             pure (Just old)
   original <- lookupOriginal >>= either (throwIO . Abort) pure
   case original of
-    Just old -> pure (Right old)
+    Just old -> pure (Right (False, old))
     Nothing -> do
       unless (creationAllowed access.settings access.actor) (throwIO (Abort ObjectiveDenied))
       case access.actor of
@@ -385,7 +448,7 @@ create access operation origin request verifyOrigin = guarded do
         writeReceipt receipt (Right receipt)
         Tx.statement (creator, (operationKey operation), (objectiveIdText identifier), mutationFingerprintText fingerprint, toJSON origin, receipt) insertOrigin
       recovered <- lookupOriginal
-      pure case recovered of Right (Just old) -> Right old; Left err -> Left err; _ -> result >> Left ObjectiveUnresolved
+      pure case recovered of Right (Just old) -> Right (old.objectiveId == identifier, old); Left err -> Left err; _ -> result >> Left ObjectiveUnresolved
 
 -- Receipt recovery precedes transition validation. A prepare transaction writes
 -- only definitive negative outcomes; a positive transition is repeated inside
@@ -905,3 +968,9 @@ coordinatorParentScope objective identity = WorkerInput.workerCoordinate (versio
 -- records the actual first native run as its origin when admitted.
 coordinatorBudgetId :: ObjectiveId -> AgentIdentity -> DelegationBudgetId
 coordinatorBudgetId objective identity = Budgets.delegationBudgetIdFor (WorkflowId ("objective-coordinator:" <> WorkerInput.workerCoordinateText (coordinatorParentScope objective identity)))
+
+selectObjectives :: Statement (Bool, Aeson.Value, Text, Int64) [(Text, Either () Objective)]
+selectObjectives = preparable "SELECT objective_id,state FROM shikigami.objectives WHERE objective_id > $3 AND ($1 OR EXISTS (SELECT 1 FROM jsonb_array_elements(state->'members') AS member WHERE member->'principal'=$2 AND jsonb_array_length(member->'roles') > 0)) ORDER BY objective_id LIMIT $4 FOR SHARE" (contrazip4 (E.param (E.nonNullable E.bool)) jsonParam textParam intParam) (D.rowList ((,) <$> D.column (D.nonNullable D.text) <*> jsonRow))
+
+selectHistory :: Statement (Text, Text, Int64) [(Text, Text, Either () (Either ObjectiveError Receipt), Maybe Aeson.Value)]
+selectHistory = preparable "SELECT r.operation_key,r.fingerprint,r.outcome,p.payload FROM shikigami.objective_receipts r LEFT JOIN shikigami.objective_payloads p ON p.objective_id=r.objective_id AND p.digest=r.outcome->'Right'->>'payloadDigest' WHERE r.objective_id=$1 AND (r.outcome->'Right'->>'revision')::numeric > $2::numeric ORDER BY (r.outcome->'Right'->>'revision')::numeric,r.operation_key LIMIT $3" (contrazip3 textParam textParam intParam) (D.rowList ((,,,) <$> D.column (D.nonNullable D.text) <*> D.column (D.nonNullable D.text) <*> jsonRow <*> D.column (D.nullable D.jsonb)))

@@ -5,6 +5,9 @@
 module Shikigami.Objective.Capability
   ( ObjectiveHost (..),
     createObjective,
+    createObjectiveWithDisposition,
+    listObjectives,
+    readHistory,
     readObjective,
     readObjectiveVersion,
     resolveAssignment,
@@ -37,6 +40,7 @@ import Shikigami.Execution.Identity (OperationId)
 import Shikigami.Objective.Authority (Access (..))
 import Shikigami.Objective.Command
 import Shikigami.Objective.Conversation qualified as Conversation
+import Shikigami.Objective.Inspection (HistoryEntry)
 import Shikigami.Objective.Reference (ObjectiveAssociation)
 import Shikigami.Objective.Store qualified as Store
 import Shikigami.Objective.Types
@@ -74,17 +78,30 @@ admit host label semantic = do
   pure (either (const (Left ObjectiveUnavailable)) id attempted)
 
 createObjective :: (Store.ObjectiveEffects es) => ObjectiveHost -> OperationId -> Maybe CreationOrigin -> CreateRequest -> Eff es (Either ObjectiveError Receipt)
-createObjective host operation origin request = do
+createObjective host operation origin request = fmap (fmap snd) (createObjectiveWithDisposition host operation origin request)
+
+createObjectiveWithDisposition :: (Store.ObjectiveEffects es) => ObjectiveHost -> OperationId -> Maybe CreationOrigin -> CreateRequest -> Eff es (Either ObjectiveError (Bool, Receipt))
+createObjectiveWithDisposition host operation origin request = do
   grant <- liftIO (admit host "create" (toJSON (operation, origin, request)))
   case grant of
     Left err -> pure (Left err)
     Right access -> do
-      Store.create access operation origin request do
+      Store.createWithDisposition access operation origin request do
         verified <- trySyncIO do
           checked <- case origin of Nothing -> pure (Right ()); Just value -> host.verifyOrigin access.actor value
           fresh <- admit host "create" (toJSON (operation, origin, request))
           pure (checked >> (fresh >>= \current -> if current.actor == access.actor then Right () else Left ObjectiveDenied))
         pure (either (const (Left ObjectiveUnavailable)) id verified)
+
+listObjectives :: (Store.ObjectiveEffects es) => ObjectiveHost -> Maybe ObjectiveId -> Int -> Eff es (Either ObjectiveError [Objective])
+listObjectives host after limit = do
+  grant <- liftIO (admit host "list" (toJSON (after, limit)))
+  either (pure . Left) (\access -> Store.listObjectives access after limit) grant
+
+readHistory :: (Store.ObjectiveEffects es) => ObjectiveHost -> ObjectiveId -> Maybe (StateRevision "objective") -> Int -> Eff es (Either ObjectiveError [HistoryEntry])
+readHistory host objective after limit = do
+  grant <- liftIO (admit host "history" (toJSON (objective, after, limit)))
+  either (pure . Left) (\access -> Store.history access objective after limit) grant
 
 readObjective :: (Store.ObjectiveEffects es) => ObjectiveHost -> ObjectiveId -> Eff es (Either ObjectiveError Objective)
 readObjective host objective = do

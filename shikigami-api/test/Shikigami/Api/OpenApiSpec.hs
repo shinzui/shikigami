@@ -22,6 +22,7 @@ import Data.OpenApi (OpenApi, Operation, PathItem)
 import Data.OpenApi qualified as O
 import Data.OpenApi.Lens qualified as L
 import Data.OpenApi.Schema.Validation (validateToJSON)
+import Data.Text qualified as Text
 import Data.Time (UTCTime (..), fromGregorian)
 import Shikigami.Api.OpenApi (openApiArtifactPath, operationIdFor, renderOpenApi, shikigamiOpenApi)
 import Shikigami.Api.Problem (ProblemCode (Unavailable), problem)
@@ -59,7 +60,7 @@ tests =
                   <> " bytes"
               ),
       testCase "the document lists every vertical" $
-        sort (documentedPaths shikigamiOpenApi) @?= sort (healthPaths <> agentPaths <> ["/openapi"]),
+        sort (documentedPaths shikigamiOpenApi) @?= sort (healthPaths <> agentPaths <> objectivePaths <> ["/openapi"]),
       testCase "all application alternatives publish their exact statuses and native error media" $
         mapM_
           ( \(path, operation) -> do
@@ -70,6 +71,8 @@ tests =
                     Just "getAgentsByAgentNameRuns" -> [200, 400, 401, 404, 503]
                     Just "getAgentsByAgentNameRunsByRunId" -> [200, 401, 404, 500, 503]
                     Just "postAgentsByAgentNameRuns" -> [200, 202, 400, 401, 404, 409, 413, 503]
+                    Just "postObjectives" -> [200, 201, 400, 401, 403, 404, 409, 413, 503]
+                    Just name | "Objectives" `Text.isInfixOf` name -> [200, 400, 401, 403, 404, 409, 413, 503]
                     _ -> []
                   responses = operation ^. L.responses . L.responses
               sort (InsOrdHashMap.keys responses) @?= expected
@@ -82,7 +85,7 @@ tests =
                 )
                 (InsOrdHashMap.toList responses)
           )
-          (filter (\(path, _) -> path `elem` agentPaths) (documentedOperations shikigamiOpenApi)),
+          (filter (\(path, _) -> path `elem` (agentPaths <> objectivePaths)) (documentedOperations shikigamiOpenApi)),
       testCase "the pure live build document is the named single-status exemption" $
         mapM_ (\(_, operation) -> sort (InsOrdHashMap.keys (operation ^. L.responses . L.responses)) @?= [200]) (filter (\(path, _) -> path == "/openapi") (documentedOperations shikigamiOpenApi)),
       testCase "every probe route publishes both typed alternatives" $
@@ -103,7 +106,7 @@ tests =
         let ids = mapMaybe (\(_, operation) -> operation ^. L.operationId) (documentedOperations shikigamiOpenApi)
         length ids @?= length (documentedOperations shikigamiOpenApi)
         sort ids @?= sort (dedupe ids)
-        sort ids @?= ["getAgents", "getAgentsByAgentName", "getAgentsByAgentNameRuns", "getAgentsByAgentNameRunsByRunId", "getHealthLive", "getHealthReady", "getOpenapi", "postAgentsByAgentNameRuns"],
+        sort ids @?= ["getAgents", "getAgentsByAgentName", "getAgentsByAgentNameRuns", "getAgentsByAgentNameRunsByRunId", "getHealthLive", "getHealthReady", "getObjectives", "getObjectivesByObjectiveId", "getObjectivesByObjectiveIdHistory", "getOpenapi", "postAgentsByAgentNameRuns", "postObjectives", "postObjectivesByObjectiveIdCommands"],
       testCase "operation ids are derived from method and path" do
         operationIdFor "get" "/health/live" @?= ("getHealthLive" :: Text)
         operationIdFor "get" "/agents/{name}" @?= "getAgentsByName"
@@ -164,3 +167,6 @@ readArtifact = go candidates
 healthPaths, agentPaths :: [FilePath]
 healthPaths = ["/health/live", "/health/ready"]
 agentPaths = ["/agents", "/agents/{agentName}", "/agents/{agentName}/runs", "/agents/{agentName}/runs/{runId}"]
+
+objectivePaths :: [FilePath]
+objectivePaths = ["/objectives", "/objectives/{objectiveId}", "/objectives/{objectiveId}/history", "/objectives/{objectiveId}/commands"]

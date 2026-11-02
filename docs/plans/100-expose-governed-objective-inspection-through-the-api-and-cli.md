@@ -23,6 +23,11 @@ provenance:
       at: 2026-10-29T13:05:53Z
       mode: "update"
       note: "Resolve configuration prerequisite ownership and stage conversation binding behind EP-2 milestone 1."
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-11-02T06:25:46Z
+      mode: "implement"
+      note: "Implement the authenticated objective API and operator CLI over the single command owner."
 ---
 
 # Expose governed objective inspection through the API and CLI
@@ -40,11 +45,13 @@ After this plan, an authenticated user can create an objective, list and inspect
 
 ## Progress
 
-- [ ] Milestone 1: the `/objectives` vertical is mounted under the existing authenticated boundary with the `format: 1` command envelope, the documented status codes and regenerated OpenAPI; the API and client packages build and their contract tests pass.
-- [ ] Milestone 2: `shikigami objectives create|inspect|history|command` call the same command owner as a recorded local operator identity, with bounded pagination and payload limits.
-- [ ] Milestone 3: server contract tests with two callers, a revoked agent and an anonymous caller pass, including plan 99's run-association cases over HTTP, and `just hurl` passes with the new objective requests.
+- [x] Milestone 1: the `/objectives` vertical is mounted under the existing authenticated boundary with the `format: 1` command envelope, the documented status codes and regenerated OpenAPI; the API and client packages build and their contract tests pass.
+- [x] Milestone 2: `shikigami objectives create|inspect|history|command` call the same command owner as a recorded local operator identity, with bounded pagination and payload limits.
+- [x] Milestone 3: server contract tests with two callers, a revoked agent and an anonymous caller pass, including plan 99's run-association cases over HTTP, and `just hurl` passes with the new objective requests.
 
-Planning baseline `3900c0e634d9b559e92a6989bb10f9943e0beab1`, inspected 2026-10-28. No implementation or test results are claimed. Hard prerequisite: plan 98 Complete; milestone 3 additionally requires plan 99 milestone 1.
+2026-11-02 UTC: all three milestones are complete against implementation baseline `afc2a28`. The authenticated `/objectives` vertical, typed client and configured local-operator commands use the single command owner. Creation disposition is derived from the transactional allocation, including concurrent replays. Lists filter current membership before the page bound; inspection pages safe criteria, assignments, evidence references and reported-result commitments. History validates receipt keys and protected payload digests before returning accepted revisions with attribution. Wire and CLI documents cap at 1 MiB, and strict versioned envelopes cannot select internal commands or caller authority.
+
+Qualification passes 35 API, 103 server, 632 core and 490 PostgreSQL tests. HTTP cases cover two callers, anonymous refusal, revocation, exact replay, concurrent creation, page bounds, oversized wire input, a store outage, native conversation binding, and run association with rollback after queue send. Decoded queued jobs prove objective-looking trigger payload grants no association while ordinary requests retain their old path. The isolated `just hurl` runner passes, including eight objective requests and all four operator commands with create/command replay equality. The actual help path lists `create`, `inspect`, `history` and `command`. Haskell conventions, migration isolation, user-doc validation and whitespace pass. The native gate has no findings, neutral replay and 169 passing conformance checks. [Qualification evidence](../evidence/plan-100/qualification.json) retains the delivered boundary and native reports. No workflow body, journal step or migration changed. Hard prerequisite: plan 98 Complete; milestone 3 additionally requires plan 99 milestone 1.
 
 
 ## Surprises & Discoveries
@@ -53,6 +60,10 @@ Planning baseline `3900c0e634d9b559e92a6989bb10f9943e0beab1`, inspected 2026-10-
 
 
 ## Decision Log
+
+- Decision: Objective-looking trigger JSON stays opaque unassociated input; only the typed request selector can admit objective authority. Unauthorized typed selectors enqueue nothing.
+  Rationale: Rejecting arbitrary existing payload text would change the old unassociated contract. The HTTP qualification inspects decoded queue envelopes to prove that payload text never supplies the trusted association.
+  Date: 2026-11-02
 
 - Decision: The public vertical is `/objectives`, and an A2A protocol task from IR-6 never shares an objective identity; a future A2A subtree mounts under its own base path.
   Rationale: MasterPlan 17 names the record `Objective` to match plans 84–87, UC-1 and the worker-session code; the standard A2A `/tasks/{id}` paths stay free.
@@ -65,7 +76,9 @@ Planning baseline `3900c0e634d9b559e92a6989bb10f9943e0beab1`, inspected 2026-10-
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+All three milestones are accepted. HTTP and local operators share current authorization, typed commands and immutable receipts; the API's metadata projection pages progress and evidence references without exposing instructions or result bodies. Operator identity is configured separately and cannot be supplied by JSON or flags. Core creation keeps its original receipt API while the new disposition adapter identifies the unique publisher under concurrency.
+
+No implementation friction entries required triage. Objective tools, Flow and conversation workflow admission remain plan 101; no-Rei continuity and IR-13 lifecycle closure remain plan 102.
 
 
 ## Context and Orientation
@@ -77,7 +90,7 @@ An objective is a goal spanning executions, with a revision, instruction and cri
 Relevant decisions: [ADR 0047](../adr/0047-public-api-authentication-is-a-verifier-at-the-vertical-mount.md) places authentication at the vertical mount and leaves resource authorization to the handler; [ADR 0033](../adr/0033-recorded-agent-principals-key-durable-state.md) keys authority by recorded principal; [ADR 0025](../adr/0025-capability-overlays-are-requests-for-additive-model-tools.md) and [ADR 0066](../adr/0066-worker-commands-require-retained-scopes-and-fresh-exact-authority.md) establish that a name or supplied identity confers no authority. No ADR governs public resource paths; MasterPlan 17 reserves `/objectives` here and the A2A base path elsewhere.
 
 
-The reviewed contracts are recorded in [ADR 0067](../adr/0067-objective-checkpoints-use-assignment-scoped-preconditions.md) (checkpoint preconditions and instruction invalidation) and [ADR 0068](../adr/0068-objective-creation-has-authority-before-association.md) (creation authority before association). These are accepted design decisions; implementation and acceptance evidence remain outstanding.
+The reviewed contracts are recorded in [ADR 0067](../adr/0067-objective-checkpoints-use-assignment-scoped-preconditions.md) (checkpoint preconditions and instruction invalidation) and [ADR 0068](../adr/0068-objective-creation-has-authority-before-association.md) (creation authority before association). Their real provider implementation is qualified in plan 99; the HTTP/CLI acceptance evidence is recorded above.
 
 ## Plan of Work
 
@@ -93,7 +106,7 @@ Add `shikigami-server/src/Shikigami/Server/Command/Objectives.hs` and extend `sh
 
 ### Milestone 3 — Server contract with distinct callers
 
-Add server contract tests with two distinct authenticated callers, a revoked agent and an anonymous caller, and exercise plan 99's run-association cases through the HTTP request path: a permitted association on a run request commits with acceptance and queue send, a forged objective reference in trigger text and an unauthorized association enqueue nothing, and an old unassociated request keeps its original fingerprint and codec path. Verify caller A can create, inspect, revise and submit associated runs, caller B and an ungranted agent cannot read, list, mutate or attach, revocation affects fresh operations and protected reads, and existing anonymous or unassociated run functionality is intact while objective access stays denied by default. Add `tests/hurl/objectives.hurl` covering creation, replay, inspect, history paging and a stale-revision conflict. Milestone 3 is accepted when the server suite and `just hurl` pass.
+Add server contract tests with two distinct authenticated callers, a revoked agent and an anonymous caller, and exercise plan 99's run-association cases through the HTTP request path: a permitted association on a run request commits with acceptance and queue send, a forged objective reference in trigger text grants no association and an unauthorized typed association enqueues nothing, and an old unassociated request keeps its original fingerprint and codec path. Verify caller A can create, inspect, revise and submit associated runs, caller B and an ungranted agent cannot read, list, mutate or attach, revocation affects fresh operations and protected reads, and existing anonymous or unassociated run functionality is intact while objective access stays denied by default. Add `tests/hurl/objectives.hurl` covering creation, replay, inspect, history paging and a stale-revision conflict. Milestone 3 is accepted when the server suite and `just hurl` pass.
 
 
 ## Concrete Steps
@@ -147,3 +160,5 @@ Hard prerequisite: plan 98 Complete; milestone 3 additionally requires plan 99 m
 ## Revision Notes
 
 2026-10-29: Clarified that plan 98 supplies shared configuration; retained plan 99 milestone 1 only for association behavior and its acceptance.
+
+2026-11-02: Clarified that objective-looking trigger JSON remains opaque unassociated input; only the typed selector grants association, and unauthorized typed association enqueues nothing. Inspection adds bounded metadata offsets, and history returns committed revisions with attribution.

@@ -171,6 +171,39 @@
       "AnyValue": {
         "additionalProperties": true
       },
+      "AssignmentView": {
+        "properties": {
+          "assignmentId": {
+            "type": "string"
+          },
+          "cutoff": {
+            "$ref": "#/components/schemas/UTCTime"
+          },
+          "owner": {
+            "type": "string"
+          },
+          "ownerEpoch": {
+            "type": "integer"
+          },
+          "revision": {
+            "type": "integer"
+          },
+          "rootId": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "assignmentId",
+          "owner",
+          "state",
+          "revision",
+          "ownerEpoch"
+        ],
+        "type": "object"
+      },
       "Connection_AgentView": {
         "properties": {
           "edges": {
@@ -204,6 +237,29 @@
         "required": [
           "edges",
           "pageInfo"
+        ],
+        "type": "object"
+      },
+      "CriterionView": {
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "journeyRequired": {
+            "type": "boolean"
+          },
+          "key": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "description",
+          "kind",
+          "journeyRequired"
         ],
         "type": "object"
       },
@@ -242,6 +298,1245 @@
         ],
         "type": "object"
       },
+      "EvidenceView": {
+        "properties": {
+          "artifact": {
+            "type": "string"
+          },
+          "assignmentId": {
+            "type": "string"
+          },
+          "criterion": {
+            "type": "string"
+          },
+          "disposition": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          },
+          "recordedBy": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "key",
+          "assignmentId",
+          "criterion",
+          "artifact",
+          "disposition",
+          "recordedBy",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "HistoryPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/HistoryView"
+            },
+            "type": "array"
+          },
+          "next": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "HistoryView": {
+        "properties": {
+          "actor": {
+            "$ref": "#/components/schemas/PrincipalView"
+          },
+          "command": {
+            "type": "string"
+          },
+          "receipt": {
+            "$ref": "#/components/schemas/ReceiptView"
+          }
+        },
+        "required": [
+          "receipt",
+          "actor",
+          "command"
+        ],
+        "type": "object"
+      },
+      "ObjectiveCommand": {
+        "additionalProperties": false,
+        "properties": {
+          "command": {
+            "oneOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "contents": {
+                    "type": "string"
+                  },
+                  "tag": {
+                    "const": "ReviseInstructions"
+                  }
+                },
+                "required": [
+                  "tag",
+                  "contents"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "contents": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "description": {
+                          "type": "string"
+                        },
+                        "journeyRequired": {
+                          "type": "boolean"
+                        },
+                        "key": {
+                          "type": "string"
+                        },
+                        "kind": {
+                          "enum": [
+                            "Automatic",
+                            "HumanVerifiable"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "key",
+                        "description",
+                        "kind",
+                        "journeyRequired"
+                      ],
+                      "type": "object"
+                    },
+                    "type": "array"
+                  },
+                  "tag": {
+                    "const": "ReviseCriteria"
+                  }
+                },
+                "required": [
+                  "tag",
+                  "contents"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "contents": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "assignmentId": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "value": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "value"
+                          ],
+                          "type": "object"
+                        },
+                        "cutoff": {
+                          "oneOf": [
+                            {
+                              "type": "null"
+                            },
+                            {
+                              "format": "date-time",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "dependencies": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "value": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "value"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "instructions": {
+                          "type": "string"
+                        },
+                        "owner": {
+                          "oneOf": [
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "kind": {
+                                  "const": "verified"
+                                },
+                                "principalId": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "principalId"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "agentName": {
+                                  "type": "string"
+                                },
+                                "kind": {
+                                  "const": "compatibility"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "agentName"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "kind": {
+                                  "const": "unresolved-legacy"
+                                }
+                              },
+                              "required": [
+                                "kind"
+                              ],
+                              "type": "object"
+                            }
+                          ]
+                        },
+                        "rootId": {
+                          "oneOf": [
+                            {
+                              "type": "null"
+                            },
+                            {
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "sessionId": {
+                          "oneOf": [
+                            {
+                              "type": "null"
+                            },
+                            {
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "state": {
+                          "enum": [
+                            "Pending",
+                            "Working",
+                            "Done",
+                            "Withdrawn"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "assignmentId",
+                        "instructions",
+                        "dependencies",
+                        "owner",
+                        "state",
+                        "sessionId",
+                        "rootId",
+                        "cutoff"
+                      ],
+                      "type": "object"
+                    },
+                    "type": "array"
+                  },
+                  "tag": {
+                    "const": "SetAssignments"
+                  }
+                },
+                "required": [
+                  "tag",
+                  "contents"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "contents": {
+                    "maxItems": 4,
+                    "minItems": 4,
+                    "prefixItems": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "value": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "value"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "enum": [
+                          "Pending",
+                          "Working",
+                          "Done",
+                          "Withdrawn"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      },
+                      {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      }
+                    ],
+                    "type": "array"
+                  },
+                  "tag": {
+                    "const": "RecordProgress"
+                  }
+                },
+                "required": [
+                  "tag",
+                  "contents"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "contents": {
+                    "maxItems": 2,
+                    "minItems": 2,
+                    "prefixItems": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "value": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "value"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "oneOf": [
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "criterion": {
+                                "type": "string"
+                              },
+                              "journey": {
+                                "type": "boolean"
+                              },
+                              "key": {
+                                "type": "string"
+                              },
+                              "result": {
+                                "oneOf": [
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "artifact": {
+                                        "type": "string"
+                                      },
+                                      "receipt": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "assignmentId": {
+                                            "type": "string"
+                                          },
+                                          "cursor": {
+                                            "minimum": 0,
+                                            "type": "integer"
+                                          },
+                                          "disposition": {
+                                            "enum": [
+                                              "AssignmentSucceeded",
+                                              "AssignmentFailed",
+                                              "AssignmentCancelled"
+                                            ],
+                                            "type": "string"
+                                          },
+                                          "fingerprint": {
+                                            "type": "string"
+                                          },
+                                          "format": {
+                                            "const": 1,
+                                            "type": "integer"
+                                          },
+                                          "operationId": {
+                                            "type": "string"
+                                          },
+                                          "output": {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "bytes": {
+                                                "minimum": 0,
+                                                "type": "integer"
+                                              },
+                                              "digest": {
+                                                "type": "string"
+                                              },
+                                              "payloadId": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "payloadId",
+                                              "digest",
+                                              "bytes"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          "sessionId": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "format",
+                                          "sessionId",
+                                          "assignmentId",
+                                          "operationId",
+                                          "fingerprint",
+                                          "disposition",
+                                          "output",
+                                          "cursor"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "tag": {
+                                        "const": "WorkerResult"
+                                      }
+                                    },
+                                    "required": [
+                                      "tag",
+                                      "receipt",
+                                      "artifact"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "artifact": {
+                                        "type": "string"
+                                      },
+                                      "digest": {
+                                        "type": "string"
+                                      },
+                                      "executionId": {
+                                        "type": "string"
+                                      },
+                                      "runId": {
+                                        "type": "string"
+                                      },
+                                      "tag": {
+                                        "const": "RetainedResult"
+                                      }
+                                    },
+                                    "required": [
+                                      "tag",
+                                      "runId",
+                                      "executionId",
+                                      "digest",
+                                      "artifact"
+                                    ],
+                                    "type": "object"
+                                  }
+                                ]
+                              },
+                              "tag": {
+                                "const": "ResultEvidence"
+                              }
+                            },
+                            "required": [
+                              "tag",
+                              "key",
+                              "criterion",
+                              "result",
+                              "journey"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "artifact": {
+                                "type": "string"
+                              },
+                              "criterion": {
+                                "type": "string"
+                              },
+                              "journey": {
+                                "type": "boolean"
+                              },
+                              "key": {
+                                "type": "string"
+                              },
+                              "statement": {
+                                "type": "string"
+                              },
+                              "tag": {
+                                "const": "Attestation"
+                              }
+                            },
+                            "required": [
+                              "tag",
+                              "key",
+                              "criterion",
+                              "artifact",
+                              "statement",
+                              "journey"
+                            ],
+                            "type": "object"
+                          }
+                        ]
+                      }
+                    ],
+                    "type": "array"
+                  },
+                  "tag": {
+                    "const": "RecordEvidence"
+                  }
+                },
+                "required": [
+                  "tag",
+                  "contents"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "contents": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "tag": {
+                    "const": "SetNextAction"
+                  }
+                },
+                "required": [
+                  "tag",
+                  "contents"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "contents": {
+                    "type": "boolean"
+                  },
+                  "tag": {
+                    "const": "SetBlocked"
+                  }
+                },
+                "required": [
+                  "tag",
+                  "contents"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "contents": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "artifacts": {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      },
+                      "checks": {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      },
+                      "criteriaRevision": {
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "instructionsRevision": {
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "limitations": {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      },
+                      "objectiveRevision": {
+                        "minimum": 0,
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "objectiveRevision",
+                      "instructionsRevision",
+                      "criteriaRevision",
+                      "artifacts",
+                      "checks",
+                      "limitations"
+                    ],
+                    "type": "object"
+                  },
+                  "tag": {
+                    "const": "ProposeCompletion"
+                  }
+                },
+                "required": [
+                  "tag",
+                  "contents"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "tag": {
+                    "const": "AcceptCompletion"
+                  }
+                },
+                "required": [
+                  "tag"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "tag": {
+                    "const": "CancelObjective"
+                  }
+                },
+                "required": [
+                  "tag"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "contents": {
+                    "maxItems": 2,
+                    "minItems": 2,
+                    "prefixItems": [
+                      {
+                        "oneOf": [
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "contents": {
+                                "type": "string"
+                              },
+                              "tag": {
+                                "const": "VerifiedCaller"
+                              }
+                            },
+                            "required": [
+                              "tag",
+                              "contents"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "contents": {
+                                "type": "string"
+                              },
+                              "tag": {
+                                "const": "LocalOperator"
+                              }
+                            },
+                            "required": [
+                              "tag",
+                              "contents"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "contents": {
+                                "oneOf": [
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "kind": {
+                                        "const": "verified"
+                                      },
+                                      "principalId": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "principalId"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "agentName": {
+                                        "type": "string"
+                                      },
+                                      "kind": {
+                                        "const": "compatibility"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "agentName"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "kind": {
+                                        "const": "unresolved-legacy"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind"
+                                    ],
+                                    "type": "object"
+                                  }
+                                ]
+                              },
+                              "tag": {
+                                "const": "RecordedAgent"
+                              }
+                            },
+                            "required": [
+                              "tag",
+                              "contents"
+                            ],
+                            "type": "object"
+                          }
+                        ]
+                      },
+                      {
+                        "items": {
+                          "enum": [
+                            "Owner",
+                            "Coordinator",
+                            "Worker",
+                            "Reader",
+                            "Completer"
+                          ],
+                          "type": "string"
+                        },
+                        "type": "array"
+                      }
+                    ],
+                    "type": "array"
+                  },
+                  "tag": {
+                    "const": "GrantMember"
+                  }
+                },
+                "required": [
+                  "tag",
+                  "contents"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "contents": {
+                    "oneOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "contents": {
+                            "type": "string"
+                          },
+                          "tag": {
+                            "const": "VerifiedCaller"
+                          }
+                        },
+                        "required": [
+                          "tag",
+                          "contents"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "contents": {
+                            "type": "string"
+                          },
+                          "tag": {
+                            "const": "LocalOperator"
+                          }
+                        },
+                        "required": [
+                          "tag",
+                          "contents"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "contents": {
+                            "oneOf": [
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "kind": {
+                                    "const": "verified"
+                                  },
+                                  "principalId": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "principalId"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "agentName": {
+                                    "type": "string"
+                                  },
+                                  "kind": {
+                                    "const": "compatibility"
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "agentName"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "kind": {
+                                    "const": "unresolved-legacy"
+                                  }
+                                },
+                                "required": [
+                                  "kind"
+                                ],
+                                "type": "object"
+                              }
+                            ]
+                          },
+                          "tag": {
+                            "const": "RecordedAgent"
+                          }
+                        },
+                        "required": [
+                          "tag",
+                          "contents"
+                        ],
+                        "type": "object"
+                      }
+                    ]
+                  },
+                  "tag": {
+                    "const": "RevokeMember"
+                  }
+                },
+                "required": [
+                  "tag",
+                  "contents"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "contents": {
+                    "type": "string"
+                  },
+                  "tag": {
+                    "const": "BindConversation"
+                  }
+                },
+                "required": [
+                  "tag",
+                  "contents"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "contents": {
+                    "oneOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "contents": {
+                            "type": "string"
+                          },
+                          "tag": {
+                            "const": "ReiIntention"
+                          }
+                        },
+                        "required": [
+                          "tag",
+                          "contents"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "contents": {
+                            "type": "string"
+                          },
+                          "tag": {
+                            "const": "ExecPlan"
+                          }
+                        },
+                        "required": [
+                          "tag",
+                          "contents"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "contents": {
+                            "type": "string"
+                          },
+                          "tag": {
+                            "const": "ProtocolTask"
+                          }
+                        },
+                        "required": [
+                          "tag",
+                          "contents"
+                        ],
+                        "type": "object"
+                      }
+                    ]
+                  },
+                  "tag": {
+                    "const": "LinkExternal"
+                  }
+                },
+                "required": [
+                  "tag",
+                  "contents"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "expectedRevision": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "format": {
+            "const": 1,
+            "type": "integer"
+          },
+          "operationKey": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "format",
+          "operationKey",
+          "expectedRevision",
+          "command"
+        ],
+        "type": "object"
+      },
+      "ObjectiveCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "format": {
+            "const": 1,
+            "type": "integer"
+          },
+          "operationKey": {
+            "type": "string"
+          },
+          "request": {
+            "additionalProperties": false,
+            "properties": {
+              "criteria": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "description": {
+                      "type": "string"
+                    },
+                    "journeyRequired": {
+                      "type": "boolean"
+                    },
+                    "key": {
+                      "type": "string"
+                    },
+                    "kind": {
+                      "enum": [
+                        "Automatic",
+                        "HumanVerifiable"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "key",
+                    "description",
+                    "kind",
+                    "journeyRequired"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "external": {
+                "items": {
+                  "oneOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "contents": {
+                          "type": "string"
+                        },
+                        "tag": {
+                          "const": "ReiIntention"
+                        }
+                      },
+                      "required": [
+                        "tag",
+                        "contents"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "contents": {
+                          "type": "string"
+                        },
+                        "tag": {
+                          "const": "ExecPlan"
+                        }
+                      },
+                      "required": [
+                        "tag",
+                        "contents"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "contents": {
+                          "type": "string"
+                        },
+                        "tag": {
+                          "const": "ProtocolTask"
+                        }
+                      },
+                      "required": [
+                        "tag",
+                        "contents"
+                      ],
+                      "type": "object"
+                    }
+                  ]
+                },
+                "type": "array"
+              },
+              "goal": {
+                "type": "string"
+              },
+              "instructions": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "title",
+              "goal",
+              "instructions",
+              "criteria",
+              "external"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "format",
+          "operationKey",
+          "request"
+        ],
+        "type": "object"
+      },
+      "ObjectivePage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ObjectiveView"
+            },
+            "type": "array"
+          },
+          "next": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "ObjectiveView": {
+        "properties": {
+          "assignmentCount": {
+            "maximum": 9223372036854775807,
+            "minimum": -9223372036854775808,
+            "type": "integer"
+          },
+          "assignments": {
+            "items": {
+              "$ref": "#/components/schemas/AssignmentView"
+            },
+            "type": "array"
+          },
+          "criteria": {
+            "items": {
+              "$ref": "#/components/schemas/CriterionView"
+            },
+            "type": "array"
+          },
+          "criteriaRevision": {
+            "type": "integer"
+          },
+          "evidence": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceView"
+            },
+            "type": "array"
+          },
+          "evidenceCount": {
+            "maximum": 9223372036854775807,
+            "minimum": -9223372036854775808,
+            "type": "integer"
+          },
+          "goal": {
+            "type": "string"
+          },
+          "instructionsRevision": {
+            "type": "integer"
+          },
+          "next": {
+            "maximum": 9223372036854775807,
+            "minimum": -9223372036854775808,
+            "type": "integer"
+          },
+          "nextActions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "objectiveId": {
+            "type": "string"
+          },
+          "reportedResults": {
+            "items": {
+              "$ref": "#/components/schemas/ReportedResultView"
+            },
+            "type": "array"
+          },
+          "revision": {
+            "type": "integer"
+          },
+          "status": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "unresolvedCount": {
+            "maximum": 9223372036854775807,
+            "minimum": -9223372036854775808,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "objectiveId",
+          "title",
+          "goal",
+          "status",
+          "revision",
+          "instructionsRevision",
+          "criteriaRevision",
+          "assignmentCount",
+          "evidenceCount",
+          "unresolvedCount",
+          "criteria",
+          "assignments",
+          "evidence",
+          "reportedResults",
+          "nextActions"
+        ],
+        "type": "object"
+      },
       "PageInfo": {
         "properties": {
           "endCursor": {
@@ -260,6 +1555,21 @@
         "required": [
           "hasNextPage",
           "hasPreviousPage"
+        ],
+        "type": "object"
+      },
+      "PrincipalView": {
+        "properties": {
+          "identity": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "identity"
         ],
         "type": "object"
       },
@@ -314,6 +1624,33 @@
         ],
         "type": "object"
       },
+      "ReceiptView": {
+        "properties": {
+          "fingerprint": {
+            "type": "string"
+          },
+          "objectiveId": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string"
+          },
+          "payloadDigest": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "objectiveId",
+          "operationId",
+          "fingerprint",
+          "revision",
+          "payloadDigest"
+        ],
+        "type": "object"
+      },
       "RelayPageError": {
         "properties": {
           "code": {
@@ -333,6 +1670,32 @@
           "code",
           "message",
           "retryable"
+        ],
+        "type": "object"
+      },
+      "ReportedResultView": {
+        "properties": {
+          "artifacts": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "assignmentId": {
+            "type": "string"
+          },
+          "digest": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "assignmentId",
+          "operationId",
+          "digest",
+          "artifacts"
         ],
         "type": "object"
       },
@@ -993,6 +2356,610 @@
             "description": "Probe failed"
           }
         }
+      }
+    },
+    "/objectives": {
+      "get": {
+        "operationId": "getObjectives",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "maximum": 9223372036854775807,
+              "minimum": -9223372036854775808,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ObjectivePage"
+                }
+              },
+              "application/json;charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/ObjectivePage"
+                }
+              }
+            },
+            "description": "Listed"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "ListInvalid or `limit` or `after`"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer credential"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "ListDenied"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "ListMissing"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "ListConflict"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "ListTooLarge"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "ListUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "post": {
+        "operationId": "postObjectives",
+        "requestBody": {
+          "content": {
+            "application/json;charset=utf-8": {
+              "schema": {
+                "$ref": "#/components/schemas/ObjectiveCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReceiptView"
+                }
+              },
+              "application/json;charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReceiptView"
+                }
+              }
+            },
+            "description": "Replayed"
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReceiptView"
+                }
+              },
+              "application/json;charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReceiptView"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "CreateInvalid or `body`"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer credential"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "CreateDenied"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "CreateMissing"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "CreateConflict"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "CreateTooLarge"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "CreateUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/objectives/{objectiveId}": {
+      "get": {
+        "operationId": "getObjectivesByObjectiveId",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "objectiveId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "maximum": 9223372036854775807,
+              "minimum": -9223372036854775808,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "maximum": 9223372036854775807,
+              "minimum": -9223372036854775808,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ObjectiveView"
+                }
+              },
+              "application/json;charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/ObjectiveView"
+                }
+              }
+            },
+            "description": "Found"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "ReadInvalid or `limit` or `after`"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer credential"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "ReadDenied"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "`objectiveId` or ReadMissing"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "ReadConflict"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "ReadTooLarge"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "ReadUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/objectives/{objectiveId}/commands": {
+      "post": {
+        "operationId": "postObjectivesByObjectiveIdCommands",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "objectiveId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json;charset=utf-8": {
+              "schema": {
+                "$ref": "#/components/schemas/ObjectiveCommand"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReceiptView"
+                }
+              },
+              "application/json;charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReceiptView"
+                }
+              }
+            },
+            "description": "CommandAccepted"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "CommandInvalid or `body`"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer credential"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "CommandDenied"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "`objectiveId` or CommandMissing"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "CommandConflict"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "CommandTooLarge"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "CommandUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/objectives/{objectiveId}/history": {
+      "get": {
+        "operationId": "getObjectivesByObjectiveIdHistory",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "objectiveId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "maximum": 9223372036854775807,
+              "minimum": -9223372036854775808,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HistoryPage"
+                }
+              },
+              "application/json;charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/HistoryPage"
+                }
+              }
+            },
+            "description": "HistoryFound"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "HistoryInvalid or `limit` or `after`"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer credential"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "HistoryDenied"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "`objectiveId` or HistoryMissing"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "HistoryConflict"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "HistoryTooLarge"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "HistoryUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
       }
     },
     "/openapi": {

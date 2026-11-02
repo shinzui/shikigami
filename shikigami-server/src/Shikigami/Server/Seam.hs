@@ -32,6 +32,7 @@ import Data.Aeson (encode)
 import Data.Text qualified as Text
 import Hasql.Pool (Pool)
 import Keiro.Workflow.Types (WorkflowId)
+import Kiroku.Store.Connection (KirokuStore)
 import OpenTelemetry.Trace.Core (Tracer)
 import Servant.Health (ProbeCheck)
 import Servant.Server (Handler, ServerError (..))
@@ -57,6 +58,7 @@ data ServerEnv = ServerEnv
     tracer :: !Tracer,
     liveness :: !ProbeCheck,
     pool :: !Pool,
+    store :: !(Maybe KirokuStore),
     readRunStatus :: !(AgentName -> WorkflowId -> IO (Either RunStatusFailure (Maybe RunStatusView))),
     logger :: !Log.Logger,
     catalog :: !AgentCatalog,

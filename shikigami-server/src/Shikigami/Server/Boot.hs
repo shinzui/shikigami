@@ -77,7 +77,7 @@ newServerEnv :: Tracer -> StoreConnection.KirokuStore -> AppConfig -> Log.Logger
 newServerEnv tracer store config logger catalog directory = do
   let pool = StoreConnection.pool store
   (livenessCheck, readinessCheck) <- mkHealthChecks pool
-  pure (newServerEnvWith tracer config pool logger catalog directory livenessCheck readinessCheck & #readRunStatus .~ deriveRunStatus store)
+  pure (newServerEnvWith tracer config pool logger catalog directory livenessCheck readinessCheck & #readRunStatus .~ deriveRunStatus store & #store .~ Just store)
 
 -- | Build the environment with probe checks supplied by the caller.
 --
@@ -93,6 +93,7 @@ newServerEnvWith tracer config pool logger catalog directory livenessCheck readi
       appConfig = config,
       tracer,
       pool,
+      store = Nothing,
       readRunStatus = \_ _ -> pure (Left RunStatusStoreUnavailable),
       logger,
       catalog,

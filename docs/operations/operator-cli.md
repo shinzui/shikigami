@@ -427,3 +427,37 @@ redrive may later create a workflow whose lifecycle takes precedence. Destructiv
 DLQ commands do not enforce this retention policy, and cleanup before
 reconciliation can erase the only evidence. See
 [ADR 0050](../adr/0050-run-status-reconciles-retained-dead-letters-through-the-released-read-api.md).
+
+## Objectives
+
+Enable tracking explicitly and record a local operator identity:
+
+```bash
+export SHIKIGAMI_OBJECTIVES='{"enabled":true,"operator":"local-operator","administration":"OwnObjectivesOnly"}'
+cabal run shikigami -- objectives create --operation-key delivery-create --file create.json --json
+cabal run shikigami -- objectives inspect OBJECTIVE --after 0 --limit 20 --json
+cabal run shikigami -- objectives history OBJECTIVE --limit 20 --json
+cabal run shikigami -- objectives command OBJECTIVE --operation-key delivery-next --expected-revision 0 --file command.json --json
+```
+
+The create file contains `title`, `goal`, `instructions`, a nonempty `criteria`
+array and `external` references. The command file contains a closed command such
+as `{"tag":"SetNextAction","contents":["Review combined artifact"]}`. Each
+criterion has `key`, `description`, `kind` (`Automatic` or `HumanVerifiable`) and
+`journeyRequired` (boolean).
+
+Retry the exact operation key, expected revision and document after an uncertain
+response. An identical replay returns its original receipt; changed input under
+that key conflicts. A stale fresh command also conflicts. `inspect` pages safe
+criterion, assignment, evidence and result-reference metadata, excluding
+instructions and result bodies. Follow `next` as the next `--after` offset while
+the objective revision stays unchanged; restart paging when that revision changes.
+`history` shows accepted receipts in increasing revision order with recorded
+principal attribution. Use the last receipt revision as `--after` for the next
+page. Pages default to 20 and cap at 100; input files cap at 1 MiB.
+
+The configured operator is a separate principal. `OwnObjectivesOnly` requires
+membership; explicit `AdministerAll` permits administration across objectives.
+Neither flags nor JSON can impersonate an API caller or agent. The authenticated
+HTTP counterpart and exact envelopes are documented in
+[the objective API](../api/objectives.md).

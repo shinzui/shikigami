@@ -34,6 +34,7 @@ import Servant.API.Generic ((:-))
 import Shikigami.Agent.Api (AgentApi)
 import Shikigami.Caller.Api (Authenticated)
 import Shikigami.Health.Api (HealthApi)
+import Shikigami.Objective.Api (ObjectiveApi)
 import Shikigami.Prelude
 
 -- | Every public HTTP surface Shikigami exposes.
@@ -44,6 +45,7 @@ import Shikigami.Prelude
 data ShikigamiApi mode = ShikigamiApi
   { health :: mode :- "health" :> NamedRoutes HealthApi,
     agents :: mode :- Authenticated :> "agents" :> NamedRoutes AgentApi,
+    objectives :: mode :- Authenticated :> "objectives" :> NamedRoutes ObjectiveApi,
     -- Pure build metadata; the named single-status exemption has no dependency.
     openapi :: mode :- "openapi" :> Get '[JSON] Value
   }

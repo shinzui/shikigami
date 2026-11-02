@@ -186,7 +186,7 @@ status or dependency edge changes. EP-5 remains gated by EP-4 and EP-6's live
 milestones remain gated by both real providers. Plan 96's workspace-only
 fixtures cannot complete this MasterPlan's integrated acceptance.
 
-2026-11-02 UTC prerequisite update: plan 99 completes the real IR-13 objective/checkpoint, ownership and retained coordination source gate. [Provider completion evidence](../evidence/plan-99/provider-completion-qualification.json) records eleven provider cases, 632 core, 490 PostgreSQL, 280 worker, 96 server and 37 agent cases, with a neutral native gate and 168 conformance checks. Worker/operator composition now uses those adapters. Plan 84's IR-11 and joint real successor/late-writer/restart qualification remains open; its status stays In Progress and EP-5 still waits for the whole child. No dependency edge or other child status changes, and no workspace fencing is inferred from the deterministic objective-side fixture.
+2026-11-02 UTC prerequisite update: plan 99 completes the real IR-13 objective/checkpoint, ownership and retained coordination source gate. [Provider completion evidence](../evidence/plan-99/provider-completion-qualification.json) records eleven provider cases, 632 core, 490 PostgreSQL, 280 worker, 96 server and 37 agent cases, with a neutral native gate and 169 conformance checks. Worker/operator composition now uses those adapters. Plan 84's IR-11 and joint real successor/late-writer/restart qualification remains open; its status stays In Progress and EP-5 still waits for the whole child. No dependency edge or other child status changes, and no workspace fencing is inferred from the deterministic objective-side fixture.
 
 ## Surprises & Discoveries
 

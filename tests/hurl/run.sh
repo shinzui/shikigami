@@ -72,6 +72,7 @@ DATABASE_URL="$connection" "$migrate_bin" up
 
 token="$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')"
 export SHIKIGAMI_API_TOKEN="$token"
+export SHIKIGAMI_OBJECTIVES='{"enabled":true,"operator":"hurl-operator","administration":"AdministerAll"}'
 http_port="$(free_port)"
 PG_CONNECTION_STRING="$connection" \
   "$server_bin" --host 127.0.0.1 --port "$http_port" --set agents.directory=tests/hurl/agents --set http.auth.mode=bearer >"$server_log" 2>&1 &
@@ -98,6 +99,8 @@ hurlfmt --check "$suite_dir/"*.hurl
 bash "$suite_dir/run.sh" "$base_url" "$secrets_file"
 # The disposable fixture explicitly opts into perimeter and write scenarios.
 hurl --test --variable "base_url=$base_url" --secrets-file "$secrets_file" "$suite_dir/auth.hurl" "$suite_dir/agent-runs.hurl"
+hurlfmt --check "$repo_root/tests/hurl/objectives.hurl"
+hurl --test --variable "base_url=$base_url" --secrets-file "$secrets_file" "$repo_root/tests/hurl/objectives.hurl"
 
 client_bin="$(project_cabal ${SHIKIGAMI_CABAL_PROJECT:+--project-file=$SHIKIGAMI_CABAL_PROJECT} list-bin exe:shikigami-client)"
 "$client_bin" --token "$token" agents show heartbeat --server "$base_url"
@@ -121,6 +124,29 @@ live_run_id="$(printf '%s\n' "$live_request" | awk 'NR == 1 { print $2 }')"
 "$client_bin" runs show heartbeat "$live_run_id" --server "$base_url"
 "$client_bin" runs list heartbeat --first 1 --server "$base_url"
 operator_bin="$(project_cabal ${SHIKIGAMI_CABAL_PROJECT:+--project-file=$SHIKIGAMI_CABAL_PROJECT} list-bin exe:shikigami)"
+PG_CONNECTION_STRING="$connection" "$operator_bin" objectives create --operation-key hurl-operator-create --file "$repo_root/tests/hurl/objective-create.json" --json >"$work_dir/objective-created.json"
+PG_CONNECTION_STRING="$connection" "$operator_bin" objectives create --operation-key hurl-operator-create --file "$repo_root/tests/hurl/objective-create.json" --json >"$work_dir/objective-replayed.json"
+cmp "$work_dir/objective-created.json" "$work_dir/objective-replayed.json"
+objective_id="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["objectiveId"])' "$work_dir/objective-created.json")"
+PG_CONNECTION_STRING="$connection" "$operator_bin" objectives inspect "$objective_id" --json >"$work_dir/objective-inspected.json"
+PG_CONNECTION_STRING="$connection" "$operator_bin" objectives command "$objective_id" --operation-key hurl-operator-command --expected-revision 0 --file "$repo_root/tests/hurl/objective-command.json" --json >"$work_dir/objective-command.json"
+PG_CONNECTION_STRING="$connection" "$operator_bin" objectives command "$objective_id" --operation-key hurl-operator-command --expected-revision 0 --file "$repo_root/tests/hurl/objective-command.json" --json >"$work_dir/objective-command-replayed.json"
+cmp "$work_dir/objective-command.json" "$work_dir/objective-command-replayed.json"
+PG_CONNECTION_STRING="$connection" "$operator_bin" objectives history "$objective_id" --after 0 --limit 1 --json >"$work_dir/objective-history.json"
+python3 - "$work_dir" <<'PY_OBJECTIVES'
+import json, pathlib, sys
+root = pathlib.Path(sys.argv[1])
+created = json.loads((root / "objective-created.json").read_text())
+inspected = json.loads((root / "objective-inspected.json").read_text())
+command = json.loads((root / "objective-command.json").read_text())
+history = json.loads((root / "objective-history.json").read_text())
+assert inspected["objectiveId"] == created["objectiveId"]
+assert "instructions" not in inspected
+assert command["revision"] == 1
+assert history[0]["receipt"] == command
+assert history[0]["actor"] == {"kind": "operator", "identity": "hurl-operator"}
+PY_OBJECTIVES
+
 PG_CONNECTION_STRING="$connection" "$operator_bin" runs show shikigami.agent-run "$live_run_id" --json >"$work_dir/operator-accepted.json"
 python3 - "$work_dir/operator-accepted.json" <<'PY_ACCEPTED'
 import json, sys

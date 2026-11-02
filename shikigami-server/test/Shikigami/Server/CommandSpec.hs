@@ -57,7 +57,8 @@ tests =
                 "runs",
                 "resources",
                 "executions",
-                "workers"
+                "workers",
+                "objectives"
               ],
       testCase "executions inspect accepts bounded history pagination" do
         case execParserPure adminPrefs adminInfo ["executions", "inspect", "execution-1", "--json", "--after", "20", "--limit", "5"] of

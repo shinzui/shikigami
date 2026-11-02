@@ -169,6 +169,7 @@ library
     Shikigami.Objective.Command
     Shikigami.Objective.Content
     Shikigami.Objective.Coordination
+    Shikigami.Objective.Inspection
     Shikigami.Objective.Keys
     Shikigami.Objective.Live
     Shikigami.Objective.Origin

@@ -47,6 +47,18 @@ reference keys index the existing worker `ObjectiveRef` with provider ID
 resource roots and sessions; the worker version projection refuses until an
 admitted root and cutoff exist. Withdrawn assignment identities are retained and cannot be reused.
 
+The authenticated `/objectives` vertical and the configured local-operator CLI
+adapt this same owner. Their versioned public envelopes cannot decode internal
+provider commands or caller authority. Creation disposition comes from the
+transaction's allocated identity, so concurrent replays return the same receipt
+with only its publisher reporting creation. Lists filter current membership
+before applying bounded pages. Inspection pages safe goal, criterion, assignment
+and evidence-reference metadata, excluding instructions and result bodies.
+History validates protected payload commitments and physical receipt keys,
+then exposes accepted revisions and their recorded actors without command bodies.
+The HTTP vertical refuses disabled tracking; internal accepted-work readers remain
+available for recovery as described above. Wire and CLI documents cap at 1 MiB.
+
 Completion requires a proposal naming the exact objective, instruction and
 criteria revisions, integrated artifacts, checks and limitations, followed by an
 explicit approving owner or completer command. Every check must match retained

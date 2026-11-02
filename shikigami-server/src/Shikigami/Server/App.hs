@@ -31,10 +31,12 @@ where
 import Control.Exception (SomeAsyncException, SomeException, catch, fromException, throwIO)
 import Data.Aeson (encode, toJSON)
 import Data.ByteString (ByteString)
+import Data.ByteString qualified as Bytes
 import Data.CaseInsensitive qualified as CI
+import Data.IORef (atomicModifyIORef', newIORef)
 import Data.Text.Encoding qualified as TE
 import Network.HTTP.Types (Status (..), hContentLength, hContentType)
-import Network.Wai (Application, Middleware, Response, ResponseReceived, responseHeaders, responseLBS, responseStatus)
+import Network.Wai (Application, Middleware, Request (..), Response, ResponseReceived, getRequestBodyChunk, responseHeaders, responseLBS, responseStatus)
 import Servant.Health (healthServer)
 import Servant.Server
   ( Context (EmptyContext, (:.)),
@@ -52,6 +54,7 @@ import Shikigami.Api.OpenApi (shikigamiOpenApi)
 import Shikigami.Api.Problem (ProblemCode (..), problem, problemStatus, problemTitle)
 import Shikigami.App.Config (AppConfig (..))
 import Shikigami.Caller.Verifier (newCallerVerifier)
+import Shikigami.Objective.Handler (objectiveServer)
 import Shikigami.Prelude
 import Shikigami.Server.Seam (ServerEnv (..), ServerM, problemServerError, runServerM)
 
@@ -62,8 +65,9 @@ import Shikigami.Server.Seam (ServerEnv (..), ServerM, problemServerError, runSe
 -- formatters; and the 405 rewrite wraps the finished application.
 shikigamiApplication :: ServerEnv -> Application
 shikigamiApplication env =
-  methodNotAllowedProblem $
-    (genericServeTWithContext (runServerM env) (shikigamiServer env) context)
+  objectiveBodyLimit $
+    methodNotAllowedProblem $
+      (genericServeTWithContext (runServerM env) (shikigamiServer env) context)
   where
     context = newCallerVerifier env.logger env.appConfig.httpAuth :. problemErrorFormatters :. EmptyContext
 
@@ -78,8 +82,29 @@ shikigamiServer env =
   ShikigamiApi
     { health = healthServer ((.liveness) env) ((.readiness) env),
       agents = agentServer env,
+      objectives = objectiveServer env,
       openapi = pure (toJSON shikigamiOpenApi)
     }
+
+-- Count wire bytes before JSON parsing, including chunked bodies and padding.
+-- Stop draining as soon as the bound is exceeded; retain only bounded chunks.
+objectiveBodyLimit :: Middleware
+objectiveBodyLimit app request respond
+  | take 1 request.pathInfo == ["objectives"] && request.requestMethod `elem` ["POST", "PUT", "PATCH"] = collect 0 []
+  | otherwise = app request respond
+  where
+    collect count chunks = do
+      chunk <- getRequestBodyChunk request
+      let size = count + Bytes.length chunk
+      if size > 1048576
+        then respond (problemResponse PayloadTooLarge "Objective documents are limited to 1 MiB.")
+        else
+          if Bytes.null chunk
+            then do
+              pending <- newIORef (reverse chunks)
+              let next = atomicModifyIORef' pending (\case [] -> ([], Bytes.empty); x : xs -> (xs, x))
+              app request {requestBody = next} respond
+            else collect size (chunk : chunks)
 
 -- | Render every Servant-generated parse or routing failure as problem details.
 --

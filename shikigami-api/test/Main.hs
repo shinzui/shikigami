@@ -20,6 +20,7 @@ import Shikigami.Api.Problem
     problemStatus,
     problemTitle,
   )
+import Shikigami.Objective.ApiSpec qualified as ObjectiveApiSpec
 import Shikigami.Trigger.Schedule (cronExpressionClaim, parseCron)
 import Test.Tasty (TestTree, defaultMain, testGroup)
 import Test.Tasty.HUnit (assertBool, assertEqual, testCase, (@?=))
@@ -33,6 +34,7 @@ main =
           problemTests,
           AgentApiSpec.tests,
           AgentRunApiSpec.tests,
+          ObjectiveApiSpec.tests,
           OpenApiSpec.tests
         ]
     )

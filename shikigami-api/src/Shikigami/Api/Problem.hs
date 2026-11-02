@@ -120,6 +120,7 @@ data ProblemCode
     InvalidHeader
   | -- | Credentials were absent, malformed, or rejected.
     Unauthorized
+  | Forbidden
   | -- | The caller exceeded a rate limit.
     RateLimited
   | -- | An unexpected server-side failure.
@@ -142,6 +143,7 @@ problemCodeText = \case
   InvalidUrl -> "invalid_url"
   InvalidHeader -> "invalid_header"
   Unauthorized -> "unauthorized"
+  Forbidden -> "forbidden"
   RateLimited -> "rate_limited"
   Internal -> "internal_error"
   Unavailable -> "unavailable"
@@ -160,6 +162,7 @@ problemTitle = \case
   InvalidUrl -> "Invalid request URL"
   InvalidHeader -> "Invalid request header"
   Unauthorized -> "Unauthorized"
+  Forbidden -> "Forbidden"
   RateLimited -> "Too many requests"
   Internal -> "Internal server error"
   Unavailable -> "Service unavailable"
@@ -178,6 +181,7 @@ problemStatus = \case
   InvalidUrl -> 400
   InvalidHeader -> 400
   Unauthorized -> 401
+  Forbidden -> 403
   RateLimited -> 429
   Internal -> 500
   Unavailable -> 503
@@ -197,6 +201,7 @@ problemRetryable = \case
   InvalidUrl -> False
   InvalidHeader -> False
   Unauthorized -> False
+  Forbidden -> False
   RateLimited -> True
   Internal -> False
   Unavailable -> True
