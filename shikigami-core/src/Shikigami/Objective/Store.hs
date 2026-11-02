@@ -68,7 +68,9 @@ import Shikigami.Agent.Principal (AgentIdentity, identityText, principalText)
 import Shikigami.App (CommandEffects, commandOptions)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Delegation.BudgetStore qualified as Budgets
+import Shikigami.Execution.AssignmentKey (assignmentIdFor, conversationAssignmentIdFor)
 import Shikigami.Execution.Coordinate (ExecutionDigest, executionDigestText)
+import Shikigami.Execution.Counter (noAttempts)
 import Shikigami.Execution.Identity (OperationId, operationIdText)
 import Shikigami.Execution.Progress (noPendingReceipts)
 import Shikigami.Execution.Resources qualified as Resources
@@ -672,6 +674,13 @@ validateTransition _now access expected mutation current = do
 prepareTransition :: UTCTime -> Access -> StateRevision "objective" -> Mutation -> Objective -> Transaction (Either ObjectiveError Objective)
 prepareTransition now access expected mutation current = do
   checked <- validateSources current mutation
+  -- A projected checkpoint is historical. A valid completion candidate must
+  -- also consult the retained owners of uncertainty that has not reached that
+  -- checkpoint yet. Abort the transaction on uncertainty: it is not an
+  -- immutable negative receipt, and the same acceptance can retry after settle.
+  case (mutation, validateTransition now access expected mutation current) of
+    (Public AcceptCompletion, Right _) -> validateSettledSources current
+    _ -> pure ()
   bounded <- case mutation of
     Internal (RetainCoordination key scope) -> do
       rootId <- maybe (abort ObjectiveDenied) pure scope.run.rootId
@@ -720,6 +729,46 @@ reportedResult assignment intent receipt = do
         unless (actual == receipt) (Left ObjectiveInvalidEvidence)
         artifacts <- traverse (either (const (Left ObjectiveInvalidEvidence)) Right . parseArtifactRef . WorkerInput.artifactReferenceText) result.artifacts
         pure (ReportedResult assignment receipt artifacts)
+
+validateSettledSources :: Objective -> Transaction ()
+validateSettledSources objective = do
+  forM_ (nub (mapMaybe (.definition.rootId) objective.assignments)) \rootId -> do
+    root <- Roots.inspectRootTx rootId >>= either (const (abort ObjectiveUnavailable)) pure
+    unless (root.unknown == noAttempts) (abort ObjectiveUnresolved)
+  let creator = versionedDigest "shikigami.objective-creator/1" (toJSON objective.owner)
+  created <- readRow (objectiveIdText objective.objectiveId, creator) selectCreatedById >>= maybe (abort ObjectiveUnavailable) pure
+  case fst created of
+    Just ExecutionOrigin {executionId} -> inspect True executionId
+    Just ConversationOrigin {runId, turnId} -> conversationExecution runId turnId >>= inspect True
+    _ -> pure ()
+  runs <- Tx.statement (objectiveIdText objective.objectiveId) selectAcceptedRunSources
+  forM_ runs \(source, encoded) -> do
+    reference <- requireDecoded encoded
+    unless (reference.objectiveId == objective.objectiveId) (abort ObjectiveUnavailable)
+    inspect False (Execution.executionIdFor (assignmentIdFor source))
+  turns <- Tx.statement (objectiveIdText objective.objectiveId) selectAcceptedTurnSources
+  forM_ turns \(run, turn, principal, encoded) -> do
+    admission <- requireDecoded encoded
+    unless (admission.format == V1 && runReferenceText admission.runId == run && turnReferenceText admission.turnId == turn && identityText admission.participant == Right principal && maybe False ((== objective.objectiveId) . (.receipt.objectiveId)) admission.binding) (abort ObjectiveUnavailable)
+    conversationExecution admission.runId admission.turnId >>= inspect False
+  where
+    -- An associated run/turn may still be queued with no admitted execution.
+    -- A creation origin, by contrast, must retain its accepted source owner.
+    inspect required execution = do
+      retained <- Execution.inspectExecutionTx execution >>= either (const (abort ObjectiveUnavailable)) pure
+      case retained of
+        Nothing -> when required (abort ObjectiveUnavailable)
+        Just (state, _) -> unless (state.pendingReceipts == noPendingReceipts && state.phase /= Execution.Unresolved) (abort ObjectiveUnresolved)
+    conversationExecution run turn = do
+      message <- maybe (abort ObjectiveUnavailable) pure (Text.stripPrefix "danwa:user:" (turnReferenceText turn))
+      when (Text.null message) (abort ObjectiveUnavailable)
+      pure (Execution.executionIdFor (conversationAssignmentIdFor (runReferenceText run) message))
+
+selectAcceptedRunSources :: Statement Text [(Text, Either () ObjectiveAssociation)]
+selectAcceptedRunSources = preparable "SELECT source_id,binding FROM shikigami.objective_associations WHERE kind='run' AND objective_id=$1 ORDER BY source_id" textParam (D.rowList ((,) <$> D.column (D.nonNullable D.text) <*> jsonRow))
+
+selectAcceptedTurnSources :: Statement Text [(Text, Text, Text, Either () Conversation.TurnAdmission)]
+selectAcceptedTurnSources = preparable "SELECT run_id,turn_id,principal_key,admission FROM shikigami.objective_turn_admissions WHERE objective_id=$1 ORDER BY run_id,turn_id,principal_key" textParam (D.rowList ((,,,) <$> D.column (D.nonNullable D.text) <*> D.column (D.nonNullable D.text) <*> D.column (D.nonNullable D.text) <*> jsonRow))
 
 -- | Source authenticity is checked again inside the commit transaction. Future
 -- provider adapters additionally validate accepted execution/fence coordinates.

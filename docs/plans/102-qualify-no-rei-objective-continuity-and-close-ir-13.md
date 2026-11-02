@@ -23,6 +23,11 @@ provenance:
       at: 2026-10-29T13:05:53Z
       mode: "update"
       note: "Qualify autonomous first-objective recovery and instruction-only checkpoint invalidation alongside API continuity."
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-11-02T08:51:23Z
+      mode: "implement"
+      note: "Qualify serving-process continuity, autonomous creation and integrated completion after completed plans 99–101."
 ---
 
 # Qualify no-Rei objective continuity and close IR-13
@@ -40,19 +45,31 @@ After this plan, a fresh reader can reproduce the IR-13 outcome with no Rei endp
 
 ## Progress
 
-- [ ] Milestone 1: the fixture under `fixtures/qualification/objectives/` and the isolated runner `tests/objective-tracking/run.sh` reproduce continuity with no Rei endpoint, including first-objective agent creation, the lost-acknowledgement and instruction-only stale-conflict scenarios with the accepted result preserved across an assignment ownership transfer.
-- [ ] Milestone 2: integrated completion is proven: all-green workers with one failing criterion leave the objective open; a passing verifier result for the exact combined artifact plus explicit acceptance produce one `Completed` transition; stale, unknown-operation and repeated acceptance behave as specified; cancellation preserves late facts.
-- [ ] Milestone 3: documentation, OKF bundle updates, consumer-plan wording, ADR distillation, friction triage and the compatibility gates establish the delivered IR-13 boundary, and IR-13 is `completed`.
+- [x] Milestone 1 (2026-11-02 UTC): the fixture under `fixtures/qualification/objectives/` and the isolated runner `tests/objective-tracking/run.sh` reproduce continuity with no Rei endpoint, including first-objective agent creation, the lost-acknowledgement and instruction-only stale-conflict scenarios with the accepted result preserved across an assignment ownership transfer.
+- [x] Milestone 2 (2026-11-02 UTC): integrated completion is proven: all-green workers with one failing criterion leave the objective open; current authorized review evidence for the exact combined artifact plus explicit acceptance produce one `Completed` transition; stale, unknown-operation and repeated acceptance behave as specified; cancellation preserves late facts.
+- [x] Milestone 3 (2026-11-02 UTC): documentation, OKF bundle updates, consumer-plan wording, ADR distillation, friction triage and the compatibility gates establish the delivered IR-13 boundary, and IR-13 is `completed`.
 
-Planning baseline `3900c0e634d9b559e92a6989bb10f9943e0beab1`, inspected 2026-10-28. No implementation or test results are claimed. Hard prerequisites: plans 99, 100 and 101 Complete.
+Implementation baseline `fdf5119`, inspected 2026-11-02 UTC. Plans 99, 100 and 101 are Complete. Milestones 1–2 are qualified: the disposable runner exits zero, preserves first creation across SIGKILL and service restart, continues through associated runs and bound turns with memory unavailable, and reaches explicit integrated completion at revision 12. All 52 objective/provider cases pass, including instruction-only invalidation, deterministic-fence ownership recovery, terminal late facts and a real unacknowledged inspection that blocks acceptance even after logical success. [Serving transcript](../evidence/plan-102/serving-qualification.txt) retains bounded evidence. All final checks pass: 639 core, 35 API, 503 PostgreSQL, 103 server, 280 worker and 37 agent tests (1,597 total), complete build, Hurl/CLI smoke and 169 native conformance checks. The baseline `fdf5119` diff has no findings and neutral replay impact. Request/use-case/user bundles and strict friction validation pass. IR-13 is completed with its delivered scope; [qualification](../evidence/plan-102/qualification.json) records the evidence. This plan is Complete.
 
 
 ## Surprises & Discoveries
 
-(None yet.)
+2026-11-02 UTC: A real rootless creating execution lost the acknowledgement of committed evidence. With the objective's own unresolved list empty, explicit acceptance returned a Completed receipt while the execution owner still retained the unacknowledged attempt. The regression now requires refusal before and after logical execution success, then delivers the original worker's retained output under its actual dispatch claim and requires the identical acceptance operation to succeed only after that late receipt settles. Logical success alone does not clear a superseded attempt's pending receipt.
 
 
 ## Decision Log
+
+- Decision: Before committing an otherwise valid new acceptance, inspect the linked retained source owners: bound resource roots, the creating execution or recorded turn, associated runs and bound turn admissions. Check the same facts again inside the objective commit; preserve receipt-first recovery. Unsettled sources abort without retaining a definitive negative acceptance receipt.
+  Rationale: A checkpoint is historical and may not yet project an execution's live uncertainty. Rootless finite objectives also need this check. The actual late-receipt regression preserves the original owner claim and output; it does not manufacture unresolved flags or infer settlement from a replacement's logical success.
+  Date: 2026-11-02
+
+- Decision: Positive native commands can settle superseded actual attempts from their immutable objective receipt, exact revision-1 output renderer and retained dispatch claim/continuation. Mutable inspections have no command receipt and preserve uncertainty until their real original outcome arrives. Ordinary associated Skills do not acquire coordinator grants; the recorded agent behavior distinguishes them before fresh scope creation, after retained-scope recovery.
+  Rationale: The serving-process crash exposed pending accounting after honest command recovery; the subsequent associated run exposed production factory admission that library fixtures had not installed. Neither logical success nor a fresh read proves the missing original receipt. The associated Skill regressions now install both production factories.
+  Date: 2026-11-02
+
+- Decision: Use public HumanVerifiable criteria and explicit authorized completer review of the actual retained worker outputs for serving integration. The store contract suite separately qualifies trusted automatic-verifier callbacks; no general automatic verifier is installed in serving hosts.
+  Rationale: A scripted model result must not manufacture authoritative criterion checks. The exact combined artifact and current journey review are explicit attestations with the same acceptance/version checks.
+  Date: 2026-11-02
 
 - Decision: Objective acceptance in this qualification requires no real repository writes; the fence fixture stays explicitly labeled, and this plan never marks IR-11, plan 96 or plans 84–87 complete from its results.
   Rationale: Real workspace fencing belongs to plan 96 and the joint late-writer test to plan 84; claiming them here would be false evidence.
@@ -65,7 +82,35 @@ Planning baseline `3900c0e634d9b559e92a6989bb10f9943e0beab1`, inspected 2026-10-
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Completed 2026-11-02 UTC. The disposable serving runner, real source owners and
+provider matrix establish the IR-13 outcome without Rei: autonomous first
+creation and actual crash recovery, durable continuation through a later run and
+bound conversation with memory unavailable, explicit integrated acceptance,
+current attribution and exact receipt replay. The final checkpoint is Completed
+at revision 12. Both workers are green before the failed journey review refuses
+acceptance; correcting the integration and providing current authorized review
+permits one transition. The live unacknowledged inspection stays unresolved
+after logical success until the real original receipt settles.
+
+The complete build, all 1,597 package tests, Hurl and 169 native checks pass.
+The native diff has no findings and neutral replay impact. Bundle and convention
+gates pass. The user/operations guides, IR-13 index/log, UC-1, roadmap and consumer
+provider references agree on the delivered boundary. ADR 0070 distills live source
+settlement and independent positive command receipt recovery; ADRs 0067–0068
+retain assignment preconditions, operation identity and creation before association.
+
+No new qualifying friction was recorded under plan 102. Initiative entries are
+triaged: FRIC-32 resolved formatter/generator ownership; FRIC-33 accepted inherited
+strict recommended request metadata; FRIC-39 resolved migration filename gaps;
+FRIC-40 resolved shared fixture selection of superseded attempts. Plans 98, 99
+and 101 retain their own evidence and triage. No entry under plans 98–102 remains
+logged.
+
+The serving criteria use authorized explicit human-verifiable review; automatic
+verifier callbacks remain a separate trusted producer contract. Real workspace
+fencing, the joint plan 84 successor/restart gate, adaptive coordination and
+recurrence remain open under their existing owners. IR-13 completion does not
+complete IR-11, IR-15, plan 96 or plans 84–87.
 
 
 ## Context and Orientation
@@ -89,7 +134,7 @@ Milestone 1 also starts with no objectives and drives an unassociated declared S
 
 ### Milestone 2 — Integrated completion
 
-Extend the runner: report both workers successful while one integrated criterion fails, and verify the objective remains open. Record a passing verifier result for the exact combined artifact and current criteria, submit explicit authorized acceptance and observe exactly one `Completed` transition. Submit an older completion command and verify it cannot close an objective whose criteria changed. Leave an unknown child or tool operation unresolved and verify acceptance is blocked. Repeat the acceptance and verify it returns its original receipt. Cancel a separate objective and verify new work stops while late facts and unresolved operations are preserved without any claim that external effects stopped. Milestone 2 is accepted when the runner prints the failed integrated acceptance still open and the final explicit acceptance completed, plus first-objective creation/replay identity and instruction-only invalidation results.
+Extend the runner: report both workers successful while one integrated criterion fails, and verify the objective remains open. Record current authorized completer review evidence for the exact combined artifact and criteria, submit explicit authorized acceptance and observe exactly one `Completed` transition. Submit an older completion command and verify it cannot close an objective whose criteria changed. Leave an unknown child or tool operation unresolved and verify acceptance is blocked. Repeat the acceptance and verify it returns its original receipt. Cancel a separate objective and verify new work stops while late facts and unresolved operations are preserved without any claim that external effects stopped. Milestone 2 is accepted when the runner prints the failed integrated acceptance still open and the final explicit acceptance completed, plus first-objective creation/replay identity and instruction-only invalidation results.
 
 ### Milestone 3 — Documentation, bundles, ADRs and gates
 
@@ -153,3 +198,14 @@ Hard prerequisites: plans 99, 100 and 101 Complete. Soft: plan 96's `WorkspacePr
 ## Revision Notes
 
 2026-10-29: Added real agent-created objective recovery and instruction-only conflict cases to qualification.
+
+
+## Revision Notes
+
+2026-11-02: Serving qualification selects public HumanVerifiable criteria and
+explicit authorized review of actual retained outputs. Trusted automatic-verifier
+callback validation remains in the store contract suite; no scripted model result
+or fixture pass flag is presented as an installed automatic producer. Actual
+SIGKILL recovery also required live source settlement checks, factual positive
+command receipt acknowledgement and distinguishing ordinary Skills from native
+coordinators. No workflow step shape or dependency pin changed.

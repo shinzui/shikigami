@@ -1,0 +1,38 @@
+cabal-version: 3.0
+name: objective-tracking-fixture
+version: 0.1.0.0
+build-type: Simple
+synopsis: Disposable no-Rei objective qualification producers
+
+executable shikigami-objective-fixture
+  main-is: Main.hs
+  hs-source-dirs: .
+  default-language: GHC2024
+  default-extensions:
+    BlockArguments
+    DuplicateRecordFields
+    NoFieldSelectors
+    OverloadedRecordDot
+    OverloadedStrings
+
+  ghc-options:
+    -Wall
+    -threaded
+
+  build-depends:
+    aeson,
+    base,
+    biscuit-haskell,
+    bytestring,
+    directory,
+    en-biscuit,
+    en-core,
+    filepath,
+    http-types,
+    kikan-en-contract,
+    kiroku-store,
+    shikigami-core,
+    text,
+    time,
+    wai,
+    warp,

@@ -15,16 +15,19 @@ import Effectful.Dispatch.Static (unsafeEff_)
 import Shikigami.App (AppEffects, runAppIO)
 import Shikigami.Behavior.Error (TransientBehaviorFailure (..))
 import Shikigami.Directory qualified as Directory
+import Shikigami.Execution.Attempt qualified as Attempt
 import Shikigami.Execution.Coordinate
 import Shikigami.Execution.Executor (BoundTool (..))
 import Shikigami.Execution.Identity (OperationId)
 import Shikigami.Execution.Policy.Types (RecoveryClass (IdempotentEffect), ToolInvoiceCost (NoInvoiceCost))
+import Shikigami.Execution.Resources (AttemptRequest (..))
 import Shikigami.Execution.Runner (OperationContext (..), PreparedTool (..), ToolPreparation (..))
 import Shikigami.Execution.Runner qualified as Runner
 import Shikigami.Execution.Selection (ExecutionSelection (..))
 import Shikigami.Execution.Store qualified as Execution
 import Shikigami.Execution.Tools (NativeToolFactory (..))
 import Shikigami.Execution.Transcript qualified as Replay
+import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Objective.Command qualified as Command
 import Shikigami.Objective.Operation qualified as Operation
 import Shikigami.Objective.Origin qualified as Origin
@@ -90,24 +93,25 @@ objectiveTools configured = NativeToolFactory describe prepare
             _ -> pure (Left (Replay.ExecutionPolicyRefused "objective binding differs from retained scope"))
           _ -> pure (Left (Replay.ExecutionPolicyRefused "ambiguous objective binding"))
     unavailable = throwIO (TransientBehaviorFailure "objective preparation is unavailable")
-    bound :: Runtime.ObjectiveRuntime -> Scope.ObjectiveScope -> Maybe (OperationContext, (Origin.OriginAuthority, Aeson.Value)) -> BoundTool
+    bound :: Runtime.ObjectiveRuntime -> Scope.ObjectiveScope -> Maybe (OperationContext, (Origin.OriginAuthority, Aeson.Value, Replay.NextWork)) -> BoundTool
     bound runtime scope accepted = BoundTool (bindingFor scope) $
       DynTool "objectives" "Read current objective progress, create a permitted objective, plan your own assignments, record evidence or propose completion. Runtime supplies authority and operation identity; returned references confer no authority." (inputSchema scope) \arguments -> case (accepted, Aeson.fromJSON arguments) of
         (Nothing, _) -> pure (Left (ToolRunFailed "objectives" "description cannot execute objective work"))
         (_, Aeson.Error _) -> pure (Left (ToolArgsInvalid "objectives" "invalid closed objective command"))
-        (Just (_, (_, original)), _) | arguments /= original -> pure (Left (ToolArgsInvalid "objectives" "arguments differ from the accepted operation"))
-        (Just (context, (origin, _)), Aeson.Success input) -> do
+        (Just (_, (_, original, _)), _) | arguments /= original -> pure (Left (ToolArgsInvalid "objectives" "arguments differ from the accepted operation"))
+        (Just (context, (origin, _, next)), Aeson.Success input) -> do
           result <- unsafeEff_ (invoke runtime scope origin context.operationId input >>= Operation.requireResolved)
           let value = toJSON result
-              output = textToolOutput (Text.decodeUtf8 (Lazy.toStrict (Aeson.encode value)))
-          pure (Right output {structuredContent = Just value})
+              output = (textToolOutput (Text.decodeUtf8 (Lazy.toStrict (Aeson.encode value)))) {structuredContent = Just value}
+          unsafeEff_ (acknowledgeCommandReceipt runtime scope context next result output)
+          pure (Right output)
 
 bindingFor :: Scope.ObjectiveScope -> Replay.ToolBinding
 bindingFor scope = Replay.ToolBinding (executionCoordinate "objectives") (executionCoordinate ("objective-scope/1:" <> executionDigestText (Scope.scopeFingerprint scope))) (executionDigestFor "shikigami.tool-schema/1" (inputSchema scope)) IdempotentEffect NoInvoiceCost
 
 -- Authenticate every OperationContext coordinate against the execution owner,
 -- and retain the exact accepted arguments rather than trusting a callback value.
-sourceFor :: Runtime.ObjectiveRuntime -> Replay.ExecutionSnapshot -> Scope.ObjectiveScope -> OperationContext -> IO (Either Replay.ExecutionError (Origin.OriginAuthority, Aeson.Value))
+sourceFor :: Runtime.ObjectiveRuntime -> Replay.ExecutionSnapshot -> Scope.ObjectiveScope -> OperationContext -> IO (Either Replay.ExecutionError (Origin.OriginAuthority, Aeson.Value, Replay.NextWork))
 sourceFor runtime snapshot scope context = do
   prepared <- execute do
     authorized <- Execution.authorizeReplay snapshot.executionId snapshot.identity (Directory.identityLifecycleAdmission runtime.directory snapshot.identity)
@@ -119,17 +123,21 @@ sourceFor runtime snapshot scope context = do
         case original of
           Right (actual, _) | actual == snapshot -> do
             checked <- Runner.prepareAcceptedTool now False Nothing access context.operationId snapshot.toolBindings (const (pure (Right ())))
-            pure do
-              permit <- checked
-              case permit of
-                ToolReady request | request.context == context -> Right (access, request.input.invocation.arguments)
-                _ -> Left Replay.OperationConflict
+            case checked of
+              Right (ToolReady request) | request.context == context -> do
+                response <- Execution.readReplayPayload @Replay.OperationOutcome access "operation-outcome" request.input.response
+                pure case response of
+                  Right (Replay.ModelReturned assistant _) -> Right (access, request.input.invocation.arguments, Replay.toolContinuation request.input assistant)
+                  Left err -> Left err
+                  _ -> Left Replay.CorruptReplay
+              Left err -> pure (Left err)
+              _ -> pure (Left Replay.OperationConflict)
           _ -> pure (Left Replay.CorruptReplay)
   case prepared of
     Left Replay.ExecutionStorageUnavailable -> unavailable
     Left Replay.ProjectionUnavailable -> unavailable
     Left err -> pure (Left err)
-    Right (access, arguments) -> do
+    Right (access, arguments, next) -> do
       source <- Runtime.owned runtime case scope.source of
         Scope.AgentScope _ -> Origin.executionAuthority access context.operationId
         Scope.ConversationScope _ conversation turn -> Origin.conversationAuthority (Runtime.hostFor runtime scope.identity) access conversation turn context.operationId
@@ -137,11 +145,54 @@ sourceFor runtime snapshot scope context = do
       case source of
         Left ObjectiveUnavailable -> unavailable
         Left _ -> pure (Left (Replay.ExecutionPolicyRefused "objective origin unavailable"))
-        Right origin -> pure (Right (origin, arguments))
+        Right origin -> pure (Right (origin, arguments, next))
   where
     execute :: Eff AppEffects (Either Replay.ExecutionError a) -> IO (Either Replay.ExecutionError a)
     execute action = runAppIO runtime.appEnv action <&> either (const (Left Replay.ExecutionStorageUnavailable)) id
     unavailable = throwIO (TransientBehaviorFailure "objective operation source is unavailable")
+
+-- A positive command receipt is the independent factual owner's immutable
+-- result for this exact accepted operation. The revision-1 renderer reproduces
+-- its original rich output; no socket/model body supplies an acknowledgement.
+-- Mutable inspections have no such receipt and must retain their uncertainty.
+acknowledgeCommandReceipt :: Runtime.ObjectiveRuntime -> Scope.ObjectiveScope -> OperationContext -> Replay.NextWork -> Either ObjectiveError Operation.Reply -> ToolOutput -> IO ()
+acknowledgeCommandReceipt runtime scope context next result output = case committed of
+  Nothing -> pure ()
+  Just receipt | receipt.operationId == context.operationId -> do
+    acknowledged <- runAppIO runtime.appEnv do
+      attempts <- Execution.inspectOperationAttempts context.operationId
+      case attempts of
+        Left err -> pure (Left err)
+        Right stored -> settleAll [attempt | attempt <- stored, attempt.phase == Attempt.AttemptSuperseded, isNothing attempt.lateReceipt]
+    case acknowledged of
+      Right (Right ()) -> pure ()
+      _ -> throwIO (TransientBehaviorFailure "objective receipt acknowledgement is unavailable")
+  _ -> throwIO (TransientBehaviorFailure "objective receipt differs from its accepted operation")
+  where
+    committed = case result of
+      Right Operation.Reply {result = Operation.ObjectiveCreated receipt} -> Just receipt
+      Right Operation.Reply {result = Operation.ObjectiveUpdated receipt} -> Just receipt
+      _ -> Nothing
+    factual = Attempt.AttemptResult (Replay.RichToolReturned (Replay.captureToolOutput output)) next Nothing
+    settleAll [] = pure (Right ())
+    settleAll (attempt : remaining) = case attempt.owner of
+      Nothing -> pure (Left Replay.AttemptClaimLost)
+      Just owner -> do
+        let reference = Attempt.JobReference V1 context.executionId context.operationId attempt.request.attemptId
+            claim = Attempt.AttemptClaim reference owner attempt.generation
+        settled <- settle claim (3 :: Int)
+        case settled of Left err -> pure (Left err); Right () -> settleAll remaining
+    settle _ 0 = pure (Left Replay.ExecutionRevisionConflict)
+    settle claim remaining = do
+      current <- Execution.inspectExecution context.executionId
+      case current of
+        Right (Just (state, _, _)) ->
+          Execution.recordIndependentToolReceipt scope.identity state.revision claim factual >>= \case
+            Right _ -> pure (Right ())
+            Left Replay.ExecutionRevisionConflict -> settle claim (remaining - 1)
+            Left err -> pure (Left err)
+        Right Nothing -> pure (Left Replay.ExecutionMissing)
+        Left err -> pure (Left err)
 
 invoke :: Runtime.ObjectiveRuntime -> Scope.ObjectiveScope -> Origin.OriginAuthority -> OperationId -> Input -> IO (Either ObjectiveError Operation.Reply)
 invoke runtime scope origin operation input = do

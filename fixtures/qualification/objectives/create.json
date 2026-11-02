@@ -1,0 +1,20 @@
+{
+  "title": "API finite delivery",
+  "goal": "Two worker artifacts reviewed together",
+  "instructions": "Retain progress independently of memory and Rei",
+  "criteria": [
+    {
+      "key": "combined",
+      "description": "The combined artifact passes review",
+      "kind": "HumanVerifiable",
+      "journeyRequired": false
+    },
+    {
+      "key": "journey",
+      "description": "The integrated journey presents component a before component b",
+      "kind": "HumanVerifiable",
+      "journeyRequired": true
+    }
+  ],
+  "external": []
+}

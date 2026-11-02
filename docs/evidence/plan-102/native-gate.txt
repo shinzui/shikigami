@@ -1,0 +1,175 @@
+Baseline: fdf5119
+Command: just keiro-gate fdf5119
+Findings: none
+Replay impact: replay-neutral
+
+PASS  structural/fixture labels: shikigami.RunRouteKind.v1
+PASS  structural/canonical identity: shikigami.RunRouteKind.v1
+PASS  structural/exhaustive enum shape round-trip: shikigami.RunRouteKind.v1
+PASS  structural/binding domain round-trip: shikigami.RunRouteKind.v1/agent
+PASS  structural/binding shape round-trip: shikigami.RunRouteKind.v1/agent
+PASS  structural/binding domain round-trip: shikigami.RunRouteKind.v1/conversation
+PASS  structural/binding shape round-trip: shikigami.RunRouteKind.v1/conversation
+PASS  structural/binding domain round-trip: shikigami.RunRouteKind.v1/execution
+PASS  structural/binding shape round-trip: shikigami.RunRouteKind.v1/execution
+PASS  structural/fixture labels: shikigami.TriggerKind.v1
+PASS  structural/canonical identity: shikigami.TriggerKind.v1
+PASS  structural/exhaustive enum shape round-trip: shikigami.TriggerKind.v1
+PASS  structural/binding domain round-trip: shikigami.TriggerKind.v1/schedule
+PASS  structural/binding shape round-trip: shikigami.TriggerKind.v1/schedule
+PASS  structural/binding domain round-trip: shikigami.TriggerKind.v1/stream
+PASS  structural/binding shape round-trip: shikigami.TriggerKind.v1/stream
+PASS  structural/binding domain round-trip: shikigami.TriggerKind.v1/event
+PASS  structural/binding shape round-trip: shikigami.TriggerKind.v1/event
+PASS  structural/binding domain round-trip: shikigami.TriggerKind.v1/delegation
+PASS  structural/binding shape round-trip: shikigami.TriggerKind.v1/delegation
+PASS  structural/fixture coverage: shikigami.RunRouteKind.v1
+PASS  structural/fixture coverage: shikigami.TriggerKind.v1
+PASS  structural/projection owner law: shikigami.RunRouteKind.v1
+PASS  structural/projection key law: shikigami.RunRouteKind.v1
+PASS  structural/projection owner law: shikigami.TriggerKind.v1
+PASS  structural/projection key law: shikigami.TriggerKind.v1
+PASS  aggregate/ExecutionLifecycle/validateTransducer is empty
+PASS  aggregate/ExecutionLifecycle/golden round-trip: ExecutionAdmitted
+PASS  aggregate/ExecutionLifecycle/golden round-trip: ExecutionAdvanced
+PASS  aggregate/ExecutionLifecycle/golden round-trip: ExecutionParked
+PASS  aggregate/ExecutionLifecycle/golden round-trip: ExecutionResumed
+PASS  aggregate/ExecutionLifecycle/golden round-trip: ExecutionBecameUnresolved
+PASS  aggregate/ExecutionLifecycle/golden round-trip: ExecutionReconciled
+PASS  aggregate/ExecutionLifecycle/golden round-trip: ExecutionFinished
+PASS  aggregate/ExecutionLifecycle/golden round-trip: ExecutionFailed
+PASS  aggregate/ExecutionLifecycle/golden round-trip: ExecutionCancelled
+PASS  aggregate/ExecutionLifecycle/golden round-trip: ExecutionRetried
+PASS  aggregate/ExecutionLifecycle/golden round-trip: ExecutionReceiptSettled
+PASS  aggregate/ExecutionLifecycle/golden round-trip: ExecutionReceiptsClosed
+PASS  aggregate/ExecutionLifecycle/golden round-trip: ExecutionFinishedPendingReceipts
+PASS  aggregate/ExecutionLifecycle/golden round-trip: ExecutionFailedPendingReceipts
+PASS  aggregate/ExecutionLifecycle/golden round-trip: ExecutionCancelledPendingReceipts
+PASS  aggregate/ExecutionLifecycle/accepts AdmitExecution from ExecutionLifecycleMissing
+PASS  aggregate/ExecutionLifecycle/nominal domain law: ExecutionIdentity
+PASS  aggregate/ExecutionLifecycle/nominal representation law: ExecutionIdentity
+PASS  aggregate/ExecutionLifecycle/nominal projection agreement: ExecutionIdentity
+PASS  aggregate/ExecutionLifecycle/forward/replay equality: AdmitExecution from ExecutionLifecycleMissing -- final vertex
+PASS  aggregate/ExecutionLifecycle/forward/replay equality: AdmitExecution from ExecutionLifecycleMissing -- register executionId
+PASS  aggregate/ExecutionLifecycle/forward/replay equality: AdmitExecution from ExecutionLifecycleMissing -- register snapshotDigest
+PASS  aggregate/ExecutionLifecycle/forward/replay equality: AdmitExecution from ExecutionLifecycleMissing -- register revision
+PASS  aggregate/ExecutionLifecycle/forward/replay equality: AdmitExecution from ExecutionLifecycleMissing -- register pendingReceipts
+PASS  aggregate/ObjectiveLifecycle/validateTransducer is empty
+PASS  aggregate/ObjectiveLifecycle/golden round-trip: ObjectiveCreated
+PASS  aggregate/ObjectiveLifecycle/golden round-trip: ObjectiveTransitionApplied
+PASS  aggregate/ObjectiveLifecycle/accepts CreateObjective from ObjectiveLifecycleMissing
+PASS  aggregate/ObjectiveLifecycle/forward/replay equality: CreateObjective from ObjectiveLifecycleMissing -- final vertex
+PASS  aggregate/ObjectiveLifecycle/forward/replay equality: CreateObjective from ObjectiveLifecycleMissing -- register objectiveId
+PASS  aggregate/ObjectiveLifecycle/forward/replay equality: CreateObjective from ObjectiveLifecycleMissing -- register revision
+PASS  aggregate/ObjectiveTurnAdmission/validateTransducer is empty
+PASS  aggregate/ObjectiveTurnAdmission/golden round-trip: ObjectiveTurnAdmitted
+PASS  aggregate/ObjectiveTurnAdmission/accepts AdmitObjectiveTurn from ObjectiveTurnAdmissionMissing
+PASS  aggregate/ObjectiveTurnAdmission/forward/replay equality: AdmitObjectiveTurn from ObjectiveTurnAdmissionMissing -- final vertex
+PASS  aggregate/ObjectiveTurnAdmission/forward/replay equality: AdmitObjectiveTurn from ObjectiveTurnAdmissionMissing -- register source
+PASS  aggregate/RunEvidence/validateTransducer is empty
+PASS  aggregate/RunEvidence/golden round-trip: ProfileBound
+PASS  aggregate/RunEvidence/golden round-trip: CollectionStarted
+PASS  aggregate/RunEvidence/golden round-trip: EvidenceSealed
+PASS  aggregate/RunEvidence/golden round-trip: EvidenceAttested
+PASS  aggregate/RunEvidence/golden round-trip: EvidenceNonConforming
+PASS  aggregate/RunEvidence/golden round-trip: EvidenceIncomplete
+PASS  aggregate/RunEvidence/golden round-trip: EvidenceFailed
+PASS  aggregate/RunEvidence/accepts BindProfile from RunEvidenceRequested
+PASS  aggregate/RunEvidence/forward/replay equality: BindProfile from RunEvidenceRequested -- final vertex
+PASS  aggregate/RunEvidence/forward/replay equality: BindProfile from RunEvidenceRequested -- register runEvidenceId
+PASS  aggregate/RunEvidence/forward/replay equality: BindProfile from RunEvidenceRequested -- register runId
+PASS  aggregate/WorkerSessionLifecycle/validateTransducer is empty
+PASS  aggregate/WorkerSessionLifecycle/golden round-trip: WorkerSessionAdmitted
+PASS  aggregate/WorkerSessionLifecycle/golden round-trip: SessionMessageAccepted
+PASS  aggregate/WorkerSessionLifecycle/golden round-trip: SessionAssignmentStarted
+PASS  aggregate/WorkerSessionLifecycle/golden round-trip: SessionAssignmentParked
+PASS  aggregate/WorkerSessionLifecycle/golden round-trip: SessionAssignmentResumed
+PASS  aggregate/WorkerSessionLifecycle/golden round-trip: SessionResultRecorded
+PASS  aggregate/WorkerSessionLifecycle/golden round-trip: SessionBecameUnresolved
+PASS  aggregate/WorkerSessionLifecycle/golden round-trip: SessionAssignmentReconciled
+PASS  aggregate/WorkerSessionLifecycle/golden round-trip: SessionTransferRequested
+PASS  aggregate/WorkerSessionLifecycle/golden round-trip: SessionTransferReconciled
+PASS  aggregate/WorkerSessionLifecycle/golden round-trip: SessionOwnerEstablished
+PASS  aggregate/WorkerSessionLifecycle/golden round-trip: SessionEventsSubscribed
+PASS  aggregate/WorkerSessionLifecycle/golden round-trip: WorkerSessionObserved
+PASS  aggregate/WorkerSessionLifecycle/golden round-trip: SessionCheckpointPrepared
+PASS  aggregate/WorkerSessionLifecycle/golden round-trip: SessionEventsConsumed
+PASS  aggregate/WorkerSessionLifecycle/golden round-trip: WorkerSessionFailed
+PASS  aggregate/WorkerSessionLifecycle/golden round-trip: WorkerSessionCancelled
+PASS  aggregate/WorkerSessionLifecycle/golden round-trip: SessionCheckpointSuperseded
+PASS  aggregate/WorkerSessionLifecycle/accepts AdmitWorkerSession from WorkerSessionLifecycleMissing
+PASS  aggregate/WorkerSessionLifecycle/nominal domain law: WorkerSessionIdentity
+PASS  aggregate/WorkerSessionLifecycle/nominal representation law: WorkerSessionIdentity
+PASS  aggregate/WorkerSessionLifecycle/nominal projection agreement: WorkerSessionIdentity
+PASS  aggregate/WorkerSessionLifecycle/forward/replay equality: AdmitWorkerSession from WorkerSessionLifecycleMissing -- final vertex
+PASS  aggregate/WorkerSessionLifecycle/forward/replay equality: AdmitWorkerSession from WorkerSessionLifecycleMissing -- register sessionId
+PASS  aggregate/WorkerSessionLifecycle/forward/replay equality: AdmitWorkerSession from WorkerSessionLifecycleMissing -- register bindingDigest
+PASS  aggregate/WorkerSessionLifecycle/forward/replay equality: AdmitWorkerSession from WorkerSessionLifecycleMissing -- register revision
+PASS  readmodel/execution_lookup/registryName
+PASS  readmodel/execution_lookup/shapeHash
+PASS  readmodel/execution_lookup/freshness
+PASS  readmodel/execution_lookup/cursorAuthority
+PASS  readmodel/execution_lookup/catalogRegistration
+PASS  readmodel/execution_lookup/querySupply
+PASS  readmodel/execution_lookup/projectionDelivery
+PASS  readmodel/objective_lookup/registryName
+PASS  readmodel/objective_lookup/shapeHash
+PASS  readmodel/objective_lookup/freshness
+PASS  readmodel/objective_lookup/cursorAuthority
+PASS  readmodel/objective_lookup/catalogRegistration
+PASS  readmodel/objective_lookup/querySupply
+PASS  readmodel/objective_lookup/projectionDelivery
+PASS  readmodel/objective_turn_lookup/registryName
+PASS  readmodel/objective_turn_lookup/shapeHash
+PASS  readmodel/objective_turn_lookup/freshness
+PASS  readmodel/objective_turn_lookup/cursorAuthority
+PASS  readmodel/objective_turn_lookup/catalogRegistration
+PASS  readmodel/objective_turn_lookup/querySupply
+PASS  readmodel/objective_turn_lookup/projectionDelivery
+PASS  readmodel/run_evidence_lookup/registryName
+PASS  readmodel/run_evidence_lookup/shapeHash
+PASS  readmodel/run_evidence_lookup/freshness
+PASS  readmodel/run_evidence_lookup/cursorAuthority
+PASS  readmodel/run_evidence_lookup/catalogRegistration
+PASS  readmodel/run_evidence_lookup/querySupply
+PASS  readmodel/run_evidence_lookup/projectionDelivery
+PASS  readmodel/worker_session_lookup/registryName
+PASS  readmodel/worker_session_lookup/shapeHash
+PASS  readmodel/worker_session_lookup/freshness
+PASS  readmodel/worker_session_lookup/cursorAuthority
+PASS  readmodel/worker_session_lookup/catalogRegistration
+PASS  readmodel/worker_session_lookup/querySupply
+PASS  readmodel/worker_session_lookup/projectionDelivery
+PASS  mapped-surface/workqueue-payload/workqueue:run_jobs/RunRouteKind/workqueue run_jobs payload .routeKind : RunRouteKind
+PASS  mapped-surface/workqueue-payload/workqueue:run_jobs/RunTriggerKind/workqueue run_jobs payload .triggerKind : RunTriggerKind
+PASS  workflow/AgentRun/awaits
+PASS  workflow/AgentRun/body
+PASS  workflow/AgentRun/idField
+PASS  workflow/AgentRun/idVia
+PASS  workflow/AgentRun/name
+PASS  workflow/AgentRun/patches
+PASS  workflow/Approval/awaits
+PASS  workflow/Approval/body
+PASS  workflow/Approval/idField
+PASS  workflow/Approval/idVia
+PASS  workflow/Approval/name
+PASS  workflow/Approval/patches
+PASS  workflow/ContinuingWorker/awaits
+PASS  workflow/ContinuingWorker/body
+PASS  workflow/ContinuingWorker/idField
+PASS  workflow/ContinuingWorker/idVia
+PASS  workflow/ContinuingWorker/name
+PASS  workflow/ContinuingWorker/patches
+PASS  workflow/DanwaConversation/awaits
+PASS  workflow/DanwaConversation/body
+PASS  workflow/DanwaConversation/idField
+PASS  workflow/DanwaConversation/idVia
+PASS  workflow/DanwaConversation/name
+PASS  workflow/DanwaConversation/patches
+PASS  workflow/ExecutionDriver/awaits
+PASS  workflow/ExecutionDriver/body
+PASS  workflow/ExecutionDriver/idField
+PASS  workflow/ExecutionDriver/idVia
+PASS  workflow/ExecutionDriver/name
+PASS  workflow/ExecutionDriver/patches
+Test suite conformance: PASS

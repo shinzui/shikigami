@@ -46,6 +46,11 @@ provenance:
       at: 2026-10-30T14:51:46Z
       mode: "implement"
       note: "Implement independent factual file receipt recovery before successor and handoff admission"
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-11-02T09:55:59Z
+      mode: "implement"
+      note: "Link the qualified objective ownership provider while retaining joint real workspace/restart acceptance."
   reviews:
     - model: "gpt-6-astra"
       harness: "codex-cli"
@@ -426,7 +431,7 @@ A worktree is a separate set of mutable repository files and a separate Git inde
 
 `shikigami-core/src/Shikigami/Capability/Catalog.hs` owns the pure operation-class gate; `shikigami-core/src/Shikigami/Execution/Tools.hs` owns the second gate and live tool binding. `shikigami-core/src/Shikigami/Execution/Runner.hs` defines logical `OperationContext`, which does not identify an actual attempt. Keep that distinction when adding dispatch plumbing. `shikigami-core/src/Shikigami/Execution/Start.hs`, `shikigami-core/src/Shikigami/Execution/Transcript.hs` and `shikigami-core/src/Shikigami/Execution/Policy.hs` own frozen instruction input, its protected snapshot, and context selection. These are required integration surfaces, not optional provider internals. Concrete Git/process IO belongs in workers because core is forbidden from linking process adapters; shared contracts and transactional stores remain in core.
 
-`shikigami-core/src/Shikigami/WorkerSession/Transfer.hs` defines `WorkspaceRef`, `TransferIntent`, `FenceProof` and `WorkspaceProvider`. Its `reconcile` must prove old-owner settlement; `admitWrite` must conditionally check the owner and epoch at the actual effect boundary. A separate IR-13 ownership provider supplies objective receipts. Do not fabricate those receipts here or mark plan 84 complete without them.
+`shikigami-core/src/Shikigami/WorkerSession/Transfer.hs` defines `WorkspaceRef`, `TransferIntent`, `FenceProof` and `WorkspaceProvider`. Its `reconcile` must prove old-owner settlement; `admitWrite` must conditionally check the owner and epoch at the actual effect boundary. The real objective ownership provider from [plan 99](99-supply-trusted-objective-associations-and-the-real-checkpoint-ownership-and-scope-providers.md) supplies IR-13 receipts, independently qualified with deterministic fence evidence; the joint real workspace/restart test still belongs to plan 84. Do not fabricate those receipts here or mark plan 84 complete without them.
 
 [ADR 0036](../adr/0036-external-agent-actions-require-fresh-exact-authorization.md) requires fresh Kikan-En authorization immediately before protected IO. [ADR 0060](../adr/0060-safe-recovery-spends-new-attempts-and-retains-independent-receipts.md) retains independent attempt receipts and conservative reservations after uncertainty. [ADR 0063](../adr/0063-handoffs-establish-epochs-only-after-fences-and-versioned-owner-receipts.md) establishes a successor only after a matching fence and objective-owner receipt. These constraints apply to all provider operations. Follow `docs/workflow-versioning.md` for any workflow-body edits, declaring patch IDs in `domain/` and running `just keiro-gate`.
 

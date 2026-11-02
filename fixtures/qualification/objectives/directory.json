@@ -1,0 +1,17 @@
+[
+  {
+    "principal_id": "agent_01h000000000000000triage",
+    "handle": "triage",
+    "lifecycle": "active"
+  },
+  {
+    "principal_id": "agent_01h000000000000000coordinator",
+    "handle": "coordinator",
+    "lifecycle": "active"
+  },
+  {
+    "principal_id": "agent_01h000000000000000successor",
+    "handle": "successor",
+    "lifecycle": "active"
+  }
+]

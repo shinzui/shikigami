@@ -461,3 +461,6 @@ membership; explicit `AdministerAll` permits administration across objectives.
 Neither flags nor JSON can impersonate an API caller or agent. The authenticated
 HTTP counterpart and exact envelopes are documented in
 [the objective API](../api/objectives.md).
+
+See [operating objectives](objective-tracking.md) for source settlement, retention,
+creation policy and reproducible qualification.

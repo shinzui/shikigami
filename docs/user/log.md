@@ -1,5 +1,9 @@
 # Bundle Update Log
 
+## 2026-11-02
+
+* **Addition**: DOC-16 documents durable objectives, creation and continuation, exact retries and explicit integrated completion. DOC-1 links the guide.
+
 ## 2026-10-29
 
 * **Correction**: Document `execution` and `harness` manifest fields, resource/execution/

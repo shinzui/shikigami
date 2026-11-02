@@ -79,7 +79,7 @@ The reviewed contracts are recorded in [ADR 0067](../adr/0067-objective-checkpoi
 | EP-2 | Supply trusted objective associations and the real checkpoint, ownership and scope providers | [docs/plans/99-supply-trusted-objective-associations-and-the-real-checkpoint-ownership-and-scope-providers.md](../plans/99-supply-trusted-objective-associations-and-the-real-checkpoint-ownership-and-scope-providers.md) | EP-1 | External plan 96 (real fence proof) | Complete |
 | EP-3 | Expose governed objective inspection through the API and CLI | [docs/plans/100-expose-governed-objective-inspection-through-the-api-and-cli.md](../plans/100-expose-governed-objective-inspection-through-the-api-and-cli.md) | EP-1; EP-2 M1 for its milestone 3 | None | Complete |
 | EP-4 | Make objective capabilities durable for agents and conversations | [docs/plans/101-make-objective-capabilities-durable-for-agents-and-conversations.md](../plans/101-make-objective-capabilities-durable-for-agents-and-conversations.md) | EP-1, EP-2 | None | Complete |
-| EP-5 | Qualify no-Rei objective continuity and close IR-13 | [docs/plans/102-qualify-no-rei-objective-continuity-and-close-ir-13.md](../plans/102-qualify-no-rei-objective-continuity-and-close-ir-13.md) | EP-2, EP-3, EP-4 | External plan 96 (real fence); plan 84 completion | Not Started |
+| EP-5 | Qualify no-Rei objective continuity and close IR-13 | [docs/plans/102-qualify-no-rei-objective-continuity-and-close-ir-13.md](../plans/102-qualify-no-rei-objective-continuity-and-close-ir-13.md) | EP-2, EP-3, EP-4 | External plan 96 (real fence); plan 84 completion | Complete |
 
 Status values: Not Started, In Progress, Complete, Cancelled. EP numbers identify rows here; the linked ExecPlan file ids are 98–102. A whole-child reference is a start gate: that child must be Complete before the dependent child begins. EP-3's dependency on EP-2 milestone 1 is a milestone gate: EP-3 milestones 1–2 need only EP-1, while EP-3 milestone 3 exercises the optional objective reference on run requests and `BindConversation` over HTTP, which EP-2 milestone 1 delivers. External plan 96 is a soft dependency everywhere: a labeled deterministic fence fixture stands in for its `WorkspaceProvider` until that provider is qualified, and no child claims real workspace fencing.
 
@@ -142,15 +142,26 @@ EP-1 exposes `Objective.Capability.readObjectiveVersion` over indexed references
 
 2026-11-02 UTC durable-adapter completion: EP-4 is Complete. Skills, registered Flows and recorded conversation turns retain protected objective scopes and runtime-owned operation identity. Real creation/evidence acknowledgement loss recovers original receipts; later associated runs and explicitly bound turns read current progress without relying on learning memory. Current membership, selector scope and authority outage cases pass. Pre-objective native journals replay with objective runtime access poisoned and no new tools. Full qualification passes 639 core, 35 API, 502 PostgreSQL, 37 agent and 280 worker tests, plus the complete build. The native gate reports two additive guards, neutral replay, no breaking findings and 169 conformance checks. [Plan 101 qualification](../evidence/plan-101/qualification.json) retains evidence. EP-5 is now eligible; IR-13 remains in progress until its integrated qualification and documentation closure.
 
+2026-11-02 UTC initiative completion: EP-5 and all five children are Complete.
+The disposable real API/worker runner passes first creation across SIGKILL and
+service restart, same receipt/origin/binding recovery, later run and bound-turn
+continuation with memory unavailable, two worker outputs, failed then repaired
+integrated journey review, one explicit completion at revision 12, exact retry,
+stale edits and denied access. All 52 objective/provider cases and all 1,597
+package tests pass. Complete build, Hurl, bundle/convention checks and the native
+gate pass (169 checks, no findings, neutral replay). IR-13 is completed with
+[EP-5 evidence](../evidence/plan-102/qualification.json). Plan 84's workspace/joint
+restart gate, plan 96, IR-11/IR-15 and adaptive/recurring children remain open.
+
 Cross-plan gates:
 
 - [x] Plan 84's IR-13 completion gate (2026-11-02 UTC): closed when EP-2 is Complete and plan 84's Progress and the MasterPlan 14 registry carry the real provider evidence.
-- [ ] IR-13 lifecycle: `in-progress` with this MasterPlan as `targetPlan`; `completed` only with EP-5 evidence.
+- [x] IR-13 lifecycle (2026-11-02 UTC): `completed` with this MasterPlan as `targetPlan`, after EP-5 serving, integration and documentation qualification.
 
 
 ## Surprises & Discoveries
 
-(None yet.)
+2026-11-02 UTC: EP-5's real process crash exposed a completion gap beyond the historical checkpoint: logical execution success can retain an unacknowledged superseded attempt. Fresh acceptance now rechecks linked live owners and preserves retryable uncertainty. Immutable positive objective command receipts can settle their original tool attempts; mutable inspections cannot substitute a later read. The serving composition also exposed ordinary Skills acquiring coordinator authority; fresh scope admission now uses the recorded behavior after retained-scope recovery. ADR 0070 records these boundaries.
 
 
 ## Decision Log
@@ -206,7 +217,31 @@ Cross-plan gates:
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Completed 2026-11-02 UTC. All five children delivered their accepted boundaries:
+one Shikigami-owned conditional store, trusted source associations and real
+checkpoint/ownership/scope providers, authenticated API and local operator CLI,
+frozen native Skill/Flow/conversation adapters, and reproducible no-Rei serving
+continuity with explicit integrated acceptance. IR-13 is completed. The provider
+slice already closed plan 84's IR-13 gate independently of this final closeout;
+no consumer start dependency or workspace gate was weakened.
+
+ADR 0067 records assignment-scoped preconditions and instruction invalidation;
+ADR 0068 records authority before first association and frozen scopes; ADR 0070
+records shared command ownership, receipt ordering and current integrated
+acceptance, including live unknown source settlement discovered by EP-5.
+The serving review uses actual retained outputs and explicit completer attestations.
+Automatic verifier callback contracts are separately qualified; no general
+serving producer, real workspace fence, adaptive orchestration or recurrence is
+claimed.
+
+All initiative friction is triaged in the child retrospectives: FRIC-32, FRIC-39
+and FRIC-40 resolved; FRIC-33 accepted with baseline-equivalent inherited strict
+metadata diagnostics. Formatter ownership and native regeneration remain a
+cross-plan constraint, handled by the existing exclusions and compatibility gate.
+The real process fixture found integration gaps that narrower tests had missed;
+production factory composition and pending actual attempts now have direct
+regression coverage. [Final evidence](../evidence/plan-102/qualification.json)
+records 1,597 package tests, 169 native checks, Hurl and complete build acceptance.
 
 
 ## Revision Notes

@@ -25,13 +25,13 @@ import Data.Text.Encoding qualified as Text
 import Data.Vector qualified as Vector
 import Effectful.Dispatch.Static (unsafeEff_)
 import Hasql.Transaction qualified as Tx
-import Keiro.Workflow (WorkflowId (..), WorkflowJournalEvent (StepRecorded), WorkflowOutcome (..), loadStepIndex, prepareJournalAppend)
+import Keiro.Workflow (WorkflowId (..), WorkflowJournalEvent (StepRecorded), WorkflowOutcome (..), loadStepIndex, prepareJournalAppend, runWorkflow)
 import Keiro.Workflow.Resume (resumeWorkflowsOnce)
 import Kiroku.Store.Connection (KirokuStore (..), withStore)
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Action.Authorization (allowAllActionAuthorizerForTests)
 import Shikigami.Agent.Conversation qualified as Conversation
-import Shikigami.Agent.Decl (AgentDecl (..), Behavior (Flow, Skill), IdentityDecl (..), RecordPolicy (Never))
+import Shikigami.Agent.Decl (AgentDecl (..), Behavior (Flow, Skill), IdentityDecl (..), RecordPolicy (Never), defaultDelegationBudget)
 import Shikigami.Agent.DeclarationValue (declarationCoordinate, declarationCoordinateText)
 import Shikigami.Agent.Principal (AgentIdentity (VerifiedIdentity), mkAgentPrincipal)
 import Shikigami.Agent.Run (AgentRunResult (..))
@@ -48,21 +48,26 @@ import Shikigami.Capability.Provider (emptyCapabilityProviderRegistry)
 import Shikigami.Directory qualified as Directory
 import Shikigami.Duration (parseDuration)
 import Shikigami.Execution.AssignmentKey (assignmentIdFor)
+import Shikigami.Execution.Attempt qualified as Attempt
 import Shikigami.Execution.Driver qualified as Driver
 import Shikigami.Execution.Executor qualified as Executor
 import Shikigami.Execution.Identity (parseOperationId)
+import Shikigami.Execution.Progress (noPendingReceipts)
 import Shikigami.Execution.Request (ExecutionContext (..))
 import Shikigami.Execution.Resources qualified as Resources
+import Shikigami.Execution.Runner qualified as Runner
 import Shikigami.Execution.Selection (ExecutionSelection (..))
 import Shikigami.Execution.SelectionRuntime (SelectionRuntime (..))
 import Shikigami.Execution.SelectionRuntime qualified as SelectionRuntime
 import Shikigami.Execution.Store qualified as Execution
 import Shikigami.Execution.Tools qualified as Native
 import Shikigami.Execution.Transcript qualified as Replay
+import Shikigami.ExecutionDriver.Generated.WorkflowRuntime qualified as DriverGenerated
 import Shikigami.ExecutionSelectionWorkflowSpec qualified as SelectionFixture
 import Shikigami.ExecutionTranscriptSpec qualified as Fixture
 import Shikigami.Flow.Decision qualified as Decision
 import Shikigami.Flow.Routing qualified as Routing
+import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Integration.Danwa (AddressedMessage (..))
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
@@ -91,6 +96,7 @@ tests fixture =
     "ObjectiveWorkflow"
     [ testCase "an unassociated native model tool creates, plans, records progress and reads through one frozen binding" (nativeCreation fixture False),
       testCase "lost creation acknowledgement recovers the same receipt after creator policy revocation and continues the original binding" (nativeCreation fixture True),
+      testCase "integrated acceptance waits for a real unacknowledged tool receipt even before checkpoint projection" (nativeScenario fixture False True),
       testCase "a registered Flow creates its first objective, records progress and reads through its admitted scope" (flowCreation fixture False),
       testCase "a registered Flow recovers creation after its journal append fails and creator policy is revoked" (flowCreation fixture True),
       testCase "a durable Skill admits first-objective creation before the actual model and records progress" (skillCreation fixture),
@@ -281,7 +287,8 @@ associatedSkillScenario fixture revoke = Fixture.withFixture fixture \env _ _ ->
       request = case createInput of Aeson.Object fields -> case Aeson.fromJSON (fromMaybe Aeson.Null (KeyMap.lookup "request" fields)) of Aeson.Success value -> value; Aeson.Error err -> error err; _ -> error "invalid fixture"
   directory <- Directory.newDirectoryHandle (Directory.staticDirectorySource [Directory.PrincipalRecord (declarationCoordinate "agent_objective_member") (declarationCoordinate "worker") Directory.Active])
   Directory.refreshDirectory directory >>= (@?= Right ())
-  let runtime = Objectives.ObjectiveRuntime env settings directory allowAllActionAuthorizerForTests Nothing
+  let coordination = Objectives.coordinationHost env settings directory allowAllActionAuthorizerForTests [declaration] defaultDelegationBudget Nothing
+      runtime = Objectives.ObjectiveRuntime env settings directory allowAllActionAuthorizerForTests (Just coordination)
       owner = (Objectives.hostFor runtime actor) & #authenticate .~ pure (Right (O.VerifiedCaller caller))
       create key = do
         created <- Objectives.owned runtime (Goal.createObjective owner (checked parseOperationId (key <> "-create")) Nothing request) >>= right
@@ -304,7 +311,7 @@ associatedSkillScenario fixture revoke = Fixture.withFixture fixture \env _ _ ->
       job = addressedRunJob now actor declaration.name AgentWorkflowRoute (Aeson.object []) (Ledger.httpRunKey declaration.name key) & #objective .~ Just (ObjectiveAssociation originalGoal assignmentKey)
   registry <- Provider.newProviderRegistryFrom [provider]
   let configured = base & #providerRegistry .~ Just registry
-      dependencies = (RouterFixture.routerDeps env configured (Routing.RoutingRuntime (\_ -> pure RouterFixture.catalog) (\_ _ _ -> error "unused routing")) [declaration]) & #directory .~ directory & #objectives .~ Just runtime & #decisions . #providers .~ [provider] & #deliveryPool .~ Just store.pool
+      dependencies = (RouterFixture.routerDeps env configured (Routing.RoutingRuntime (\_ -> pure RouterFixture.catalog) (\_ _ _ -> error "unused routing")) [declaration]) & #directory .~ directory & #objectives .~ Just runtime & #coordination .~ Just coordination & #decisions . #providers .~ [provider] & #deliveryPool .~ Just store.pool
       execution = Replay.executionIdFor (assignmentIdFor (runJobWorkflowId job).unWorkflowId)
   _ <- Ledger.acceptObjectiveRunRequest settings store.pool job key (Ledger.callerAttribution "objective-source-owner") >>= right
   Agent.runAgentRunWorkflow dependencies job >>= (@?= Right Suspended)
@@ -481,7 +488,10 @@ sql :: AppEnv -> Text -> IO ()
 sql env statement = Fixture.run env (runTransaction (Tx.sql (Text.encodeUtf8 statement)))
 
 nativeCreation :: DatabaseFixture -> Bool -> IO ()
-nativeCreation fixture loseAcknowledgement = Fixture.withConfiguredResourceFixture fixture id (Map.insert Resources.Tokens Resources.ExplicitlyUnbounded) \env seed _ -> do
+nativeCreation fixture loseAcknowledgement = nativeScenario fixture loseAcknowledgement False
+
+nativeScenario :: DatabaseFixture -> Bool -> Bool -> IO ()
+nativeScenario fixture loseAcknowledgement holdInspection = Fixture.withConfiguredResourceFixture fixture id (Map.insert Resources.Tokens Resources.ExplicitlyUnbounded) \env seed _ -> do
   withStore env.connectionSettings (\store -> ensureRunQueue store.pool >>= right)
   now <- getCurrentTime
   let principal = checked mkAgentPrincipal "agent_objectives_native"
@@ -489,19 +499,22 @@ nativeCreation fixture loseAcknowledgement = Fixture.withConfiguredResourceFixtu
       declaration = (RouterFixture.successSpecialist "worker") {identity = Just (IdentityDecl (declarationCoordinate "agent_objectives_native")), behavior = Skill (declarationCoordinate "unused-native-fixture")}
       job = addressedRunJob now actor declaration.name AgentWorkflowRoute (Aeson.object []) (checked parseRunKey "objective-native-consumer") & #executionRootId .~ seed.selection.rootId & #executionPermissions .~ Just seed.selection.permittedAliases
       assignment = assignmentIdFor (runJobWorkflowId job).unWorkflowId
-      selection = seed.selection & #assignmentId .~ assignment
+      selection = seed.selection & #assignmentId .~ assignment & #rootId .~ (if holdInspection then Nothing else seed.selection.rootId)
       initial = seed & #executionId .~ Replay.executionIdFor assignment & #runId .~ runJobWorkflowId job & #identity .~ actor & #selection .~ selection
       settings = O.defaultObjectiveSettings & #enabled .~ O.ObjectivesEnabled & #agentCreation .~ [principal]
   directory <- Directory.newDirectoryHandle (Directory.staticDirectorySource [Directory.PrincipalRecord (declarationCoordinate "agent_objectives_native") (declarationCoordinate "worker") Directory.Active])
   Directory.refreshDirectory directory >>= (@?= Right ())
   let runtime = Objectives.ObjectiveRuntime env settings directory allowAllActionAuthorizerForTests Nothing
   scope <- Objectives.resolveExecutionScope runtime job declaration initial.sessionId selection >>= right >>= maybe (fail "creator scope missing") pure
-  scope.rootId @?= seed.selection.rootId
+  scope.rootId @?= selection.rootId
   runtimeRef <- newIORef runtime
   lost <- newIORef False
   creations <- newIORef ([] :: [Aeson.Value])
   evidenceReplies <- newIORef ([] :: [Aeson.Value])
   lostEvidence <- newIORef False
+  dispatch <- newIORef Nothing
+  lateInspection <- newIORef Nothing
+  lostInspection <- newIORef False
   modelCalls <- newIORef (0 :: Int)
   let currentFactory =
         Native.NativeToolFactory
@@ -529,6 +542,14 @@ nativeCreation fixture loseAcknowledgement = Fixture.withConfiguredResourceFixtu
                   Left err -> unsafeEff_ (assertFailure (show err))
                 first <- unsafeEff_ (atomicModifyIORef' lostEvidence (\old -> (True, not old)))
                 when (loseAcknowledgement && first) (unsafeEff_ (throwIO (TransientBehaviorFailure "lost evidence acknowledgement after commit")))
+              when (tag arguments == Just "InspectObjective" && holdInspection) do
+                first <- unsafeEff_ (atomicModifyIORef' lostInspection (\old -> (True, not old)))
+                when first case output of
+                  Right rich -> unsafeEff_ do
+                    context <- readIORef dispatch >>= maybe (fail "missing real dispatch claim") pure
+                    atomicModifyIORef' lateInspection (const (Just (context, Replay.captureToolOutput rich), ()))
+                    throwIO (TransientBehaviorFailure "lost inspection acknowledgement without an immutable command receipt")
+                  Left _ -> pure ()
               pure output
           }
   menu <- Native.describeExecutionTools Log.silentLogger allowAllActionAuthorizerForTests emptyCapabilityProviderRegistry currentFactory (initial & #objectiveScope .~ Just scope) >>= right
@@ -541,7 +562,7 @@ nativeCreation fixture loseAcknowledgement = Fixture.withConfiguredResourceFixtu
         request <- case ordinal of
           0 -> pure (Just createInput)
           1 -> Just . planInput <$> goalFromContext context
-          2 -> Just . progressInput <$> goalFromContext context
+          2 -> Just . (if holdInspection then doneInput else progressInput) <$> goalFromContext context
           3 -> Just . evidenceInput <$> goalFromContext context
           4 -> Just . inspectInput <$> goalFromContext context
           _ -> pure Nothing
@@ -552,7 +573,26 @@ nativeCreation fixture loseAcknowledgement = Fixture.withConfiguredResourceFixtu
   registry <- Provider.newProviderRegistryFrom [provider]
   let original = base.selectionRuntime snapshot
       selected = original {providers = [provider], baseEnv = original.baseEnv & #providerRegistry .~ Just registry}
-      executor = base {Executor.selectionRuntime = const selected, Executor.replayAuthority = Directory.identityLifecycleAdmission directory, Executor.authorize = \snapshot' -> Directory.identityLifecycleAdmission directory snapshot'.identity, Executor.withTools = Native.withExecutionTools Log.silentLogger allowAllActionAuthorizerForTests emptyCapabilityProviderRegistry currentFactory}
+      executor =
+        base
+          { Executor.selectionRuntime = const selected,
+            Executor.replayAuthority = Directory.identityLifecycleAdmission directory,
+            Executor.authorize = \snapshot' -> Directory.identityLifecycleAdmission directory snapshot'.identity,
+            Executor.withTools = \snapshot' context requested use -> do
+              atomicModifyIORef' dispatch (const (Just context, ()))
+              Native.withExecutionTools Log.silentLogger allowAllActionAuthorizerForTests emptyCapabilityProviderRegistry currentFactory snapshot' context requested use
+          }
+  when holdInspection do
+    advanceUntilPending env executor snapshot 60
+    goals <- Objectives.owned runtime (Goal.listObjectives (Objectives.hostFor runtime actor) Nothing 20) >>= right
+    length goals @?= 1
+    let current = head goals
+        proposal = O.CompletionProposal current.revision current.instructionsRevision current.criteriaRevision [checked O.parseArtifactRef "combined-artifact"] [checked O.parseEvidenceKey "review-check"] []
+        owner = Objectives.hostFor runtime actor
+    current.revision @?= checked O.parseRevision 3
+    current.unresolved @?= []
+    _ <- Objectives.owned runtime (Goal.executeCommand owner current.objectiveId current.revision (checked parseOperationId "propose-with-unacknowledged-tool") (Command.ProposeCompletion proposal)) >>= right
+    Objectives.owned runtime (Goal.executeCommand owner current.objectiveId (checked O.parseRevision 4) (checked parseOperationId "accept-after-source-settlement") Command.AcceptCompletion) >>= (@?= Left O.ObjectiveUnresolved)
   result <- Fixture.pumpDriver env executor snapshot 80
   assertBool (show result) (result.phase == Replay.Succeeded)
   calls <- readIORef creations
@@ -561,7 +601,7 @@ nativeCreation fixture loseAcknowledgement = Fixture.withConfiguredResourceFixtu
   goal <- goalFromValue (head calls) >>= maybe (fail "creation returned no objective") pure
   currentRuntime <- readIORef runtimeRef
   actual <- Objectives.owned currentRuntime (Goal.readObjective (Objectives.hostFor currentRuntime actor) goal) >>= right
-  actual.revision @?= checked O.parseRevision 3
+  actual.revision @?= checked O.parseRevision (if holdInspection then 4 else 3)
   length actual.evidence @?= 1
   (head actual.evidence).recordedBy @?= O.RecordedAgent actor
   evidenceResults <- readIORef evidenceReplies
@@ -572,10 +612,51 @@ nativeCreation fixture loseAcknowledgement = Fixture.withConfiguredResourceFixtu
   assigned.definition.owner @?= actor
   assigned.definition.rootId @?= scope.rootId
   assigned.definition.cutoff @?= scope.cutoff
-  assigned.definition.state @?= O.Working
+  assigned.definition.state @?= if holdInspection then O.Done else O.Working
+  when holdInspection do
+    let owner = Objectives.hostFor currentRuntime actor
+        accept = Objectives.owned currentRuntime (Goal.executeCommand owner goal actual.revision (checked parseOperationId "accept-after-source-settlement") Command.AcceptCompletion)
+    -- Logical success does not settle a superseded actual attempt. The original
+    -- worker's retained output and real dispatch claim supply its late receipt.
+    accept >>= (@?= Left O.ObjectiveUnresolved)
+    (context, output) <- readIORef lateInspection >>= maybe (fail "missing retained late inspection receipt") pure
+    access <- Fixture.run env (Execution.authorizeReplay snapshot.executionId actor (Directory.identityLifecycleAdmission directory actor)) >>= right
+    (_, state) <- Fixture.run env (Execution.loadExecution access) >>= right
+    let reference = Attempt.JobReference V1 snapshot.executionId context.operation.operationId context.attemptId
+        claim = Attempt.AttemptClaim reference context.owner context.generation
+        receipt = Attempt.AttemptResult (Replay.RichToolReturned output) Replay.NeedModel Nothing
+    _ <- Fixture.run env (Execution.recordLateExecutionReceipt access state.revision claim receipt) >>= right
+    (_, settled) <- Fixture.run env (Execution.loadExecution access) >>= right
+    settled.pendingReceipts @?= noPendingReceipts
+    accepted <- accept >>= right
+    accept >>= (@?= Right accepted)
   (retained, _) <- Fixture.run env (Execution.authorizeReplay snapshot.executionId actor (Directory.identityLifecycleAdmission directory actor)) >>= right >>= \permit -> Fixture.run env (Execution.loadExecution permit) >>= right
   retained.toolBindings @?= snapshot.toolBindings
   retained.objectiveScope @?= Just scope
+  access <- Fixture.run env (Execution.authorizeReplay snapshot.executionId actor (Directory.identityLifecycleAdmission directory actor)) >>= right
+  (_, finalState) <- Fixture.run env (Execution.loadExecution access) >>= right
+  finalState.pendingReceipts @?= noPendingReceipts
+
+advanceUntilPending :: AppEnv -> Executor.ExecutionRuntime -> Replay.ExecutionSnapshot -> Int -> IO ()
+advanceUntilPending env executor snapshot remaining
+  | remaining <= 0 = assertFailure "fixture did not reach the real pending-receipt boundary"
+  | otherwise = do
+      Just (state, _, _) <- Fixture.run env (Execution.inspectExecution snapshot.executionId) >>= right
+      if state.pendingReceipts /= noPendingReceipts
+        then pure ()
+        else do
+          outcome <- Fixture.run env (runWorkflow DriverGenerated.workflowName (Replay.executionWorkflowId snapshot.executionId) (Driver.executionWorkflow executor (Just (Driver.ExecutionStart snapshot.executionId))))
+          case outcome of
+            ContinuedAsNew -> advanceUntilPending env executor snapshot (remaining - 1)
+            Suspended -> do
+              Just (current, _, _) <- Fixture.run env (Execution.inspectExecution snapshot.executionId) >>= right
+              operation <- maybe (fail "no active operation") pure current.activeOperation
+              attempts <- Fixture.run env (Execution.inspectOperationAttempts operation) >>= right
+              case filter Attempt.logicalAttempt attempts of
+                [attempt] -> Executor.executeAcceptedAttempt executor snapshot.identity (Attempt.JobReference V1 snapshot.executionId operation attempt.request.attemptId) >>= (@?= Right Executor.ExecutorDone)
+                _ -> assertFailure "expected one current accepted attempt"
+              advanceUntilPending env executor snapshot (remaining - 1)
+            _ -> assertFailure (show outcome)
 
 createInput :: Aeson.Value
 createInput = Aeson.object ["tag" .= ("CreateObjective" :: Text), "request" .= Aeson.object ["title" .= ("Autonomous delivery" :: Text), "goal" .= ("Reviewed artifact" :: Text), "instructions" .= ("work" :: Text), "criteria" .= [Aeson.object ["key" .= ("review" :: Text), "description" .= ("Review combined artifact" :: Text), "kind" .= ("HumanVerifiable" :: Text), "journeyRequired" .= False]], "external" .= ([] :: [Aeson.Value])]]
@@ -585,6 +666,9 @@ planInput goal = Aeson.object ["tag" .= ("PlanAssignments" :: Text), "objectiveI
 
 progressInput :: O.ObjectiveId -> Aeson.Value
 progressInput goal = Aeson.object ["tag" .= ("RecordProgress" :: Text), "objectiveId" .= goal, "expectedRevision" .= (1 :: Int), "assignmentId" .= assignment, "state" .= ("Working" :: Text), "decisions" .= ([] :: [Text]), "assumptions" .= ([] :: [Text])]
+
+doneInput :: O.ObjectiveId -> Aeson.Value
+doneInput goal = case progressInput goal of Aeson.Object fields -> Aeson.Object (KeyMap.insert "state" (Aeson.String "Done") fields); value -> value
 
 evidenceInput :: O.ObjectiveId -> Aeson.Value
 evidenceInput goal = Aeson.object ["tag" .= ("RecordEvidence" :: Text), "objectiveId" .= goal, "expectedRevision" .= (2 :: Int), "assignmentId" .= assignment, "evidence" .= Aeson.object ["tag" .= ("Attestation" :: Text), "key" .= ("review-check" :: Text), "criterion" .= ("review" :: Text), "artifact" .= ("combined-artifact" :: Text), "statement" .= ("Reviewed combined artifact" :: Text), "journey" .= False]]

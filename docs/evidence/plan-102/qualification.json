@@ -1,0 +1,58 @@
+{
+  "baseline": "fdf5119",
+  "qualified_at": "2026-11-02T10:16:28Z",
+  "scope": "Plan 102: real no-Rei serving-process continuity, integrated review and exact acceptance; live linked-source uncertainty and immutable positive native command receipt recovery.",
+  "suites": {
+    "shikigami-core-test": 639,
+    "shikigami-api-test": 35,
+    "shikigami-core-postgres-test": 503,
+    "shikigami-server-test": 103,
+    "shikigami-workers-test": 280,
+    "shikigami-agent-test": 37
+  },
+  "package_test_count": 1597,
+  "objective_provider_cases": 52,
+  "objective_workflow_cases": 11,
+  "native_conformance_checks": 169,
+  "native_diff": {
+    "breaking": false,
+    "findings": []
+  },
+  "replay_impact": "replay-neutral",
+  "checks": [
+    "bash tests/objective-tracking/run.sh",
+    "cabal build all",
+    "bash tests/hurl/run.sh",
+    "just keiro-gate fdf5119",
+    "just haskell-conventions",
+    "just migration-schema-isolation",
+    "just improvement-requests-validate",
+    "just use-cases-validate",
+    "just user-docs-validate",
+    "strict friction-log validation",
+    "git diff --check"
+  ],
+  "qualified_behaviors": [
+    "An unassociated authorized declared Skill creates the first objective; a real worker SIGKILL after commit before tool-outcome publication preserves the original objective, receipt, origin and frozen snapshot across API/worker restart and creation-policy removal.",
+    "The recovered positive immutable command receipt settles its superseded actual attempt without inventing a socket reply, invoice or new operation key.",
+    "A later associated run and a later explicitly bound owning conversation turn read current progress with both learning recall paths unavailable.",
+    "Two real serving workers complete separate finite API assignments; retained terminal outputs supply the exact combined-artifact commitment. Reversed component order fails journey review and leaves the objective Open.",
+    "Changed criteria invalidate the old proposal. Current explicit completer attestations and acceptance complete revision 12 once; exact retry returns the same receipt and history retains the caller.",
+    "Unauthenticated/non-member access, denied first creation, unrelated accessible goal selectors and stale public edits refuse.",
+    "Real provider cases preserve sibling results, instruction-only and revert conflicts, cursors, accepted results across owner transfer, retained scopes across source GC and terminal late facts. Their fence evidence is deterministic.",
+    "An unacknowledged mutable inspection blocks otherwise valid acceptance before checkpoint projection and after logical success. The original retained output under the actual dispatch claim settles it, then the exact original acceptance key succeeds."
+  ],
+  "boundaries": [
+    "Serving integrated criteria are HumanVerifiable with explicit authorized review; trusted automatic-verifier callbacks are qualified separately in store contracts. No general automatic verifier is installed in serving hosts.",
+    "No Rei endpoint, host credential or external Danwa delivery is used. Model/OAuth/C13 transports are loopback fixtures; production parsers and verification remain active.",
+    "No real workspace fencing, Git handoff, adaptive coordinator or recurring scheduler is qualified. IR-11, plan 96 and the plan 84 joint successor/restart gate remain open.",
+    "No workflow journal step, domain shape, migration or dependency pin changes in this child."
+  ],
+  "friction": {
+    "FRIC-32": "resolved in plan 98",
+    "FRIC-33": "accepted inherited strict recommended-metadata diagnostics in plan 98",
+    "FRIC-39": "resolved in plan 99",
+    "FRIC-40": "resolved in plan 101",
+    "plan-102": "no new qualifying friction; no initiative entry remains logged"
+  }
+}

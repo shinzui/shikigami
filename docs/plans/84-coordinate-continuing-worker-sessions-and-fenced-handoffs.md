@@ -156,7 +156,7 @@ mailbox wake. Start freezes a bounded selection of up to three retained
 findings. Checkpoint preparation fixes a batch of at most 100 events before the
 external call; lost acknowledgements retry that same intent. The local pending
 pointer, receipt acceptance and consumed cursor prevent overlapping integration.
-The adapter remains unconfigured for production pending IR-13. Fixture children
+The production worker now installs plan 99's objective adapter when tracking is enabled; real workspace fencing remains a separate gate. Fixture children
 exercise real delegated ingestion, descendant reservations and Keiro child
 completion; they do not claim coding or checkpoint-provider delivery.
 

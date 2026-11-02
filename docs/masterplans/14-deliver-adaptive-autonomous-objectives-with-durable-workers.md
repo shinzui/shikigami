@@ -256,6 +256,11 @@ remain unchanged.
 2026-10-21: Revision after review. Distinguish whole-child start gates from external completion gates in the registry so EP-4 through EP-7 are described consistently; IR-11 and IR-13 providers are completion gates except for EP-6's live milestones. Adopt the 2026-10-21 MasterPlan 13 contracts (plan 73 owns the public model descriptor and the reusable `providerCall`/`matchesCall` predicate; ADR 0041 governs pinned decision identity and committed-outcome reads) as consumed interfaces for EP-2 and EP-5. Cite ADR 0004, 0017, 0022 and 0030, which already govern the shared options owner, static labels, receipt ownership and approval children the children rely on. Replace the Progress instruction to copy child milestones with a coordination snapshot. No decomposition or dependency edge changed, so no ADR changes.
 
 
+The objective API/CLI, native Skills, typed Flows and bound conversations are now
+implemented by plans 100–101. Plan 102 has qualified their no-Rei serving continuity and completed IR-13;
+this does not change the remaining real workspace, joint handoff, adaptive or
+recurring child gates. See [objective operations](../operations/objective-tracking.md).
+
 ## Outcomes & Retrospective
 
 

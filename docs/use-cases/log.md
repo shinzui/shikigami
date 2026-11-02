@@ -1,5 +1,9 @@
 # Bundle Update Log
 
+## 2026-11-02
+
+* **Update**: UC-1 records the installed objective providers and durable adapters, preserving real workspace and joint handoff gates.
+
 ## 2026-10-29
 
 * **Correction**: Reconcile UC-1 with completed plans 73–76 and 81–83, partial plan 84,

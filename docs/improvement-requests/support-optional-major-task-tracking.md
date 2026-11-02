@@ -2,12 +2,13 @@
 type: Improvement Request
 title: Support optional major-task tracking for Shikigami agents without Rei
 description: Give agents and users an explicit, durable view of progress on multi-step goals across runs without requiring a Rei intention, while preserving replay-safe updates and governed access.
-timestamp: "2026-10-30T19:36:00Z"
+timestamp: "2026-11-02T10:16:28Z"
 generated:
   by: process:codex
   at: "2026-10-29T13:33:46Z"
 requestId: IR-13
-status: in-progress
+status: completed
+completedAt: "2026-11-02T10:16:28Z"
 targetPlan: docs/masterplans/17-track-durable-objectives-and-authoritative-assignment-checkpoints-without-rei.md
 origin: mori://shinzui/shikigami
 ---
@@ -16,18 +17,36 @@ origin: mori://shinzui/shikigami
 
 ## Status
 
-**In progress; owned by [MasterPlan 17: Track durable objectives and authoritative assignment checkpoints without Rei](../masterplans/17-track-durable-objectives-and-authoritative-assignment-checkpoints-without-rei.md).**
-Shikigami owns the authoritative record, which the design names an objective (this request's
-"major task"). Five child plans deliver it: [plan 98](../plans/98-persist-authoritative-objectives-and-conditional-commands.md)
-persists objectives behind one conditional command executor; [plan 99](../plans/99-supply-trusted-objective-associations-and-the-real-checkpoint-ownership-and-scope-providers.md)
-adds trusted run/conversation associations and the real checkpoint, ownership and coordination-scope
-providers that close plan 84's IR-13 gate; [plan 100](../plans/100-expose-governed-objective-inspection-through-the-api-and-cli.md)
-exposes the authenticated `/objectives` API and operator CLI; [plan 101](../plans/101-make-objective-capabilities-durable-for-agents-and-conversations.md)
-makes the capability durable for Skills, Flows and conversations; and [plan 102](../plans/102-qualify-no-rei-objective-continuity-and-close-ir-13.md)
-qualifies no-Rei continuity and completes this request. Plan 98 implements the objective
-store and conditional command owner, with 19 new PostgreSQL cases covering concurrency,
-rollback, source receipts and recovery after process exit. Real providers, API/CLI, durable
-tools and integrated no-Rei qualification remain plans 99–102; this request is not complete.
+**Completed by [MasterPlan 17](../masterplans/17-track-durable-objectives-and-authoritative-assignment-checkpoints-without-rei.md), plans 98–102, on 2026-11-02.**
+Shikigami owns the authoritative record, named an objective. The delivered store,
+checkpoint/ownership/retained-scope providers, authenticated `/objectives` API,
+operator CLI, native Skill/conversation tool and typed Flow effect share one
+conditional command owner. An authorized agent can create its first objective
+before association; later runs and explicitly bound turns continue it without
+learning-memory availability or a Rei endpoint.
+
+[Plan 102 qualification](../evidence/plan-102/qualification.json) and the
+[serving transcript](../evidence/plan-102/serving-qualification.txt) reproduce an
+actual worker crash after creation commit, identical receipt/origin/binding
+recovery after API/worker restart, two real workers, failed integrated journey
+review, current explicit acceptance exactly once, stale conflicts and denied
+access. Completion checks live linked source uncertainty, including a pending
+original attempt after logical execution success. Immutable positive command
+receipts can settle their own superseded actual attempts; a mutable read cannot
+supply its lost original outcome from a later view. Full qualification passes
+1,597 package tests, 169 native conformance checks, Hurl and the complete build.
+See [the user guide](../user/objectives.md) and
+[operations](../operations/objective-tracking.md).
+
+Serving integration uses explicit authorized completer review of actual retained
+combined outputs for human-verifiable criteria. Trusted automatic-verifier
+callbacks are separately qualified; no general automatic producer is installed
+in serving hosts. Objective-side ownership uses deterministic fence evidence in
+its provider fixture. Real workspace fencing, Git handoff, the joint successor
+and restart gate, adaptive coordination, recurrence, external Danwa delivery,
+automatic Rei mirroring and A2A mapping remain separately owned work. This does
+not complete IR-11, IR-15, plan 96 or plans 84–87.
+
 The research baseline below is retained as the evidence the design started from.
 The earlier [plan 97](../plans/97-track-durable-tasks-and-authoritative-assignment-checkpoints-without-rei.md) is superseded by MasterPlan 17 and is not a second implementation lane.
 

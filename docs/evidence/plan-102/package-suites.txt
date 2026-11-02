@@ -1,0 +1,9 @@
+Command: cabal test shikigami-core-test shikigami-api-test shikigami-core-postgres-test shikigami-server-test shikigami-workers-test shikigami-agent-test --test-show-details=direct --test-options="--num-threads=1"
+
+shikigami-core-test: 639 passed
+shikigami-api-test: 35 passed
+shikigami-core-postgres-test: 503 passed
+shikigami-server-test: 103 passed
+shikigami-workers-test: 280 passed
+shikigami-agent-test: 37 passed
+Total: 1597 passed

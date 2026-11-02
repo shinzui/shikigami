@@ -1,5 +1,9 @@
 # Bundle Update Log
 
+## 2026-11-02
+
+* **Completion**: IR-13 completed by MasterPlan 17, plans 98–102. Real API/worker restart, first agent creation and receipt recovery, cross-run/bound-turn continuity, integrated explicit acceptance, stale/denied inputs and source uncertainty pass. Full qualification: 1,597 package tests, 169 native checks, Hurl and complete build. Human-verifiable review, deterministic fixture fencing and remaining workspace/adaptive/recurring gates are explicit; no IR-11/IR-15 or plan 84–87 completion is inferred.
+
 ## 2026-10-30
 * **Progress**: IR-13 moves to in-progress: plan 98 implements the conditional objective store, receipt recovery and integrated-acceptance boundary. Plans 99–102 retain real-provider, API/tool and no-Rei qualification ownership; this does not close plan 84.
 * **Qualification**: IR-11 plan 96 passes all 22 workspace-owned native cases, including exact integration, continuing writes/cleanup, restart fencing and privacy. Preserve in-progress status and the separately owned real objective ownership/accepted successor gate; bounded evidence is retained in docs/evidence/plan-96/native-workspace-facts.json.

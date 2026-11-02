@@ -161,7 +161,8 @@ not redeclare that upstream aggregate or those targets as its own.
 assignment, payload, receipt, origin, association, scope and cursor targets together.
 The preserve/live-only boundary does not reconstruct private evidence from events.
 Objective authority, atomicity, workflow and contract suites qualify the owner;
-tracker/product integrations remain with their owning MasterPlans 17 and 18.
+MasterPlan 17 supplies the API/CLI and durable native objective adapters.
+MasterPlan 18 retains its separately owned product integrations.
 
 ## Continuing session ownership
 
@@ -183,10 +184,10 @@ operation coordinates are refused. New messages narrow original delegation
 permissions. The public resume registration uses the original session input and
 is repairable by command retry.
 
-Checkpoint and workspace contracts are consumer interfaces. Production defaults
-to unavailable providers until the separately owned IR-13 and IR-11 integrations
-qualify. Deterministic handoff and checkpoint tests do not establish real late
-process fencing or authoritative task updates. See ADRs 0061–0063 and
+The production worker installs the authoritative objective checkpoint, ownership
+and retained-scope providers from plan 99, behind explicit objective enablement.
+Workspace-dependent transfers still refuse without the separately owned IR-11
+provider. Deterministic handoff tests do not establish real late-process fencing. See ADRs 0061–0063 and
 [ADR 0066](../adr/0066-worker-commands-require-retained-scopes-and-fresh-exact-authority.md).
 
 ## Run-job queue

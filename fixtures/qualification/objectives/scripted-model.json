@@ -1,0 +1,27 @@
+{
+  "bootstrap": [
+    "CreateObjective",
+    "PlanAssignments",
+    "RecordProgress",
+    "RecordEvidence",
+    "terminal"
+  ],
+  "worker": [
+    "RecordProgress",
+    "terminal"
+  ],
+  "continue": [
+    "InspectObjective",
+    "terminal"
+  ],
+  "forged": [
+    "RecordProgress",
+    "terminal"
+  ],
+  "denied": [
+    "CreateObjective"
+  ],
+  "plain": [
+    "terminal"
+  ]
+}

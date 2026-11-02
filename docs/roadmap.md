@@ -44,7 +44,7 @@ not feature readiness or effort percentages.
 | [10](masterplans/10-sanctioned-execution-attestation-for-agent-runs.md) | 3 of 4 complete | Plan 52 shared signed envelope, read API/verifier and live proof |
 | [14](masterplans/14-deliver-adaptive-autonomous-objectives-with-durable-workers.md) | 3 of 7 complete; plan 84 in progress | Real providers, adaptive coordination, integrated proof and optional recurrence |
 | [16](masterplans/16-upgrade-shikigami-to-keiro-0-22-and-retire-superseded-runtime-workarounds.md) | 0 of 4 complete | Plans 92–95: released solve, migration, guarded commands, patterns and replay rollout |
-| [17](masterplans/17-track-durable-objectives-and-authoritative-assignment-checkpoints-without-rei.md) | 0 of 5 complete | Plans 98–102: authoritative objectives, trusted providers, API/CLI, durable capabilities and no-Rei qualification |
+| [17](masterplans/17-track-durable-objectives-and-authoritative-assignment-checkpoints-without-rei.md) | 5 of 5 complete | Plans 98–102: authoritative objectives, trusted providers, API/CLI, durable capabilities and no-Rei qualification |
 
 ## Delivery order and gates
 
@@ -59,7 +59,9 @@ objective/assignment state, trusted associations and checkpoint/ownership/scope
 providers. Plan 99 consumes the real fence for positive handoff qualification.
 Do not close plan 84 or IR-15 from deterministic adapter evidence. Plans 85/86
 consume these contracts; plan 87 adds explicitly admitted recurring mandates.
-No objective CLI or HTTP endpoint is shipped yet.
+The authenticated objective API, operator CLI, native Skill/conversation tools
+and typed Flow effects are implemented (plans 98–101). Plan 102 qualifies
+serving-process continuity and explicit integrated completion; IR-13 is completed.
 
 MasterPlan 16 independently owns the Keiro 0.22 upgrade. Retain the current
 cohort, late-write rollback protections, queue upcasters and protected live-only
@@ -106,12 +108,12 @@ surfaces, not prerequisites for every autonomous workload.
 | [93](plans/93-adopt-guarded-catalog-commands-and-qualify-current-dsl-consumer-contracts.md) | Not started; guarded commands and DSL consumer contracts |
 | [94](plans/94-adopt-current-runtime-lifecycle-patterns-and-bounded-operator-inspection.md) | Not started; runtime lifecycle and bounded operator integration |
 | [95](plans/95-close-the-runtime-pattern-audit-and-qualify-the-keiro-0-22-rollout.md) | Not started; old/new replay, artifacts and rollout closure |
-| [96](plans/96-provide-governed-mutable-repository-workspaces-for-durable-agents.md) | In progress; pure admission landed, durable workspaces/mutation/fencing remain |
-| [98](plans/98-persist-authoritative-objectives-and-conditional-commands.md) | Not started; authoritative objective persistence and conditional commands |
-| [99](plans/99-supply-trusted-objective-associations-and-the-real-checkpoint-ownership-and-scope-providers.md) | Not started; trusted associations and actual checkpoint/ownership/scope providers |
-| [100](plans/100-expose-governed-objective-inspection-through-the-api-and-cli.md) | Not started; governed objective API/CLI inspection |
-| [101](plans/101-make-objective-capabilities-durable-for-agents-and-conversations.md) | Not started; durable objective capabilities for agents/conversations |
-| [102](plans/102-qualify-no-rei-objective-continuity-and-close-ir-13.md) | Not started; integrated no-Rei continuity and request closeout |
+| [96](plans/96-provide-governed-mutable-repository-workspaces-for-durable-agents.md) | In progress; 22 workspace-owned native cases qualified; joint plan 84 successor/restart gate remains |
+| [98](plans/98-persist-authoritative-objectives-and-conditional-commands.md) | Complete; authoritative objective persistence and conditional commands |
+| [99](plans/99-supply-trusted-objective-associations-and-the-real-checkpoint-ownership-and-scope-providers.md) | Complete; trusted associations and actual checkpoint/ownership/scope providers |
+| [100](plans/100-expose-governed-objective-inspection-through-the-api-and-cli.md) | Complete; governed objective API/CLI inspection |
+| [101](plans/101-make-objective-capabilities-durable-for-agents-and-conversations.md) | Complete; durable objective capabilities for agents/conversations |
+| [102](plans/102-qualify-no-rei-objective-continuity-and-close-ir-13.md) | Complete; integrated no-Rei continuity and request closeout |
 
 ## Improvement-request lifecycle and implementation coverage
 
@@ -131,11 +133,11 @@ gates; the owning plans and parent completion matrix define those gates.
 | [IR-8](improvement-requests/expose-addressed-agent-runs-over-http.md) | completed | MasterPlan 15 complete |
 | [IR-9](improvement-requests/key-agent-continuity-by-meibo-principal.md) | completed | Plan 54 |
 | [IR-10](improvement-requests/expose-agent-run-status-over-http.md) | completed | MasterPlan 15 complete |
-| [IR-11](improvement-requests/provide-governed-mutable-repository-workspaces.md) | in-progress | Plan 96 in progress: pure catalog admission only |
+| [IR-11](improvement-requests/provide-governed-mutable-repository-workspaces.md) | in-progress | Plan 96 workspace-owned qualification passes; joint real objective/successor/restart gate remains |
 | [IR-12](improvement-requests/compose-shikumi-decisions-in-durable-flows.md) | completed | MasterPlan 13 complete |
-| [IR-13](improvement-requests/support-optional-major-task-tracking.md) | accepted | MasterPlan 17 accepted: plans 98–102 not started; plan 97 superseded |
+| [IR-13](improvement-requests/support-optional-major-task-tracking.md) | completed | Plans 98–102 complete: no-Rei restart/continuity and explicit integrated acceptance qualified; workspace/adaptive/recurring gates remain separate |
 | [IR-14](improvement-requests/record-durable-model-tool-turns-and-compose-harness-policies.md) | in-progress | Plan 83 complete; follow-up/integrated acceptance remains in 84/86 |
-| [IR-15](improvement-requests/support-continuing-worker-sessions.md) | in-progress | Plan 84 partial; real providers gate completion |
+| [IR-15](improvement-requests/support-continuing-worker-sessions.md) | in-progress | Plan 84 partial; real workspace/joint successor and restart qualification remains |
 | [IR-16](improvement-requests/support-adaptive-durable-orchestration.md) | in-progress | Plan 81 complete; adaptive/integrated plans 85/86 remain |
 | [IR-17](improvement-requests/select-governed-models-for-agent-runs.md) | in-progress | Plan 82 complete; later adaptation/integration remains |
 | [IR-18](improvement-requests/support-recurring-objective-supervision.md) | accepted | Plan 87 not started |

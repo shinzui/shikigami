@@ -7,6 +7,7 @@ generated:
   at: "2026-10-10T18:29:20Z"
 useCaseId: UC-1
 status: draft
+timestamp: "2026-11-02T09:53:52Z"
 origin: mori://shinzui/shikigami
 tags: [autonomous-delivery, coordination, durable-agents, repository-work, recovery]
 themes: [autonomous-work]
@@ -195,8 +196,11 @@ model/tool operations and a protected transcript; the no-database command uses a
 ephemeral recording. See [execution policies](../operations/durable-execution.md).
 The default worker still installs no mutable repository provider. The pure
 repository catalog admits exact identities and bases but performs no filesystem
-I/O. The real ownership fence and objective checkpoint providers remain separate
-completion gates. Library fixtures do not establish integrated coding delivery.
+I/O. The objective checkpoint, ownership and retained-scope providers are installed
+and qualified by [plan 99](../plans/99-supply-trusted-objective-associations-and-the-real-checkpoint-ownership-and-scope-providers.md).
+The real workspace fence and joint handoff/restart qualification remain open
+completion gates. Objective tracking, the API/CLI and native cross-run/conversation
+capabilities are described in [the objective guide](../user/objectives.md). Library fixtures do not establish integrated coding delivery.
 
 ## Acceptance scenarios
 

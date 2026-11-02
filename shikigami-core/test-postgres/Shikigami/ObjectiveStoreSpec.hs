@@ -150,7 +150,7 @@ tests fixture =
           run env (O.lookupCreatedObjective creator operation origin) >>= (@?= Right (Just receipt)),
       testCase "malformed creation fingerprint cannot allocate a replacement objective" $
         withObjective fixture \env _ objective -> do
-          let recover = O.createObjective ownerHost (fixtureOperationId "create") (Just origin) request
+          let recover = O.createObjective ownerHost (fixtureOperationId "create") Nothing request
           original <- right =<< run env recover
           original.objectiveId @?= objective
           beforeEvents <- objectiveEventCount env
@@ -163,7 +163,7 @@ tests fixture =
           run env recover >>= (@?= Right original),
       testCase "corrupt creation receipt prevents replacement allocation and recovers the original winner" $
         withObjective fixture \env _ objective -> do
-          let recover = O.createObjective ownerHost (fixtureOperationId "create") (Just origin) request
+          let recover = O.createObjective ownerHost (fixtureOperationId "create") Nothing request
           original <- right =<< run env recover
           original.objectiveId @?= objective
           beforeEvents <- objectiveEventCount env
@@ -538,7 +538,7 @@ environment connection = do
 
 withObjective :: DatabaseFixture -> (AppEnv -> WS.SessionAdmission -> ObjectiveId -> IO a) -> IO a
 withObjective fixture callback = SessionsFixture.withFixture fixture \env admission _ -> do
-  receipt <- right =<< run env (O.createObjective ownerHost (fixtureOperationId "create") (Just origin) request)
+  receipt <- right =<< run env (O.createObjective ownerHost (fixtureOperationId "create") Nothing request)
   callback env admission receipt.objectiveId
 
 get :: AppEnv -> ObjectiveId -> IO Objective

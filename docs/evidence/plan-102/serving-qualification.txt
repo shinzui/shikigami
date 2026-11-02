@@ -1,0 +1,13 @@
+Command: nix develop --no-write-lock-file -c bash tests/objective-tracking/run.sh
+Baseline: fdf5119
+
+PASS autonomous creation/restart objective=shikigami_objective_01m6dvqpatern8p7v8mtz6yxxb receipt=operation:sha256:ab1f551acebaae49b87ef7b7623053f8dc77979ca395816c5c9f92b13f41daea@sha256:6dd7881ee42ef088d3880aaba2ac5d682b28be305e7ca49b6b6082a23f063178 replay-identical=true revision=4 status=Open
+conversation turn enqueued through the production producer
+conversation turn enqueued through the production producer
+PASS associated later run and explicitly bound conversation read current progress with learning memory unavailable
+PASS both workers succeeded; failing integrated journey leaves objective Open
+PASS integrated explicit acceptance objective=shikigami_objective_01m6dvvabme9ebbz3efmv4hnbd revision=12 receipt=explicit-integrated-accept@sha256:4275098334140942aa0a90ef9b26bcf894eae73383a5f3e8dbe75af3ae5efb9d status=Completed
+PASS denied creator, forged accessible selector and authenticated non-member refused; stale public update conflicted
+PASS provider receipt recovery, sibling ordering, instruction-only invalidation, ownership continuity and late facts (deterministic fence fixture)
+PASS live unknown-attempt acceptance barrier and exact retry after retained source settlement
+PASS no-Rei objective continuity; workspace fencing and adaptive/recurring orchestration remain separate qualification

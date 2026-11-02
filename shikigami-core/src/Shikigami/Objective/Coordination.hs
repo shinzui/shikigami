@@ -5,13 +5,12 @@
 module Shikigami.Objective.Coordination (coordinationAuthority, objectiveHost) where
 
 import Data.Generics.Labels ()
-import Data.List.NonEmpty (NonEmpty (..))
 import Data.Maybe (catMaybes)
 import Effectful (Eff)
 import Keiro.Workflow.Types (WorkflowId (..))
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Action.Authorization (ActionAuthorizer)
-import Shikigami.Agent.CoordinationSource (AcceptedCoordinator (..), loadAcceptedCoordinator)
+import Shikigami.Agent.CoordinationSource (AcceptedCoordinator (..), acceptsCoordination, loadAcceptedCoordinator)
 import Shikigami.Agent.Decl (AgentDecl (..), DelegationBudget, IdentityDecl (..), delegationBudgetNatural)
 import Shikigami.Agent.DeclarationValue (agentEnabled)
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
@@ -62,7 +61,12 @@ coordinationAuthority env settings directory actions declarations budget = Worke
               case saved of
                 Left err -> pure (Left err)
                 Right (Just scope) -> pure (Right (Just scope))
-                Right Nothing -> fresh run association
+                Right Nothing -> do
+                  eligible <- acceptsCoordination run
+                  case eligible of
+                    Left _ -> pure (Left ObjectiveDenied)
+                    Right False -> pure (Right Nothing)
+                    Right True -> fresh run association
     fresh run association = do
       let admittedHost = host run
       permission <- Capability.resolveAssignment admittedHost (Store.referenceFor association.objectiveId association.assignmentId)

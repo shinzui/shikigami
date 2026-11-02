@@ -22,6 +22,7 @@ extra-packages: keiro-dsl
 optional-packages:
   shikigami-core/src/keiro-dsl-conformance.workspace.*/*.cabal
   tests/workspace/prototype/*.cabal
+  tests/objective-tracking/fixture/*.cabal
 
 with-compiler: ghc-9.12.4
 -- The co-developed cohort is selected by the components' own build-depends

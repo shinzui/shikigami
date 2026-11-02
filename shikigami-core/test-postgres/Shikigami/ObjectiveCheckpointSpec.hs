@@ -22,7 +22,8 @@ import Keiro.Workflow.Gc (WorkflowGcPolicy (..), gcWorkflowsOnce)
 import Keiro.Workflow.Types (WorkflowId (..))
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Action.Authorization (allowAllActionAuthorizerForTests, denyAllActionAuthorizer)
-import Shikigami.Agent.Decl (AgentDecl (..), defaultDelegationBudget)
+import Shikigami.Agent.Decl (AgentDecl (..), Behavior (CoordinatingSkill), defaultDelegationBudget)
+import Shikigami.Agent.DeclarationValue (declarationCoordinate)
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
 import Shikigami.Agent.Name (mkAgentName)
 import Shikigami.Agent.Principal (AgentIdentity, compatibilityIdentity)
@@ -490,7 +491,7 @@ retainCoordinatorSource :: AppEnv -> ObjectiveId -> AgentIdentity -> WS.SessionA
 retainCoordinatorSource env objective actor worker = do
   current <- get env objective
   let parent = AssignmentDraft (assignment "coordinator") (instructions "coordinate") [] actor Pending Nothing Nothing Nothing
-      declaration = worker.delegator
+      declaration = worker.delegator & #behavior .~ CoordinatingSkill (declarationCoordinate "../agents/skills/triage-note")
   _ <- right =<< run env (O.executeCommand ownerHost objective current.revision (fixtureOperationId "parent-assignment") (SetAssignments (map (.definition) current.assignments <> [parent])))
   forM_ (zip ["worker-a", "worker-b"] [4, 5]) \(name, next) -> do
     void (right =<< run env (O.executeCommand ownerHost objective (revision (next - 1)) (fixtureOperationId ("grant-" <> name)) (GrantMember (RecordedAgent (compatibilityIdentity (checked mkAgentName name))) [Worker])))
