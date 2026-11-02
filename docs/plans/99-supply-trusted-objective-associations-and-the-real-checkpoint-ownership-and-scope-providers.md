@@ -53,14 +53,18 @@ After this plan, continuing worker sessions run against a real objective owner i
 
 Acceptance evidence: 632 core tests, 32 API tests, 473 PostgreSQL tests, 280 worker tests and 96 server tests pass. The latest objective-store rerun passes all 28 cases, including the post-enqueue failure injection and concurrent association acceptance. `just keiro-gate HEAD` passes with 156 conformance checks and a neutral replay diff; Haskell conventions pass. ADR 0070 records the run-admission boundary. No workflow step or generated domain shape changed.
 
-Milestone 1 remains incomplete: implement verified conversation bindings and per-turn association snapshots, creation-origin validation/lookup against accepted runtime records, and their acceptance tests. Then implement milestones 2 and 3; production providers, retained coordination scopes, explicit conflict reconciliation and plan 84's real-provider gate remain open. EP-3 milestone 3 and EP-4 retain their existing prerequisites.
+2026-11-02 UTC conversation checkpoint: verified bindings and the runtime turn-admission primitive are implemented in `Objective/Conversation.hs`, behind `Objective/Capability.hs`, with public types re-exported by `Objective/Association.hs`. The source session must match the indexed conversation, Shikigami namespace, memory space and recorded member identity. Binding history is retained; the current pointer is serialized per conversation and participant. Migration `0035-objective-conversation-admissions.sql` preserves turn snapshots, including absence. `ObjectiveTurnAdmission` owns their atomic source event and live-only projection in an independent group; the original objective writer/query target sets are unchanged. All 29 objective-store cases pass, including concurrent admission, rebinding across objectives, immutable absent/bound retries, refusal after revocation, forged participants, substituted index subjects, source outage recovery and rollback on a snapshot-write failure. Workflow invocation remains owned by plan 101 and no workflow body changed. The final qualification passes 632 core, 474 PostgreSQL, 280 worker, 96 server and 37 agent tests, plus the full build, migration isolation and Haskell conventions. The workflow gate passes 168 conformance checks with an additive diff and neutral replay classification. [Conversation qualification](../evidence/plan-99/conversation-admission-qualification.json) records the scope and counts; adjacent native reports retain the contract evidence.
+
+Milestone 1 remains incomplete: implement creation-origin validation/lookup against accepted runtime records and its acceptance tests. Then implement milestones 2 and 3; production providers, retained coordination scopes, explicit conflict reconciliation and plan 84's real-provider gate remain open. EP-3 milestone 3 and EP-4 retain their existing prerequisites.
+
+Tooling friction: FRIC-39 in `docs/friction-log/` is resolved. `just new-migration` now permits the existing monotonically increasing filename gap and generated migration 0035 without changing any historical migration identity.
 
 Planning baseline `3900c0e634d9b559e92a6989bb10f9943e0beab1`, inspected 2026-10-28. Hard prerequisite: plan 98 Complete.
 
 
 ## Surprises & Discoveries
 
-(None yet.)
+- 2026-11-02 UTC: adding turn admission to the existing objective projection group changes persisted rebuild and query identities (`CatalogGroupChanged`, `CatalogOwnerChanged`, `CatalogQueryBindingChanged`). Give technical turn admission its own stream, preserved group and lookup model instead. The resulting native diff is additive and replay-neutral; objective mutations retain their original owner. ADR 0070 records the durable boundary.
 
 
 ## Decision Log

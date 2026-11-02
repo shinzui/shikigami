@@ -10,6 +10,7 @@ module Shikigami.Objective.Capability
     executeCommand,
     executeInternal,
     readCommandReceipt,
+    admitConversationTurn,
   )
 where
 
@@ -27,6 +28,7 @@ import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Identity (OperationId)
 import Shikigami.Objective.Authority (Access (..))
 import Shikigami.Objective.Command
+import Shikigami.Objective.Conversation qualified as Conversation
 import Shikigami.Objective.Store qualified as Store
 import Shikigami.Objective.Types
 import Shikigami.Prelude
@@ -101,13 +103,16 @@ execute host objective expected operation command = do
         Left err -> pure (Left err)
         Right (Just _) -> Store.execute access objective expected operation command
         Right Nothing -> do
+          models <- case command of
+            Public BindConversation {} -> Conversation.checkMemoryModels
+            _ -> pure (Right ())
           checked <- liftIO $ trySyncIO do
             internal <- case command of Public _ -> pure (Right ()); Internal value -> host.verifyInternal access.actor value
             evidence <- forM (evidenceInputs command) \input -> case input of
               Attestation {} -> pure (Right (input, EvidenceVerification CheckPassed (Just input.criterion) input.journey))
               ResultEvidence {result = WorkerResult receipt _} -> pure (Right (input, EvidenceVerification (if receipt.disposition == WS.AssignmentSucceeded then ResultObserved else CheckFailed) Nothing NoJourney))
               ResultEvidence {result} -> fmap (input,) <$> host.verifyResult result
-            pure (internal >> sequence evidence)
+            pure (models >> internal >> sequence evidence)
           case checked of
             Left _ -> pure (Left ObjectiveUnavailable)
             Right validation -> do
@@ -124,6 +129,13 @@ readCommandReceipt :: (Store.ObjectiveEffects es) => ObjectiveHost -> ObjectiveI
 readCommandReceipt host objective operation = do
   grant <- liftIO (admit host "read-receipt" (toJSON (objective, operation)))
   either (pure . Left) (\access -> Store.readReceipt access objective operation) grant
+
+-- | Runtime-only turn admission. Run/turn coordinates never come from a model
+-- tool's JSON; this freezes the association before that turn can dispatch work.
+admitConversationTurn :: (Store.ObjectiveEffects es) => ObjectiveHost -> RunReference -> TurnReference -> ConversationRef -> Eff es (Either ObjectiveError Conversation.TurnAdmission)
+admitConversationTurn host run turn conversation = do
+  grant <- liftIO (admit host "admit-conversation-turn" (toJSON (run, turn, conversation)))
+  either (pure . Left) (\access -> Store.admitConversationTurn access run turn conversation) grant
 
 trySyncIO :: IO a -> IO (Either SomeException a)
 trySyncIO action =

@@ -156,7 +156,7 @@ not redeclare that upstream aggregate or those targets as its own.
 
 ## Objective ownership
 
-`domain/shikigami/objective.keiro` owns ObjectiveLifecycle and its current catalog.
+`domain/shikigami/objective.keiro` owns ObjectiveLifecycle and its current catalog. It also owns the independent ObjectiveTurnAdmission stream and preserved turn-admission group; adding that group leaves the existing objective lifecycle and catalog identities intact.
 `Objective/Store.hs` commits lifecycle append and protected objective state,
 assignment, payload, receipt, origin, association, scope and cursor targets together.
 The preserve/live-only boundary does not reconstruct private evidence from events.

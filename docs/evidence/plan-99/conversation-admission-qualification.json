@@ -1,0 +1,31 @@
+{
+  "scope": "Plan 99 milestone 1: verified conversation binding and immutable turn-admission primitives; workflow tool admission remains plan 101; creation-origin validation remains unfinished.",
+  "baseline": "10f4e0d74822dcf24fe2084dd61f06a0a2ddc845",
+  "qualified_at": "2026-11-02 UTC",
+  "suites": {
+    "shikigami-core-test": 632,
+    "shikigami-core-postgres-test": 474,
+    "shikigami-server-test": 96,
+    "shikigami-workers-test": 280,
+    "shikigami-agent-test": 37
+  },
+  "focused_final_objective_store_cases": 29,
+  "checks": [
+    "cabal build all --offline",
+    "just keiro-gate 10f4e0d",
+    "python3 tools/style/check_haskell.py",
+    "bash tools/check-migration-schema-isolation.sh"
+  ],
+  "native_conformance_checks": 168,
+  "native_diff": "additive",
+  "qualification_notes": [
+    "Server suite rerun after adding the new aggregate to the safe inspection catalog.",
+    "ObjectiveStore cases rerun after final versioned binding/admission codecs."
+  ],
+  "remaining": [
+    "creation-origin validator and lookup",
+    "checkpoint and ownership providers",
+    "coordination scopes and explicit conflict reconciliation",
+    "production wiring and remaining MasterPlan children"
+  ]
+}

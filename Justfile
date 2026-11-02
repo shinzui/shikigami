@@ -119,7 +119,7 @@ hurl:
 #
 # pg-migrate orders migrations by their position in
 # shikigami-migrations/sql-migrations/manifest, not by filename. Filenames use
-# contiguous four-digit numbers (0001-<slug>.sql, 0002-<slug>.sql, ...).
+# increasing four-digit numbers. Preserve historical gaps and deployed identities.
 # The durable migration identity is <component>/<filename without extension>,
 # so names are fixed once deployed; append new migrations without renumbering.
 #
@@ -139,15 +139,20 @@ new-migration name="":
       exit 1
     fi
     dir="shikigami-migrations/sql-migrations"
-    next=1
+    previous=0
     while IFS= read -r entry || [ -n "$entry" ]; do
-      expected="$(printf '%04d' "$next")"
-      if [[ ! "$entry" =~ ^${expected}-[a-z0-9][a-z0-9-]*\.sql$ ]]; then
-        echo "error: expected migration ${expected}-<slug>.sql, got '$entry'" >&2
+      if [[ ! "$entry" =~ ^([0-9]{4})-[a-z0-9][a-z0-9-]*\.sql$ ]]; then
+        echo "error: invalid migration filename '$entry'" >&2
         exit 1
       fi
-      next=$((next + 1))
+      number=$((10#${BASH_REMATCH[1]}))
+      if (( number <= previous )); then
+        echo "error: migration filenames must increase, got '$entry'" >&2
+        exit 1
+      fi
+      previous=$number
     done < "${dir}/manifest"
+    next=$((previous + 1))
     if (( next > 9999 )); then
       echo "error: four-digit migration numbers are exhausted" >&2
       exit 1

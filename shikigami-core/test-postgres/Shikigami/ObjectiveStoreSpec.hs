@@ -10,6 +10,7 @@ import Data.ByteString.Lazy.Char8 qualified as Lazy
 import Data.Either (isLeft, rights)
 import Data.Generics.Labels ()
 import Data.Int (Int64)
+import Data.List (nub)
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Text
 import Data.Time (addUTCTime)
@@ -22,15 +23,19 @@ import Hasql.Session qualified as Session
 import Hasql.Statement (preparable)
 import Hasql.Transaction qualified as Tx
 import Hasql.Transaction.Sessions qualified as Transactions
+import Kioku.Id (genSessionId, idText)
+import Kioku.Session qualified as Memory
+import Kioku.Session.Domain (RecordTurnData (..), StartSessionData (..))
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
 import Kiroku.Store.Read qualified as StoreRead
 import Kiroku.Store.Transaction (runTransaction)
 import Kiroku.Store.Types qualified as StoreTypes
 import Pgmq qualified
 import Shikigami.Action.Authorization (allowAllActionAuthorizerForTests, denyAllActionAuthorizer)
+import Shikigami.Agent.Conversation.SessionIndex qualified as ConversationIndex
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
 import Shikigami.Agent.Name (AgentName, mkAgentName)
-import Shikigami.Agent.Principal (AgentIdentity (..), compatibilityIdentity, mkAgentPrincipal)
+import Shikigami.Agent.Principal (AgentIdentity (..), ResolvedAgentIdentity (CompatibilityAgent), compatibilityIdentity, identityText, mkAgentPrincipal)
 import Shikigami.Agent.RunJob (RunRouteKind (..), runJobWorkflowId)
 import Shikigami.AgentRun.Ledger qualified as Ledger
 import Shikigami.AgentRun.RequestKey (parseRequestKey)
@@ -40,6 +45,8 @@ import Shikigami.Execution.Payload (payloadIdText)
 import Shikigami.Execution.Transcript (ExecutionId (..), PayloadRef (..), executionIdentity)
 import Shikigami.Fixture.ExecutionIdentity (fixtureOperationId, fixtureRootId)
 import Shikigami.FormatVersion (FormatVersion (V1))
+import Shikigami.Memory.Access (agentActor, shikigamiMemorySpace, shikigamiWriteContext)
+import Shikigami.Memory.Scope (agentScope)
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Shikigami.Objective.Association qualified as Association
 import Shikigami.Objective.Capability qualified as O
@@ -67,7 +74,8 @@ tests :: DatabaseFixture -> TestTree
 tests fixture =
   testGroup
     "ObjectiveStore"
-    [ testCase "run associations commit with acceptance, refuse revoked callers and preserve queue selectors" (runAssociations fixture),
+    [ testCase "conversation bindings validate participants and freeze each admitted turn" (conversationAssociations fixture),
+      testCase "run associations commit with acceptance, refuse revoked callers and preserve queue selectors" (runAssociations fixture),
       testCase "corrupt snapshot refuses through the owner and recovery preserves the retained objective" $
         withObjective fixture \env _ objective -> do
           current <- get env objective
@@ -688,3 +696,73 @@ runAssociations fixture = withDatabase fixture \env -> withStore env.connectionS
   failedBinding @?= Right Nothing
   Ledger.lookupRunRequest store.pool agent (runJobWorkflowId failed) >>= (@?= Right Nothing)
   queueLength >>= (@?= 1)
+
+conversationAssociations :: DatabaseFixture -> IO ()
+conversationAssociations fixture = withDatabase fixture \env -> do
+  now <- getCurrentTime
+  sid <- genSessionId
+  let agent = fixtureAgentName "conversation-worker"
+      resolved = CompatibilityAgent agent
+      identity = compatibilityIdentity agent
+      workerHost = host (RecordedAgent identity)
+      conversation = either (error . show) id (parseConversationRef "conversation-objectives")
+      context = shikigamiWriteContext resolved
+      admit turn = run env (O.admitConversationTurn workerHost (runReference "conversation-run") (turnReference turn) conversation)
+      create key = right =<< run env (O.createObjective ownerHost (fixtureOperationId key) Nothing request)
+  _ <- right =<< run env (Memory.startWithContext context (StartSessionData sid shikigamiMemorySpace (agentActor resolved) Nothing (either (error . show) id (identityText identity)) "conversation" (agentScope resolved) (Just (conversationRefText conversation)) Nothing Nothing 0 now))
+  run env (ConversationIndex.rememberConversationSession (conversationRefText conversation) (idText sid) now)
+  forM_ (zip [0 ..] ["turn-a", "turn-b", "turn-c"]) \(index, turn) -> do
+    _ <- right =<< run env (Memory.recordTurnWithContext context (RecordTurnData sid shikigamiMemorySpace (agentActor resolved) turn index "user" "work" Nothing Nothing Nothing now))
+    pure ()
+  first <- create "conversation-first"
+  run env (O.executeCommand ownerHost first.objectiveId (revision 0) (fixtureOperationId "unrelated-participant") (BindConversation conversation)) >>= (@?= Left ObjectiveDenied)
+  _ <- right =<< run env (O.executeCommand ownerHost first.objectiveId (revision 0) (fixtureOperationId "grant-conversation") (GrantMember (RecordedAgent identity) [Worker, Reader]))
+  unbound <- right =<< admit "turn-a"
+  unbound.binding @?= Nothing
+  firstBinding <- right =<< run env (O.executeCommand ownerHost first.objectiveId (revision 1) (fixtureOperationId "bind-first") (BindConversation conversation))
+  admit "turn-a" >>= (@?= Right unbound)
+  recovered <- replicateConcurrently 6 (admit "turn-b") >>= traverse right
+  [earlier] <- pure (nub recovered)
+  count env "shikigami.objective_turn_admissions" >>= (@?= 2)
+  turnAdmissionEventCount env >>= (@?= 2)
+  fmap (.receipt) earlier.binding @?= Just firstBinding
+  earlier.sessionId @?= idText sid
+  second <- create "conversation-second"
+  _ <- right =<< run env (O.executeCommand ownerHost second.objectiveId (revision 0) (fixtureOperationId "grant-second") (GrantMember (RecordedAgent identity) [Worker, Reader]))
+  secondBinding <- right =<< run env (O.executeCommand ownerHost second.objectiveId (revision 1) (fixtureOperationId "bind-second") (BindConversation conversation))
+  admit "turn-b" >>= (@?= Right earlier)
+  later <- right =<< admit "turn-c"
+  fmap (.receipt) later.binding @?= Just secondBinding
+  admit "missing-turn" >>= (@?= Left ObjectiveDenied)
+  let other = host (RecordedAgent (compatibilityIdentity (fixtureAgentName "unrelated")))
+  run env (O.admitConversationTurn other (runReference "forged-run") (turnReference "turn-b") conversation) >>= (@?= Left ObjectiveDenied)
+  -- Lost acknowledgements recover without consulting a mutable source index
+  -- or reinterpreting the binding after either source becomes unavailable.
+  sql env "ALTER TABLE shikigami.conversation_sessions RENAME TO unavailable_objective_index"
+  sql env "ALTER TABLE kioku.sessions RENAME TO unavailable_objective_sessions"
+  admit "turn-b" >>= (@?= Right earlier)
+  admit "turn-a" >>= (@?= Right unbound)
+  run env (O.executeCommand ownerHost first.objectiveId (revision 1) (fixtureOperationId "bind-first") (BindConversation conversation)) >>= (@?= Right firstBinding)
+  sql env "ALTER TABLE kioku.unavailable_objective_sessions RENAME TO sessions"
+  sql env "ALTER TABLE shikigami.unavailable_objective_index RENAME TO conversation_sessions"
+  -- A failed admission commits neither an objective pointer nor a snapshot.
+  _ <- right =<< run env (Memory.recordTurnWithContext context (RecordTurnData sid shikigamiMemorySpace (agentActor resolved) "turn-failure" 3 "user" "work" Nothing Nothing Nothing now))
+  sql env "CREATE FUNCTION shikigami.reject_turn_fixture() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'injected admission failure'; END $$; CREATE TRIGGER reject_turn_fixture BEFORE INSERT ON shikigami.objective_turn_admissions FOR EACH ROW EXECUTE FUNCTION shikigami.reject_turn_fixture()"
+  admit "turn-failure" >>= (@?= Left ObjectiveUnavailable)
+  count env "shikigami.objective_turn_admissions" >>= (@?= 3)
+  turnAdmissionEventCount env >>= (@?= 3)
+  sql env "DROP TRIGGER reject_turn_fixture ON shikigami.objective_turn_admissions"
+  retried <- right =<< admit "turn-failure"
+  fmap (.receipt) retried.binding @?= Just secondBinding
+  turnAdmissionEventCount env >>= (@?= 4)
+  -- Permission is rechecked on historical lookup, after a rebind as well.
+  _ <- right =<< run env (O.executeCommand ownerHost first.objectiveId (revision 2) (fixtureOperationId "revoke-conversation") (RevokeMember (RecordedAgent identity)))
+  admit "turn-b" >>= (@?= Left ObjectiveDenied)
+  -- An index pointer to a session of another conversation supplies no authority.
+  let substituted = either (error . show) id (parseConversationRef "unrelated-conversation")
+  run env (ConversationIndex.rememberConversationSession (conversationRefText substituted) (idText sid) now)
+  run env (O.executeCommand ownerHost second.objectiveId (revision 2) (fixtureOperationId "substitute-index") (BindConversation substituted)) >>= (@?= Left ObjectiveDenied)
+  get env second.objectiveId >>= \objective -> objective.revision @?= revision 2
+
+turnAdmissionEventCount :: AppEnv -> IO Int
+turnAdmissionEventCount env = length <$> run env (StoreRead.readCategory (StoreTypes.CategoryName "objectiveTurnAdmission") (StoreTypes.GlobalPosition 0) 100)

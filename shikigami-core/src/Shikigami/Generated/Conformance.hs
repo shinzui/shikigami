@@ -7,10 +7,12 @@ module Shikigami.Generated.Conformance
 import Shikigami.Generated.StructuralConformance qualified as StructuralConformance
 import Shikigami.ExecutionLifecycle.Generated.Harness qualified as ExecutionLifecycle
 import Shikigami.ObjectiveLifecycle.Generated.Harness qualified as ObjectiveLifecycle
+import Shikigami.ObjectiveTurnAdmission.Generated.Harness qualified as ObjectiveTurnAdmission
 import Shikigami.RunEvidence.Generated.Harness qualified as RunEvidence
 import Shikigami.WorkerSessionLifecycle.Generated.Harness qualified as WorkerSessionLifecycle
 import Shikigami.ExecutionLookup.Generated.ReadModelHarness qualified as ExecutionLookup
 import Shikigami.ObjectiveLookup.Generated.ReadModelHarness qualified as ObjectiveLookup
+import Shikigami.ObjectiveTurnLookup.Generated.ReadModelHarness qualified as ObjectiveTurnLookup
 import Shikigami.RunEvidenceLookup.Generated.ReadModelHarness qualified as RunEvidenceLookup
 import Shikigami.WorkerSessionLookup.Generated.ReadModelHarness qualified as WorkerSessionLookup
 import Shikigami.AgentRun.Generated.WorkflowFacts qualified as AgentRun
@@ -25,10 +27,12 @@ runServiceConformanceChecks =
     [("structural/" <> fact, passed) | (fact, passed) <- StructuralConformance.structuralConformanceAssertions]
     <> [("aggregate/ExecutionLifecycle/" <> fact, passed) | (fact, passed) <- ExecutionLifecycle.harnessAssertions]
     <> [("aggregate/ObjectiveLifecycle/" <> fact, passed) | (fact, passed) <- ObjectiveLifecycle.harnessAssertions]
+    <> [("aggregate/ObjectiveTurnAdmission/" <> fact, passed) | (fact, passed) <- ObjectiveTurnAdmission.harnessAssertions]
     <> [("aggregate/RunEvidence/" <> fact, passed) | (fact, passed) <- RunEvidence.harnessAssertions]
     <> [("aggregate/WorkerSessionLifecycle/" <> fact, passed) | (fact, passed) <- WorkerSessionLifecycle.harnessAssertions]
     <> [("readmodel/execution_lookup/" <> fact, passed) | (fact, passed) <- ExecutionLookup.readModelFactResults]
     <> [("readmodel/objective_lookup/" <> fact, passed) | (fact, passed) <- ObjectiveLookup.readModelFactResults]
+    <> [("readmodel/objective_turn_lookup/" <> fact, passed) | (fact, passed) <- ObjectiveTurnLookup.readModelFactResults]
     <> [("readmodel/run_evidence_lookup/" <> fact, passed) | (fact, passed) <- RunEvidenceLookup.readModelFactResults]
     <> [("readmodel/worker_session_lookup/" <> fact, passed) | (fact, passed) <- WorkerSessionLookup.readModelFactResults]
   )

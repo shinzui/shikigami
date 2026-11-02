@@ -44,6 +44,11 @@ target objective_cursors {
   table = "objective_cursors"
   reset = preserve
 }
+target objective_turn_admissions {
+  schema = "shikigami"
+  table = "objective_turn_admissions"
+  reset = preserve
+}
 rebuild-group objective_store {
   targets = [ objective_rows objective_assignments objective_payloads objective_receipts objective_origins objective_associations objective_scopes objective_cursors ]
   order = [ objective_rows objective_assignments objective_payloads objective_receipts objective_origins objective_associations objective_scopes objective_cursors ]
@@ -70,6 +75,34 @@ readmodel objective_lookup {
   backing = objective_rows
 }
 
+rebuild-group objective_turn_store {
+  targets = [ objective_turn_admissions ]
+  order = [ objective_turn_admissions ]
+}
+projection-owner objective_turn_writer {
+  source = aggregate ObjectiveTurnAdmission
+  delivery = inline
+  group = objective_turn_store
+  targets = [ objective_turn_admissions ]
+  order = 41
+  replay = live-only "Turn admission requires protected memory and objective authority"
+}
+readmodel objective_turn_lookup {
+  columns {
+    run_id text required
+    turn_id text required
+    principal_key text required
+    objective_id text
+    admission jsonb required
+  }
+  version = 1
+  shape = "fnv1a:18d729f1d572d494"
+  freshness = immediate
+  group = objective_turn_store
+  targets = [ objective_turn_admissions ]
+  backing = objective_turn_admissions
+}
+
 aggregate ObjectiveLifecycle
   regs
     objectiveId ObjectiveId = placeholder
@@ -89,6 +122,21 @@ aggregate ObjectiveLifecycle
     guard cmd.objectiveId == reg.objectiveId && cmd.expected == reg.revision && cmd.revision > reg.revision
     write revision := cmd.revision
     emit ObjectiveTransitionApplied
+    goto Present
+
+  wire kind=ctorName fields=camelCase schemaVersion=1
+
+
+aggregate ObjectiveTurnAdmission
+  regs
+    source Text = ""
+  states Missing Present
+  command AdmitObjectiveTurn { source:Text }
+  event ObjectiveTurnAdmitted = fields(AdmitObjectiveTurn)
+
+  Missing -- AdmitObjectiveTurn -->
+    write source := cmd.source
+    emit ObjectiveTurnAdmitted
     goto Present
 
   wire kind=ctorName fields=camelCase schemaVersion=1

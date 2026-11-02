@@ -308,6 +308,19 @@ library
     Shikigami.Generated.StructuralConformance
     Shikigami.Generated.StructuralProjections
     Shikigami.Objective.Authority
+    Shikigami.Objective.Conversation
+    Shikigami.ObjectiveTurnAdmission.BehaviorHoles
+    Shikigami.ObjectiveTurnAdmission.Generated.BehaviorContract
+    Shikigami.ObjectiveTurnAdmission.Generated.Codec
+    Shikigami.ObjectiveTurnAdmission.Generated.Domain
+    Shikigami.ObjectiveTurnAdmission.Generated.EventStream
+    Shikigami.ObjectiveTurnAdmission.Generated.Harness
+    Shikigami.ObjectiveTurnAdmission.Generated.Projection
+    Shikigami.ObjectiveTurnAdmission.Generated.Transducer
+    Shikigami.ObjectiveTurnLookup.Generated.ReadModel
+    Shikigami.ObjectiveTurnLookup.Generated.ReadModelHarness
+    Shikigami.ObjectiveTurnLookup.Generated.ReadModelTable
+    Shikigami.ObjectiveTurnLookup.ReadModelHoles
     Shikigami.ProjectionCatalog.ProjectionCatalogHoles
     Shikigami.RunEvidence.BehaviorHoles
     Shikigami.RunEvidence.Generated.BehaviorContract

@@ -1,5 +1,9 @@
 # Bundle Update Log
 
+## 2026-11-02
+* **Update**: FRIC-39 resolved: Fix migration scaffolding to preserve deployed filename gaps.
+* **Addition**: FRIC-39 records detour tooling friction with mori://shinzui/shikigami: Migration scaffolder refuses the existing manifest gap
+
 ## 2026-11-01
 * **Update**: FRIC-38 accepted: Accepted serial worker qualification as the reproducible existing fixture execution profile, without widening runtime deadlines.
 * **Update**: FRIC-37 accepted: Accepted the existing Git metadata rebuild cost with a single final source boundary; changing version embedding is outside this type migration.

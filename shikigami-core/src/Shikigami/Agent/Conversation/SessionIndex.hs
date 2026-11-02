@@ -29,6 +29,7 @@
 module Shikigami.Agent.Conversation.SessionIndex
   ( lookupConversationSession,
     rememberConversationSession,
+    lookupConversationSessionTx,
     lookupConversationEpoch,
     advanceConversationEpoch,
   )
@@ -53,6 +54,14 @@ import Shikigami.Prelude
 lookupConversationSession :: (Store :> es) => Text -> Eff es (Maybe Text)
 lookupConversationSession conversationId =
   runTransaction (Tx.statement conversationId selectConversationSessionStmt)
+
+-- | Compose validation with a caller-owned admission transaction. The shared
+-- row lock keeps the indexed participant stable until admission commits.
+lookupConversationSessionTx :: Text -> Tx.Transaction (Maybe Text)
+lookupConversationSessionTx conversation =
+  Tx.statement
+    conversation
+    (preparable "SELECT session_id FROM shikigami.conversation_sessions WHERE conversation_id=$1 FOR SHARE" (Encoders.param (Encoders.nonNullable Encoders.text)) (Decoders.rowMaybe (Decoders.column (Decoders.nonNullable Decoders.text))))
 
 -- | Point this conversation at this session, replacing any previous pointer.
 --

@@ -7,6 +7,7 @@ import Keiki.Core ((!))
 import Keiro.Inspection.Aggregate (AggregateInspectors, SomeAggregateInspector (..), aggregateInspector, aggregateInspectors)
 import Shikigami.ExecutionLifecycle.Generated.EventStream (executionLifecycleCategory, executionLifecycleEventStream)
 import Shikigami.ObjectiveLifecycle.Generated.EventStream (objectiveLifecycleCategory, objectiveLifecycleEventStream)
+import Shikigami.ObjectiveTurnAdmission.Generated.EventStream (objectiveTurnAdmissionCategory, objectiveTurnAdmissionEventStream)
 import Shikigami.RunEvidence.Generated.EventStream (runEvidenceCategory, runEvidenceEventStream)
 import Shikigami.WorkerSessionLifecycle.Generated.EventStream (workerSessionLifecycleCategory, workerSessionLifecycleEventStream)
 
@@ -29,6 +30,9 @@ aggregateCatalog =
         SomeAggregateInspector $
           aggregateInspector "ObjectiveLifecycle" objectiveLifecycleEventStream objectiveLifecycleCategory \_ registers ->
             object ["objectiveId" .= (registers ! #objectiveId), "revision" .= (registers ! #revision)],
+        SomeAggregateInspector $
+          aggregateInspector "ObjectiveTurnAdmission" objectiveTurnAdmissionEventStream objectiveTurnAdmissionCategory \_ registers ->
+            object ["admissionKey" .= (registers ! #source)],
         SomeAggregateInspector $
           aggregateInspector "RunEvidence" runEvidenceEventStream runEvidenceCategory \_ registers ->
             object ["runEvidenceId" .= (registers ! #runEvidenceId), "runId" .= (registers ! #runId)]

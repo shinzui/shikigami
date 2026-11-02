@@ -30,6 +30,8 @@
     "Objective",
     "ObjectiveLifecycle",
     "ObjectiveLookup",
+    "ObjectiveTurnAdmission",
+    "ObjectiveTurnLookup",
     "PracticeReview",
     "Program",
     "ProjectionCatalog",

@@ -10,6 +10,7 @@ module Shikigami.Generated.ReplayAudit (auditTargets) where
 
 import Shikigami.ExecutionLifecycle.Generated.EventStream qualified as ExecutionLifecycle
 import Shikigami.ObjectiveLifecycle.Generated.EventStream qualified as ObjectiveLifecycle
+import Shikigami.ObjectiveTurnAdmission.Generated.EventStream qualified as ObjectiveTurnAdmission
 import Shikigami.RunEvidence.Generated.EventStream qualified as RunEvidence
 import Shikigami.WorkerSessionLifecycle.Generated.EventStream qualified as WorkerSessionLifecycle
 import Keiro.ReplayAudit (AuditTarget (..), SomeAuditTarget (..), streamInCategory)
@@ -28,6 +29,12 @@ auditTargets =
         { eventStream = ObjectiveLifecycle.objectiveLifecycleEventStream
         , category = Stream.categoryText ObjectiveLifecycle.objectiveLifecycleCategory
         , mkStream = streamInCategory (Stream.categoryText ObjectiveLifecycle.objectiveLifecycleCategory)
+        }
+  , SomeAuditTarget
+      AuditTarget
+        { eventStream = ObjectiveTurnAdmission.objectiveTurnAdmissionEventStream
+        , category = Stream.categoryText ObjectiveTurnAdmission.objectiveTurnAdmissionCategory
+        , mkStream = streamInCategory (Stream.categoryText ObjectiveTurnAdmission.objectiveTurnAdmissionCategory)
         }
   , SomeAuditTarget
       AuditTarget

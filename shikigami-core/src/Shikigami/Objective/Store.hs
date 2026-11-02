@@ -8,6 +8,7 @@ module Shikigami.Objective.Store
     create,
     read,
     readVersion,
+    admitConversationTurn,
     execute,
     lookupCommandReceipt,
     readReceipt,
@@ -42,7 +43,7 @@ import Hasql.Transaction (Transaction)
 import Hasql.Transaction qualified as Tx
 import Keiro.Command (CommandError (..))
 import Keiro.Projection (ProjectionCommandOutcome (..), runCommandWithCatalogProjections)
-import Keiro.ReadModel (runQuery)
+import Keiro.ReadModel (ReadModel, runQuery)
 import Keiro.Stream qualified as Stream
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Effect.Resource (KirokuStoreResource)
@@ -56,12 +57,16 @@ import Shikigami.Execution.Transcript (PayloadRef (..))
 import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Objective.Acceptance
 import Shikigami.Objective.Authority (Access (..))
-import Shikigami.Objective.Catalog (withLiveObjective)
+import Shikigami.Objective.Catalog (withLiveObjective, withLiveObjectiveTurn)
 import Shikigami.Objective.Command
+import Shikigami.Objective.Conversation qualified as Conversation
 import Shikigami.Objective.Types
 import Shikigami.ObjectiveLifecycle.Generated.Domain qualified as G
 import Shikigami.ObjectiveLifecycle.Generated.EventStream (objectiveLifecycleCategory, objectiveLifecycleEventStream)
 import Shikigami.ObjectiveLookup.Generated.ReadModel (objectiveLookupReadModel)
+import Shikigami.ObjectiveTurnAdmission.Generated.Domain qualified as Turn
+import Shikigami.ObjectiveTurnAdmission.Generated.EventStream (objectiveTurnAdmissionCategory, objectiveTurnAdmissionEventStream)
+import Shikigami.ObjectiveTurnLookup.Generated.ReadModel (objectiveTurnLookupReadModel)
 import Shikigami.Prelude
 import Shikigami.WorkerSession.Checkpoint qualified as CP
 import Shikigami.WorkerSession.Input qualified as WorkerInput
@@ -144,6 +149,49 @@ readVersion access reference = protected do
   checkAccess access current
   key <- requireDecoded (parseObjectiveAssignmentId assignment)
   require (versionFor current key)
+
+-- | Called only by authenticated runtime admission. Absence is retained too;
+-- accepted turns never acquire a later conversation binding on retry.
+admitConversationTurn :: (ObjectiveEffects es) => Access -> RunReference -> TurnReference -> ConversationRef -> Eff es (Either ObjectiveError Conversation.TurnAdmission)
+admitConversationTurn access run turn conversation = guarded case access.actor of
+  RecordedAgent participant -> do
+    original <- recover participant
+    case original of
+      Left err -> pure (Left err)
+      Right (Just admission) -> pure (Right admission)
+      Right Nothing -> do
+        models <- Conversation.checkMemoryModels
+        case models of
+          Left err -> pure (Left err)
+          Right () -> do
+            options <- commandOptions
+            let source = versionedDigest "shikigami.objective-turn/1" (toJSON (run, turn, participant))
+                (catalog, projections) = withLiveObjectiveTurn (\_ _ -> checkFresh >> (Conversation.admitTurn check run turn conversation participant >>= require) >> pure ())
+            attempted <- guarded do
+              outcome <- runCommandWithCatalogProjections options objectiveTurnAdmissionEventStream (Stream.entityStream objectiveTurnAdmissionCategory source) (Turn.AdmitObjectiveTurn (Turn.AdmitObjectiveTurnData source)) catalog projections
+              pure case outcome of
+                Right (ProjectionCommandApplied _) -> Right ()
+                Left CommandRejected -> Left ObjectiveConflict
+                _ -> Left ObjectiveUnavailable
+            saved <- recover participant
+            pure case saved of
+              Right (Just admission) -> Right admission
+              Left err -> Left err
+              Right Nothing -> attempted >> Left ObjectiveUnresolved
+  _ -> pure (Left ObjectiveDenied)
+  where
+    recover participant = protectedTurn do
+      checkFresh
+      saved <- Conversation.lookupTurn run turn conversation participant >>= require
+      forM_ saved \admission -> forM_ admission.binding (\binding -> check binding >>= require)
+      pure saved
+    checkFresh = do
+      now <- Tx.statement () currentTime
+      unless (now < access.expiresAt && access.settings.enabled == ObjectivesEnabled) (abort ObjectiveDenied)
+    check binding = do
+      current <- locked binding.receipt.objectiveId
+      checkAccess access current
+      pure (Right ())
 
 readReceipt :: (ObjectiveEffects es) => Access -> ObjectiveId -> OperationId -> Eff es (Either ObjectiveError (Maybe (Either ObjectiveError Receipt)))
 readReceipt access objective operation = protected do
@@ -255,7 +303,7 @@ execute access identifier expected operation mutation = guarded do
                 writePayload identifier (objectivePayloadDigestText digest) payload
                 case mutation of
                   Internal (IngestCheckpoint assignment intent _ _) -> Tx.statement ((objectiveIdText identifier), (objectiveAssignmentIdText assignment), intent.sessionId.value, fromInteger (revisionNumber intent.throughCursor)) saveCursor
-                  Public (BindConversation conversation) -> Tx.statement (conversationRefText conversation, (objectiveIdText identifier), toJSON receipt) bindConversation
+                  Public (BindConversation conversation) -> Conversation.publishBinding next conversation receipt >>= require
                   _ -> pure ()
                 writeReceipt receipt (Right receipt)
               case applied of
@@ -389,6 +437,9 @@ validateSources objective mutation = do
             unless (WorkerInput.artifactReference (artifactRefText artifact) `elem` result.artifacts) (Left ObjectiveInvalidEvidence)
         Nothing -> pure (Left ObjectiveInvalidEvidence)
     _ -> pure (Right ())
+  conversation <- case mutation of
+    Public (BindConversation reference) -> fmap (const ()) <$> Conversation.participantFor objective reference
+    _ -> pure (Right ())
   bindings <- case mutation of
     Public (SetAssignments graph) -> forM graph \draft -> case draft.sessionId of
       Nothing -> pure (Right ())
@@ -412,7 +463,7 @@ validateSources objective mutation = do
             _ -> Left ObjectiveInvalidEvidence
         Nothing -> pure (Left ObjectiveMissing)
     _ -> pure (Right ())
-  pure (sequence_ evidence >> sequence_ bindings >> checkpoint)
+  pure (sequence_ evidence >> conversation >> sequence_ bindings >> checkpoint)
   where
     matchesActor actor obj = not (null (rolesFor obj (RecordedAgent actor)))
 
@@ -452,8 +503,14 @@ persist objective command action = guarded do
     Left _ -> Left ObjectiveUnavailable
 
 protected :: (ObjectiveEffects es, ToJSON a, FromJSON a) => Transaction a -> Eff es (Either ObjectiveError a)
-protected action = guarded do
-  result <- runQuery Nothing objectiveLookupReadModel (toJSON <$> action)
+protected = protectedUsing objectiveLookupReadModel
+
+protectedTurn :: (ObjectiveEffects es, ToJSON a, FromJSON a) => Transaction a -> Eff es (Either ObjectiveError a)
+protectedTurn = protectedUsing objectiveTurnLookupReadModel
+
+protectedUsing :: (ObjectiveEffects es, ToJSON a, FromJSON a) => ReadModel (Transaction Aeson.Value) Aeson.Value -> Transaction a -> Eff es (Either ObjectiveError a)
+protectedUsing model action = guarded do
+  result <- runQuery Nothing model (toJSON <$> action)
   pure case result of
     Left _ -> Left ObjectiveUnavailable
     Right value -> case Aeson.fromJSON value of Aeson.Success answer -> Right answer; _ -> Left ObjectiveUnavailable
@@ -543,9 +600,6 @@ selectCursor = preparable "SELECT cursor FROM shikigami.objective_cursors WHERE 
 
 saveCursor :: Statement (Text, Text, Text, Int64) ()
 saveCursor = preparable "INSERT INTO shikigami.objective_cursors(objective_id,assignment_id,session_id,cursor) VALUES ($1,$2,$3,$4) ON CONFLICT (objective_id,assignment_id,session_id) DO UPDATE SET cursor=$4" (contrazip4 textParam textParam textParam intParam) D.noResult
-
-bindConversation :: Statement (Text, Text, Aeson.Value) ()
-bindConversation = preparable "INSERT INTO shikigami.objective_associations(kind,source_id,objective_id,binding) VALUES ('conversation',$1,$2,$3) ON CONFLICT (kind,source_id,objective_id) DO UPDATE SET binding=$3" (contrazip3 textParam textParam jsonParam) D.noResult
 
 selectReference :: Statement Text (Maybe (Text, Text))
 selectReference = preparable "SELECT objective_id,assignment_id FROM shikigami.objective_assignments WHERE reference_key=$1" textParam (D.rowMaybe ((,) <$> D.column (D.nonNullable D.text) <*> D.column (D.nonNullable D.text)))

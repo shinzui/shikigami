@@ -4,6 +4,8 @@ module Shikigami.Objective.Association
   ( RunAdmission (..),
     admitRunTx,
     lookupRunTx,
+    ConversationBinding (..),
+    TurnAdmission (..),
   )
 where
 
@@ -18,6 +20,7 @@ import Hasql.Transaction qualified as Tx
 import Keiro.Workflow.Types (WorkflowId (..))
 import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.Objective.Authority (Access (..))
+import Shikigami.Objective.Conversation (ConversationBinding (..), TurnAdmission (..))
 import Shikigami.Objective.Reference
 import Shikigami.Objective.Store qualified as Store
 import Shikigami.Objective.Types

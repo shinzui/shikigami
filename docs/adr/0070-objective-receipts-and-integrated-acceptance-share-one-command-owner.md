@@ -77,6 +77,24 @@ and cannot downgrade to the unassociated entry point. Development-mode anonymous
 HTTP access cannot admit an association. Conversation, creation-origin and worker
 provider qualification remain separate acceptance gates in plan 99.
 
+Conversation binding resolves the Shikigami-owned index and verifies the session
+through Kioku's owning read-model query, including memory space, namespace,
+conversation subject and a recorded objective member's agent identity. Publication
+retains immutable binding history and one current binding per conversation and
+participant. The binding receipt supplies its objective revision.
+
+Turn admission retains the runtime run/turn coordinates, recorded participant,
+source session and the binding visible at admission, including an explicit absent
+binding. Retrying admission returns that snapshot after checking current objective
+membership; it never acquires a later binding or requires the mutable memory index
+to remain available. Source validation and snapshot persistence share a transaction.
+Publication and fresh admission use the same binding-coordinate lock, with the
+objective locked first, so a concurrent rebind either orders with admission or
+produces a visible conflict before writing. The snapshot and its technical ObjectiveTurnAdmission event commit together in
+their own live-only, preserved projection group. The original objective writer
+and query retain their target sets and lifecycle identities;
+workflow wiring and frozen tool scopes remain plan 101's responsibility.
+
 ## Alternatives rejected
 
 Independent adapter executors would drift on retry ordering and revocation races.

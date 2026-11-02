@@ -52,6 +52,7 @@ tests fixture =
                     "ExecutionLifecycle" -> ["executionId", "pendingReceipts", "revision"]
                     "WorkerSessionLifecycle" -> ["revision", "sessionId"]
                     "ObjectiveLifecycle" -> ["objectiveId", "revision"]
+                    "ObjectiveTurnAdmission" -> ["admissionKey"]
                     "RunEvidence" -> ["runEvidenceId", "runId"]
                     _ -> []
               case inspector.displayState definition.initialState definition.initialRegisters of
