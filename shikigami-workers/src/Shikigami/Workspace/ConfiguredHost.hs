@@ -1,6 +1,6 @@
 -- | Production composition of reviewed repository policy, exact agent grants,
 -- current principal/profile authority and exact retained workspace adapters.
-module Shikigami.Workspace.ConfiguredHost (configuredWorkspaceHost, configuredWorkspaceHostWithTransfers) where
+module Shikigami.Workspace.ConfiguredHost (configuredWorkspaceHost, configuredWorkspaceHostWithTransfers, configuredWorkspaceTransfers) where
 
 import Data.Generics.Labels ()
 import Data.Map.Strict qualified as Map
@@ -16,6 +16,7 @@ import Shikigami.Execution.SelectionRuntime (currentExecutionAuthority)
 import Shikigami.Execution.Start (SkillAssignment (..))
 import Shikigami.Execution.Transcript (ExecutionSnapshot (..))
 import Shikigami.Prelude
+import Shikigami.WorkerSession.Transfer (WorkspaceProvider)
 import Shikigami.Workspace.Admission (WorkspaceHost)
 import Shikigami.Workspace.Catalog
 import Shikigami.Workspace.FileProvider
@@ -27,16 +28,24 @@ import Shikigami.Workspace.Profile (retainedFileProfile)
 import Shikigami.Workspace.Provision
 import Shikigami.Workspace.Settings
 import Shikigami.Workspace.Systemd qualified as Systemd
+import Shikigami.Workspace.TransferClient (workspaceTransferClient)
 import Shikigami.Workspace.Types
 import Shikigami.Workspace.Value
 
 configuredWorkspaceHost :: AppEnv -> Pool -> DirectoryHandle -> ActionAuthorizer -> WorkspaceSettings -> Either Text WorkspaceHost
 configuredWorkspaceHost = configuredWorkspaceHostFor False
 
--- Explicit qualification composition. Production selection remains on the
--- qualified historical revisions until the real Linux successor gate passes.
+-- Transfer-aware composition retains the exact historical adapters for
+-- previously accepted snapshots alongside fresh successor-aware revisions.
 configuredWorkspaceHostWithTransfers :: AppEnv -> Pool -> DirectoryHandle -> ActionAuthorizer -> WorkspaceSettings -> Either Text WorkspaceHost
 configuredWorkspaceHostWithTransfers = configuredWorkspaceHostFor True
+
+-- File-only hosts cannot fence an external process. The process-backed host
+-- uses the same peer-checked endpoint for launch, recovery and transfer.
+configuredWorkspaceTransfers :: WorkspaceSettings -> Maybe WorkspaceProvider
+configuredWorkspaceTransfers settings = do
+  process <- settings.process
+  pure (workspaceTransferClient (ProcessClient process.socketPath process.serverUser process.requestSeconds process.waitSeconds))
 
 configuredWorkspaceHostFor :: Bool -> AppEnv -> Pool -> DirectoryHandle -> ActionAuthorizer -> WorkspaceSettings -> Either Text WorkspaceHost
 configuredWorkspaceHostFor transferable appEnv pool directory authorizer settings = do

@@ -51,6 +51,11 @@ provenance:
       at: 2026-11-02T09:55:59Z
       mode: "implement"
       note: "Link the qualified objective ownership provider while retaining joint real workspace/restart acceptance."
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-11-02T18:20:07Z
+      mode: "implement"
+      note: "Connect real objective ownership and native successor write/restart qualification."
   reviews:
     - model: "gpt-6-astra"
       harness: "codex-cli"
@@ -321,6 +326,18 @@ friction validation and profile/log-enforced IR validation pass. Strict IR
 validation reports the same eight recommended-metadata omissions as `HEAD`,
 all in other requests; this revision adds none. These host checks supplement
 the complete 22-case native evidence without closing the real ownership gate.
+
+Joint ownership qualification is implemented but not yet verified (2026-11-02).
+The worker composition now installs the transfer-aware host and passes its
+peer-checked workspace client to the real objective coordination provider.
+The native `--qualify` runner creates an objective through its real command
+owner, commits ownership after the factual fence, drops that acknowledgement,
+restarts the supervisor and controller, then requires the recovered successor
+to edit and validate the same workspace. Local compilation and shell syntax
+checks pass; Linux execution and final acceptance remain required. The older
+statements that plan 99 is unimplemented describe the 2026-10-30 checkpoint;
+plan 99 now supplies the real provider, independently qualified with a
+deterministic fence. No milestone is closed by the new fixture code alone.
 
 ## Surprises & Discoveries
 

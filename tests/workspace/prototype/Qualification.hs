@@ -52,6 +52,10 @@ import Shikigami.Execution.Start (SkillAssignment (..))
 import Shikigami.Execution.Store qualified as Execution
 import Shikigami.Execution.Transcript
 import Shikigami.Log qualified as Log
+import Shikigami.Objective.Capability qualified as Objectives
+import Shikigami.Objective.Coordination (objectiveHost)
+import Shikigami.Objective.Types qualified as Goal
+import Shikigami.Prelude ((&), (.~))
 import Shikigami.Trigger.Schedule (parseCron)
 import Shikigami.Workspace.Admission (WorkspaceHost (..))
 import Shikigami.Workspace.Allocation
@@ -84,6 +88,7 @@ data Qualification = Qualification
     lifecycle :: !(AgentIdentity -> IO (Either Text.Text ())),
     client :: !ProcessClient,
     host :: !WorkspaceHost,
+    objectives :: !(AgentIdentity -> Objectives.ObjectiveHost),
     initial :: !Ready,
     prefix :: !FilePath
   }
@@ -102,11 +107,11 @@ withQualification configFile prefix use = do
   withStore env.connectionSettings \store -> do
     let repository = WorkspaceRepository initial.binding.repository initial.binding.source [WorkspaceRevision initial.binding.base (bundleDigest initial.admission.instructions)] initial.binding.base (workspaceCoordinate "qualification-reviewed") initial.profile.policy.readPaths initial.profile.policy.writePaths
         process = WorkspaceProcessSettings socket ((either (error . show) id . parseRpcPeerUserId) 0) ((either (error . show) id . parseRpcRequestSeconds) 5) ((either (error . show) id . parseRpcWaitSeconds) 60) (((either (error . show) id . mkIdentityRange) (IdentityRangeInput ((either (error . show) id . parseWorkspaceIdentity) 64000) ((either (error . show) id . parseWorkspaceIdentity) 64031)))) (Map.singleton repository.identity initial.profile.policy)
-        settings = WorkspaceSettings initial.binding.storageRoot [repository] [WorkspaceGrant ((either (error . show) id . mkAgentName) "fixture") (declarationCoordinate principal) repository.identity Nothing] (Just process)
+        settings = WorkspaceSettings initial.binding.storageRoot [repository] [WorkspaceGrant ((either (error . show) id . mkAgentName) "fixture") (declarationCoordinate actor) repository.identity Nothing | actor <- [principal, "agent_01h000000000000000successor"]] (Just process)
         client = ProcessClient socket ((either (error . show) id . parseRpcPeerUserId) 0) ((either (error . show) id . parseRpcRequestSeconds) 5) ((either (error . show) id . parseRpcWaitSeconds) 60)
         current = identityLifecycleAdmission directory.handle . (.identity)
     host <- right (configuredWorkspaceHostWithTransfers env store.pool directory.handle authorizer settings)
-    use (Qualification env authorizer current (identityLifecycleAdmission directory.handle) client host initial prefix)
+    use (Qualification env authorizer current (identityLifecycleAdmission directory.handle) client host (objectiveHost (Goal.defaultObjectiveSettings & #enabled .~ Goal.ObjectivesEnabled) directory.handle authorizer) initial prefix)
 
 loadAssignment :: Qualification -> ExecutionRootId -> Text.Text -> AgentIdentity -> IO WorkspaceAdmission
 loadAssignment q root runId owner = do

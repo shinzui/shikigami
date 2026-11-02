@@ -472,6 +472,21 @@ LIFECYCLE
   sleep 2
   "$prototype" continuing "$config" "$prefix" late >"$prefix/continuing-late.log" 2>&1
   cat "$prefix/continuing-late.log"
+  if [[ "$mode" == --qualify ]]; then
+    "$prototype" continuing "$config" "$prefix" ownership >"$prefix/continuing-ownership.log" 2>&1
+    cat "$prefix/continuing-ownership.log"
+    # Restart the independent provider and use a new controller process after
+    # the objective commit but before the session acknowledges its receipt.
+    listener=$(stat -c '%d:%i' "$prefix/rpc/supervisor.sock")
+    systemctl kill --kill-whom=main --signal=KILL "$service"
+    systemctl start "$service"
+    [[ $(stat -c '%d:%i' "$prefix/rpc/supervisor.sock") == "$listener" ]]
+    if [[ -f /run/shikigami-workspace-prototype.clock-steps ]]; then
+      /usr/bin/timeout 40 "$prefix/root/bin/probe" --await-clock-step >>"$prefix/clock-barrier.log"
+    fi
+    "$prototype" continuing "$config" "$prefix" successor >"$prefix/continuing-successor.log" 2>&1
+    cat "$prefix/continuing-successor.log"
+  fi
   /usr/bin/psql "$connection" -Atc "SELECT to_jsonb(e) FROM shikigami.executions e UNION ALL SELECT to_jsonb(o) FROM shikigami.execution_transcript_operations o UNION ALL SELECT result FROM keiro.keiro_workflow_steps" >"$prefix/public-metadata.jsonl"
   python3 - "$prefix" <<'PRIVACY'
 from pathlib import Path
@@ -490,11 +505,10 @@ PRIVACY
   elif [[ "$mode" == --continuing-only ]]; then
     echo 'Focused continuing workspace gates passed (7 cases); the full matrix remains separate.'
   else
-    echo 'Workspace-owned native gates passed (22 cases). Real objective ownership and accepted successor writes remain unqualified.'
+    echo 'Workspace-owned native gates passed (22 cases).'
   fi
 
   if [[ "$mode" == --qualify ]]; then
-    echo 'REFUSED full qualification: the real IR-13 ownership provider is not installed; no substitute receipt is permitted.'
-    exit 78
+    echo 'Full governed workspace qualification passed (24 cases), including real objective ownership and accepted successor writes across restart.'
   fi
 fi

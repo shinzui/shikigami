@@ -46,7 +46,7 @@ import Shikigami.Sink.Permission (sinkKindText)
 import Shikigami.Telemetry (withRunTelemetry)
 import Shikigami.Workers.Config (WorkerEnv (..), directoryLoopRegistration, persistAgentLoadReport, schedulerSchedules, startProcessDirectory)
 import Shikigami.Workers.Registry (runWorkers)
-import Shikigami.Workspace.ConfiguredHost (configuredWorkspaceHost)
+import Shikigami.Workspace.ConfiguredHost (configuredWorkspaceHostWithTransfers, configuredWorkspaceTransfers)
 import System.Exit qualified as Exit
 
 -- | Boot the supervised worker that drains @shikigami_run_jobs@, runs each agent
@@ -166,7 +166,7 @@ runWorkerCmdWith resumeBudget config = do
       DirectoryRuntime {handle = directory, refresher = directoryRefresher} <-
         startProcessDirectory logger registry ((.directorySettings) config)
       let appEnv = AppEnv {connectionSettings = settings, tracer = tr, metrics = keiroMetrics, store = Just st}
-      workspace <- case traverse (configuredWorkspaceHost appEnv storePool directory actionAuthorizer) config.workspaceSettings of
+      workspace <- case traverse (configuredWorkspaceHostWithTransfers appEnv storePool directory actionAuthorizer) config.workspaceSettings of
         Left _ -> do
           Log.logError logger "worker.workspace.invalid" []
           Exit.exitFailure
@@ -190,6 +190,7 @@ runWorkerCmdWith resumeBudget config = do
                   decisions = FlowDecision.defaultDecisionServices (either (error . show) id config.decisionModelCatalog),
                   actionAuthorizer,
                   workspace,
+                  workspaceTransfers = config.workspaceSettings >>= configuredWorkspaceTransfers,
                   runTimeout = (.runTimeout) config,
                   harness = (.harness) config,
                   delegationBudget = (.delegationBudget) config,

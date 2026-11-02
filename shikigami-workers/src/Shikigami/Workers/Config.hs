@@ -78,6 +78,7 @@ import Shikigami.Sink.Http (SinkHttp)
 import Shikigami.Telemetry.Metrics (ShikigamiMetrics)
 import Shikigami.Trigger.Schedule (CatchUpPolicy, CronSchedule, cronExpressionText, parseCron)
 import Shikigami.Trigger.Scheduler qualified as Scheduler
+import Shikigami.WorkerSession.Transfer (WorkspaceProvider)
 import Shikigami.Workspace.Admission (WorkspaceHost (..))
 import System.Exit (exitFailure)
 
@@ -112,6 +113,7 @@ data WorkerEnv = WorkerEnv
     decisions :: !FlowDecision.DecisionServices,
     actionAuthorizer :: !ActionAuthorizer,
     workspace :: !(Maybe WorkspaceHost),
+    workspaceTransfers :: !(Maybe WorkspaceProvider),
     runTimeout :: !(Duration "agent-run"),
     harness :: !HarnessPolicy,
     delegationBudget :: !DelegationBudget,
@@ -223,7 +225,7 @@ agentRunDeps env =
       AgentWorkflow.actionAuthorizer = (.actionAuthorizer) env,
       AgentWorkflow.capabilities = maybe emptyCapabilityRuntime (.capabilities) env.workspace,
       AgentWorkflow.workspace = env.workspace,
-      AgentWorkflow.coordination = Just (Objectives.coordinationHost env.appEnv env.objectiveSettings env.directory env.actionAuthorizer env.agents env.delegationBudget Nothing),
+      AgentWorkflow.coordination = Just (Objectives.coordinationHost env.appEnv env.objectiveSettings env.directory env.actionAuthorizer env.agents env.delegationBudget env.workspaceTransfers),
       AgentWorkflow.objectives = Just (objectiveRuntime env),
       AgentWorkflow.agents = (.agents) env,
       AgentWorkflow.kizashi = (.kizashi) env,
@@ -272,7 +274,7 @@ conversationEnv env =
     }
 
 objectiveRuntime :: WorkerEnv -> Objectives.ObjectiveRuntime
-objectiveRuntime env = Objectives.ObjectiveRuntime env.appEnv env.objectiveSettings env.directory env.actionAuthorizer (Just (Objectives.coordinationHost env.appEnv env.objectiveSettings env.directory env.actionAuthorizer env.agents env.delegationBudget Nothing))
+objectiveRuntime env = Objectives.ObjectiveRuntime env.appEnv env.objectiveSettings env.directory env.actionAuthorizer (Just (Objectives.coordinationHost env.appEnv env.objectiveSettings env.directory env.actionAuthorizer env.agents env.delegationBudget env.workspaceTransfers))
 
 -- | Resolve every scheduled agent's declared cron, once, at boot.
 --
