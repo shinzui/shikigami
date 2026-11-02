@@ -2,7 +2,7 @@
 
 Date: 2026-10-29
 
-Status: accepted; provider-neutral implementation qualified, Rei integration pending
+Status: accepted; provider-neutral engine and pinned Rei adapter implemented, public controls pending
 
 ## Context
 
@@ -11,7 +11,7 @@ across runs. External records do not carry Shikigami's assignment epochs, accept
 operations or integrated acceptance evidence. A copied status cannot replace those
 facts. External APIs also differ in conditional writes, ordering and retry guarantees.
 
-The Rei source inspected at `515c6c0c6dd0527eb7184825d8bb75acdbde68ec` exposes a
+The Rei source qualified at `c109222db550537ec998ecc6fc1866cc7a35e29a` exposes a
 v2 HTTP API. Its intention read model includes a stream position but is projected
 asynchronously. Its action endpoint generates a new action ID per request and accepts
 no caller idempotency key. A local receipt cannot close the crash window between a
@@ -78,7 +78,19 @@ interpreted by the legacy sink handler as delivery. The engine is tested with st
 providers; Rei is additionally tested against its real disposable API server, including
 lost responses and projection lag. The provider-neutral implementation declares a separate preserved tracker projection group, with one writer per target. Both the objective and tracker projections consume the same ObjectiveLifecycle source and execute under both catalog fences in one append transaction. A technical tracker event does not advance the objective semantic revision. Proposal application uses an actor-pinned callback through the existing objective command owner; it cannot write objective rows independently or change public command fingerprints.
 
-Publication records retain their original timestamp, full request digest and destination fence. Attempt claims are separate from immutable provider attempts, so claim renewal cannot change a replayed request. Receipt lookup uses a protected typed command result; dispatch barriers and the latest export base use bounded indexed queries independently of the public inspection limit. [Provider-neutral qualification](../evidence/plan-103/qualification.json) passes 22 focused unit cases, 34 PostgreSQL cases, the broader package regression, complete build and 177 native conformance checks. The technical event adds a fold-surface warning without changing existing registers or old-event folding; generated fingerprints invalidate native snapshots automatically. The concrete Rei adapter and public serving gate remain pending.
+Publication records retain their original timestamp, full request digest and destination fence. Attempt claims are separate from immutable provider attempts, so claim renewal cannot change a replayed request. Receipt lookup uses a protected typed command result; dispatch barriers and the latest export base use bounded indexed queries independently of the public inspection limit. [Provider-neutral qualification](../evidence/plan-103/qualification.json) passes 22 focused unit cases, 34 PostgreSQL cases, the broader package regression, complete build and 177 native conformance checks. The technical event adds a fold-surface warning without changing existing registers or old-event folding; generated fingerprints invalidate native snapshots automatically. The concrete Rei adapter uses the contract-derived client with explicit domain and
+transport failure channels. Its capability revision declares ordered projected reads,
+unconditional writes, no idempotency key and exact applied-receipt lookup. Candidate
+scans are bounded discovery only; all ambiguous appends remain Unknown until explicit
+verified attestation. The real-server fixture qualifies process restart without a second
+POST, exact attestation and scoped pagination. Active and future are distinct external
+observations. Runtime managers capture named environment credentials opaquely per
+connection incarnation, forbid redirects, bound bodies and impose an absolute SDK call
+duration. Polling exposes bounded routing coordinates only to the configured local
+operator, then rechecks each objective before loading protected state. The single
+outbox owner routes both callbacks; quarantine retires transport without delivery.
+See [the Rei operations guide](../operations/objective-tracker-rei.md). Public serving
+qualification remains pending.
 MasterPlan 17's no-Rei feature and acceptance gate remain independently useful.
 
 ## References

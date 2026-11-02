@@ -97,7 +97,7 @@ data TrackerBinding = TrackerBinding
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
-data RemoteLifecycle = RemoteOpen | RemoteCompleted | RemoteCancelled | RemoteMissing
+data RemoteLifecycle = RemoteOpen | RemotePlanned | RemoteCompleted | RemoteCancelled | RemoteMissing
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 

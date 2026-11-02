@@ -14,6 +14,8 @@
 -- uses whatever @publishClaimedOutbox@ already does and adds no policy of its own.
 module Shikigami.Flow.SinkOutbox.Publisher
   ( runOutboxPublisher,
+    publishTrackerRow,
+    reconcilePublishedRow,
   )
 where
 
@@ -24,13 +26,20 @@ import Data.Aeson qualified as Aeson
 import Data.Foldable (traverse_)
 import Data.IORef (modifyIORef', newIORef, readIORef)
 import Data.Text qualified as Text
+import Effectful (Eff)
 import Effectful.Dispatch.Static (unsafeEff_)
-import Keiro.Outbox (OutboxPublishSummary (..), PublishOutcome (PublishSucceeded), defaultPublishOptions, publishClaimedOutbox)
+import Keiro.Integration.Event (IntegrationEvent (..), decodeJsonIntegrationEvent)
+import Keiro.Outbox (OutboxPublishSummary (..), PublishOutcome (PublishFailed, PublishSucceeded), defaultPublishOptions, publishClaimedOutbox)
 import Keiro.Outbox.Types (OutboxRow (..))
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
 import Shikigami.App (runAppIO)
 import Shikigami.Health.Worker (LoopName (OutboxLoop), beat)
 import Shikigami.Log qualified as Log
+import Shikigami.Objective.Store (ObjectiveEffects)
+import Shikigami.Objective.Tracker.Dispatch qualified as TrackerDispatch
+import Shikigami.Objective.Tracker.Publication (trackerDestination)
+import Shikigami.Objective.Tracker.Store qualified as Tracker
+import Shikigami.Objective.Tracker.Types
 import Shikigami.Workers.Config (WorkerEnv (..), agentRunDeps, envHeartbeats, envKeiroMetrics, envLogger)
 
 -- | Publish claimed outbox rows until the process stops.
@@ -50,7 +59,11 @@ runOutboxPublisher env = do
     let publishBatch rows = do
           outcomes <-
             traverse
-              (\row -> (outboxId row,) <$> AgentWorkflow.publishSinkIntent deps row)
+              ( \row -> do
+                  outcome <- publishTrackerRow env.trackers (AgentWorkflow.publishSinkIntent deps) row
+                  unsafeEff_ (beat (envHeartbeats env) OutboxLoop)
+                  pure (outboxId row, outcome)
+              )
               rows
           unsafeEff_ (modifyIORef' attempted (<> zip rows (snd <$> outcomes)))
           pure outcomes
@@ -62,7 +75,7 @@ runOutboxPublisher env = do
         outcomes <- readIORef attempted
         traverse_
           ( \(row, outcome) -> case outcome of
-              PublishSucceeded -> AgentWorkflow.reconcilePublishedSinkIntent deps row
+              PublishSucceeded -> reconcilePublishedRow (AgentWorkflow.reconcilePublishedSinkIntent deps) row
               _ -> pure ()
           )
           outcomes
@@ -95,3 +108,32 @@ logPublishSummary logger OutboxPublishSummary {claimed, published, rejected, ret
             if retried > 0
               then Log.logWarn logger "worker.outbox.retried" fields
               else Log.logInfo logger "worker.outbox.published" fields
+
+-- Routing is shared by the publish and post-success callbacks. Quarantine is
+-- transport success only: the domain receipt remains Unknown and queryable.
+publishTrackerRow :: (ObjectiveEffects es) => Maybe Tracker.TrackerHost -> (OutboxRow -> Eff es PublishOutcome) -> OutboxRow -> Eff es PublishOutcome
+publishTrackerRow configured legacy row
+  | row.event.destination /= trackerDestination = legacy row
+  | otherwise = case (configured, decodeJsonIntegrationEvent row.event) of
+      (Just host, Right (wire :: PublicationDispatch))
+        | wire.version == TrackerV1,
+          row.event.source == "shinzui/shikigami",
+          row.event.eventType == "shikigami.objective-tracker.publication-requested",
+          row.event.schemaVersion == 1,
+          row.event.messageId == "objective-tracker:" <> coordinateText wire.publicationId,
+          row.event.key == Just (coordinateText wire.bindingId) -> do
+            retained <- TrackerDispatch.lookupPublication host wire.objectiveId wire.publicationId
+            case retained of
+              Right (intent, _) | intent.bindingId == wire.bindingId -> do
+                dispatched <- TrackerDispatch.dispatch host wire.objectiveId wire.publicationId
+                pure case dispatched of
+                  Right TrackerDispatch.Settled -> PublishSucceeded
+                  Right TrackerDispatch.Quarantined -> PublishSucceeded
+                  _ -> PublishFailed "objective tracker dispatch deferred"
+              _ -> pure (PublishFailed "objective tracker publication unavailable")
+      _ -> pure (PublishFailed "objective tracker route unavailable or invalid")
+
+reconcilePublishedRow :: (Applicative f) => (OutboxRow -> f ()) -> OutboxRow -> f ()
+reconcilePublishedRow legacy row
+  | row.event.destination == trackerDestination = pure () -- Domain receipt committed before transport acknowledgement.
+  | otherwise = legacy row

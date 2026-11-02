@@ -365,3 +365,15 @@ changeStillPresent :: TrackerObservation -> ProposedChange -> Bool
 changeStillPresent observation = \case
   InstructionsChange value -> observation.snapshot.instructions == value
   LifecycleChange value -> observation.snapshot.lifecycle == value
+
+-- Scheduler APIs expose no unadmitted protected records.
+scheduledBindings :: (OStore.ObjectiveEffects es) => TrackerHost -> Maybe TrackerBindingId -> Eff es (Either TrackerError [(O.ObjectiveId, TrackerBindingId)])
+scheduledBindings host after = do
+  grant <- liftIO (admit host (toJSON ("schedule" :: Text)))
+  either (pure . Left) (\access -> mapped (OStore.trackerRoutingKeys access after host.settings.batchSize)) grant
+
+inspectBinding :: (OStore.ObjectiveEffects es) => TrackerHost -> O.ObjectiveId -> TrackerBindingId -> Eff es (Either TrackerError TrackerBinding)
+inspectBinding host objective identifier = query host objective (\_ _ -> bindingFor objective identifier)
+
+nextPublication :: (OStore.ObjectiveEffects es) => TrackerHost -> O.ObjectiveId -> TrackerBindingId -> Eff es (Either TrackerError (Maybe (PublicationIntent, PublicationReceipt)))
+nextPublication host objective identifier = query host objective \_ _ -> bindingFor objective identifier >> Sql.nextUnsettled identifier

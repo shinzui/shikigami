@@ -23,6 +23,11 @@ provenance:
       at: 2026-10-30T03:15:57Z
       mode: "update"
       note: "Clarify shared dispatch and evidence-based delivery attestation; preserve planning status and hard dependencies."
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-11-02T11:24:40Z
+      mode: "implement"
+      note: "Begin real Rei adapter after plan 103 qualification; audit unpublished client/contract tuple"
 ---
 
 # Adapt Rei intentions and actions to objective tracker contracts
@@ -42,14 +47,20 @@ An explicitly linked Rei intention can supply observed planning changes and rece
 ## Progress
 
 
-- [ ] Milestone 1: verified client/server compatibility and one read/action roundtrip through a disposable real Rei API prove the shared provider contract.
-- [ ] Milestone 2: production adapter, bounded polling and routed outbox delivery pass conformance and fault tests, including unknown action recovery.
+- [x] Milestone 1 (2026-11-02): paired client/contract 0.2.0.0 at verified public commit `c109222db550537ec998ecc6fc1866cc7a35e29a`, real server 8.0.0.0 and the shared executor pass a real read/action/receipt lookup and an unauthorized-write refusal. The opt-in live suite passes both cases using disposable databases, an API-created intention, real projection workers and fresh bearer identity.
+- [x] Milestone 2 (2026-11-02): production Rei adapter, opaque process providers, supervised bounded polling and both outbox callbacks are wired. The real fault suite and mixed receipt test pass, including fresh dispatcher processes, Unknown quarantine, exact verified attestation and zero second POSTs.
 - [ ] Milestone 3: real-server restart/lag/revocation tests and legacy-sink isolation pass; compatibility evidence and capability limits are documented.
 
-Planning only. Hard prerequisite: plan 103 Complete.
+Implementation baseline `a787d3fe`; plan 103 is Complete with its 177-check native gate and retained acceptance evidence. Milestone 2 is in progress. Mori locates Rei at current public commit `c109222db550537ec998ecc6fc1866cc7a35e29a`. Authoritative Hackage endpoints for `rei-api-client` and `rei-api-contract` both return 404; upstream package source reports 0.2.0.0. A public immutable source pin is permitted by `docs/dependency-cohort.md` for packages with no Hackage release; no released-package claim or bound override is made. The first two milestones are accepted. The real suite passes 17 cases, including an injected stale projected intention read; the mixed-outbox regression passes. Production export contains 385 packages/seven immutable sources, with only Rei client/contract and the optional fixture flag disabled. The complete build and package regressions pass (661 core, 537 PostgreSQL, 103 server, 281 workers); conventions, migration isolation and 21 cohort-tool tests pass. Final native compatibility acceptance remains in progress.
 
 
 ## Surprises & Discoveries
+
+The upstream graph/paging fixture records are read-model rows without command streams. The first real write correctly refused that target; qualification now creates each command target through the real API and waits only for its projected read. The source fixture's full server needs its own development environment (including liblzma); its schema and projection owners are reused rather than copied. The live suite is an explicit opt-in Cabal target so ordinary no-Rei tests remain independent.
+
+Valid declared 404/409 problem documents classify as rejection/conflict, while malformed bodies under those statuses are decoding failures and stay Unknown. The test proxy uses the actual problem codec and content type rather than equating raw status with a decoded domain result.
+
+Rei v2 read routes are public, while write routes carry bearer authentication. Local observation/import admission still requires authenticated Shikigami membership and explicit connection-use grants; no remote per-record read ACL is claimed.
 
 
 The current source’s action endpoint has no idempotency key and generates a new action ID per request. The existing Shikigami ReiAction path is not the v2 API. These facts constrain implementation; they are not reasons to simulate stronger guarantees.
@@ -150,7 +161,7 @@ Replace `IMPLEMENTATION_BASELINE` with the saved revision. Expected results are 
 After implementing the isolated launcher, run:
 
 ```bash
-bash tests/objective-trackers/with-rei.sh -- cabal test shikigami-core-postgres-test --test-show-details=direct --test-options='--pattern ObjectiveTrackerRei --num-threads=1'
+bash tests/objective-trackers/run-rei.sh
 ```
 
 The launcher must fail when no compatible real server is supplied or buildable. Expected evidence includes the server revision, created intention and action IDs, one remote action after lost acknowledgement, and an Unknown-to-reconciled transition with no second POST. Do not run against the intention created for planning.

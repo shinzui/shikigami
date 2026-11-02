@@ -1,0 +1,60 @@
+{
+  "status": "candidate; native gate pending",
+  "baseline": "a787d3fe",
+  "server": {
+    "project": "mori://shinzui/rei",
+    "commit": "c109222db550537ec998ecc6fc1866cc7a35e29a",
+    "server": "8.0.0.0",
+    "contract": "0.2.0.0",
+    "client": "0.2.0.0",
+    "release_selection": "immutable public source; SDK Hackage endpoints 404"
+  },
+  "checks": {
+    "complete_build": true,
+    "core_tests": 661,
+    "postgres_tests": 537,
+    "server_tests": 103,
+    "worker_tests": 281,
+    "live_rei_tests": 17,
+    "mixed_outbox_test": true,
+    "cohort_tool_tests": 21,
+    "migration_isolation": true,
+    "haskell_conventions": true
+  },
+  "runtime_cohort": {
+    "packages": 385,
+    "immutable_repositories": 7,
+    "rei_packages": [
+      "rei-api-client",
+      "rei-api-contract"
+    ],
+    "live_test_flag": false,
+    "cold_nix_build_claimed": false
+  },
+  "faults": [
+    "committed malformed acknowledgement",
+    "fresh dispatcher process after commit",
+    "no second POST",
+    "Unknown survives restart",
+    "exact remote verification then operator attestation",
+    "forged receipt refused",
+    "400/401/403/404/409/422/429/500/503",
+    "stale projected read after authoritative acknowledgement",
+    "multi-page scoped cursors",
+    "paused binding",
+    "revoked export grant",
+    "cached target replacement refused",
+    "production response body bound"
+  ],
+  "limits": [
+    "eventually consistent public remote reads",
+    "unconditional non-idempotent action append",
+    "candidate marker is not causal proof",
+    "no automatic resend for Unknown",
+    "no automatic remote lifecycle commands",
+    "legacy ReiAction remains a separate protocol"
+  ],
+  "friction": {
+    "FRIC-41": "accepted; enter owning checkout before foreign dev shell"
+  }
+}

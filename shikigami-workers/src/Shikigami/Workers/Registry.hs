@@ -38,10 +38,11 @@ import Shikigami.App (AppEnv (..))
 import Shikigami.Duration
 import Shikigami.Flow.SinkOutbox.Publisher (runOutboxPublisher)
 import Shikigami.Health.Supervision (LoopExited (LoopExited), superviseLoops)
-import Shikigami.Health.Worker (LoopName (DirectoryLoop, OutboxLoop, QueueLoop, ResumeLoop, TelemetryLoop, TimerLoop, WorkflowGcLoop), loopStaleness, registerReport, supervisedLoopVerdictWithStaleness)
+import Shikigami.Health.Worker (LoopName (DirectoryLoop, ObjectiveTrackerLoop, OutboxLoop, QueueLoop, ResumeLoop, TelemetryLoop, TimerLoop, WorkflowGcLoop), loopStaleness, registerReport, supervisedLoopVerdictWithStaleness)
 import Shikigami.Inspection.Consumer (withConsumerInspection)
 import Shikigami.Integration.ConsumerRuntime (withConsumerAppAcquisition)
 import Shikigami.Log qualified as Log
+import Shikigami.Objective.Tracker.Worker (runTrackerWorker)
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.RunJobs qualified as RunJobs
 import Shikigami.Telemetry.Sampler (runTelemetrySampler)
@@ -67,7 +68,7 @@ runWorkers env = do
           (TelemetryLoop, runTelemetrySampler env)
         ]
       directoryLoops = maybe [] (pure . (DirectoryLoop,)) (envDirectoryRefresher env)
-  superviseLoops (envLogger env) (durableLoops <> directoryLoops)
+  superviseLoops (envLogger env) (durableLoops <> directoryLoops <> maybe [] (\host -> [(ObjectiveTrackerLoop, runTrackerWorker env host)]) env.trackers)
 
 -- | The id shibuya knows the run-job processor by.
 --

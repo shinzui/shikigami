@@ -67,6 +67,7 @@ import Shikigami.Health.Worker (Heartbeats, LoopName (DirectoryLoop), LoopStalen
 import Shikigami.Inspection.Consumer (ConsumerInspection)
 import Shikigami.Log qualified as Log
 import Shikigami.Objective.Runtime qualified as Objectives
+import Shikigami.Objective.Tracker.Store qualified as Tracker
 import Shikigami.Objective.Types (ObjectiveSettings)
 import Shikigami.PracticeReview.Capability qualified as PracticeReviewCapability
 import Shikigami.Prelude hiding ((.=))
@@ -153,6 +154,7 @@ data WorkerEnv = WorkerEnv
     directory :: !DirectoryHandle,
     directoryRefresher :: !(Maybe (IO ())),
     objectiveSettings :: !ObjectiveSettings,
+    trackers :: !(Maybe Tracker.TrackerHost),
     practiceReviewAttentionRecipients :: !PracticeReviewCapability.AttentionRecipientMap
   }
 

@@ -29,11 +29,15 @@ import Shikigami.Directory (DirectoryRuntime (..))
 import Shikigami.Duration
 import Shikigami.Flow (flowDeclarationErrors)
 import Shikigami.Flow.Decision qualified as FlowDecision
-import Shikigami.Health.Worker (LoopName (OutboxLoop, QueueLoop, TelemetryLoop, TimerLoop), loopStaleAfter, newHeartbeatsWithStaleness, serveProbesWith)
+import Shikigami.Health.Worker (LoopName (OutboxLoop, QueueLoop, TelemetryLoop, TimerLoop), loopStaleAfter, loopStaleness, newHeartbeatsWithStaleness, serveProbesWith)
 import Shikigami.Inspection.Consumer (consumerInspection)
 import Shikigami.Inspection.Store (withObservedStore)
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations (verifyShikigamiMigrations)
+import Shikigami.Objective.Tracker.Config (TrackerEnablement (..), TrackerSettings (..))
+import Shikigami.Objective.Tracker.Runtime qualified as TrackerRuntime
+import Shikigami.Objective.Tracker.Store qualified as Tracker
+import Shikigami.Objective.Tracker.Worker (trackerLoopRegistration)
 import Shikigami.Prelude (Text)
 import Shikigami.Runtime (registerRuntimeCatalog, runtimeConnectionSettings)
 import Shikigami.Sink (DanwaConfig (..), GrantSource (DbGrants), KanmonConfig (..), KawaConfig (..), KizashiConfig (..), ReiConfig (..))
@@ -155,8 +159,9 @@ runWorkerCmdWith resumeBudget config = do
       -- but no success heartbeat. Supervision detects their unexpected exit.
       registry <-
         newHeartbeatsWithStaleness
-          ( [(loop, loopStaleAfter loop) | loop <- [QueueLoop, OutboxLoop, TimerLoop, TelemetryLoop]]
+          ( [(loop, if loop == OutboxLoop && config.trackerSettings.enabled == TrackersEnabled then loopStaleness 45 else loopStaleAfter loop) | loop <- [QueueLoop, OutboxLoop, TimerLoop, TelemetryLoop]]
               <> directoryLoopRegistration ((.directorySettings) config)
+              <> trackerLoopRegistration config.trackerSettings
           )
       DirectoryRuntime {handle = directory, refresher = directoryRefresher} <-
         startProcessDirectory logger registry ((.directorySettings) config)
@@ -166,54 +171,63 @@ runWorkerCmdWith resumeBudget config = do
           Log.logError logger "worker.workspace.invalid" []
           Exit.exitFailure
         Right host -> pure host
-      let env =
-            WorkerEnv
-              { pool = storePool,
-                appEnv,
-                inspection = consumerInspection (durationTime config.runTimeout + 30) config.inspection logger settings st storeMetrics,
-                agents,
-                agentReport = report,
-                behaviorEnv = behEnv,
-                decisions = FlowDecision.defaultDecisionServices (either (error . show) id config.decisionModelCatalog),
-                actionAuthorizer,
-                workspace,
-                runTimeout = (.runTimeout) config,
-                harness = (.harness) config,
-                delegationBudget = (.delegationBudget) config,
-                approvalDeadline = (.approvalDeadline) config,
-                approvalPolicy = policy,
-                approvalNotifier = notifier,
-                conversationIdleTimeout = (.conversationIdleTimeout) config,
-                catchUpPolicy = (.schedulerCatchUp) config,
-                schedules,
-                kizashi = kizashiConfig,
-                kawa = kawaConfig,
-                kanmon = kanmonConfig,
-                danwa = danwaConfig,
-                rei = ReiConfig {baseUrl = (.reiBaseUrl) config},
-                http = sinkHttp,
-                metrics = shikigamiMetrics,
-                logger,
-                -- The C11 gate reads shikigami.sink_grants over the same pool
-                -- the rest of the process uses, so a grant change is visible on
-                -- the next dispatch without a restart.
-                grants = DbGrants storePool,
-                heartbeats = registry,
-                directory,
-                directoryRefresher,
-                objectiveSettings = config.objectiveSettings,
-                practiceReviewAttentionRecipients = (.practiceReviewAttentionRecipients) config
-              }
-      case resumeBudget of
-        Just (passes, candidates) -> void (runBoundedResumeWorker passes candidates env)
-        Nothing ->
-          serveProbesWith
-            logger
-            ((.httpHost) config)
-            (Config.healthPortFor WorkerRole config)
-            storePool
-            registry
-            (runWorkers env)
+      TrackerRuntime.withTrackerProviders httpLimits config.trackerSettings \available -> do
+        providers <- either (const (Exit.die "shikigami-worker: invalid objective tracker provider configuration")) pure available
+        trackers <-
+          if config.trackerSettings.enabled == TrackersDisabled
+            then pure Nothing
+            else do
+              objective <- either (const (Exit.die "shikigami-worker: objective tracker operator is required")) pure (TrackerRuntime.operatorHost config.objectiveSettings actionAuthorizer)
+              pure (Just (Tracker.TrackerHost objective config.trackerSettings (TrackerRuntime.providerFor providers config.trackerSettings)))
+        let env =
+              WorkerEnv
+                { pool = storePool,
+                  appEnv,
+                  inspection = consumerInspection (durationTime config.runTimeout + 30) config.inspection logger settings st storeMetrics,
+                  agents,
+                  agentReport = report,
+                  behaviorEnv = behEnv,
+                  decisions = FlowDecision.defaultDecisionServices (either (error . show) id config.decisionModelCatalog),
+                  actionAuthorizer,
+                  workspace,
+                  runTimeout = (.runTimeout) config,
+                  harness = (.harness) config,
+                  delegationBudget = (.delegationBudget) config,
+                  approvalDeadline = (.approvalDeadline) config,
+                  approvalPolicy = policy,
+                  approvalNotifier = notifier,
+                  conversationIdleTimeout = (.conversationIdleTimeout) config,
+                  catchUpPolicy = (.schedulerCatchUp) config,
+                  schedules,
+                  kizashi = kizashiConfig,
+                  kawa = kawaConfig,
+                  kanmon = kanmonConfig,
+                  danwa = danwaConfig,
+                  rei = ReiConfig {baseUrl = (.reiBaseUrl) config},
+                  http = sinkHttp,
+                  metrics = shikigamiMetrics,
+                  logger,
+                  -- The C11 gate reads shikigami.sink_grants over the same pool
+                  -- the rest of the process uses, so a grant change is visible on
+                  -- the next dispatch without a restart.
+                  grants = DbGrants storePool,
+                  heartbeats = registry,
+                  directory,
+                  directoryRefresher,
+                  objectiveSettings = config.objectiveSettings,
+                  trackers,
+                  practiceReviewAttentionRecipients = (.practiceReviewAttentionRecipients) config
+                }
+        case resumeBudget of
+          Just (passes, candidates) -> void (runBoundedResumeWorker passes candidates env)
+          Nothing ->
+            serveProbesWith
+              logger
+              ((.httpHost) config)
+              (Config.healthPortFor WorkerRole config)
+              storePool
+              registry
+              (runWorkers env)
 
 credentialPresence :: Maybe a -> Text
 credentialPresence = maybe "none" (const "token")

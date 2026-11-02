@@ -43,6 +43,23 @@ instead of the old vendored SQL. No developer database is altered. This delibera
 establishes a first-release ledger under ADR-27; an old populated installation is
 not a supported upgrade path for this candidate.
 
+## Rei tracker SDK addition — selected 2026-11-02
+
+The provider uses `mori://shinzui/rei/packages/rei-api-client` and
+`mori://shinzui/rei/packages/rei-api-contract`, both 0.2.0.0 at verified public
+commit `c109222db550537ec998ecc6fc1866cc7a35e29a`. Authoritative Hackage package
+endpoints return 404 and no package release tag exists; the immutable public
+source exception below applies. No compatibility-bound override is added.
+Retire this source pin when a compatible pair is published.
+
+The successful production solve exports **385 runtime packages and seven
+immutable repositories** to `nix/qualification`, including the exact metadata
+archive and source hash. The manual live-test flag is disabled in this export.
+Rei core/server appear only in the separate disposable fixture build, never in
+the production closure. Native builds, package tests and real-server adapter
+qualification cover this tuple; a cold Nix rebuild is not claimed. See
+[the Rei operations guide](operations/objective-tracker-rei.md).
+
 ## Keiro 0.18 configured cohort
 
 Plan 80 advances the index to `2026-10-06T14:00:00Z` for the released Baikai

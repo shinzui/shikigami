@@ -128,6 +128,7 @@ data LoopName
   | ConsumerLoop
   | SchedulerLoop
   | DirectoryLoop
+  | ObjectiveTrackerLoop
   deriving stock (Eq, Ord, Show, Enum, Bounded)
 
 -- | The name a failed loop reports under, and therefore the string an operator
@@ -143,6 +144,7 @@ loopCheckName = \case
   ConsumerLoop -> "loop.consumer"
   SchedulerLoop -> "loop.scheduler"
   DirectoryLoop -> "loop.directory"
+  ObjectiveTrackerLoop -> "loop.objective_tracker"
 
 -- | How long a loop may go without a heartbeat before it is considered wedged.
 --
@@ -182,6 +184,7 @@ loopStaleAfter =
     ConsumerLoop -> 60
     SchedulerLoop -> 10
     DirectoryLoop -> 60
+    ObjectiveTrackerLoop -> 960
 
 -- ── Heartbeats ──────────────────────────────────────────────────────────────
 

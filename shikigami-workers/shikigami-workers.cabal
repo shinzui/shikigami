@@ -47,6 +47,7 @@ library
     Shikigami.Health.Worker
     Shikigami.Inspection.Consumer
     Shikigami.Integration.ConsumerRuntime
+    Shikigami.Objective.Tracker.Worker
     Shikigami.Telemetry
     Shikigami.Telemetry.Sampler
     Shikigami.Trigger.Consumer
@@ -227,6 +228,7 @@ test-suite shikigami-workers-test
     Shikigami.Health.WorkerSpec
     Shikigami.Inspection.ConsumerSpec
     Shikigami.Integration.ConsumerRuntimeSpec
+    Shikigami.ObjectiveTrackerWorkerSpec
     Shikigami.SchedulerSpec
     Shikigami.StreamInboxSpec
     Shikigami.TelemetrySpec

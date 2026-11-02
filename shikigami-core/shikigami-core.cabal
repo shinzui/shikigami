@@ -5,6 +5,11 @@ synopsis: Shikigami runtime core (loader, scope helper)
 build-type: Simple
 extra-source-files: test/fixtures/durable-skill/SKILL.md
 
+flag objective-tracker-rei-tests
+  description: Run mandatory real-Rei qualification through the disposable launcher
+  default: False
+  manual: True
+
 common common
   default-language: GHC2024
   default-extensions:
@@ -190,6 +195,8 @@ library
     Shikigami.Objective.Tracker.Mapping
     Shikigami.Objective.Tracker.Provider
     Shikigami.Objective.Tracker.Publication
+    Shikigami.Objective.Tracker.Rei
+    Shikigami.Objective.Tracker.Runtime
     Shikigami.Objective.Tracker.Store
     Shikigami.Objective.Tracker.Types
     Shikigami.Objective.Types
@@ -428,6 +435,8 @@ library
     network-uri,
     optparse-applicative >=0.19 && <0.20,
     pgmq-hasql,
+    rei-api-client >=0.2 && <0.3,
+    rei-api-contract >=0.2 && <0.3,
     relay-pagination,
     relay-pagination-hasql,
     servant-client >=0.20 && <0.21,
@@ -736,3 +745,37 @@ test-suite shikigami-core-diagrams-test
     tasty,
     tasty-hunit,
     text,
+
+test-suite shikigami-objective-tracker-rei-test
+  import: common
+  type: exitcode-stdio-1.0
+  main-is: Main.hs
+  hs-source-dirs: test-rei
+  other-modules: Shikigami.ObjectiveTrackerReiSpec
+  ghc-options:
+    -threaded
+    -rtsopts
+    -with-rtsopts=-N2
+
+  if !flag(objective-tracker-rei-tests)
+    buildable: False
+  build-depends:
+    aeson,
+    base,
+    bytestring,
+    effectful-core,
+    generic-lens,
+    http-client,
+    http-types,
+    kiroku-store,
+    mmzk-typeid,
+    process,
+    rei-api-client,
+    rei-api-contract,
+    shikigami-core,
+    shikigami-migrations:test-support,
+    tasty,
+    tasty-hunit,
+    text,
+    wai,
+    warp,

@@ -25,6 +25,7 @@ module Shikigami.Objective.Store
     executeWithTrackerCommit,
     trackerTransaction,
     trackerQuery,
+    trackerRoutingKeys,
     locked,
     checkAccess,
     lookupCommandReceipt,
@@ -936,6 +937,14 @@ trackerQuery access objective action = protectedUsing objectiveTrackerLookupRead
   current <- locked objective
   checkAccess access current
   action current
+
+-- Process-only scan: an explicitly configured local operator can discover
+-- locators. This does not grant access to any objective or tracker contents.
+trackerRoutingKeys :: (ObjectiveEffects es) => Access -> Maybe TrackerTypes.TrackerBindingId -> Int -> Eff es (Either ObjectiveError [(ObjectiveId, TrackerTypes.TrackerBindingId)])
+trackerRoutingKeys access after limit = protectedUsing objectiveTrackerLookupReadModel do
+  now <- Tx.statement () currentTime
+  unless (now < access.expiresAt && case access.actor of LocalOperator actor -> access.settings.operator == Just actor; _ -> False) (abort ObjectiveDenied)
+  TrackerSql.routingKeys after limit
 
 -- A technical tracker event does not advance the objective's semantic revision.
 -- Its stream precondition and row lock fence it against objective mutations.

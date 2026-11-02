@@ -17,7 +17,7 @@ import Hasql.Transaction qualified as Tx
 import Shikigami.Execution.Identity (OperationId, operationIdText)
 import Shikigami.Objective.Tracker.Mapping (validatePolicy)
 import Shikigami.Objective.Tracker.Types
-import Shikigami.Objective.Types (ObjectiveId, objectiveIdText)
+import Shikigami.Objective.Types (ObjectiveId, objectiveIdText, parseObjectiveId)
 import Shikigami.Prelude
 import Shikigami.StateRevision
 
@@ -192,3 +192,13 @@ hasVerification evidence = do
 
 verificationKey :: VerifiedDelivery -> Text
 verificationKey = digestText . (trackerDigest "shikigami.tracker-verification/1" :: Aeson.Value -> TrackerDigest "verification-key") . toJSON
+
+-- Only routing coordinates leave this bounded process scan. Every subsequent
+-- lookup rechecks objective permission before revealing protected state.
+routingKeys :: Maybe TrackerBindingId -> Int -> Transaction [(ObjectiveId, TrackerBindingId)]
+routingKeys after limit = do
+  rows <- Tx.statement (maybe "" coordinateText after, fromIntegral (max 1 (min 100 limit)) :: Int64) (preparable "SELECT objective_id,binding_id FROM shikigami.objective_tracker_bindings WHERE binding_id>$1 AND (active OR EXISTS (SELECT 1 FROM shikigami.objective_tracker_publications p WHERE p.binding_id=shikigami.objective_tracker_bindings.binding_id AND p.receipt_state IN ('Pending','Attempting','Unknown'))) ORDER BY binding_id LIMIT $2" (contrazip2 textParam (E.param (E.nonNullable E.int8))) (D.rowList ((,) <$> textColumn <*> textColumn)))
+  forM rows \(objective, binding) -> (,) <$> require (either (const (Left TrackerConflict)) Right (parseObjectiveId objective)) <*> require (either (const (Left TrackerConflict)) Right (parseCoordinate binding))
+
+nextUnsettled :: TrackerBindingId -> Transaction (Maybe (PublicationIntent, PublicationReceipt))
+nextUnsettled identifier = Tx.statement (coordinateText identifier) (preparable "SELECT publication_id,receipt_state,intent,receipt FROM shikigami.objective_tracker_publications WHERE binding_id=$1 AND receipt_state IN ('Pending','Attempting','Unknown') ORDER BY objective_revision,publication_id LIMIT 1 FOR UPDATE" textParam (D.rowMaybe publicationRow)) >>= traverse decodePublication

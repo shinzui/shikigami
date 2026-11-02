@@ -83,8 +83,12 @@ dispatch host objective identifier = do
                     Just attempt <- receipt.attempt -> do
                       -- The exact immutable request/attempt is replayed only under
                       -- a retained, still-valid server-key guarantee.
-                      outcome <- liftIO (S.safeNetwork (provider.publish retained attempt))
-                      recordOutcome host objective retained receipt claimId (either (const P.OutcomeUnknown) id outcome)
+                      beforeSend <- liftIO getCurrentTime
+                      if beforeSend >= claim.expiresAt
+                        then recordOutcome host objective retained receipt claimId P.OutcomeUnknown
+                        else do
+                          outcome <- liftIO (S.safeNetwork (provider.publish retained attempt))
+                          recordOutcome host objective retained receipt claimId (either (const P.OutcomeUnknown) id outcome)
                 Right (_, receipt) -> pure (Right (disposition receipt))
                 Left err -> pure (Left err)
 

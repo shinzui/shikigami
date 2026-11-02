@@ -55,6 +55,7 @@ module Shikigami.App.Config
 
     -- * Value types
     SecretText,
+    opaqueSecretText,
     revealSecretText,
     CredentialRef (..),
     DirectorySettings (..),
@@ -228,6 +229,11 @@ import Shikigami.Workspace.Settings (WorkspaceSettings, WorkspaceSupervisorSetti
 -- the application does with the value afterwards.
 newtype SecretText = SecretText Text
   deriving stock (Eq)
+
+-- | Capture a process-owned secret lookup without making it serializable or
+-- printable. Protocol-specific credential grammar is checked by its client.
+opaqueSecretText :: Text -> SecretText
+opaqueSecretText = SecretText
 
 -- | Lower a secret to plaintext at the exact boundary that needs it.
 --
@@ -489,9 +495,9 @@ data AppConfig = AppConfig
     danwaToken :: !(Maybe SecretText),
     -- | Base URL of a rei ingestion endpoint, if one exists.
     --
-    -- The only sink base URL with no default, because rei has no HTTP surface to
-    -- point one at. Absent means a @ReiAction@ sink fails visibly into the outbox
-    -- retry path rather than reporting a delivery that never happened.
+    -- This selects the legacy /v1/agent-actions protocol. Objective trackers
+    -- use separately configured Rei v2 connections. Absent means a @ReiAction@
+    -- sink fails visibly into the outbox retry path.
     reiBaseUrl :: !(Maybe Text),
     -- | Which model the @Skill@ behavior arm dispatches with.
     --

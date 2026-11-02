@@ -64,7 +64,7 @@ Upstream decisions were discovered through Mori: `mori://shinzui/rei/okf/adrs/co
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|---|---|---|---|---|
 | EP-1 | Persist provider-neutral bindings and synchronization receipts | [103-persist-provider-neutral-objective-tracker-bindings-and-synchronization-receipts.md](../plans/103-persist-provider-neutral-objective-tracker-bindings-and-synchronization-receipts.md) | MasterPlan 17 Complete | None | Complete |
-| EP-2 | Adapt Rei intentions and actions | [104-adapt-rei-intentions-and-actions-to-objective-tracker-contracts.md](../plans/104-adapt-rei-intentions-and-actions-to-objective-tracker-contracts.md) | EP-1 | None | Not Started |
+| EP-2 | Adapt Rei intentions and actions | [104-adapt-rei-intentions-and-actions-to-objective-tracker-contracts.md](../plans/104-adapt-rei-intentions-and-actions-to-objective-tracker-contracts.md) | EP-1 | None | In Progress |
 | EP-3 | Expose and qualify external synchronization | [105-expose-and-qualify-recoverable-external-objective-synchronization.md](../plans/105-expose-and-qualify-recoverable-external-objective-synchronization.md) | EP-1, EP-2 | None | Not Started |
 
 Whole-child dependencies require Complete. Status values are Not Started, In Progress, Complete and Cancelled. Planning can precede prerequisites; implementation cannot.
@@ -97,6 +97,8 @@ EP-1 consumes the delivered objective transaction and authorization owner. EP-2 
 
 
 ## Progress
+
+2026-11-02 EP-2 milestone 1: the real Rei 8.0.0.0 server and paired typed 0.2.0.0 client/contract at public commit `c109222db550537ec998ecc6fc1866cc7a35e29a` pass an API-created intention read, action publication and receipt verification through the shared executor, plus real bearer refusal. The pair is not on Hackage and uses the documented immutable source-pin exception. EP-2 stays In Progress for worker routing, fault/restart qualification and packaging evidence.
 
 2026-11-02 EP-1 Complete: candidate `9b34e4e5` passes final 22 tracker unit and 34 PostgreSQL cases, complete build, convention/migration checks and the native gate (177 checks; 11 additive findings, one understood fold-surface warning, neutral replay). [Plan 103 evidence](../evidence/plan-103/qualification.json) retains the broad regression run and recovery boundary. EP-2 is now eligible; EP-3 still requires EP-2 Complete. The real disposable Rei and public-control gates remain open.
 

@@ -3627,6 +3627,30 @@
       },
       "version": "1.3.2.6"
     },
+    "rei-api-client": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "repository": "shinzui/rei/c109222db550537ec998ecc6fc1866cc7a35e29a",
+        "subdir": "rei-api-client",
+        "type": "github"
+      },
+      "version": "0.2.0.0"
+    },
+    "rei-api-contract": {
+      "components": [
+        "lib"
+      ],
+      "flags": {},
+      "source": {
+        "repository": "shinzui/rei/c109222db550537ec998ecc6fc1866cc7a35e29a",
+        "subdir": "rei-api-contract",
+        "type": "github"
+      },
+      "version": "0.2.0.0"
+    },
     "relay-pagination": {
       "components": [
         "lib"
@@ -4104,7 +4128,9 @@
         "lib",
         "lib:inspection"
       ],
-      "flags": {},
+      "flags": {
+        "objective-tracker-rei-tests": false
+      },
       "source": {
         "path": "shikigami-core",
         "type": "local"
@@ -5315,6 +5341,13 @@
       "owner": "shinzui",
       "repo": "kikan-en",
       "rev": "16704290d527d413568bfa40c983f5c3604c35c8",
+      "type": "github"
+    },
+    "shinzui/rei/c109222db550537ec998ecc6fc1866cc7a35e29a": {
+      "narHash": "sha256-l5A5qJPYwEV5g67YUvCgbZdkBaRD1vt9mBI3YHen8x0=",
+      "owner": "shinzui",
+      "repo": "rei",
+      "rev": "c109222db550537ec998ecc6fc1866cc7a35e29a",
       "type": "github"
     },
     "shinzui/shomei/65551cb120336b53695c0dd30ebe0e473d6efcb2": {

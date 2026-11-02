@@ -7,6 +7,7 @@ import Shikigami.Health.WorkerSpec qualified as HealthWorkerSpec
 import Shikigami.Inspection.ConsumerSpec qualified as InspectionSpec
 import Shikigami.Integration.ConsumerRuntimeSpec qualified as ConsumerAppSpec
 import Shikigami.Migrations.TestSupport (withShikigamiMigratedSuite)
+import Shikigami.ObjectiveTrackerWorkerSpec qualified as ObjectiveTrackerWorkerSpec
 import Shikigami.SchedulerSpec qualified as SchedulerSpec
 import Shikigami.StreamInboxSpec qualified as StreamInboxSpec
 import Shikigami.TelemetrySpec qualified as TelemetrySpec
@@ -52,6 +53,7 @@ main = do
               WorkspaceFileProviderSpec.tests databaseFixture,
               WorkspaceContainedFileSpec.tests,
               WorkspaceStoreSpec.tests databaseFixture,
+              ObjectiveTrackerWorkerSpec.tests databaseFixture,
               CommandSpec.tests,
               ConsumerAppSpec.tests,
               InspectionSpec.tests databaseFixture,

@@ -441,3 +441,13 @@ source-repository-package
   location: https://github.com/shinzui/kikan-en.git
   tag: 16704290d527d413568bfa40c983f5c3604c35c8
   subdir: kikan-en-contract kikan-en-client
+
+-- Rei's paired typed client/contract have no Hackage release (404 checked
+-- 2026-11-02). Pin the verified public source; retire on a compatible release.
+-- mori://shinzui/rei/packages/rei-api-client
+-- mori://shinzui/rei/packages/rei-api-contract
+source-repository-package
+  type: git
+  location: https://github.com/shinzui/rei.git
+  tag: c109222db550537ec998ecc6fc1866cc7a35e29a
+  subdir: rei-api-client rei-api-contract

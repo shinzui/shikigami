@@ -12,6 +12,7 @@ module Shikigami.Sink.Http
     HttpFailure (..),
     HttpFailureReason (..),
     newSinkManager,
+    newTypedClientManager,
     credentialsFromConfig,
     newSinkHttp,
     unauthenticatedHttpEnv,
@@ -386,6 +387,12 @@ newDanwaManager httpLimits source =
       }
   where
     baseSettings = tlsManagerSettings
+
+-- | The same bounded, non-redirecting policy for another process-owned typed
+-- client. One credential scope owns each manager; a client never supplies a
+-- serialized header or inherits a token for another endpoint.
+newTypedClientManager :: HttpLimits -> Maybe TokenSource -> IO Manager
+newTypedClientManager = newDanwaManager
 
 configureDanwaRequest :: HttpLimits -> Maybe TokenSource -> Request -> IO Request
 configureDanwaRequest httpLimits source request = do
