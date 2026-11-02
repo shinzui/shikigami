@@ -137,7 +137,7 @@ readProvider host objective scope expected operatorOnly = do
     if operatorOnly then S.requireReconciliation host access else S.requireManage access current
     connection <- Sql.require (connectionFor host.settings scope)
     unless (connectionDigestFor connection == expected) (Sql.abort TrackerConflict)
-    let operator = access.actor `elem` host.settings.reconciliationOperators && case access.actor of OT.LocalOperator _ -> True; _ -> False
+    let operator = access.actor `elem` host.settings.reconciliationOperators && case access.actor of OT.LocalOperator _ -> True; OT.VerifiedCaller _ -> True; _ -> False
     unless (access.actor `elem` connection.useGrants || operator) (Sql.abort TrackerDenied)
     pure ()
   case admitted of Left err -> pure (Left err); Right () -> liftIO (S.provider host scope)

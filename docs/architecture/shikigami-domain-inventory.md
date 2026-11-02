@@ -320,3 +320,24 @@ and [review acceptance](../evidence/keiro-0.22/practice-values-results.txt) reta
 the failure, vectors and complete codec/recovery controls. These citation labels
 are verdict-local locators. Review/resolution entity allocation remains open; no
 live Mori content-plane adapter qualification is claimed.
+
+## External tracker ownership
+
+`domain/shikigami/objective-tracker.keiro` owns a separately preserved tracker
+group sourced from ObjectiveLifecycle. The objective and tracker writers share
+one checked append transaction and both catalog fences. Bindings, observations,
+proposals, command receipts, immutable publications, attempts, verified evidence
+are protected tracker targets. Durable provider-read controls share the command target and its operation primary key, preserving catalog identity. The technical
+tracker event never advances the objective semantic revision.
+
+`Objective/Tracker/Control.hs` admits network reads before execution, retaining
+the authenticated principal and exact target. A configured scheduler restores
+that principal only from protected records and rechecks current authority;
+service maintenance may retain refusal after revocation without granting access.
+Local decisions call the existing tracker/objective owners. The shared executor
+alone owns delivery claims, quarantine and evidence. Workers only schedule it;
+both shared outbox callbacks route tracker rows separately from legacy sinks.
+Public projections expose bounded previews, full-document digests and scoped
+Relay cursors. [ADR 0069](../adr/0069-external-trackers-propose-objective-changes-and-retain-delivery-uncertainty.md)
+and [operations](../operations/objective-trackers.md) record the authority and
+failure semantics.

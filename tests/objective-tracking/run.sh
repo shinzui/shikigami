@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 umask 077
+# This gate remains independent even when the caller normally enables trackers.
+export SHIKIGAMI_OBJECTIVE_TRACKERS='{"enabled":"TrackersDisabled","connections":[],"pollSeconds":60,"batchSize":20,"reconciliationOperators":[]}'
 
 for command in cabal createdb curl initdb pg_ctl psql python3; do
   command -v "$command" >/dev/null || { echo "objective qualification: missing $command" >&2; exit 1; }

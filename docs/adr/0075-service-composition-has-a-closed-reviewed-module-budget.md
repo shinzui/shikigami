@@ -79,6 +79,13 @@ These are concrete value contracts; they contain no runtime dispatch, loading,
 storage, or service composition. Configured positive budget bounds remain with
 the configuration owner, while an exhausted remaining approval wait retains zero.
 
+ExecPlan 105 adds the exact `Server.Command.ObjectiveTrackers` leaf to the
+existing CLI role budget. It resolves configured operator credentials/managers,
+opens the supported store runtime and renders bounded results. All commands,
+provider-read admission, import decisions and receipt transitions remain in the
+Objective.Tracker vertical; this exception grants no tracker behavior to the
+Server namespace.
+
 ## Durable identity consequences
 
 Moving the nominal binding/fixture/initial symbols changes generated source and

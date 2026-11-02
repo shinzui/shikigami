@@ -2,7 +2,7 @@
 
 Date: 2026-10-29
 
-Status: accepted; provider-neutral engine and pinned Rei adapter implemented, public controls pending
+Status: accepted; provider-neutral engine, pinned Rei adapter and public controls implemented
 
 ## Context
 
@@ -89,8 +89,23 @@ connection incarnation, forbid redirects, bound bodies and impose an absolute SD
 duration. Polling exposes bounded routing coordinates only to the configured local
 operator, then rechecks each objective before loading protected state. The single
 outbox owner routes both callbacks; quarantine retires transport without delivery.
-See [the Rei operations guide](../operations/objective-tracker-rei.md). Public serving
-qualification remains pending.
+See [the Rei operations guide](../operations/objective-tracker-rei.md). Versioned control documents share the existing command target and operation primary key; additive columns preserve rebuild-group membership and all historical receipts. Public controls queue provider reads before any network access and keep local
+commands on the existing idempotent owner. The preserved control record pins its
+original authenticated principal, request fingerprint and connection target.
+Workers re-admit that principal and current resource/connection policy; configured
+scheduler maintenance may retain refusal after revocation without granting caller
+authority. A queue lease coordinates safe repeatable reads, not arbitrary remote
+mutation. Queue and local commands cannot reuse a key for different operations.
+Explicitly granted `VerifiedCaller` reconcilers retain their identity rather than
+being promoted to `LocalOperator`; recorded agents cannot select this permission.
+
+Public inspection uses resource-scoped Relay cursors, bounded text previews and
+full-document digests. The serving perimeter limits commands to 1 MiB and protected
+replies to 16 KiB. A local instructions preview supports before/after review without
+expanding the original objective metadata view. The real server/worker/CLI journey
+qualifies uncertain append recovery, exact attestation/replay, local conflicts,
+independent lifecycle, revocation, access loss and incarnation isolation. Public
+compatibility and regression evidence belongs to plan 105's completion record.
 MasterPlan 17's no-Rei feature and acceptance gate remain independently useful.
 
 ## References

@@ -190,8 +190,11 @@ library
     Shikigami.Objective.Tools
     Shikigami.Objective.Tracker.Command
     Shikigami.Objective.Tracker.Config
+    Shikigami.Objective.Tracker.Control
+    Shikigami.Objective.Tracker.Control.Types
     Shikigami.Objective.Tracker.Coordinate
     Shikigami.Objective.Tracker.Dispatch
+    Shikigami.Objective.Tracker.Inspection
     Shikigami.Objective.Tracker.Mapping
     Shikigami.Objective.Tracker.Provider
     Shikigami.Objective.Tracker.Publication

@@ -36,6 +36,7 @@ library
     Shikigami.Health.Handler
     Shikigami.Inspection.Server
     Shikigami.Objective.Handler
+    Shikigami.Objective.Tracker.Handler
     Shikigami.Server.App
     Shikigami.Server.Boot
     Shikigami.Server.Command
@@ -44,6 +45,7 @@ library
     Shikigami.Server.Command.EnqueueRun
     Shikigami.Server.Command.Executions
     Shikigami.Server.Command.Grants
+    Shikigami.Server.Command.ObjectiveTrackers
     Shikigami.Server.Command.Objectives
     Shikigami.Server.Command.Ops
     Shikigami.Server.Command.PublishFixture
@@ -154,6 +156,7 @@ test-suite shikigami-server-test
     Shikigami.InspectionSocketSpec
     Shikigami.InspectionSpec
     Shikigami.Objective.HandlerSpec
+    Shikigami.Objective.TrackerHandlerSpec
     Shikigami.Server.AgentsSpec
     Shikigami.Server.CommandSpec
     Shikigami.Server.DispatchSpec

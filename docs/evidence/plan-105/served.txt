@@ -1,0 +1,11 @@
+PASS served binding, unchanged initial instructions, one real action and Delivered receipt
+PASS reviewed proposal import and original command receipt replay
+PASS concurrent local edit conflicts and explicit rejection does not repropose
+PASS external completion and reopening preserve independent local acceptance
+PASS real response loss, both service restarts, Unknown quarantine, exact verified attestation and zero second POSTs
+PASS external abandonment offers review without local cancellation
+PASS operator CLI inspection, closed command, exact replay and paused export
+PASS accepted caller revocation before real worker dispatch performs zero provider reads
+PASS revoked export suppresses pending work; remote access loss retains observations and delivery evidence
+PASS identical remote ID in another connection/incarnation has independent binding and source state
+{"objectiveId": "shikigami_objective_01m6e77p27e4ht3an3nxv2v60q", "bindingId": "binding-main", "intentionId": "intention_01m6e77p21ex6vk5wq5f8bd98w", "publicationId": "sha256:f5a9b21ca757960740060bfd22c307f35a634e6f276de3f6a021c49edfef9b1e", "remoteActionId": "action_01m6e77zfvef5ra73ba9bh0ts3", "actualActionPosts": 3, "localStatus": "Blocked", "externalStatus": "abandoned", "deliveryEvidence": "OperatorAttested", "localRevision": 9}

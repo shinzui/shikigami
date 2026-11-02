@@ -18,8 +18,10 @@ import Shikigami.Api.Problem
 import Shikigami.Execution.Identity (OperationId)
 import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Objective.Command (Command)
+import Shikigami.Objective.HttpEnvelope qualified as HttpEnvelope
 import Shikigami.Objective.Inspection (AssignmentView, CriterionView, EvidenceView, ObjectiveView, ReportedResultView)
 import Shikigami.Objective.Schema (commandSchema, createSchema)
+import Shikigami.Objective.Tracker.Api (TrackerApi)
 import Shikigami.Objective.Types (CreateRequest, StateRevision)
 import Shikigami.Prelude hiding ((.=))
 
@@ -45,11 +47,6 @@ instance FromJSON ObjectiveCommand where
   parseJSON = Aeson.withObject "objective command" \fields -> do
     envelope ["format", "operationKey", "expectedRevision", "command"] fields
     ObjectiveCommand <$> fields .: "operationKey" <*> fields .: "expectedRevision" <*> fields .: "command"
-
-envelope :: [Key] -> Aeson.Object -> Parser ()
-envelope allowed fields = do
-  unless (all (`elem` allowed) (KeyMap.keys fields)) (fail "unknown envelope field")
-  void (fields .: "format" :: Parser (FormatVersion "objective-http-envelope"))
 
 data ReceiptView = ReceiptView {objectiveId :: !Text, operationId :: !Text, fingerprint :: !Text, revision :: !Integer, payloadDigest :: !Text}
   deriving stock (Eq, Show, Generic)
@@ -259,6 +256,7 @@ data ObjectiveApi mode = ObjectiveApi
     list :: mode :- QueryParam "after" Text :> QueryParam "limit" Int :> MultiVerb 'GET '[JSON] ListResponses ListResult,
     inspect :: mode :- Capture "objectiveId" Text :> QueryParam "after" Int :> QueryParam "limit" Int :> MultiVerb 'GET '[JSON] ReadResponses ReadResult,
     history :: mode :- Capture "objectiveId" Text :> "history" :> QueryParam "after" Integer :> QueryParam "limit" Int :> MultiVerb 'GET '[JSON] HistoryResponses HistoryResult,
+    trackers :: mode :- Capture "objectiveId" Text :> "trackers" :> NamedRoutes TrackerApi,
     command :: mode :- Capture "objectiveId" Text :> "commands" :> ReqBody '[JSON] ObjectiveCommand :> MultiVerb 'POST '[JSON] CommandResponses CommandResult
   }
   deriving stock (Generic)
@@ -269,5 +267,8 @@ instance ToSchema ObjectiveCreate where
 instance ToSchema ObjectiveCommand where
   declareNamedSchema _ = pure (NamedSchema (Just "ObjectiveCommand") (schemaValue commandSchema))
 
+envelope :: [Key] -> Aeson.Object -> Parser ()
+envelope = HttpEnvelope.envelope
+
 schemaValue :: Aeson.Value -> Schema
-schemaValue value = case Aeson.fromJSON value of Aeson.Success schema -> schema; Aeson.Error message -> error message
+schemaValue = HttpEnvelope.schemaValue

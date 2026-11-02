@@ -55,7 +55,10 @@ data ResourceScope = ResourceScope
     providerRevision :: !ProviderRevision
   }
   deriving stock (Eq, Ord, Show, Generic)
-  deriving anyclass (ToJSON, FromJSON)
+  deriving anyclass (ToJSON)
+
+instance FromJSON ResourceScope where
+  parseJSON = Aeson.genericParseJSON (Aeson.defaultOptions {Aeson.rejectUnknownFields = True})
 
 data FieldPolicy = FieldPolicy
   { revision :: !MappingRevision,
@@ -64,7 +67,10 @@ data FieldPolicy = FieldPolicy
     publication :: !PublicationPolicy
   }
   deriving stock (Eq, Show, Generic)
-  deriving anyclass (ToJSON, FromJSON)
+  deriving anyclass (ToJSON)
+
+instance FromJSON FieldPolicy where
+  parseJSON = Aeson.genericParseJSON (Aeson.defaultOptions {Aeson.rejectUnknownFields = True})
 
 data ImportPolicy = IgnoreField | ProposeField
   deriving stock (Eq, Show, Generic)

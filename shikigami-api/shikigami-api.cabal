@@ -44,6 +44,8 @@ library
     Shikigami.Caller.Api
     Shikigami.Health.Api
     Shikigami.Objective.Api
+    Shikigami.Objective.HttpEnvelope
+    Shikigami.Objective.Tracker.Api
 
   build-depends:
     aeson >=2.2,

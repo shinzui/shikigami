@@ -8,6 +8,7 @@ import Shikigami.App (runAppIO)
 import Shikigami.Health.Worker (LoopName (ObjectiveTrackerLoop), LoopStaleness, beat, loopStaleness)
 import Shikigami.Log qualified as Log
 import Shikigami.Objective.Tracker.Config
+import Shikigami.Objective.Tracker.Control qualified as Control
 import Shikigami.Objective.Tracker.Dispatch qualified as Dispatch
 import Shikigami.Objective.Tracker.Store qualified as Store
 import Shikigami.Objective.Tracker.Types
@@ -17,12 +18,14 @@ import Shikigami.Workers.Config (WorkerEnv (..))
 trackerLoopRegistration :: TrackerSettings -> [(LoopName, LoopStaleness)]
 trackerLoopRegistration settings
   | settings.enabled == TrackersDisabled = []
-  | otherwise = [(ObjectiveTrackerLoop, loopStaleness (fromIntegral (settings.pollSeconds + 45 * settings.batchSize + 30)))]
+  | otherwise = [(ObjectiveTrackerLoop, loopStaleness (fromIntegral (settings.pollSeconds + 65 * settings.batchSize + 30)))]
 
 runTrackerWorker :: WorkerEnv -> Store.TrackerHost -> IO ()
-runTrackerWorker env host = loop Nothing
+runTrackerWorker env host = loop Nothing Nothing
   where
-    loop after = do
+    loop after controlsAfter = do
+      controlResult <- runAppIO env.appEnv (Control.runPending host controlsAfter)
+      let nextControls = case controlResult of Right (Right next) -> next; _ -> controlsAfter
       result <- runAppIO env.appEnv (Store.scheduledBindings host after)
       next <- case result of
         Right (Right keys) -> do
@@ -42,4 +45,4 @@ runTrackerWorker env host = loop Nothing
         _ -> Log.logWarn env.logger "worker.objective_tracker.scan_unavailable" [] >> pure after
       beat env.heartbeats ObjectiveTrackerLoop
       threadDelay (host.settings.pollSeconds * 1_000_000)
-      loop next
+      loop next nextControls

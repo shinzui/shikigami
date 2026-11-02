@@ -1,0 +1,8 @@
+PASS autonomous creation/restart objective=shikigami_objective_01m6e790cfefcs8pm7y4nq7jh5 receipt=operation:sha256:ab1f551acebaae49b87ef7b7623053f8dc77979ca395816c5c9f92b13f41daea@sha256:4e65270212afb49e2aa857997104097f1cbe0596e453d5d6f994dabd405f5b76 replay-identical=true revision=4 status=Open
+PASS associated later run and explicitly bound conversation read current progress with learning memory unavailable
+PASS both workers succeeded; failing integrated journey leaves objective Open
+PASS integrated explicit acceptance objective=shikigami_objective_01m6e7cmdaerkvs9dwfpevmmd5 revision=12 receipt=explicit-integrated-accept@sha256:303f0c32575979ca57e44c58ac07caad2b04b174727907b7ef7f62c739a38705 status=Completed
+PASS denied creator, forged accessible selector and authenticated non-member refused; stale public update conflicted
+PASS provider receipt recovery, sibling ordering, instruction-only invalidation, ownership continuity and late facts (deterministic fence fixture)
+PASS live unknown-attempt acceptance barrier and exact retry after retained source settlement
+PASS no-Rei objective continuity; workspace fencing and adaptive/recurring orchestration remain separate qualification

@@ -18,6 +18,7 @@ import Shikigami.Objective.Command qualified as OC
 import Shikigami.Objective.Store qualified as OStore
 import Shikigami.Objective.Tracker.Command
 import Shikigami.Objective.Tracker.Config
+import Shikigami.Objective.Tracker.Control.Types (ControlRecord (..), ControlRequest (RunCommand), ControlState (..))
 import Shikigami.Objective.Tracker.Mapping
 import Shikigami.Objective.Tracker.Provider qualified as Provider
 import Shikigami.Objective.Tracker.Sql qualified as Sql
@@ -128,6 +129,7 @@ execute host objective operation command = do
             mapped
               ( OStore.trackerQuery access objective \current -> do
                   permission host access command current
+                  checkControlOperation host access objective operation command
                   stored <- Sql.lookupReceipt objective operation
                   forM_ stored \receipt -> unless (receipt.actor == access.actor && receipt.operationId == operation && receipt.fingerprint == fingerprint) (Sql.abort TrackerConflict)
                   pure stored
@@ -151,6 +153,7 @@ execute host objective operation command = do
                       mapped
                         ( OStore.trackerTransaction current objective (digestText fingerprint) \snapshot -> do
                             permission host current command snapshot
+                            checkControlOperation host current objective operation command
                             existing <- Sql.lookupReceipt objective operation
                             case existing of
                               Just receipt -> unless (receipt.fingerprint == fingerprint) (Sql.abort TrackerConflict)
@@ -188,7 +191,7 @@ permission host access command current = do
       unless (either (const False) (elem access.actor . (.useGrants)) (connectionFor host.settings binding.scope)) (Sql.abort TrackerDenied)
 
 requireReconciliation :: TrackerHost -> Access -> Transaction ()
-requireReconciliation host access = unless (access.actor `elem` host.settings.reconciliationOperators && case access.actor of O.LocalOperator _ -> True; _ -> False) (Sql.abort TrackerDenied)
+requireReconciliation host access = unless (access.actor `elem` host.settings.reconciliationOperators && case access.actor of O.LocalOperator _ -> True; O.VerifiedCaller _ -> True; _ -> False) (Sql.abort TrackerDenied)
 
 prepare :: (OStore.ObjectiveEffects es) => TrackerHost -> Command -> Eff es (Either TrackerError (Maybe (Provider.Provider, TrackerObservation)))
 prepare host = \case
@@ -301,6 +304,7 @@ apply host access objective operation command identifier expected proposalId rev
       result <-
         mapped
           ( Objective.executeCommandWithTrackerCommit host.objective access.actor objective revision localOperation mutation \next objectiveReceipt -> do
+              checkControlOperation host access objective operation command
               binding <- bindingFor objective identifier
               retained <- Sql.proposalById proposalId
               unless (binding.revision == expected && retained == proposal) (Sql.abort TrackerConflict)
@@ -313,9 +317,13 @@ apply host access objective operation command identifier expected proposalId rev
       pure (() <$ result)
 
 observe :: (OStore.ObjectiveEffects es) => TrackerHost -> O.ObjectiveId -> TrackerBindingId -> Eff es (Either TrackerError ())
-observe host objective identifier = do
+observe host objective identifier = observeAt host objective identifier Nothing
+
+observeAt :: (OStore.ObjectiveEffects es) => TrackerHost -> O.ObjectiveId -> TrackerBindingId -> Maybe (StateRevision "tracker-binding") -> Eff es (Either TrackerError ())
+observeAt host objective identifier expected = do
   selected <- query host objective \access _ -> do
     binding <- bindingFor objective identifier
+    unless (maybe True (== binding.revision) expected) (Sql.abort TrackerConflict)
     unless (binding.state == Active && matchesConnection host.settings binding.scope binding.connectionDigest && mayUseConnection host.settings access.actor binding.scope) (Sql.abort TrackerDenied)
     pure binding
   case selected of
@@ -349,6 +357,7 @@ observe host objective identifier = do
                     unless (current.state == Active && current.revision == binding.revision && mayUseConnection host.settings access.actor current.scope) (Sql.abort TrackerDenied)
                     (disposition, proposals) <- Sql.require (stageProposals current observation)
                     Sql.retainObservation identifier observation (case disposition of Advance -> "advance"; Duplicate -> "duplicate"; Older -> "older"; Equivocation -> "equivocation")
+                    when (disposition `elem` [Advance, Duplicate]) (Sql.markObserved identifier)
                     when (disposition == Advance) do
                       old <- Sql.awaitingProposalsFor identifier
                       let awaiting = filter ((== AwaitingDecision) . (.state)) old
@@ -377,3 +386,12 @@ inspectBinding host objective identifier = query host objective (\_ _ -> binding
 
 nextPublication :: (OStore.ObjectiveEffects es) => TrackerHost -> O.ObjectiveId -> TrackerBindingId -> Eff es (Either TrackerError (Maybe (PublicationIntent, PublicationReceipt)))
 nextPublication host objective identifier = query host objective \_ _ -> bindingFor objective identifier >> Sql.nextUnsettled identifier
+
+checkControlOperation :: TrackerHost -> Access -> O.ObjectiveId -> OperationId -> Command -> Transaction ()
+checkControlOperation host access objective operation command = do
+  record <- Sql.controlById objective operation
+  forM_ record \retained -> do
+    unless (retained.actor == access.actor && retained.request == RunCommand command && maybe True (\(scope, digest) -> matchesConnection host.settings scope digest) retained.target && isNothing retained.failure && retained.state `elem` [Running, Finished]) (Sql.abort TrackerConflict)
+    when (retained.state == Finished) do
+      receipt <- Sql.lookupReceipt objective operation
+      when (isNothing receipt) (Sql.abort TrackerConflict)

@@ -133,3 +133,30 @@ also exercises stale leases, concurrent polls, stronger-provider replay and
 checkpoint invalidation. A separate mixed-outbox test preserves a delivered
 legacy receipt, delivered tracker receipt and quarantined tracker receipt while
 calling the legacy post-success callback only for the legacy row.
+
+## Supported control qualification
+
+The authenticated [tracker controls](objective-trackers.md) and configured-operator
+CLI are qualified with real Shikigami server and worker executables against the
+same disposable Rei tuple. The full runner is:
+
+```bash
+nix develop --no-write-lock-file -c bash tests/objective-trackers/run.sh
+```
+
+The served journey binds without overwrite, imports reviewed guidance, refuses
+concurrent local divergence, retains rejection, and keeps external completion and
+abandonment separate from local acceptance. It restarts both Shikigami serving
+processes after a committed malformed action reply and performs no second POST.
+An authenticated explicitly granted caller verifies the exact action, attests
+its immutable attempt, and replays the original command receipt. Further cases
+qualify operator CLI pause, caller revocation before queued reads, export
+revocation before pending dispatch, missing remote access with retained evidence,
+and the same textual remote ID in another connection/incarnation. The runner
+also executes the shared native checkpoint conflict case; actual repository
+containment remains a separate gate.
+
+Rei wire status strings are lowercase. The typed adapter handles them through
+its contract codec. The real server permits reopening a completed intention but
+refuses reopening an abandoned one; no adapter or fixture assumes a broader
+lifecycle API.

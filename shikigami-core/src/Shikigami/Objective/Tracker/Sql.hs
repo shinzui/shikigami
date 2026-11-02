@@ -14,10 +14,11 @@ import Hasql.Encoders qualified as E
 import Hasql.Statement (Statement, preparable)
 import Hasql.Transaction (Transaction)
 import Hasql.Transaction qualified as Tx
-import Shikigami.Execution.Identity (OperationId, operationIdText)
+import Shikigami.Execution.Identity (OperationId, operationIdText, parseOperationId)
+import Shikigami.Objective.Tracker.Control.Types
 import Shikigami.Objective.Tracker.Mapping (validatePolicy)
 import Shikigami.Objective.Tracker.Types
-import Shikigami.Objective.Types (ObjectiveId, objectiveIdText, parseObjectiveId)
+import Shikigami.Objective.Types (AccessPrincipal, ObjectiveId, objectiveIdText, parseObjectiveId)
 import Shikigami.Prelude
 import Shikigami.StateRevision
 
@@ -85,7 +86,7 @@ resourceBindings :: ResourceScope -> Transaction [TrackerBinding]
 resourceBindings scope = Tx.statement (coordinateText scope.connectionId, coordinateText scope.incarnation, coordinateText scope.resourceId) (preparable ("SELECT " <> bindingColumns <> " FROM shikigami.objective_tracker_bindings WHERE connection_id=$1 AND incarnation=$2 AND resource_id=$3 AND (active OR EXISTS (SELECT 1 FROM shikigami.objective_tracker_publications p WHERE p.binding_id=shikigami.objective_tracker_bindings.binding_id AND p.receipt_state IN ('Attempting','Unknown'))) ORDER BY binding_id LIMIT 65 FOR UPDATE") (contrazip3 textParam textParam textParam) (D.rowList bindingRow)) >>= traverse decodeBinding
 
 insertBinding :: TrackerBinding -> Transaction ()
-insertBinding binding = Tx.statement (coordinateText binding.bindingId, objectiveIdText binding.objectiveId, coordinateText binding.scope.connectionId, coordinateText binding.scope.incarnation, coordinateText binding.scope.resourceId, binding.state /= ReconciliationOnly, binding) (preparable "INSERT INTO shikigami.objective_tracker_bindings(binding_id,objective_id,connection_id,incarnation,resource_id,active,state) VALUES($1,$2,$3,$4,$5,$6,$7)" (contrazip7 textParam textParam textParam textParam textParam (E.param (E.nonNullable E.bool)) jsonParam) D.noResult)
+insertBinding binding = Tx.statement (coordinateText binding.bindingId, objectiveIdText binding.objectiveId, coordinateText binding.scope.connectionId, coordinateText binding.scope.incarnation, coordinateText binding.scope.resourceId, binding.state /= ReconciliationOnly, binding) (preparable "INSERT INTO shikigami.objective_tracker_bindings(binding_id,objective_id,connection_id,incarnation,resource_id,active,state,last_observed_at) VALUES($1,$2,$3,$4,$5,$6,$7,clock_timestamp())" (contrazip7 textParam textParam textParam textParam textParam (E.param (E.nonNullable E.bool)) jsonParam) D.noResult)
 
 saveBinding :: TrackerBinding -> Transaction ()
 saveBinding binding = Tx.statement (coordinateText binding.bindingId, binding.state /= ReconciliationOnly, binding) (preparable "UPDATE shikigami.objective_tracker_bindings SET active=$2,state=$3 WHERE binding_id=$1" (contrazip3 textParam (E.param (E.nonNullable E.bool)) jsonParam) D.noResult)
@@ -93,7 +94,7 @@ saveBinding binding = Tx.statement (coordinateText binding.bindingId, binding.st
 retainObservation :: TrackerBindingId -> TrackerObservation -> Text -> Transaction ()
 retainObservation identifier observation disposition = do
   let key = digestText (trackerDigest "shikigami.tracker-observation-key/1" (toJSON (identifier, observation, disposition)) :: TrackerDigest "observation-key")
-  Tx.statement (key, coordinateText identifier, disposition, observation) (preparable "INSERT INTO shikigami.objective_tracker_observations(observation_key,binding_id,disposition,observation) VALUES($1,$2,$3,$4) ON CONFLICT(observation_key) DO NOTHING" (contrazip4 textParam textParam textParam jsonParam) D.noResult)
+  Tx.statement (key, coordinateText identifier, disposition, observation) (preparable "INSERT INTO shikigami.objective_tracker_observations(observation_key,binding_id,disposition,observation,observed_at) VALUES($1,$2,$3,$4,clock_timestamp()) ON CONFLICT(observation_key) DO NOTHING" (contrazip4 textParam textParam textParam jsonParam) D.noResult)
 
 observationsFor :: TrackerBindingId -> Transaction [(Text, TrackerObservation)]
 observationsFor identifier = Tx.statement (coordinateText identifier) (preparable "SELECT disposition,observation FROM shikigami.objective_tracker_observations WHERE binding_id=$1 ORDER BY position DESC LIMIT 100" textParam (D.rowList ((,) <$> textColumn <*> jsonColumn))) >>= traverse (\(disposition, raw) -> (disposition,) <$> decode raw)
@@ -127,11 +128,11 @@ saveProposal proposal = Tx.statement (coordinateText proposal.proposalId, propos
 
 lookupReceipt :: ObjectiveId -> OperationId -> Transaction (Maybe CommandReceipt)
 lookupReceipt objective operation = do
-  value <- Tx.statement (objectiveIdText objective, operationIdText operation) (preparable "SELECT receipt FROM shikigami.objective_tracker_commands WHERE objective_id=$1 AND operation_key=$2" (contrazip2 textParam textParam) (D.rowMaybe jsonColumn))
+  value <- Tx.statement (objectiveIdText objective, operationIdText operation) (preparable "SELECT receipt FROM shikigami.objective_tracker_commands WHERE objective_id=$1 AND operation_key=$2 AND receipt IS NOT NULL" (contrazip2 textParam textParam) (D.rowMaybe jsonColumn))
   traverse decode value
 
 insertReceipt :: ObjectiveId -> CommandReceipt -> Transaction ()
-insertReceipt objective receipt = Tx.statement (objectiveIdText objective, operationIdText receipt.operationId, digestText receipt.fingerprint, receipt) (preparable "INSERT INTO shikigami.objective_tracker_commands(objective_id,operation_key,fingerprint,receipt) VALUES($1,$2,$3,$4)" (contrazip4 textParam textParam textParam jsonParam) D.noResult)
+insertReceipt objective receipt = Tx.statement (objectiveIdText objective, operationIdText receipt.operationId, digestText receipt.fingerprint, receipt) (preparable "INSERT INTO shikigami.objective_tracker_commands(objective_id,operation_key,fingerprint,receipt) VALUES($1,$2,$3,$4) ON CONFLICT(objective_id,operation_key) DO UPDATE SET fingerprint=EXCLUDED.fingerprint,receipt=EXCLUDED.receipt WHERE shikigami.objective_tracker_commands.receipt IS NULL" (contrazip4 textParam textParam textParam jsonParam) D.noResult)
 
 -- Public inspection is bounded; internal barriers and the latest export base
 -- have dedicated indexed queries, so a long history cannot hide Unknown work.
@@ -202,3 +203,53 @@ routingKeys after limit = do
 
 nextUnsettled :: TrackerBindingId -> Transaction (Maybe (PublicationIntent, PublicationReceipt))
 nextUnsettled identifier = Tx.statement (coordinateText identifier) (preparable "SELECT publication_id,receipt_state,intent,receipt FROM shikigami.objective_tracker_publications WHERE binding_id=$1 AND receipt_state IN ('Pending','Attempting','Unknown') ORDER BY objective_revision,publication_id LIMIT 1 FOR UPDATE" textParam (D.rowMaybe publicationRow)) >>= traverse decodePublication
+
+controlById :: ObjectiveId -> OperationId -> Transaction (Maybe ControlRecord)
+controlById objective operation = do
+  row <- Tx.statement (objectiveIdText objective, operationIdText operation) (preparable "SELECT control_actor,pending,control FROM shikigami.objective_tracker_commands WHERE objective_id=$1 AND operation_key=$2 AND control IS NOT NULL FOR UPDATE" (contrazip2 textParam textParam) (D.rowMaybe ((,,) <$> jsonColumn <*> D.column (D.nonNullable D.bool) <*> jsonColumn)))
+  forM row \(rawActor, pending, raw) -> do
+    record <- decode raw
+    actor <- decode rawActor
+    unless (record.objectiveId == objective && record.operationId == operation && record.actor == actor && pending == (record.state /= Finished) && record.fingerprint == controlFingerprint record) (abort TrackerConflict)
+    unless (case record.state of Queued -> isNothing record.claim && isNothing record.failure; Running -> isJust record.claim && isNothing record.failure; Finished -> isNothing record.claim) (abort TrackerConflict)
+    pure record
+
+insertControl :: ControlRecord -> Transaction ()
+insertControl record = Tx.statement (objectiveIdText record.objectiveId, operationIdText record.operationId, digestText record.fingerprint, toJSON record.actor, record) (preparable "INSERT INTO shikigami.objective_tracker_commands(objective_id,operation_key,fingerprint,control_actor,pending,control) VALUES($1,$2,$3,$4,true,$5)" (contrazip5 textParam textParam textParam jsonParam jsonParam) D.noResult)
+
+saveControl :: ControlRecord -> Transaction ()
+saveControl record = Tx.statement (objectiveIdText record.objectiveId, operationIdText record.operationId, record.state /= Finished, record) (preparable "UPDATE shikigami.objective_tracker_commands SET pending=$3,control=$4 WHERE objective_id=$1 AND operation_key=$2 AND control IS NOT NULL" (contrazip4 textParam textParam (E.param (E.nonNullable E.bool)) jsonParam) D.noResult)
+
+pendingControls :: Maybe (ObjectiveId, OperationId) -> Int -> Transaction [(ObjectiveId, OperationId, AccessPrincipal)]
+pendingControls after limit = do
+  let (objective, operation) = maybe ("", "") (\(o, k) -> (objectiveIdText o, operationIdText k)) after
+  rows <- Tx.statement (objective, operation, fromIntegral (max 1 (min 100 limit)) :: Int64) (preparable "SELECT objective_id,operation_key,control_actor FROM shikigami.objective_tracker_commands WHERE pending AND (objective_id,operation_key)>($1,$2) ORDER BY objective_id,operation_key LIMIT $3" (contrazip3 textParam textParam (E.param (E.nonNullable E.int8))) (D.rowList ((,,) <$> textColumn <*> textColumn <*> jsonColumn)))
+  forM rows \(o, k, a) -> (,,) <$> require (either (const (Left TrackerConflict)) Right (parseObjectiveId o)) <*> require (either (const (Left TrackerConflict)) Right (parseOperationId k)) <*> decode a
+
+historyPage :: TrackerBindingId -> HistoryKind -> Bool -> Maybe Text -> Int -> Transaction [HistoryRecord]
+historyPage identifier kind forward after limit = do
+  let comparator = if forward then ">" else "<"
+      direction = if forward then "ASC" else "DESC"
+      boundary = fromMaybe (if forward then "" else "~") after
+      parameters = (coordinateText identifier, boundary, fromIntegral (max 1 (min 101 limit)) :: Int64)
+      encoder = contrazip3 textParam textParam (E.param (E.nonNullable E.int8))
+      suffix key = " WHERE binding_id=$1 AND " <> key <> comparator <> "$2 ORDER BY " <> key <> " " <> direction <> " LIMIT $3 FOR UPDATE"
+  case kind of
+    Observations -> do
+      rows <- Tx.statement parameters (preparable ("SELECT lpad(position::text,20,'0'),disposition,observation FROM shikigami.objective_tracker_observations" <> suffix "lpad(position::text,20,'0')") encoder (D.rowList ((,,) <$> textColumn <*> textColumn <*> jsonColumn)))
+      forM rows \(key, disposition, raw) -> do
+        observation <- decode @TrackerObservation raw
+        unless (observation.digest == observationDigest observation.snapshot) (abort TrackerConflict)
+        pure (HistoryRecord key (toJSON (disposition, observation)))
+    Proposals -> do
+      rows <- Tx.statement parameters (preparable ("SELECT proposal_id,state FROM shikigami.objective_tracker_proposals" <> suffix "proposal_id") encoder (D.rowList ((,) <$> textColumn <*> jsonColumn)))
+      forM rows \row@(key, _) -> HistoryRecord key . toJSON <$> decodeProposal identifier row
+    Publications -> do
+      rows <- Tx.statement parameters (preparable ("SELECT publication_id,receipt_state,intent,receipt FROM shikigami.objective_tracker_publications" <> suffix "publication_id") encoder (D.rowList publicationRow))
+      forM rows \row@(key, _, _, _) -> HistoryRecord key . toJSON <$> decodePublication row
+
+lastObservationTime :: TrackerBindingId -> Transaction (Maybe UTCTime)
+lastObservationTime identifier = Tx.statement (coordinateText identifier) (preparable "SELECT last_observed_at FROM shikigami.objective_tracker_bindings WHERE binding_id=$1" textParam (D.singleRow (D.column (D.nullable D.timestamptz))))
+
+markObserved :: TrackerBindingId -> Transaction ()
+markObserved identifier = Tx.statement (coordinateText identifier) (preparable "UPDATE shikigami.objective_tracker_bindings SET last_observed_at=clock_timestamp() WHERE binding_id=$1" textParam D.noResult)

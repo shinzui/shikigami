@@ -464,3 +464,24 @@ HTTP counterpart and exact envelopes are documented in
 
 See [operating objectives](objective-tracking.md) for source settlement, retention,
 creation policy and reproducible qualification.
+
+## Objective trackers
+
+The configured local operator uses the same protected tracker owner as HTTP:
+
+```bash
+shikigami objectives trackers bind OBJECTIVE --file bind.json --json
+shikigami objectives trackers inspect OBJECTIVE --binding BINDING --json
+shikigami objectives trackers proposals OBJECTIVE BINDING --limit 3 --json
+shikigami objectives trackers deliveries OBJECTIVE BINDING --after KEY --limit 3 --json
+shikigami objectives trackers command OBJECTIVE --file command.json --json
+shikigami objectives trackers operation OBJECTIVE OPERATION --json
+```
+
+Bind and provider reads return durable queued operations for a configured worker.
+Local decisions return their original receipt on exact replay. Commands carry a
+closed versioned envelope with operation key and request; no flag impersonates an
+HTTP caller, agent or external performer. Histories distinguish provider-proved
+and operator-attested delivery. See [the user guide](../user/objective-trackers.md)
+for document examples and [operations](objective-trackers.md) for permissions,
+reply bounds, incarnation replacement and Unknown recovery.

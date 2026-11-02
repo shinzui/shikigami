@@ -204,11 +204,68 @@
         ],
         "type": "object"
       },
+      "BindingView": {
+        "properties": {
+          "binding": {
+            "$ref": "#/components/schemas/TrackerRecordPreview"
+          },
+          "deliveryState": {
+            "type": "string"
+          },
+          "lastSuccessfulObservation": {
+            "$ref": "#/components/schemas/UTCTime"
+          },
+          "localInstructions": {
+            "$ref": "#/components/schemas/TrackerRecordPreview"
+          },
+          "localRevision": {
+            "type": "integer"
+          },
+          "localStatus": {
+            "type": "string"
+          },
+          "objectiveId": {
+            "type": "string"
+          },
+          "pendingProposals": {
+            "maximum": 9223372036854775807,
+            "minimum": -9223372036854775808,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "objectiveId",
+          "localRevision",
+          "localStatus",
+          "localInstructions",
+          "binding",
+          "pendingProposals"
+        ],
+        "type": "object"
+      },
       "Connection_AgentView": {
         "properties": {
           "edges": {
             "items": {
               "$ref": "#/components/schemas/Edge_AgentView"
+            },
+            "type": "array"
+          },
+          "pageInfo": {
+            "$ref": "#/components/schemas/PageInfo"
+          }
+        },
+        "required": [
+          "edges",
+          "pageInfo"
+        ],
+        "type": "object"
+      },
+      "Connection_RecordView": {
+        "properties": {
+          "edges": {
+            "items": {
+              "$ref": "#/components/schemas/Edge_RecordView"
             },
             "type": "array"
           },
@@ -275,6 +332,21 @@
           },
           "node": {
             "$ref": "#/components/schemas/AgentView"
+          }
+        },
+        "required": [
+          "node",
+          "cursor"
+        ],
+        "type": "object"
+      },
+      "Edge_RecordView": {
+        "properties": {
+          "cursor": {
+            "$ref": "#/components/schemas/Cursor"
+          },
+          "node": {
+            "$ref": "#/components/schemas/TrackerRecordPreview"
           }
         },
         "required": [
@@ -1537,6 +1609,28 @@
         ],
         "type": "object"
       },
+      "OperationView": {
+        "properties": {
+          "failure": {
+            "type": "string"
+          },
+          "operationKey": {
+            "type": "string"
+          },
+          "receiptDigest": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "operationKey",
+          "state",
+          "receiptDigest"
+        ],
+        "type": "object"
+      },
       "PageInfo": {
         "properties": {
           "endCursor": {
@@ -1744,6 +1838,69 @@
           "acceptedAt",
           "requestedBy",
           "disposition"
+        ],
+        "type": "object"
+      },
+      "TrackerCommand": {
+        "additionalProperties": false,
+        "properties": {
+          "format": {
+            "enum": [
+              1
+            ],
+            "type": "integer"
+          },
+          "operationKey": {
+            "maxLength": 256,
+            "type": "string"
+          },
+          "request": {
+            "additionalProperties": false,
+            "properties": {
+              "contents": {},
+              "tag": {
+                "enum": [
+                  "RunCommand",
+                  "Observe",
+                  "Reconcile",
+                  "Verify"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "tag",
+              "contents"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "format",
+          "operationKey",
+          "request"
+        ],
+        "type": "object"
+      },
+      "TrackerRecordPreview": {
+        "additionalProperties": false,
+        "properties": {
+          "digest": {
+            "type": "string"
+          },
+          "identity": {
+            "type": "string"
+          },
+          "preview": {},
+          "truncated": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "identity",
+          "digest",
+          "preview",
+          "truncated"
         ],
         "type": "object"
       },
@@ -2953,6 +3110,961 @@
               }
             },
             "description": "HistoryUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/objectives/{objectiveId}/trackers": {
+      "get": {
+        "operationId": "getObjectivesByObjectiveIdTrackers",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "objectiveId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Forward page size (0..100). Defaults to 20 when neither 'first' nor 'last' is given. Cannot be combined with 'last' or 'before'.",
+            "in": "query",
+            "name": "first",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Opaque cursor: return items after this position (forward pagination).",
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "format": "base64url",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Backward page size (0..100). Cannot be combined with 'first' or 'after'.",
+            "in": "query",
+            "name": "last",
+            "required": false,
+            "schema": {
+              "maximum": 100,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Opaque cursor: return items before this position (backward pagination).",
+            "in": "query",
+            "name": "before",
+            "required": false,
+            "schema": {
+              "format": "base64url",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Connection_RecordView"
+                }
+              },
+              "application/json;charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/Connection_RecordView"
+                }
+              }
+            },
+            "description": "PageOk"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RelayPageError"
+                }
+              },
+              "application/json;charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/RelayPageError"
+                }
+              }
+            },
+            "description": "PageInvalid"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer credential"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "`objectiveId` or PageMissing"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "PageTooLarge"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "PageUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/objectives/{objectiveId}/trackers/commands": {
+      "post": {
+        "operationId": "postObjectivesByObjectiveIdTrackersCommands",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "objectiveId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json;charset=utf-8": {
+              "schema": {
+                "$ref": "#/components/schemas/TrackerCommand"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationView"
+                }
+              },
+              "application/json;charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationView"
+                }
+              }
+            },
+            "description": "Ok"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationView"
+                }
+              },
+              "application/json;charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationView"
+                }
+              }
+            },
+            "description": "Accepted"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Invalid or `body`"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer credential"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Denied"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "`objectiveId` or Missing"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "TooLarge"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "NotAvailable"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/objectives/{objectiveId}/trackers/operations/{operationKey}": {
+      "get": {
+        "operationId": "getObjectivesByObjectiveIdTrackersOperationsByOperationKey",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "objectiveId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "operationKey",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationView"
+                }
+              },
+              "application/json;charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationView"
+                }
+              }
+            },
+            "description": "Ok"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationView"
+                }
+              },
+              "application/json;charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationView"
+                }
+              }
+            },
+            "description": "Accepted"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Invalid"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer credential"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Denied"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "`objectiveId` or `operationKey` or Missing"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "TooLarge"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "NotAvailable"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/objectives/{objectiveId}/trackers/{bindingId}": {
+      "get": {
+        "operationId": "getObjectivesByObjectiveIdTrackersByBindingId",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "objectiveId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "bindingId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BindingView"
+                }
+              },
+              "application/json;charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/BindingView"
+                }
+              }
+            },
+            "description": "Ok"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BindingView"
+                }
+              },
+              "application/json;charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/BindingView"
+                }
+              }
+            },
+            "description": "Accepted"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Invalid"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer credential"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Denied"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "`objectiveId` or `bindingId` or Missing"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "TooLarge"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "NotAvailable"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/objectives/{objectiveId}/trackers/{bindingId}/deliveries": {
+      "get": {
+        "operationId": "getObjectivesByObjectiveIdTrackersByBindingIdDeliveries",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "objectiveId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "bindingId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Forward page size (0..100). Defaults to 20 when neither 'first' nor 'last' is given. Cannot be combined with 'last' or 'before'.",
+            "in": "query",
+            "name": "first",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Opaque cursor: return items after this position (forward pagination).",
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "format": "base64url",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Backward page size (0..100). Cannot be combined with 'first' or 'after'.",
+            "in": "query",
+            "name": "last",
+            "required": false,
+            "schema": {
+              "maximum": 100,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Opaque cursor: return items before this position (backward pagination).",
+            "in": "query",
+            "name": "before",
+            "required": false,
+            "schema": {
+              "format": "base64url",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Connection_RecordView"
+                }
+              },
+              "application/json;charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/Connection_RecordView"
+                }
+              }
+            },
+            "description": "PageOk"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RelayPageError"
+                }
+              },
+              "application/json;charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/RelayPageError"
+                }
+              }
+            },
+            "description": "PageInvalid"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer credential"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "`objectiveId` or `bindingId` or PageMissing"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "PageTooLarge"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "PageUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/objectives/{objectiveId}/trackers/{bindingId}/observations": {
+      "get": {
+        "operationId": "getObjectivesByObjectiveIdTrackersByBindingIdObservations",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "objectiveId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "bindingId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Forward page size (0..100). Defaults to 20 when neither 'first' nor 'last' is given. Cannot be combined with 'last' or 'before'.",
+            "in": "query",
+            "name": "first",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Opaque cursor: return items after this position (forward pagination).",
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "format": "base64url",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Backward page size (0..100). Cannot be combined with 'first' or 'after'.",
+            "in": "query",
+            "name": "last",
+            "required": false,
+            "schema": {
+              "maximum": 100,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Opaque cursor: return items before this position (backward pagination).",
+            "in": "query",
+            "name": "before",
+            "required": false,
+            "schema": {
+              "format": "base64url",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Connection_RecordView"
+                }
+              },
+              "application/json;charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/Connection_RecordView"
+                }
+              }
+            },
+            "description": "PageOk"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RelayPageError"
+                }
+              },
+              "application/json;charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/RelayPageError"
+                }
+              }
+            },
+            "description": "PageInvalid"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer credential"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "`objectiveId` or `bindingId` or PageMissing"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "PageTooLarge"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "PageUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/objectives/{objectiveId}/trackers/{bindingId}/proposals": {
+      "get": {
+        "operationId": "getObjectivesByObjectiveIdTrackersByBindingIdProposals",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "objectiveId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "bindingId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Forward page size (0..100). Defaults to 20 when neither 'first' nor 'last' is given. Cannot be combined with 'last' or 'before'.",
+            "in": "query",
+            "name": "first",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Opaque cursor: return items after this position (forward pagination).",
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "format": "base64url",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Backward page size (0..100). Cannot be combined with 'first' or 'after'.",
+            "in": "query",
+            "name": "last",
+            "required": false,
+            "schema": {
+              "maximum": 100,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Opaque cursor: return items before this position (backward pagination).",
+            "in": "query",
+            "name": "before",
+            "required": false,
+            "schema": {
+              "format": "base64url",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Connection_RecordView"
+                }
+              },
+              "application/json;charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/Connection_RecordView"
+                }
+              }
+            },
+            "description": "PageOk"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RelayPageError"
+                }
+              },
+              "application/json;charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/RelayPageError"
+                }
+              }
+            },
+            "description": "PageInvalid"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer credential"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "`objectiveId` or `bindingId` or PageMissing"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "PageTooLarge"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "PageUnavailable"
           }
         },
         "security": [

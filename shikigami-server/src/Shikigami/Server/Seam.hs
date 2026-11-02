@@ -43,6 +43,8 @@ import Shikigami.Api.Problem (ProblemCode, problem, problemStatus, problemTitle)
 import Shikigami.App.Config (AppConfig)
 import Shikigami.Directory (DirectoryHandle)
 import Shikigami.Log qualified as Log
+import Shikigami.Objective.Tracker.Provider (Provider)
+import Shikigami.Objective.Tracker.Types (ResourceScope, TrackerError)
 import Shikigami.Prelude
 import Shikigami.Server.Config (ServerConfig)
 
@@ -63,6 +65,7 @@ data ServerEnv = ServerEnv
     logger :: !Log.Logger,
     catalog :: !AgentCatalog,
     directory :: !DirectoryHandle,
+    trackerProvider :: !(ResourceScope -> IO (Either TrackerError Provider)),
     readiness :: !ProbeCheck
   }
   deriving stock (Generic)

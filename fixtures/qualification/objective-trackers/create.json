@@ -1,0 +1,1 @@
+{"title":"Qualify linked objectives","goal":"Keep local execution and external tracker truth independent","instructions":"local guidance","criteria":[{"key":"review","description":"Review integrated evidence","kind":"HumanVerifiable","journeyRequired":false}],"external":[]}

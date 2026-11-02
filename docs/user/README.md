@@ -73,6 +73,7 @@ agent declaration in order:
 | **[Skills](./skills.md)** | Authoring a `SKILL.md` skill behavior |
 | **[Sinks](./sinks.md)** | The producer sink set and the permission gate |
 | **[Durable objectives](./objectives.md)** | Goals, authoritative progress, cross-run continuity and explicit integrated acceptance |
+| **[External objective trackers](./objective-trackers.md)** | Bind Rei, review proposals, and recover uncertain summary delivery |
 | **[Memory & Sessions](./memory.md)** | How an agent recalls prior learnings and records new ones across runs |
 | **[Detectors](./detectors.md)** | Building the intelligence layer as declared agents |
 | **[The Living Loop](./living-loop.md)** | Running the worker end to end; closing the loop with `stub-kawa` |

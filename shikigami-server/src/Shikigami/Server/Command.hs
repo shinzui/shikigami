@@ -57,11 +57,13 @@ import Shikigami.App.Config.Load
   )
 import Shikigami.App.Version (versionOption)
 import Shikigami.Execution.Identity (parseExecutionRootId, parseOperationId)
+import Shikigami.Objective.Tracker.Control.Types (HistoryKind (Proposals, Publications))
 import Shikigami.Server.Command.Agents (runAgentsList, runAgentsSync)
 import Shikigami.Server.Command.DanwaSpike (runDanwaSpike)
 import Shikigami.Server.Command.EnqueueRun (runEnqueueRun)
 import Shikigami.Server.Command.Executions (runExecutionsInspect)
 import Shikigami.Server.Command.Grants (runGrantsGrant, runGrantsList, runGrantsRevoke)
+import Shikigami.Server.Command.ObjectiveTrackers
 import Shikigami.Server.Command.Objectives
 import Shikigami.Server.Command.Ops (opsConfigSources, opsInvocationParser, runOps)
 import Shikigami.Server.Command.PublishFixture (runPublishFixture)
@@ -178,7 +180,8 @@ objectivesInfo :: ParserInfo AdminAction
 objectivesInfo = info (subparser commands <**> helper) (progDesc "Create, inspect and update authoritative objectives as the configured operator")
   where
     commands =
-      command "create" (info (create <**> helper) (progDesc "Create or replay an objective"))
+      command "trackers" trackersInfo
+        <> command "create" (info (create <**> helper) (progDesc "Create or replay an objective"))
         <> command "inspect" (info (inspect <**> helper) (progDesc "Read objective metadata"))
         <> command "history" (info (history <**> helper) (progDesc "Page through attributed command receipts"))
         <> command "command" (info (mutate <**> helper) (progDesc "Submit a closed command at an expected revision"))
@@ -190,6 +193,26 @@ objectivesInfo = info (subparser commands <**> helper) (progDesc "Create, inspec
     inspect = (\key after limit format -> (runObjectivesInspect key after limit format, [])) <$> identifier <*> option auto (long "after" <> value 0 <> metavar "OFFSET") <*> option auto (long "limit" <> value 20 <> metavar "N") <*> json
     history = (\key after limit format -> (runObjectivesHistory key after limit format, [])) <$> identifier <*> optional (option auto (long "after" <> metavar "REVISION")) <*> option auto (long "limit" <> value 20 <> metavar "N") <*> json
     mutate = (\key op revision path format -> (runObjectivesCommand key op revision path format, [])) <$> identifier <*> operation <*> option revisionReader (long "expected-revision" <> metavar "REVISION") <*> file <*> json
+
+trackersInfo :: ParserInfo AdminAction
+trackersInfo = info (subparser commands <**> helper) (progDesc "Inspect tracker proposals and receipts or submit closed operator commands")
+  where
+    commands =
+      command "bind" (info (submit True <**> helper) (progDesc "Queue an explicit reviewed binding"))
+        <> command "command" (info (submit False <**> helper) (progDesc "Submit a closed command or queue a provider read"))
+        <> command "inspect" (info (inspect <**> helper) (progDesc "Inspect independent local, observed and delivery state"))
+        <> command "proposals" (info (history Proposals <**> helper) (progDesc "Page bounded proposal previews"))
+        <> command "deliveries" (info (history Publications <**> helper) (progDesc "Page immutable publications and independent receipts"))
+        <> command "operation" (info (operation <**> helper) (progDesc "Recover a retained operation after timeout"))
+    identifier = strArgument (metavar "OBJECTIVE")
+    binding = strArgument (metavar "BINDING")
+    after = optional (strOption (long "after" <> metavar "KEY"))
+    limit = option auto (long "limit" <> value 20 <> metavar "N")
+    json = switch (long "json")
+    submit onlyBind = (\objective file format -> (runTrackerSubmit onlyBind objective file format, [])) <$> identifier <*> strOption (long "file" <> metavar "FILE") <*> json
+    inspect = (\objective selected cursor count format -> (runTrackerInspect objective selected cursor count format, [])) <$> identifier <*> optional (strOption (long "binding" <> metavar "BINDING")) <*> after <*> limit <*> json
+    history kind = (\objective selected cursor count format -> (runTrackerHistory kind objective selected cursor count format, [])) <$> identifier <*> binding <*> after <*> limit <*> json
+    operation = (\objective key format -> (runTrackerOperation objective key format, [])) <$> identifier <*> strArgument (metavar "OPERATION") <*> json
 
 workersInfo :: ParserInfo AdminAction
 workersInfo = info (subparser commands <**> helper) (progDesc "Inspect continuing workers and issue scoped, explicitly keyed commands")

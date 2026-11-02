@@ -26,6 +26,8 @@ module Shikigami.Objective.Store
     trackerTransaction,
     trackerQuery,
     trackerRoutingKeys,
+    trackerServiceQuery,
+    trackerServiceTransaction,
     locked,
     checkAccess,
     lookupCommandReceipt,
@@ -945,6 +947,23 @@ trackerRoutingKeys access after limit = protectedUsing objectiveTrackerLookupRea
   now <- Tx.statement () currentTime
   unless (now < access.expiresAt && case access.actor of LocalOperator actor -> access.settings.operator == Just actor; _ -> False) (abort ObjectiveDenied)
   TrackerSql.routingKeys after limit
+
+-- Trusted scheduler maintenance can retain a refusal after caller revocation.
+-- Only a configured process operator admits this path; it is never a public
+-- command or an elevation of the recorded caller's objective permissions.
+checkTrackerService :: Access -> Transaction ()
+checkTrackerService access = do
+  now <- Tx.statement () currentTime
+  unless (now < access.expiresAt && case access.actor of LocalOperator actor -> access.settings.operator == Just actor; _ -> False) (abort ObjectiveDenied)
+
+trackerServiceQuery :: (ObjectiveEffects es, ToJSON a, FromJSON a) => Access -> Transaction a -> Eff es (Either ObjectiveError a)
+trackerServiceQuery access action = protectedUsing objectiveTrackerLookupReadModel (checkTrackerService access >> action)
+
+trackerServiceTransaction :: (ObjectiveEffects es) => Access -> ObjectiveId -> Text -> Transaction () -> Eff es (Either ObjectiveError ())
+trackerServiceTransaction access objective fingerprint action = guarded do
+  revision <- trackerServiceQuery access ((.revision) <$> locked objective) >>= either (throwIO . Abort) pure
+  let command = G.RecordTrackerTransition (G.RecordTrackerTransitionData objective (fromInteger (revisionNumber revision)) fingerprint)
+  persistWithTracker objective command (\_ -> checkTrackerService access >> action) (pure ())
 
 -- A technical tracker event does not advance the objective's semantic revision.
 -- Its stream precondition and row lock fence it against objective mutations.

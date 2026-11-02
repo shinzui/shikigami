@@ -23,6 +23,11 @@ provenance:
       at: 2026-10-30T03:15:57Z
       mode: "update"
       note: "Clarify shared dispatch and evidence-based delivery attestation; preserve planning status and hard dependencies."
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-11-02T12:39:15Z
+      mode: "implement"
+      note: "Implement authenticated tracker controls and full served Rei qualification after both prerequisite children are accepted."
 ---
 
 # Expose and qualify recoverable external objective synchronization
@@ -42,17 +47,19 @@ A user can link an objective to an existing Rei intention, inspect what will be 
 ## Progress
 
 
-- [ ] Milestone 1: authenticated API/client and operator CLI expose binding, proposals, pause and reconciliation over the shared owner with authorization tests.
-- [ ] Milestone 2: a real disposable Rei and Shikigami roundtrip proves imports, publication, concurrent edits, restart and unknown-delivery behavior.
+- [x] Milestone 1 (2026-11-02): authenticated routes, typed client and configured-operator CLI use the shared owner. Two served HTTP cases and 38 tracker PostgreSQL cases pass, including durable queued reads, revocation, typed replay/conflict responses, scoped Relay pages beyond 100 retained records and explicitly granted caller reconciliation.
+- [x] Milestone 2 (2026-11-02): real server/worker/CLI qualification passes binding, proposals/application/rejection, independent lifecycle, concurrent edits, outage recovery, both Shikigami process restarts, lost response and exact attestation without a second POST. Expanded cases pass queued caller revocation with zero provider reads, pending-export suppression, missing remote access with retained evidence and identical remote ID in another connection/incarnation. Native checkpoint conflict is additionally covered by the shared production-provider case; the final runner repeats it.
 - [ ] Milestone 3: user/operations docs, compatibility checks, dependency evidence and ADR distillation match the delivered scope.
 
-Planning only. Hard prerequisites: plans 103 and 104 Complete.
+Implementation baseline `6881da43`. Both prerequisite children are Complete with retained native and real-server evidence. The first two milestones pass. Network-request admission uses a preserved control queue in the existing command target: local commands remain synchronous and idempotent; Bind, Observe, Reconcile and Verify requests are durably admitted before workers perform provider reads. Additive migration 0037 owns its columns; existing receipts and catalog membership remain unchanged.
 
 
 ## Surprises & Discoveries
 
 
-(None yet.)
+Rei wire status strings are lowercase while its typed Haskell constructors are capitalized; production uses the typed client, and the Python qualification compares the actual lowercase wire value. Rei allows reopening a completed intention but refuses reopening an abandoned intention with `intention-is-abandoned`; the fixture exercises abandonment after its append scenarios rather than inventing an unsupported lifecycle command.
+
+The inherited public objective view deliberately omits instructions. Tracker binding inspection supplies an explicitly bounded local preview and full-document digest so proposal review can compare before/after without changing that original metadata contract.
 
 
 ## Decision Log
@@ -63,10 +70,14 @@ Planning only. Hard prerequisites: plans 103 and 104 Complete.
   Date: 2026-10-29
 
 
+- Decision: Store queued provider-read controls alongside receipts in the existing preserved tracker command target, sharing its operation primary key.
+  Rationale: Native compatibility treats rebuild-group membership changes as breaking. Additive columns retain catalog identity and enforce one operation namespace without a new writer or read fence.
+  Date: 2026-11-02
+
 ## Outcomes & Retrospective
 
 
-(To be filled during implementation with observed evidence, remaining limitations and friction triage.)
+Implementation and real served qualification are complete; complete build, final 39 tracker PostgreSQL/two tracker HTTP cases, no-Rei continuity, Hurl, schema and documentation gates pass. The committed native compatibility gate is pending. No friction entry was needed for routine implementation debugging. The concrete Rei source pin remains the selected compatibility tuple, not a claim of a Hackage release or a cold Nix build.
 
 
 ## Context and Orientation

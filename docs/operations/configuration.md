@@ -700,3 +700,17 @@ input diagnostics never print payload content. Use a private environment or
 configuration file for credentials. Version and native shell-completion actions
 need no service connection. Nix installs Bash, Zsh and Fish completion files for all
 eleven public command-line executables. See [ADR 72](../adr/0072-public-cli-input-is-explicit-and-diagnostics-are-offline.md).
+
+## External objective tracker configuration
+
+`objective_trackers` / `SHIKIGAMI_OBJECTIVE_TRACKERS` is explicit JSON configuration,
+disabled by default. Each connection pins its ID, incarnation, provider revision,
+endpoint and remote account, with a named `env:NAME` credential reference and
+separate use/export grants. The poll interval is 1..86400 seconds and batch size
+1..100. The worker also needs an objective local operator and current coordination
+permission. Reconciliation has an additional explicit principal allowlist.
+
+See [the complete Rei configuration example](objective-tracker-rei.md#configuration)
+and [control admission/recovery](objective-trackers.md). Credentials are captured
+opaquely at process boot; replacing an endpoint/account requires a new incarnation.
+Existing `sinks.rei.base_url` remains the independent legacy ingestion protocol.

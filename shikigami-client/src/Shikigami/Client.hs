@@ -23,6 +23,7 @@ module Shikigami.Client
     healthClient,
     agentsClient,
     objectivesClient,
+    trackersClient,
     Credential,
     credentialFor,
 
@@ -44,7 +45,8 @@ import Shikigami.Agent.Api (AgentApi)
 import Shikigami.Api (ShikigamiApi (..))
 import Shikigami.Caller.Api (Authenticated)
 import Shikigami.Health.Api (HealthApi)
-import Shikigami.Objective.Api (ObjectiveApi)
+import Shikigami.Objective.Api (ObjectiveApi (..))
+import Shikigami.Objective.Tracker.Api (TrackerApi)
 
 -- | Every endpoint, as a record of callable functions.
 shikigamiClient :: ShikigamiApi (AsClientT ClientM)
@@ -89,3 +91,6 @@ credentialFor token = mkAuthenticatedRequest token \value request ->
 
 objectivesClient :: Credential -> ObjectiveApi (AsClientT ClientM)
 objectivesClient = (.objectives) shikigamiClient
+
+trackersClient :: Credential -> Text -> TrackerApi (AsClientT ClientM)
+trackersClient credential = (.trackers) (objectivesClient credential)

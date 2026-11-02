@@ -60,7 +60,7 @@ tests =
                   <> " bytes"
               ),
       testCase "the document lists every vertical" $
-        sort (documentedPaths shikigamiOpenApi) @?= sort (healthPaths <> agentPaths <> objectivePaths <> ["/openapi"]),
+        sort (documentedPaths shikigamiOpenApi) @?= sort (healthPaths <> agentPaths <> objectivePaths <> trackerPaths <> ["/openapi"]),
       testCase "all application alternatives publish their exact statuses and native error media" $
         mapM_
           ( \(path, operation) -> do
@@ -72,6 +72,8 @@ tests =
                     Just "getAgentsByAgentNameRunsByRunId" -> [200, 401, 404, 500, 503]
                     Just "postAgentsByAgentNameRuns" -> [200, 202, 400, 401, 404, 409, 413, 503]
                     Just "postObjectives" -> [200, 201, 400, 401, 403, 404, 409, 413, 503]
+                    Just name | "Trackers" `Text.isInfixOf` name && (name == "getObjectivesByObjectiveIdTrackers" || any (`Text.isSuffixOf` name) ["Deliveries", "Observations", "Proposals"]) -> [200, 400, 401, 404, 413, 503]
+                    Just name | "Trackers" `Text.isInfixOf` name -> [200, 202, 400, 401, 403, 404, 409, 413, 503]
                     Just name | "Objectives" `Text.isInfixOf` name -> [200, 400, 401, 403, 404, 409, 413, 503]
                     _ -> []
                   responses = operation ^. L.responses . L.responses
@@ -80,12 +82,12 @@ tests =
                 ( \(status, reference) -> when (status >= 400) $ case reference of
                     O.Ref _ -> assertFailure "error response is an unexpected unresolved reference"
                     O.Inline response -> do
-                      let media = if status == 400 && identity `elem` [Just "getAgents", Just "getAgentsByAgentNameRuns"] then "application/json" else "application/problem+json"
+                      let media = if status == 400 && (identity `elem` [Just "getAgents", Just "getAgentsByAgentNameRuns", Just "getObjectivesByObjectiveIdTrackers"] || maybe False (\name -> any (`Text.isSuffixOf` name) ["Deliveries", "Observations", "Proposals"]) identity) then "application/json" else "application/problem+json"
                       assertBool (path <> ": error media mismatch") (InsOrdHashMap.member media (response ^. L.content))
                 )
                 (InsOrdHashMap.toList responses)
           )
-          (filter (\(path, _) -> path `elem` (agentPaths <> objectivePaths)) (documentedOperations shikigamiOpenApi)),
+          (filter (\(path, _) -> path `elem` (agentPaths <> objectivePaths <> trackerPaths)) (documentedOperations shikigamiOpenApi)),
       testCase "the pure live build document is the named single-status exemption" $
         mapM_ (\(_, operation) -> sort (InsOrdHashMap.keys (operation ^. L.responses . L.responses)) @?= [200]) (filter (\(path, _) -> path == "/openapi") (documentedOperations shikigamiOpenApi)),
       testCase "every probe route publishes both typed alternatives" $
@@ -106,7 +108,7 @@ tests =
         let ids = mapMaybe (\(_, operation) -> operation ^. L.operationId) (documentedOperations shikigamiOpenApi)
         length ids @?= length (documentedOperations shikigamiOpenApi)
         sort ids @?= sort (dedupe ids)
-        sort ids @?= ["getAgents", "getAgentsByAgentName", "getAgentsByAgentNameRuns", "getAgentsByAgentNameRunsByRunId", "getHealthLive", "getHealthReady", "getObjectives", "getObjectivesByObjectiveId", "getObjectivesByObjectiveIdHistory", "getOpenapi", "postAgentsByAgentNameRuns", "postObjectives", "postObjectivesByObjectiveIdCommands"],
+        sort ids @?= ["getAgents", "getAgentsByAgentName", "getAgentsByAgentNameRuns", "getAgentsByAgentNameRunsByRunId", "getHealthLive", "getHealthReady", "getObjectives", "getObjectivesByObjectiveId", "getObjectivesByObjectiveIdHistory", "getObjectivesByObjectiveIdTrackers", "getObjectivesByObjectiveIdTrackersByBindingId", "getObjectivesByObjectiveIdTrackersByBindingIdDeliveries", "getObjectivesByObjectiveIdTrackersByBindingIdObservations", "getObjectivesByObjectiveIdTrackersByBindingIdProposals", "getObjectivesByObjectiveIdTrackersOperationsByOperationKey", "getOpenapi", "postAgentsByAgentNameRuns", "postObjectives", "postObjectivesByObjectiveIdCommands", "postObjectivesByObjectiveIdTrackersCommands"],
       testCase "operation ids are derived from method and path" do
         operationIdFor "get" "/health/live" @?= ("getHealthLive" :: Text)
         operationIdFor "get" "/agents/{name}" @?= "getAgentsByName"
@@ -170,3 +172,6 @@ agentPaths = ["/agents", "/agents/{agentName}", "/agents/{agentName}/runs", "/ag
 
 objectivePaths :: [FilePath]
 objectivePaths = ["/objectives", "/objectives/{objectiveId}", "/objectives/{objectiveId}/history", "/objectives/{objectiveId}/commands"]
+
+trackerPaths :: [FilePath]
+trackerPaths = ["/objectives/{objectiveId}/trackers", "/objectives/{objectiveId}/trackers/commands", "/objectives/{objectiveId}/trackers/operations/{operationKey}", "/objectives/{objectiveId}/trackers/{bindingId}", "/objectives/{objectiveId}/trackers/{bindingId}/deliveries", "/objectives/{objectiveId}/trackers/{bindingId}/observations", "/objectives/{objectiveId}/trackers/{bindingId}/proposals"]

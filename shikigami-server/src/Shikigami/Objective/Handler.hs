@@ -20,6 +20,7 @@ import Shikigami.Execution.Identity (operationIdText)
 import Shikigami.Objective.Api
 import Shikigami.Objective.Capability qualified as Owner
 import Shikigami.Objective.Inspection qualified as View
+import Shikigami.Objective.Tracker.Handler (trackerServer)
 import Shikigami.Objective.Types qualified as O
 import Shikigami.Prelude
 import Shikigami.Server.Seam
@@ -28,7 +29,7 @@ objectiveHost :: O.ObjectiveSettings -> IO (Either O.ObjectiveError O.AccessPrin
 objectiveHost settings authenticate = Owner.ObjectiveHost settings authenticate denyAllActionAuthorizer (\_ _ -> pure (Left O.ObjectiveDenied)) (\_ _ -> pure (Left O.ObjectiveDenied)) (\_ -> pure (Left O.ObjectiveUnavailable))
 
 objectiveServer :: ServerEnv -> ApiCaller -> ObjectiveApi (AsServerT ServerM)
-objectiveServer env caller = ObjectiveApi {create, list, inspect, history, command}
+objectiveServer env caller = ObjectiveApi {create, list, inspect, history, command, trackers = trackerServer env caller}
   where
     host = objectiveHost env.appConfig.objectiveSettings $ pure $ case env.appConfig.httpAuth of
       AuthDisabled -> Left O.ObjectiveDenied

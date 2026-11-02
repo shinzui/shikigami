@@ -91,6 +91,7 @@
     "Shikigami.Server.Command.Validate",
     "Shikigami.Server.Command.Workers",
     "Shikigami.Server.Command.Objectives",
+    "Shikigami.Server.Command.ObjectiveTrackers",
     "Shikigami.Server.Config",
     "Shikigami.Server.RequestLog",
     "Shikigami.Server.Seam",

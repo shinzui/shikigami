@@ -15,6 +15,7 @@ okf_version: "0.2"
 - [Detectors — the intelligence layer as declared agents](detectors.md) - Check detector execution support and configure supported agents.
 - [Flows](flows.md) - Implement, register, and inspect durable lifecycle-backed Flow behaviors.
 - [HTTP API — agents and runs](http-api.md) - Authenticate, discover declared agents, request an idempotent run, and follow its lifecycle through the typed client or HTTP.
+- [Link objectives to external trackers](objective-trackers.md) - Bind an existing Rei intention, review external proposals, and recover uncertain publication without duplicate actions.
 - [Durable objectives](objectives.md) - Create and continue an objective across runs and conversations, then explicitly accept its integrated result.
 - [Skills — authoring a SKILL.md behavior](skills.md) - Author and validate a skill directory for a Shikigami Skill behavior.
 - [Typed decisions in Flows](typed-decisions.md) - Configure model aliases, run the typed decision example, and preserve governed results and attempt evidence on replay.

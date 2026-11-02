@@ -65,7 +65,7 @@ Upstream decisions were discovered through Mori: `mori://shinzui/rei/okf/adrs/co
 |---|---|---|---|---|---|
 | EP-1 | Persist provider-neutral bindings and synchronization receipts | [103-persist-provider-neutral-objective-tracker-bindings-and-synchronization-receipts.md](../plans/103-persist-provider-neutral-objective-tracker-bindings-and-synchronization-receipts.md) | MasterPlan 17 Complete | None | Complete |
 | EP-2 | Adapt Rei intentions and actions | [104-adapt-rei-intentions-and-actions-to-objective-tracker-contracts.md](../plans/104-adapt-rei-intentions-and-actions-to-objective-tracker-contracts.md) | EP-1 | None | Complete |
-| EP-3 | Expose and qualify external synchronization | [105-expose-and-qualify-recoverable-external-objective-synchronization.md](../plans/105-expose-and-qualify-recoverable-external-objective-synchronization.md) | EP-1, EP-2 | None | Not Started |
+| EP-3 | Expose and qualify external synchronization | [105-expose-and-qualify-recoverable-external-objective-synchronization.md](../plans/105-expose-and-qualify-recoverable-external-objective-synchronization.md) | EP-1, EP-2 | None | In Progress |
 
 Whole-child dependencies require Complete. Status values are Not Started, In Progress, Complete and Cancelled. Planning can precede prerequisites; implementation cannot.
 

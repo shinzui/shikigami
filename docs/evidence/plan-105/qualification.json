@@ -1,0 +1,56 @@
+{
+  "status": "candidate; committed native gate pending",
+  "baseline": "6881da43",
+  "checks": {
+    "complete_build": true,
+    "broad_regression": {
+      "api": 35,
+      "core": 661,
+      "postgres": 541,
+      "server": 105,
+      "workers": 281
+    },
+    "final_tracker_postgres": 39,
+    "final_tracker_http": 2,
+    "final_mixed_outbox": 1,
+    "served_real_rei": true,
+    "independent_no_rei": true,
+    "hurl": true,
+    "conventions": true,
+    "migration_isolation": true,
+    "user_docs": 17
+  },
+  "runtime_cohort": {
+    "packages": 385,
+    "immutable_repositories": 7,
+    "sdk_packages": [
+      "rei-api-client",
+      "rei-api-contract"
+    ],
+    "sdk_version": "0.2.0.0",
+    "server_version": "8.0.0.0",
+    "source": "mori://shinzui/rei",
+    "commit": "c109222db550537ec998ecc6fc1866cc7a35e29a",
+    "cold_nix_build_claimed": false
+  },
+  "control_storage": "versioned control columns share the preserved command target and operation primary key; no catalog membership change",
+  "served_cases": [
+    "PASS served binding, unchanged initial instructions, one real action and Delivered receipt",
+    "PASS reviewed proposal import and original command receipt replay",
+    "PASS concurrent local edit conflicts and explicit rejection does not repropose",
+    "PASS external completion and reopening preserve independent local acceptance",
+    "PASS real response loss, both service restarts, Unknown quarantine, exact verified attestation and zero second POSTs",
+    "PASS external abandonment offers review without local cancellation",
+    "PASS operator CLI inspection, closed command, exact replay and paused export",
+    "PASS accepted caller revocation before real worker dispatch performs zero provider reads",
+    "PASS revoked export suppresses pending work; remote access loss retains observations and delivery evidence",
+    "PASS identical remote ID in another connection/incarnation has independent binding and source state"
+  ],
+  "limits": [
+    "non-idempotent Rei append remains quarantined after uncertain outcomes",
+    "exact verified receipt plus explicit authenticated attestation is required for uncertain authorship",
+    "projected read lag is not non-application proof",
+    "SDK pair uses an immutable public source pin rather than a Hackage release",
+    "repository containment and Linux runtime qualification are separate"
+  ]
+}

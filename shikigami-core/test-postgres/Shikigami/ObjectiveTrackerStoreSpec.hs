@@ -11,6 +11,7 @@ import Data.Either (isLeft, rights)
 import Data.Generics.Labels ()
 import Data.IORef
 import Data.Int (Int64)
+import Data.List (nub)
 import Data.Text qualified as Text
 import Data.Time (addUTCTime)
 import Effectful (Eff)
@@ -32,7 +33,10 @@ import Shikigami.Objective.Command qualified as OC
 import Shikigami.Objective.Store qualified as ObjectiveStore
 import Shikigami.Objective.Tracker.Command qualified as C
 import Shikigami.Objective.Tracker.Config
+import Shikigami.Objective.Tracker.Control qualified as Control
+import Shikigami.Objective.Tracker.Control.Types qualified as Control
 import Shikigami.Objective.Tracker.Dispatch qualified as Dispatch
+import Shikigami.Objective.Tracker.Inspection qualified as Inspection
 import Shikigami.Objective.Tracker.Mapping
 import Shikigami.Objective.Tracker.Provider qualified as P
 import Shikigami.Objective.Tracker.Store qualified as S
@@ -54,7 +58,83 @@ tests :: DatabaseFixture -> TestTree
 tests fixture =
   testGroup
     "ObjectiveTrackerStore"
-    [ testCase "a process exit after commit recovers the original binding and publication without network access" $
+    [ testCase "durable read admission performs no network and restores the original caller after restart" $
+        withTracker fixture \env objective original _ -> do
+          reads <- newIORef (0 :: Int)
+          provider <- right =<< original.providerFor scope
+          let selected = provider & #readResource .~ (\requested -> modifyIORef' reads (+ 1) >> provider.readResource requested)
+              host = original & #providerFor .~ (\_ -> pure (Right selected))
+              operator = checked (OT.parseOperatorId "scheduler")
+              scheduler = host & #objective . #settings . #operator .~ Just operator & #objective . #authenticate .~ pure (Right (OT.LocalOperator operator))
+              request = Control.RunCommand bindCommand
+          (fresh, accepted) <- right =<< run env (Control.enqueue host objective (operation "bind") request)
+          fresh @?= True
+          accepted.actor @?= actor
+          accepted.state @?= Control.Queued
+          readIORef reads >>= (@?= 0)
+          run env (S.execute host objective (operation "bind") bindCommand) >>= (@?= Left TrackerConflict)
+          S.inspectBindings host objective & run env >>= (@?= Right [])
+          (replayed, _) <- right =<< run env (Control.enqueue host objective (operation "bind") request)
+          replayed @?= False
+          run env (S.execute host objective (operation "bind") (C.Pause bindingId initialRevision)) >>= (@?= Left TrackerConflict)
+          _ <- right =<< run env (Control.runPending scheduler Nothing)
+          record <- right =<< run env (Control.inspect host objective (operation "bind"))
+          record.state @?= Control.Finished
+          record.failure @?= Nothing
+          readIORef reads >>= (@?= 1)
+          _ <- right =<< run env (Control.runPending scheduler Nothing)
+          _ <- right =<< run env (S.execute host objective (operation "bind") bindCommand)
+          readIORef reads >>= (@?= 1),
+      testCase "revoked queued callers cannot perform provider reads" $
+        withTracker fixture \env objective host _ -> do
+          _ <- bind env objective host
+          let another = OT.VerifiedCaller (checked (OT.parseCallerId "reviewer"))
+              operator = checked (OT.parseOperatorId "scheduler")
+              admitted = host & #objective .~ objectiveHost another & #settings . #connections .~ [connection & #useGrants .~ [actor, another]]
+              scheduler = admitted & #objective . #settings . #operator .~ Just operator & #objective . #authenticate .~ pure (Right (OT.LocalOperator operator)) & #providerFor .~ (\_ -> fail "revoked request accessed provider")
+          _ <- right =<< run env (O.executeCommand ownerHost objective initialRevision (operation "reviewer") (OC.GrantMember another [OT.Coordinator]))
+          _ <- right =<< run env (Control.enqueue admitted objective (operation "observe") (Control.Observe bindingId initialRevision))
+          _ <- right =<< run env (O.executeCommand ownerHost objective (revision 1) (operation "revoke") (OC.RevokeMember another))
+          _ <- right =<< run env (Control.runPending scheduler Nothing)
+          run env (Control.inspect admitted objective (operation "observe")) >>= (@?= Left TrackerDenied)
+          rows <- right =<< run env (S.inspectBindings host objective)
+          length rows @?= 1,
+      testCase "an unchanged successful poll refreshes last observation time without a new proposal" $
+        withTracker fixture \env objective host _ -> do
+          _ <- bind env objective host
+          before <- right =<< run env (Inspection.binding host objective bindingId)
+          _ <- right =<< run env (S.observe host objective bindingId)
+          after <- right =<< run env (Inspection.binding host objective bindingId)
+          assertBool "successful duplicate read advances local observation time" (after.lastSuccessfulObservation > before.lastSuccessfulObservation)
+          after.pendingProposals @?= 0,
+      testCase "history keysets traverse beyond the former inspection limit" $
+        withTracker fixture \env objective host remote -> do
+          _ <- bind env objective host
+          forM_ [2 .. 105 :: Integer] \position -> do
+            writeIORef remote (initial & #position .~ Just (revision position))
+            _ <- right =<< run env (S.observe host objective bindingId)
+            pure ()
+          let walk after found = do
+                page <- right =<< run env (Inspection.history host objective bindingId Control.Observations True after 7)
+                if null page then pure found else case reverse page of last : _ -> walk (Just last.identity) (found <> map (.identity) page); _ -> pure found
+          identifiers <- walk Nothing []
+          length identifiers @?= 105
+          length (nub identifiers) @?= 105,
+      testCase "explicitly granted authenticated reconcilers retain their caller identity" $
+        withTracker fixture \env objective base _ -> do
+          (host, _, calls, _) <- deterministic base False
+          (intent, _) <- enqueue env objective host
+          _ <- right =<< run env (Dispatch.dispatch host objective intent.publicationId)
+          (_, receipt) <- single =<< publications env objective host
+          attempt <- maybe (fail "missing attempt") pure receipt.attempt
+          let granted = host & #settings . #reconciliationOperators .~ [actor]
+              command = C.AttestDelivery intent.publicationId attempt.attemptId scope.incarnation (key "remote-receipt") intent.digest receipt.revision (instructions "verified as authenticated operator")
+          _ <- right =<< run env (Dispatch.verifyDelivery granted objective intent.publicationId (key "remote-receipt"))
+          accepted <- right =<< run env (S.execute granted objective (operation "attest-caller") command)
+          accepted.actor @?= actor
+          run env (S.execute granted objective (operation "attest-caller") command) >>= (@?= Right accepted)
+          readIORef calls >>= (@?= 1),
+      testCase "a process exit after commit recovers the original binding and publication without network access" $
         withShikigamiFreshDatabase fixture \connectionString -> do
           env <- environment connectionString
           _ <- right =<< run env Catalog.registerProjectionCatalog

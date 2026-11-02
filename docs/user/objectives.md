@@ -18,8 +18,8 @@ objective; finishing a run or assignment does not complete the objective.
 
 A memory session supplies recalled learnings. A conversation supplies recorded
 turns. Neither replaces the objective's authoritative checkpoint. A Rei intention
-can be an optional external reference. Objectives do not currently synchronize
-Rei or implement an A2A task mapping.
+can be an optional external reference. Optional [tracker bindings](objective-trackers.md) offer reviewed Rei proposals
+and independent progress delivery. An A2A task mapping remains separate.
 
 ## Create and inspect
 
