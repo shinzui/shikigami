@@ -6,12 +6,17 @@ generated:
   by: "codex-cli/gpt-6.1-sol"
   at: "2026-11-02T18:31:55Z"
 frictionId: FRIC-43
-status: logged
+status: "accepted"
 impact: slowdown
 kind: tooling
 origin: "mori://shinzui/shikigami"
 affects: "mori://shinzui/shikigami"
 plan: "docs/plans/96-provide-governed-mutable-repository-workspaces-for-durable-agents.md"
+resolution: "Accept the frozen runtime rebuild for the joint ownership gate; host checks remain separate from native acceptance."
+amended:
+  - by: "codex-cli/gpt-6.1-sol"
+    at: "2026-11-02T18:43:43Z"
+    change: "Triage the observed qualification constraint with its retained bounded workaround."
 ---
 # Joint successor qualification waits for a cold frozen runtime build
 

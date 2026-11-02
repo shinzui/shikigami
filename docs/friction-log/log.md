@@ -1,6 +1,20 @@
 # Bundle Update Log
 
 ## 2026-11-02
+* **Update**: FRIC-44 resolved: Match the native database environment to the current UUIDv7 allocator requirement.
+* **Addition**: FRIC-44 records detour environment friction with mori://shinzui/shikigami: Apple fixture selects PostgreSQL 17 for an allocator requiring 18
+* **Update**: FRIC-43 accepted: Triage the observed qualification constraint with its retained bounded workaround.
+* **Update**: FRIC-31 accepted: Triage the observed qualification constraint with its retained bounded workaround.
+* **Update**: FRIC-30 accepted: Triage the observed qualification constraint with its retained bounded workaround.
+* **Update**: FRIC-29 accepted: Triage the observed qualification constraint with its retained bounded workaround.
+* **Update**: FRIC-26 accepted: Triage the observed qualification constraint with its retained bounded workaround.
+* **Update**: FRIC-24 accepted: Triage the observed qualification constraint with its retained bounded workaround.
+* **Update**: FRIC-23 accepted: Triage the observed qualification constraint with its retained bounded workaround.
+* **Update**: FRIC-22 accepted: Triage the observed qualification constraint with its retained bounded workaround.
+* **Update**: FRIC-21 accepted: Triage the observed qualification constraint with its retained bounded workaround.
+* **Update**: FRIC-19 accepted: Triage the observed qualification constraint with its retained bounded workaround.
+* **Update**: FRIC-18 accepted: Triage the observed qualification constraint with its retained bounded workaround.
+* **Update**: FRIC-17 accepted: Triage the observed qualification constraint with its retained bounded workaround.
 * **Addition**: FRIC-43 records slowdown tooling friction with mori://shinzui/shikigami: Joint successor qualification waits for a cold frozen runtime build
 * **Update**: FRIC-42 resolved: Restore final qualification against the current source without changing deployed SQL.
 * **Addition**: FRIC-42 records detour tooling friction with mori://shinzui/shikigami: Checked migration and diagram artifacts lag the current source

@@ -43,6 +43,11 @@ provenance:
       at: 2026-11-02T06:00:10Z
       mode: "implement"
       note: "Record objective-backed provider acceptance from plan 99 while retaining the IR-11 joint qualification gate."
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-11-02T18:39:36Z
+      mode: "update"
+      note: "Track plan 96 real ownership and successor qualification without closing full IR-15 acceptance."
 ---
 
 # Coordinate continuing worker sessions and fenced handoffs
@@ -83,6 +88,13 @@ acceptance stay open; workspace-only facts cannot close them.
 
 
 2026-11-02 UTC IR-13 completion-gate evidence: [plan 99](99-supply-trusted-objective-associations-and-the-real-checkpoint-ownership-and-scope-providers.md) qualifies and installs the real objective adapters. [Provider completion qualification](../evidence/plan-99/provider-completion-qualification.json) covers simultaneous sibling commits, lost acknowledgement plus local cursor failure, instruction/criteria invalidation and explicit non-commit reconciliation, immutable accepted-result references, stale checkpoint refusal after fenced owner change, and retained scopes after source workflow GC. The actual command owner opens distinct worker scopes with original roots and limits. Eleven provider cases and the full suites pass (632 core, 490 PostgreSQL, 280 worker, 96 server, 37 agent); the native gate is neutral with 169 conformance checks. The deterministic fence qualifies only objective-side receipt recovery. The IR-11 and joint real successor/late-writer/restart gate remains open, this plan remains In Progress, and plan 85 still waits for this whole child.
+
+2026-11-02 workspace composition update: plan 96 now connects the real
+workspace transfer client and transfer-aware host to objective coordination in
+normal workers. Its host qualification passes on `8d1ee35e`; the native joint
+ownership/successor matrix is running. This closes no milestone here until the
+required real-provider evidence exists. Full IR-15 acceptance and this child's
+completion remain separately owned; plan 85 still requires this whole child.
 
 ## Surprises & Discoveries
 

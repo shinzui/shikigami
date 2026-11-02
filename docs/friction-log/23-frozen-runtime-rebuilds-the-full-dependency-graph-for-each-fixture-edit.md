@@ -6,13 +6,18 @@ generated:
   by: "codex-cli/gpt-6.1-sol"
   at: "2026-10-30T01:52:58Z"
 frictionId: FRIC-23
-status: logged
+status: "accepted"
 impact: slowdown
 kind: tooling
 origin: "mori://shinzui/shikigami"
 affects: "mori://shinzui/shikigami"
 plan: "docs/plans/96-provide-governed-mutable-repository-workspaces-for-durable-agents.md"
 workaround: "Explore the cached controller with a temporary fixture-only HTTP metadata correction while the corrected candidate builds; final acceptance still requires the corrected candidate."
+resolution: "Retain the frozen runtime as the qualification gate; redesigning its monolithic build cache is outside this workspace implementation."
+amended:
+  - by: "codex-cli/gpt-6.1-sol"
+    at: "2026-11-02T18:43:39Z"
+    change: "Triage the observed qualification constraint with its retained bounded workaround."
 ---
 # Frozen runtime rebuilds the full dependency graph for each fixture edit
 

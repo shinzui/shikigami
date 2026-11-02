@@ -1,7 +1,7 @@
 -- Actual accepted execution/claim plumbing for the disposable Linux fixture.
 -- Only the model response is deterministic; files, accounts, RPC and systemd
 -- use their production interpreters.
-module Accepted (Prepared (..), prepareAccepted, prepareUpgrade, advanceUpgrade, executePrepared, executeGitWithBackend, prepareTools, continueTools, advanceTools, executeWithProviders) where
+module Accepted (Prepared (..), prepareAccepted, prepareUpgrade, advanceUpgrade, executePrepared, executeGitWithBackend, prepareTools, prepareToolsFor, continueTools, advanceTools, executeWithProviders) where
 
 import Baikai.Options (emptyOptions)
 import Baikai.StopReason (StopReason (ToolUse))
@@ -28,7 +28,7 @@ import Shikigami.Action.Authorization (ActionAuthorizer)
 import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Decl (Behavior (Skill))
 import Shikigami.Agent.DeclarationValue
-import Shikigami.Agent.Name (AgentName, mkAgentName)
+import Shikigami.Agent.Name (AgentName, agentNameText, mkAgentName)
 import Shikigami.App (AppEffects, AppEnv, runAppIO)
 import Shikigami.Behavior.Provider.Coordinate qualified as ProviderValue
 import Shikigami.Behavior.StubProvider (stubModel)
@@ -189,7 +189,10 @@ must = either (const (error "fixture definition refused")) id
 -- Transfer-aware qualification uses real protected model/tool inputs and actual
 -- claims. This helper never invents session/objective ownership authority.
 prepareTools :: AppEnv -> ActionAuthorizer -> (ExecutionSnapshot -> IO (Either Text.Text ())) -> ProcessClient -> WorkspaceAdmission -> [(Text.Text, Aeson.Value)] -> IO Prepared
-prepareTools env authorizer current client admission calls = do
+prepareTools = prepareToolsFor (fixtureAgentName "fixture")
+
+prepareToolsFor :: AgentName -> AppEnv -> ActionAuthorizer -> (ExecutionSnapshot -> IO (Either Text.Text ())) -> ProcessClient -> WorkspaceAdmission -> [(Text.Text, Aeson.Value)] -> IO Prepared
+prepareToolsFor agent env authorizer current client admission calls = do
   now <- getCurrentTime
   session <- genSessionId
   selection <- right (resolveExecutionSelection admission.assignmentId (must (modelCatalog [])) (defaultBinding stubModel emptyOptions) Nothing Nothing Nothing Nothing (Just admission.rootId) now)
@@ -198,8 +201,8 @@ prepareTools env authorizer current client admission calls = do
       providers = must (installDurableAdapters adapters emptyCapabilityProviderRegistry)
       descriptors = map (.descriptor) adapters
   catalog <- right (mkCapabilityCatalog descriptors)
-  capabilities <- right (resolveGovernedCapabilityOverlays (durableAdapterInstalled providers) catalog (\_ _ -> Right ()) (ResolutionSubject (fmap declarationCoordinate ((Just "fixture"))) Durable (Skill (declarationCoordinate ("fixture"))) Nothing) (map (.capability) descriptors))
-  let initial = ExecutionSnapshot V1 (executionIdFor admission.assignmentId) admission.runId (fixtureAgentName "fixture") admission.owner session selection Nothing (SkillInstructions (ExecutionValue.executionCoordinate "fixture") "system" "body") (ReplayContext RequestContext (Just (instructionPrompt admission.instructions)) [RequestTurn [TextBlock "qualified workspace operation"] Nothing]) capabilities (Aeson.toJSON ([] :: [Aeson.Value])) defaultHarnessPolicy [] (Just admission) Nothing
+  capabilities <- right (resolveGovernedCapabilityOverlays (durableAdapterInstalled providers) catalog (\_ _ -> Right ()) (ResolutionSubject (Just (declarationCoordinate (agentNameText agent))) Durable (Skill (declarationCoordinate ("fixture"))) Nothing) (map (.capability) descriptors))
+  let initial = ExecutionSnapshot V1 (executionIdFor admission.assignmentId) admission.runId agent admission.owner session selection Nothing (SkillInstructions (ExecutionValue.executionCoordinate "fixture") "system" "body") (ReplayContext RequestContext (Just (instructionPrompt admission.instructions)) [RequestTurn [TextBlock "qualified workspace operation"] Nothing]) capabilities (Aeson.toJSON ([] :: [Aeson.Value])) defaultHarnessPolicy [] (Just admission) Nothing
   menu <- right =<< Tools.describeExecutionTools Log.silentLogger authorizer providers native initial
   let snapshot = initial & #offeredTools .~ menu.offeredTools & #toolBindings .~ menu.toolBindings
   void (right =<< run env Catalog.registerProjectionCatalog)

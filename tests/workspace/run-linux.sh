@@ -5,7 +5,7 @@ set -eEuo pipefail
 export LANG=C.UTF-8 LC_ALL=C.UTF-8
 mode=${1:-}
 runtime=${2:-}
-[[ $# == 2 && ( "$mode" == --prototype || "$mode" == --provision || "$mode" == --git || "$mode" == --workflow || "$mode" == --workflow-only || "$mode" == --workspace-gates || "$mode" == --qualify || "$mode" == --continuing-only || "$mode" == --handoff-only ) && "$runtime" == /nix/store/* ]] || { echo 'Usage: run-linux.sh --prototype|--provision|--git|--workflow|--workflow-only|--workspace-gates|--qualify|--continuing-only|--handoff-only RUNTIME'; exit 64; }
+[[ $# == 2 && ( "$mode" == --prototype || "$mode" == --provision || "$mode" == --git || "$mode" == --workflow || "$mode" == --workflow-only || "$mode" == --workspace-gates || "$mode" == --qualify || "$mode" == --continuing-only || "$mode" == --handoff-only || "$mode" == --ownership-only ) && "$runtime" == /nix/store/* ]] || { echo 'Usage: run-linux.sh --prototype|--provision|--git|--workflow|--workflow-only|--workspace-gates|--qualify|--continuing-only|--handoff-only|--ownership-only RUNTIME'; exit 64; }
 [[ $(uname -s) == Linux && $(id -u) == 0 && -f /run/shikigami-workspace-prototype.disposable ]] || { echo 'REFUSED: a marked disposable Linux guest running as root is required'; exit 78; }
 [[ $(ps -p 1 -o comm=) == systemd && $(stat -fc %T /sys/fs/cgroup) == cgroup2fs ]]
 sudo -n true
@@ -85,8 +85,13 @@ chmod 666 "$prefix/root/etc/probe-immutable"
 # frozen runtime. Materialize that existing pinned package for the guest's
 # native architecture instead of selecting the image's older apt server.
 postgres_reference='github:NixOS/nixpkgs/d5dfd8e6716dde34398bc14bc87c10dece9c8c68#postgresql_18'
-nix --extra-experimental-features 'nix-command flakes' build --no-link --no-write-lock-file "$postgres_reference" >"$prefix/nix-postgres.log" 2>&1
-postgres=$(nix --extra-experimental-features 'nix-command flakes' path-info "$postgres_reference")
+nix --extra-experimental-features 'nix-command flakes' build --json --no-link --no-write-lock-file "$postgres_reference" >"$prefix/nix-postgres.json" 2>"$prefix/nix-postgres.log"
+postgres=$(python3 - "$prefix/nix-postgres.json" <<'POSTGRES'
+import json,sys
+values=json.load(open(sys.argv[1])); assert len(values)==1
+print(values[0]['outputs']['out'])
+POSTGRES
+)
 pg_bindir="$postgres/bin"
 "$pg_bindir/postgres" --version >"$prefix/postgres-version.log"
 runuser -u postgres -- "$pg_bindir/initdb" -D "$prefix/pg" --auth=trust --no-locale --encoding=UTF8 >"$prefix/pg-init.log" 2>&1
@@ -254,7 +259,7 @@ duplicate_original() {
   done
   return 1
 }
-if [[ "$mode" != --workflow-only && "$mode" != --continuing-only && "$mode" != --handoff-only ]]; then
+if [[ "$mode" != --workflow-only && "$mode" != --continuing-only && "$mode" != --handoff-only && "$mode" != --ownership-only ]]; then
 prepare duplicate slow
 start_worker duplicate
 wait_ready duplicate
@@ -387,14 +392,14 @@ if [[ "$mode" == --workflow || "$mode" == --workflow-only || "$mode" == --worksp
   fi
 fi
 
-if [[ "$mode" == --workspace-gates || "$mode" == --qualify || "$mode" == --continuing-only || "$mode" == --handoff-only ]]; then
-  if [[ "$mode" != --continuing-only && "$mode" != --handoff-only ]]; then
+if [[ "$mode" == --workspace-gates || "$mode" == --qualify || "$mode" == --continuing-only || "$mode" == --handoff-only || "$mode" == --ownership-only ]]; then
+  if [[ "$mode" != --continuing-only && "$mode" != --handoff-only && "$mode" != --ownership-only ]]; then
   "$prototype" integration "$config" "$prefix" >"$prefix/integration.log" 2>&1
   cat "$prefix/integration.log"
   /usr/bin/psql "$connection" -Atc "SELECT jsonb_agg(jsonb_build_object('repository',b.binding->'repository','base',b.binding->'base','process',p.record) ORDER BY p.operation_id) FROM shikigami.workspace_processes p JOIN shikigami.workspace_bindings b USING(resource) WHERE b.binding->'request'->>'rootId'=(SELECT binding->'request'->>'rootId' FROM shikigami.workspace_bindings WHERE binding->'request'->>'runId'='integration-worker-one')" >"$prefix/integration-process-evidence.json"
   jq -e 'length==6 and ([.[] | select(.process.receipt.termination=="ProcessExited" and .process.receipt.exitCode==0)] | length)==5 and ([.[] | select(.process.receipt.termination=="ProcessExited" and .process.receipt.exitCode==77)] | length)==1' "$prefix/integration-process-evidence.json" >/dev/null
   fi
-  if [[ "$mode" != --handoff-only ]]; then
+  if [[ "$mode" != --handoff-only && "$mode" != --ownership-only ]]; then
   "$prototype" continuing "$config" "$prefix" followup >"$prefix/continuing-followup.log" 2>&1
   cat "$prefix/continuing-followup.log"
   /usr/bin/psql "$connection" -Atc "SELECT jsonb_agg(jsonb_build_object('workspace',b.binding->'workspace','repository',b.binding->'repository','base',b.binding->'base','original',b.binding->'request','followup',jsonb_build_object('runId',a.run_id,'assignmentId',a.admission->'assignmentId','workspace',a.admission->'workspace','owner',a.admission->'owner','epoch',a.admission->'epoch'),'profile',jsonb_build_object('ready',p.ready,'userId',p.user_id,'bindingDigest',p.profile->'bindingDigest','instructionDigest',p.profile->'instructionDigest'),'cleanup',c.plan,'complete',c.complete)) FROM shikigami.workspace_bindings b LEFT JOIN shikigami.workspace_successor_admissions a USING(resource) LEFT JOIN shikigami.workspace_process_profiles p USING(resource) LEFT JOIN shikigami.workspace_cleanup c USING(resource) WHERE b.binding->'request'->>'rootId' IN (SELECT binding->>'rootId' FROM shikigami.worker_sessions WHERE binding->'scope'->>'parent'='native-followup')" >"$prefix/continuing-followup-evidence.json"
@@ -480,7 +485,7 @@ LIFECYCLE
   sleep 2
   "$prototype" continuing "$config" "$prefix" late >"$prefix/continuing-late.log" 2>&1
   cat "$prefix/continuing-late.log"
-  if [[ "$mode" == --qualify ]]; then
+  if [[ "$mode" == --qualify || "$mode" == --ownership-only ]]; then
     "$prototype" continuing "$config" "$prefix" ownership >"$prefix/continuing-ownership.log" 2>&1
     cat "$prefix/continuing-ownership.log"
     # Restart the independent provider and use a new controller process after
@@ -542,7 +547,9 @@ for path in files:
     assert not any(marker in body for marker in markers), 'public fixture metadata/log privacy check failed'
 print('PASS retained workflow/operation metadata and public logs exclude fixture contents, credentials and bearer authority')
 PRIVACY
-  if [[ "$mode" == --handoff-only ]]; then
+  if [[ "$mode" == --ownership-only ]]; then
+    echo 'Focused real ownership and successor gates passed (9 cases); full qualification remains separate.'
+  elif [[ "$mode" == --handoff-only ]]; then
     echo 'Focused workspace fence gates passed (6 cases); successor and full matrix gates remain separate.'
   elif [[ "$mode" == --continuing-only ]]; then
     echo 'Focused continuing workspace gates passed (7 cases); the full matrix remains separate.'
@@ -550,7 +557,7 @@ PRIVACY
     echo 'Workspace-owned native gates passed (22 cases).'
   fi
 
-  if [[ "$mode" == --qualify ]]; then
-    echo 'Full governed workspace qualification passed (25 cases), including real objective ownership and accepted successor writes across restart.'
+  if [[ "$mode" == --qualify || "$mode" == --ownership-only ]]; then
+    if [[ "$mode" == --qualify ]]; then echo 'Full governed workspace qualification passed (25 cases), including real objective ownership and accepted successor writes across restart.'; fi
   fi
 fi

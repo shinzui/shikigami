@@ -107,7 +107,7 @@ withQualification configFile prefix use = do
   withStore env.connectionSettings \store -> do
     let repository = WorkspaceRepository initial.binding.repository initial.binding.source [WorkspaceRevision initial.binding.base (bundleDigest initial.admission.instructions)] initial.binding.base (workspaceCoordinate "qualification-reviewed") initial.profile.policy.readPaths initial.profile.policy.writePaths
         process = WorkspaceProcessSettings socket ((either (error . show) id . parseRpcPeerUserId) 0) ((either (error . show) id . parseRpcRequestSeconds) 5) ((either (error . show) id . parseRpcWaitSeconds) 60) (((either (error . show) id . mkIdentityRange) (IdentityRangeInput ((either (error . show) id . parseWorkspaceIdentity) 64000) ((either (error . show) id . parseWorkspaceIdentity) 64031)))) (Map.singleton repository.identity initial.profile.policy)
-        settings = WorkspaceSettings initial.binding.storageRoot [repository] [WorkspaceGrant ((either (error . show) id . mkAgentName) "fixture") (declarationCoordinate actor) repository.identity Nothing | actor <- [principal, "agent_01h000000000000000successor"]] (Just process)
+        settings = WorkspaceSettings initial.binding.storageRoot [repository] [WorkspaceGrant ((either (error . show) id . mkAgentName) agent) (declarationCoordinate actor) repository.identity Nothing | (agent, actor) <- [("fixture", principal), ("successor", "agent_01h000000000000000successor")]] (Just process)
         client = ProcessClient socket ((either (error . show) id . parseRpcPeerUserId) 0) ((either (error . show) id . parseRpcRequestSeconds) 5) ((either (error . show) id . parseRpcWaitSeconds) 60)
         current = identityLifecycleAdmission directory.handle . (.identity)
     host <- right (configuredWorkspaceHostWithTransfers env store.pool directory.handle authorizer settings)
@@ -118,7 +118,8 @@ loadAssignment q root runId owner = do
   now <- getCurrentTime
   session <- genSessionId
   selection <- right (resolveExecutionSelection (assignmentIdFor runId) (either (error . show) id (modelCatalog [])) (defaultBinding stubModel emptyOptions) Nothing Nothing Nothing Nothing (Just root) now)
-  let assignment = SkillAssignment (WorkflowId runId) (fixtureAgentName "fixture") owner session selection Nothing emptyResolvedCapabilitySet (Right defaultHarnessPolicy) (SkillDir "fixture") (fail "host cannot dispatch a model")
+  let agent = fixtureAgentName (if owner == q.initial.binding.request.owner then "fixture" else "successor")
+      assignment = SkillAssignment (WorkflowId runId) agent owner session selection Nothing emptyResolvedCapabilitySet (Right defaultHarnessPolicy) (SkillDir "fixture") (fail "host cannot dispatch a model")
   let awaitAdmission remaining = do
         result <- q.host.load assignment
         case result of

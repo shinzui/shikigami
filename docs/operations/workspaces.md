@@ -33,7 +33,10 @@ image and containment profile.
 The prototype uses systemd system services and writable cgroup v2, an immutable
 execution root, separate reserved Unix identities, a private network and PID
 namespace, and independent bounded output collection and deadline enforcement.
-Unsupported hosts refuse execution. A command rule alone supplies no repository
+The allocation store requires PostgreSQL 18 for native UUIDv7 allocation. The
+runner materializes the existing pinned Nix PostgreSQL package for its guest
+architecture and selects its server output explicitly. Unsupported hosts refuse
+execution. A command rule alone supplies no repository
 containment. The supervisor owns the socket-activated listener and factual
 receipt recovery independently of queue workers.
 
@@ -66,7 +69,8 @@ on runtime `20e8e80`;
 [bounded native facts](../evidence/plan-96/native-workspace-facts.json) retain
 artifacts, validation receipts, follow-up ownership and the fence. The focused
 `--continuing-only` and `--handoff-only` modes run seven and six cases
-respectively. `--qualify` adds three cases: the real objective owner commits
+respectively. `--ownership-only` runs nine cases for focused real-owner and
+successor iteration; it does not replace the full matrix. `--qualify` adds three cases: the real objective owner commits
 ownership while a lost acknowledgement leaves the session frozen, then a new
 controller recovers its exact receipt after supervisor restart and requires an
 accepted successor edit and native validation in the same workspace. Finally it

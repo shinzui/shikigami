@@ -42,6 +42,11 @@ provenance:
       at: 2026-11-02T06:00:10Z
       mode: "implement"
       note: "Record plan 99 objective checkpoint, ownership and retained-scope provider evidence; keep the workspace joint gate open."
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-11-02T18:39:36Z
+      mode: "update"
+      note: "Track plan 96 real workspace/objective qualification while retaining child completion and integrated acceptance gates."
 ---
 
 # Deliver adaptive autonomous objectives with durable workers
@@ -187,6 +192,13 @@ milestones remain gated by both real providers. Plan 96's workspace-only
 fixtures cannot complete this MasterPlan's integrated acceptance.
 
 2026-11-02 UTC prerequisite update: plan 99 completes the real IR-13 objective/checkpoint, ownership and retained coordination source gate. [Provider completion evidence](../evidence/plan-99/provider-completion-qualification.json) records eleven provider cases, 632 core, 490 PostgreSQL, 280 worker, 96 server and 37 agent cases, with a neutral native gate and 169 conformance checks. Worker/operator composition now uses those adapters. Plan 84's IR-11 and joint real successor/late-writer/restart qualification remains open; its status stays In Progress and EP-5 still waits for the whole child. No dependency edge or other child status changes, and no workspace fencing is inferred from the deterministic objective-side fixture.
+
+2026-11-02 workspace composition update: plan 96 now installs the real
+workspace transfer client alongside plan 99's objective owner in normal workers.
+Its host checks pass and the final native successor/ownership matrix is running.
+EP-4 stays In Progress pending the required real-provider evidence and its full
+IR-15 acceptance. No child status or dependency edge changes, and EP-5 still
+requires the whole EP-4. EP-6 retains adaptive and live coding acceptance.
 
 ## Surprises & Discoveries
 

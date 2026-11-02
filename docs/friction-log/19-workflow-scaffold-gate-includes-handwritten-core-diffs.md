@@ -6,7 +6,7 @@ generated:
   by: "codex-cli/gpt-6.1-sol"
   at: "2026-10-29T21:48:28Z"
 frictionId: FRIC-19
-status: logged
+status: "accepted"
 impact: detour
 kind: tooling
 origin: "mori://shinzui/shikigami"
@@ -14,6 +14,11 @@ affects: "mori://shinzui/shikigami"
 affectedVersion: "unreleased"
 plan: "docs/plans/96-provide-governed-mutable-repository-workspaces-for-durable-agents.md"
 workaround: "Commit the verified implementation and rerun the workflow gate on that committed source; do not regenerate or edit unchanged generated files."
+resolution: "Run the scaffold gate against committed source; its whole-core drift check remains the reviewed house contract."
+amended:
+  - by: "codex-cli/gpt-6.1-sol"
+    at: "2026-11-02T18:43:37Z"
+    change: "Triage the observed qualification constraint with its retained bounded workaround."
 ---
 # Workflow scaffold gate includes handwritten core diffs
 

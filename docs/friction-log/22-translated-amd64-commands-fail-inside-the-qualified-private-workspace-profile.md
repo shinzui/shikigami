@@ -6,13 +6,18 @@ generated:
   by: "codex-cli/gpt-6.1-sol"
   at: "2026-10-30T00:20:00Z"
 frictionId: FRIC-22
-status: logged
+status: "accepted"
 impact: detour
 kind: environment
 origin: "mori://shinzui/shikigami"
 affects: "mori://apple/container"
 plan: "docs/plans/96-provide-governed-mutable-repository-workspaces-for-durable-agents.md"
 workaround: "Keep repository payloads and deadline guards native arm64. Investigate running only the trusted remote-built controller in an Apple arm64 guest with Rosetta; this has not yet qualified coupled execution."
+resolution: "Keep contained payloads and deadline guards native arm64; translated amd64 payloads remain unqualified under this containment profile."
+amended:
+  - by: "codex-cli/gpt-6.1-sol"
+    at: "2026-11-02T18:43:38Z"
+    change: "Triage the observed qualification constraint with its retained bounded workaround."
 ---
 # Translated amd64 commands fail inside the qualified private workspace profile
 

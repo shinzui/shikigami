@@ -6,13 +6,18 @@ generated:
   by: "codex-cli/gpt-6.1-sol"
   at: "2026-10-30T18:41:26Z"
 frictionId: FRIC-31
-status: logged
+status: "accepted"
 impact: detour
 kind: tooling
 origin: "mori://shinzui/shikigami"
 affects: "mori://shinzui/shikigami"
 plan: "docs/plans/96-provide-governed-mutable-repository-workspaces-for-durable-agents.md"
 workaround: "Stop only the recorded fixture processes, then rerun the agent suite with stdin redirected from /dev/null. Use closed stdin for subsequent batch qualification."
+resolution: "Close stdin from /dev/null for unattended batch qualification so fake vendor commands receive EOF."
+amended:
+  - by: "codex-cli/gpt-6.1-sol"
+    at: "2026-11-02T18:43:43Z"
+    change: "Triage the observed qualification constraint with its retained bounded workaround."
 ---
 # Batch qualification retains open stdin in a fake unattended vendor
 

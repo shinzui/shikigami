@@ -102,17 +102,42 @@ Final host verification for this candidate passes `cabal build all` and the comp
 
 ## Surprises & Discoveries
 
+The PostgreSQL-18 run passes all fourteen provisioning/process/Git/normal-workflow
+cases on runtime `8d1ee35e`, including the newly selected transfer-aware normal
+host (`/tmp/shikigami-96-joint-native4.log`, private evidence
+`/tmp/shikigami-workspace-run.oRgJxS/evidence`). Integration then refused its
+fixture configuration: the catalog permits one principal per agent declaration,
+but the fixture supplied two principals under `fixture`. The corrected fixture
+uses distinct `fixture` and `successor` declarations and freezes the successor
+name in its accepted snapshot. A focused `--ownership-only` mode exercises nine
+real ownership/fence/successor cases before the mandatory full 25-case matrix.
+The provider implementation is unchanged; the controller must be rebuilt.
+
+The first final native run refused allocation before any workspace or Unix
+identity was reserved. Its guest selected PostgreSQL 17 from apt, while the
+current store allocates UUIDv7 through PostgreSQL 18. The runner now materializes
+the existing pinned `postgresql_18` Nix package for the native guest architecture
+and records its version. The Haskell runtime is unchanged and reused; no SQL
+identity fallback is introduced. The previous run is failure evidence, not a
+passing containment result.
+
+2026-11-02 validation: checked execution-root identities are opaque allocated
+values. The old native evidence selectors still compared root columns with
+fixture seed text, which would produce empty integration/follow-up evidence.
+The runner now follows retained workspace and session bindings to the actual
+root; it keeps the six-process and single-workspace assertions. Fixture seed
+names select test setup, not an alternate identity derivation or ownership
+source. This changes evidence collection without changing provider authority.
+
+
 2026-10-30 successor design: retain the original allocation and process profile
 unchanged. A separate successor admission binds the established handoff to the
 session store's actual child mapping, exact run/assignment, owner and epoch. New
-transfer-aware adapter revisions will require `ascii-exact-transfer-v1`; old
+transfer-aware adapter revisions require `ascii-exact-transfer-v1`; old
 adapters must refuse it before IO. Conditional owner control advances only after
 the session has retained its matching fence and separate objective receipt. The
-store contract and five PostgreSQL cases are implemented. The full candidate
-passes 533 core, 358 PostgreSQL and five migration tests, schema isolation and
-`git diff --check`; no transfer-aware adapter or concrete handoff provider is
-installed yet at that checkpoint; the concrete provider boundary above is now
-implemented and separately qualified with instrumented process evidence.
+store, adapters and concrete provider implement this separation; the native
+workspace-owned matrix and final joint gate qualify the separate effect owners.
 
 
 The baseline build fails before solving dependencies because `kikan-en-contract` and `kikan-en-client` are absent from the checkout referenced by `cabal.project`. The registered producer checkout has only one worktree. A clean fast-forward to the verified upstream master commit `16704290d527d413568bfa40c983f5c3604c35c8` restored both packages and the baseline core build. FRIC-14 is resolved.
@@ -131,11 +156,11 @@ The baseline build fails before solving dependencies because `kikan-en-contract`
 
 2026-10-29 timeout evidence: under the shared production profile, a command demonstrably started, then its retained unit reported `Result=timeout`, `MainPID=0`, `ExecMainCode=0`, `ExecMainStatus=0` and an empty cgroup. Repeated probes established this behavior in the image's systemd 257; the cause is not established. FRIC-18 records the investigation. Preserve an unavailable numeric status rather than inventing 137 or zero. A timeout/cancellation receipt can prove descendant settlement without proving successful validation; normal completion still requires a known exit status. Upstream's current release was independently verified as v262.1; this finding selects no version pin or unverified upgrade workaround.
 
-2026-10-29 Unix access: native file edits publish private staging files with mode 0600. A process-backed assignment must explicitly provision its workspace identity and preserve that identity's file access on publication; merely mounting the same directory does not make edited files readable by a distinct unprivileged service identity. This remains a process-aware file-adapter/provisioning prerequisite, not a reason to expose provider metadata or weaken the validation service identity.
+2026-10-29 Unix access: native file edits publish private staging files with mode 0600. A process-backed assignment must explicitly provision its workspace identity and preserve that identity's file access on publication; merely mounting the same directory does not make edited files readable by a distinct unprivileged service identity. This required the process-aware file adapter and provisioning owner to preserve exact Unix access on publication without exposing provider metadata.
 
 2026-10-29 queued starts: a correctly described, loaded systemd unit can lack its first invocation identity while its start waits for a prerequisite. Closing capture at that point left the later service blocked opening its output pipes. The collector now keeps them open for a bounded pre-invocation interval, checking the fingerprint throughout. Missing or changed identity after pinning still refuses evidence. The real queued-start regression confirms the expired payload never executes and its nonzero guarded-unit receipt settles independently.
 
-2026-10-29 translated architecture experiment: the arm64 collector/deadline/cancellation probe passes 17 cases, but its amd64 Apple guest settles the first payload with SIGTRAP (exit 133) under the unchanged containment profile. The cause is unknown (FRIC-22). Keep payloads and guards native arm64 while testing whether the trusted remote-built controller can run through translation outside that private namespace; this mixed configuration has not yet passed the coupled gate. The configured remote builder successfully builds the complete Linux runtime, but the current host user cannot directly SSH with its daemon-owned key or use passwordless host sudo. No host credentials were copied into a guest.
+2026-10-29 translated architecture experiment: the arm64 collector/deadline/cancellation probe passes 17 cases, but its amd64 Apple guest settles the first payload with SIGTRAP (exit 133) under the unchanged containment profile. The cause is unknown (FRIC-22). Keep payloads and guards native arm64. The coupled matrix subsequently qualified the trusted remote-built controller through translation outside that private namespace; it does not qualify translated payloads inside containment. The configured remote builder successfully builds the complete Linux runtime, but the current host user cannot directly SSH with its daemon-owned key or use passwordless host sudo. No host credentials were copied into a guest.
 
 2026-10-30 guest clocks: the absolute guard correctly returns nonzero on `timerfd` cancellation before its UTC cutoff. Apple's host-side VM time synchronizer calls the guest time-setting API every thirty seconds, while guest systemd-timesyncd is inactive. This explains the intermittent first-command failures (FRIC-24). The qualified fixture coordinates short held commands after an observed clock step; production clock-change protection remains intact. See `mori://apple/containerization`, project-relative `Sources/Containerization/TimeSyncer.swift` at tag `0.47.0` (artifact URI pending). Installed container CLI is 1.5.0; the authoritative latest release was verified as 1.6.1, without changing the host installation or selecting a new pin.
 
@@ -188,15 +213,43 @@ admission. This supplies no synthetic IR-13 production receipt.
 ## Outcomes & Retrospective
 
 
-Milestones 1–4 are verified. Configured durable workers can perform governed file/process/local Git effects, recover their retained original-attempt receipts, and return one exact commit with validation evidence through the normal parent/child workflow. Explicit terminal cleanup and transfer-aware admissions are implemented. Native exact-artifact integration and workspace-side freeze/restart/late-writer fencing now pass separately. Native follow-up writes, latest-run terminal cleanup and the complete 22-case workspace-owned matrix pass on the corrected controller. Real objective ownership and accepted successor writes remain open, so Milestones 5–6 and full IR-11 acceptance are not complete. Production still selects the earlier qualified adapters.
+Milestones 1–4 are verified. Configured workers now install transfer-aware
+file/process/Git tools and the concrete workspace client beside the real
+objective owner. Native integration, same-owner follow-ups/cleanup and workspace
+freeze/restart/refusal have prior accepted evidence. Final host qualification
+passes on the current implementation and is retained in
+[the host evidence artifact](../evidence/plan-96/host-qualification.json).
+The final joint native gate is running; Milestones 5–6 and IR-11 remain open
+until real ownership recovery and successor effects pass. Plans 84/86 and
+MasterPlan 14 retain their separately owned full-request and adaptive gates.
 
-FRIC-14 was resolved by restoring the missing upstream dependency sources. FRIC-15 was resolved by separating the typed and dynamic authorization fixtures' global provider keys. FRIC-16 was resolved by preserving the core/leaf package boundary for concrete IO fixtures. ADR-0063 distinguishes allocation/cleanup facts from fencing proof. ADR-0059 records frozen instruction and policy admission, while ADR-0025 records the qualified exact file/process/Git adapters and historical file-only compatibility. Real ownership and accepted successor qualification remain open.
+The durable result is the separation of allocation, accepted effect facts,
+session ownership and fresh successor authority. ADR 0063 records the fence and
+real objective-receipt sequence and shared supervisor endpoint; ADR 0059 records
+frozen instructions across follow-ups/transfers and historical adapters. Neither
+an unlocked file nor a session/queue timeout proves process settlement.
 
-FRIC-25, FRIC-27 and FRIC-28 are resolved by qualified guest filesystem/manager readiness and UTF-8 controller setup. These changes preserve signed package verification and the independently cleared repository command environment. FRIC-26, FRIC-29 and FRIC-30 remain logged: each frozen runtime rebuild still recompiles the complete dependency graph, as previously observed in FRIC-23. Focused workflow, continuing and fence modes support iteration; the complete workspace-owned matrix is now 22 cases. Friction triage remains open because real ownership/successor qualification and full plan completion are not established.
-
-FRIC-31 remains logged: close stdin explicitly for batch host tests so the
-fake unattended vendor receives EOF. The corrected agent invocation passes;
-the underlying inherited-input behavior remains available to investigate.
+FRIC-14 is resolved by restoring the missing dependency source; the build now uses its existing source-repository pin.
+FRIC-15 is resolved by separating authorization fixtures' global model-provider keys.
+FRIC-16 is resolved by retaining concrete IO in workers and shared contracts in core.
+FRIC-17 is accepted with two PostgreSQL test threads.
+FRIC-18 is accepted with explicitly absent timeout/cancellation wait status and confirmed zero required for validation success.
+FRIC-19 is accepted with workflow/scaffold checks against committed source.
+FRIC-20 is resolved by the explicit UTF-8 runtime build locale.
+FRIC-21 is accepted with the configured builder for the Haskell controller and Apple containers for runtime qualification.
+FRIC-22 is accepted with native arm64 contained payloads/guards; translated amd64 contained execution remains unqualified.
+FRIC-23 is accepted with the frozen complete runtime as the final qualification input.
+FRIC-24 is accepted with clock-change expiry preserved and short fixture commands coordinated after an observed guest clock step.
+FRIC-25 is resolved by waiting for the guest filesystem before package setup.
+FRIC-26 is accepted with the full runtime rebuild for normal-workflow qualification.
+FRIC-27 is resolved by waiting for guest manager readiness.
+FRIC-28 is resolved by the trusted controller's UTF-8 locale without changing the cleared repository-command environment.
+FRIC-29 is accepted with focused iteration modes and a complete final matrix.
+FRIC-30 is accepted with final rebuilding after fixture corrections.
+FRIC-31 is accepted with stdin from `/dev/null` for unattended batch tests.
+FRIC-42 is resolved by regenerating checked migration/schema/diagram artifacts without changing existing SQL or checksums.
+FRIC-43 is accepted with the cold frozen build at the joint ownership gate; host tests do not replace native acceptance.
+FRIC-44 is resolved by selecting the existing pinned native PostgreSQL 18 server output; both provisioning cases pass with the unchanged runtime.
 
 ## Context and Orientation
 
@@ -209,7 +262,7 @@ A worktree is a separate set of mutable repository files and a separate Git inde
 
 `shikigami-core/src/Shikigami/Capability/Catalog.hs` owns the pure operation-class gate; `shikigami-core/src/Shikigami/Execution/Tools.hs` owns the second gate and live tool binding. `shikigami-core/src/Shikigami/Execution/Runner.hs` defines logical `OperationContext`, which does not identify an actual attempt. Keep that distinction when adding dispatch plumbing. `shikigami-core/src/Shikigami/Execution/Start.hs`, `shikigami-core/src/Shikigami/Execution/Transcript.hs` and `shikigami-core/src/Shikigami/Execution/Policy.hs` own frozen instruction input, its protected snapshot, and context selection. These are required integration surfaces, not optional provider internals. Concrete Git/process IO belongs in workers because core is forbidden from linking process adapters; shared contracts and transactional stores remain in core.
 
-`shikigami-core/src/Shikigami/WorkerSession/Transfer.hs` defines `WorkspaceRef`, `TransferIntent`, `FenceProof` and `WorkspaceProvider`. Its `reconcile` must prove old-owner settlement; `admitWrite` must conditionally check the owner and epoch at the actual effect boundary. The real objective ownership provider from [plan 99](99-supply-trusted-objective-associations-and-the-real-checkpoint-ownership-and-scope-providers.md) supplies IR-13 receipts, independently qualified with deterministic fence evidence; the joint real workspace/restart test still belongs to plan 84. Do not fabricate those receipts here or mark plan 84 complete without them.
+`shikigami-core/src/Shikigami/WorkerSession/Transfer.hs` defines `WorkspaceRef`, `TransferIntent`, `FenceProof` and `WorkspaceProvider`. Its `reconcile` must prove old-owner settlement; `admitWrite` must conditionally check the owner and epoch at the actual effect boundary. The real objective ownership provider from [plan 99](99-supply-trusted-objective-associations-and-the-real-checkpoint-ownership-and-scope-providers.md) supplies IR-13 receipts. `tests/workspace/prototype/Continuing.hs` composes that real owner with the native workspace supervisor for joint restart/successor qualification; plan 84 consumes that evidence while retaining its full IR-15 acceptance. Do not fabricate ownership receipts or infer full consumer completion from workspace-only facts.
 
 [ADR 0036](../adr/0036-external-agent-actions-require-fresh-exact-authorization.md) requires fresh Kikan-En authorization immediately before protected IO. [ADR 0060](../adr/0060-safe-recovery-spends-new-attempts-and-retains-independent-receipts.md) retains independent attempt receipts and conservative reservations after uncertainty. [ADR 0063](../adr/0063-handoffs-establish-epochs-only-after-fences-and-versioned-owner-receipts.md) establishes a successor only after a matching fence and objective-owner receipt. These constraints apply to all provider operations. Follow `docs/workflow-versioning.md` for any workflow-body edits, declaring patch IDs in `domain/` and running `just keiro-gate`.
 
@@ -250,7 +303,7 @@ Wire the same admission view, registry, workspace admission and instruction load
 
 Milestone 5 implements `WorkspaceProvider` against real workspaces and supervised processes. Freeze old-owner admission before waiting for pending operations; retain a deduplicated transfer intent and matching fence receipt. Unknown processes leave transfer unresolved. Successor writes require fresh authority and established ownership; delayed old-owner callbacks fail. Provide a separately allocated integration workspace consuming exact worker commits and bases, report conflicts explicitly, and validate the resulting exact integrated tree. Add operator list/cleanup commands that consult authoritative terminal ownership, conditionally mark cleanup pending and remove only the retained provider-owned worktree. Retain idle sessions and active runs; recover interrupted cleanup without broad directory deletion.
 
-For the successor path, retain the original allocation and effect history unchanged and add explicit retained authority for the successor's session, assignment, run, owner and epoch. Protect any new snapshot/profile contract with exact provider revisions or another versioned profile that older writers refuse before IO. Resolve the session-to-child mapping from authoritative session records, not the trigger payload. Extend independent factual receipt recovery to pending file effects before a transfer can return a settled fence. A successful handoff must exercise the successor's real structured write, not only the abstract `admitWrite` callback or a changed control row. Extend cleanup eligibility to the retained successor assignment/epoch when that contract exists; its current terminal lookup deliberately uses the original allocation owner/run and refuses transferred control rather than guessing.
+For the successor path, retain the original allocation and effect history unchanged and add explicit retained authority for the successor's session, assignment, run, owner and epoch. Protect any new snapshot/profile contract with exact provider revisions or another versioned profile that older writers refuse before IO. Resolve the session-to-child mapping from authoritative session records, not the trigger payload. Extend independent factual receipt recovery to pending file effects before a transfer can return a settled fence. A successful handoff must exercise the successor's real structured write, not only the abstract `admitWrite` callback or a changed control row. Extend cleanup eligibility to the retained successor assignment/epoch when that contract exists; terminal lookup must follow the retained latest admitted owner/run and refuse unknown associations rather than guessing.
 
 Milestone 6 adds `tests/workspace/` fixtures and operator documentation in `docs/operations/workspaces.md`. Exercise all acceptance cases below and update IR-11's status only with evidence. Update plans 84 and 86 and MasterPlan 14 to point to this provider without claiming their unrelated acceptance gates passed. Review decisions for a new ADR, preserving the existing filesystem ADR convention. Triage friction when completion is actually established.
 
@@ -265,7 +318,7 @@ bash tests/workspace/probe-apple-container.sh
 
 It creates a disposable image-pinned Linux container without host mounts, installs D-Bus, checks systemd/cgroup v2 and effective PID/network/capability isolation, prints two passing cases and stops/removes its own container. It does not replace `run-linux.sh --prototype` or `--qualify`. Apple containers are the user's preferred qualification environment; use the configured remote builder only if they cannot support the required fixture.
 
-Run from the repository root. The configured Kikan-En checkout was restored to upstream commit `16704290d527d413568bfa40c983f5c3604c35c8`, which compiles against this project's existing imports. Discover dependencies with Mori and verify released registry versions and upstream tags before changing any pins; this plan does not authorize guessing compatible versions.
+Run from the repository root. The existing `cabal.project` source-repository package and `nix/qualification/cohort.json` pin Kikan-En at `16704290d527d413568bfa40c983f5c3604c35c8`; a local checkout is no longer a build prerequisite. Discover dependencies with Mori and verify released registry versions and upstream tags before changing any pins; this plan does not authorize guessing compatible versions.
 
 ```bash
 mori registry show shinzui/kikan-en --full
@@ -333,7 +386,7 @@ Restart recovery joins the retained unit name, invocation and boot identity to t
 
 Shared types and stores belong in `shikigami-core`; durable runtime composition belongs in `shikigami-workers`; schema changes belong in `shikigami-migrations`. Keep one-off executable dependencies in `shikigami-agent`. Reuse the core `OperationId`, `AttemptId`, `ExecutionRootId`, `WorkerSessionId`, `AssignmentId`, `AgentIdentity`, `WorkspaceRef` and transfer proof contracts rather than introducing alternative identity or accounting stores.
 
-The dependency owner is `mori://shinzui/kikan-en`, specifically its contract and client packages. The current project references local source, restored in this session to verified upstream commit `16704290d527d413568bfa40c983f5c3604c35c8`. Existing process, filesystem, serialization and database dependencies should be reused after source inspection through Mori. Select a new dependency only when the containment/recovery requirements justify it and authoritative releases have been verified.
+The dependency owner is `mori://shinzui/kikan-en`, specifically its contract and client packages. The project uses the existing source-repository pin `16704290d527d413568bfa40c983f5c3604c35c8` in both its Cabal project and frozen Nix cohort. Existing process, filesystem, serialization and database dependencies should be reused after source inspection through Mori. Select a new dependency only when the containment/recovery requirements justify it and authoritative releases have been verified.
 
 The selected operating-system backend is `mori://systemd/systemd`, project-relative `man/systemd.exec.xml`, `man/systemd.service.xml` and `man/systemd.kill.xml`; artifact-level URIs are pending. Mori has no registered systemd source at this revision, so the planning lookup used the corresponding official upstream manuals. No package version or pin is selected here. Implementation must verify the installed backend and authoritative releases before adding bounds, and the fixture must test effective containment rather than assuming a setting is supported. The supervisor owns process settlement facts, while `Shikigami.Execution.Store` remains the sole owner of accepted attempts, resource accounting and terminal publication.
 

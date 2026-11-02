@@ -171,7 +171,7 @@ continuingCase config prefix stage = withQualification config prefix \q -> case 
     next <- loadAssignment q item.admission.rootId child intent.newOwner
     unless (next.workspace == item.admission.workspace && next.bindingDigest == item.admission.bindingDigest && next.instructions == item.admission.instructions && next.epoch == intent.newEpoch) (fail "successor changed allocation or frozen instructions")
     profile <- right =<< run q.env (runTransaction (inspectProcessProfileTx next.workspace))
-    prepared <- prepareTools q.env q.authorizer q.current q.client next [edit "src/integration-c" "0\n" "2\n", edit "src/mode" "orphan\n" "complete\n", validate]
+    prepared <- prepareToolsFor (fixtureAgentName "successor") q.env q.authorizer q.current q.client next [edit "src/integration-c" "0\n" "2\n", edit "src/mode" "orphan\n" "complete\n", validate]
     (lastTool, _) <- runTools q prepared
     after <- right =<< run q.env (runTransaction (inspectProcessProfileTx next.workspace))
     unless (profile == after) (fail "successor changed ready Unix profile")

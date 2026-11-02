@@ -6,7 +6,7 @@ generated:
   by: "codex-cli/gpt-6.1-sol"
   at: "2026-10-30T02:24:48Z"
 frictionId: FRIC-24
-status: logged
+status: "accepted"
 impact: detour
 kind: environment
 origin: "mori://shinzui/shikigami"
@@ -14,6 +14,11 @@ affects: "mori://apple/container"
 affectedVersion: "1.5.0"
 plan: "docs/plans/96-provide-governed-mutable-repository-workspaces-for-durable-agents.md"
 workaround: "Observe the next guest clock step before short fixture admission, hold payloads until the duplicate or restart boundary is proven, then explicitly release them. Keep production clock-change expiry enabled; this fixture workaround does not qualify long-running commands across clock changes."
+resolution: "Keep clock-change expiration enabled and coordinate short qualification commands after observed guest clock steps; long commands across clock changes are not qualified."
+amended:
+  - by: "codex-cli/gpt-6.1-sol"
+    at: "2026-11-02T18:43:40Z"
+    change: "Triage the observed qualification constraint with its retained bounded workaround."
 ---
 # Apple guest clock synchronization cancels absolute deadline guards
 

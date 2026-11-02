@@ -23,6 +23,11 @@ provenance:
       at: 2026-10-30T16:34:26Z
       mode: "update"
       note: "Point qualification at plan 96 retained artifact integration without closing adaptive or objective acceptance"
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-11-02T18:39:36Z
+      mode: "update"
+      note: "Refresh real workspace and objective prerequisites while retaining adaptive and live-trial gates."
 ---
 
 # Qualify integrated adaptive autonomous delivery
@@ -55,6 +60,13 @@ real ownership and accepted successor qualification remain open. This plan
 retains its adaptive coordinator, objective completion and UC-1 acceptance
 gates. Plan 85
 and the real IR-13 provider still gate this plan's live milestones.
+
+2026-11-02 prerequisite update: plan 99 supplies the real objective provider,
+and plan 96 now installs the transfer-aware workspace composition into normal
+workers. Its final real-owner/native successor matrix is running; host evidence
+alone supplies no process fence. This plan remains Not Started and still
+requires plan 85, its adaptive coordinator, integrated objective acceptance and
+the bounded live coding trial. No provider result completes UC-1 by itself.
 
 ## Surprises & Discoveries
 

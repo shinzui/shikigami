@@ -6,7 +6,7 @@ generated:
   by: "codex-cli/gpt-6.1-sol"
   at: "2026-10-29T22:49:23Z"
 frictionId: FRIC-21
-status: "logged"
+status: "accepted"
 impact: detour
 kind: tooling
 origin: "mori://shinzui/shikigami"
@@ -21,6 +21,10 @@ amended:
   - by: "codex-cli/gpt-6.1-sol"
     at: "2026-10-29T23:46:10Z"
     change: "Two-core retry is not a reliable workaround; the same configure/defunct-helper symptom recurred during the profile/primitives build."
+  - by: "codex-cli/gpt-6.1-sol"
+    at: "2026-11-02T18:43:38Z"
+    change: "Triage the observed qualification constraint with its retained bounded workaround."
+resolution: "Use the configured remote builder for the Haskell controller and native Apple containers for runtime qualification; do not depend on the stalled guest configure path."
 ---
 # Cabal configure stayed blocked after its strip helper exited
 

@@ -6,13 +6,18 @@ generated:
   by: "codex-cli/gpt-6.1-sol"
   at: "2026-10-30T16:35:55Z"
 frictionId: FRIC-29
-status: logged
+status: "accepted"
 impact: slowdown
 kind: tooling
 origin: "mori://shinzui/shikigami"
 affects: "mori://shinzui/shikigami"
 plan: "docs/plans/96-provide-governed-mutable-repository-workspaces-for-durable-agents.md"
 workaround: "Batch the integration, continuing-write and process-fence fixtures into one committed runtime; finish host-wide checks and consumer documentation while it builds."
+resolution: "Use focused native modes during iteration and retain the complete frozen runtime at final qualification."
+amended:
+  - by: "codex-cli/gpt-6.1-sol"
+    at: "2026-11-02T18:43:41Z"
+    change: "Triage the observed qualification constraint with its retained bounded workaround."
 ---
 # Expanded workspace gates wait for another frozen cohort rebuild
 

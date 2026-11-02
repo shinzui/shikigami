@@ -6,13 +6,18 @@ generated:
   by: "codex-cli/gpt-6.1-sol"
   at: "2026-10-30T13:30:36Z"
 frictionId: FRIC-26
-status: logged
+status: "accepted"
 impact: slowdown
 kind: tooling
 origin: "mori://shinzui/shikigami"
 affects: "mori://shinzui/shikigami"
 plan: "docs/plans/96-provide-governed-mutable-repository-workspaces-for-durable-agents.md"
 workaround: "Continue the independent terminal cleanup implementation and native C qualification while the committed workflow candidate builds."
+resolution: "Retain complete runtime rebuilding at final normal-workflow qualification despite the build cost."
+amended:
+  - by: "codex-cli/gpt-6.1-sol"
+    at: "2026-11-02T18:43:40Z"
+    change: "Triage the observed qualification constraint with its retained bounded workaround."
 ---
 # Normal workflow qualification waits for a complete runtime rebuild
 

@@ -6,7 +6,7 @@ generated:
   by: "codex-cli/gpt-6.1-sol"
   at: "2026-10-29T20:29:47Z"
 frictionId: FRIC-18
-status: logged
+status: "accepted"
 impact: detour
 kind: interface
 origin: "mori://shinzui/shikigami"
@@ -14,6 +14,11 @@ affects: "mori://systemd/systemd"
 affectedVersion: "257"
 plan: "docs/plans/96-provide-governed-mutable-repository-workspaces-for-durable-agents.md"
 workaround: "Represent unavailable numeric status explicitly for timeout/cancellation only; require normal exit with confirmed code zero for validation success, and retain exact boot/invocation, bounded output and empty-cgroup evidence for settlement."
+resolution: "Keep absent numeric status explicit for timeout/cancellation only; normal validation still requires a confirmed zero exit."
+amended:
+  - by: "codex-cli/gpt-6.1-sol"
+    at: "2026-11-02T18:43:36Z"
+    change: "Triage the observed qualification constraint with its retained bounded workaround."
 ---
 # Systemd timeout evidence can omit numeric wait status
 
