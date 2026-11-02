@@ -238,11 +238,11 @@ openNativeSession q name = do
   parentMemory <- genSessionId
   original <- right =<< loadAgent "/var/lib/shikigami-workspace-fixture-code/agents/triage-note.dhall"
   actor <- VerifiedIdentity <$> right (mkAgentPrincipal "agent_01h000000000000000coordinator")
+  void (right =<< run q.env Catalog.registerProjectionCatalog)
   reference <- if name == "handoff" then seedObjective q actor q.initial.binding.request.owner (fixtureRootId ("continuing-" <> name <> "-root")) else pure (ObjectiveRef (workerCoordinate "uninstalled-objective-provider") (workerCoordinate name))
   let root = fixtureRootId ("continuing-" <> name <> "-root")
       owner = q.initial.binding.request.owner
       admission = SessionAdmission V1 (SessionScope (workerCoordinate ("native-" <> name)) (workerCoordinate "fixture")) reference (original & #name .~ fixtureAgentName "coordinator" & #delegates .~ map fixtureAgentName ["fixture", "successor"]) (DelegateCtx (fixtureDelegationDepth 0) actor (Just parentMemory) Nothing (Just (WorkflowId ("continuing-parent-" <> name))) [fixtureAgentName "coordinator"] Nothing (Just root) Nothing defaultDelegationBudget) (fixtureAgentName "fixture") owner (fixtureLimit 10) (fixtureLimit 4)
-  void (right =<< run q.env Catalog.registerProjectionCatalog)
   void (right =<< run q.env (Roots.enrollRoot root (Resources.Envelope (Map.fromList [(dimension, Resources.ExplicitlyUnbounded) | dimension <- [minBound .. maxBound]]) (addUTCTime 3600 now))))
   void (right =<< run q.env (Sessions.openSession admission))
   when (name == "handoff") do
