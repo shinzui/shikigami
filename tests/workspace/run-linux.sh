@@ -486,8 +486,8 @@ LIFECYCLE
     fi
     "$prototype" continuing "$config" "$prefix" successor >"$prefix/continuing-successor.log" 2>&1
     cat "$prefix/continuing-successor.log"
-    python3 - "$prefix" <<'SUCCESSOR_FENCE'
-import json,socket,struct,sys,time
+    python3 - "$prefix" "$connection" <<'SUCCESSOR_FENCE'
+import json,socket,struct,subprocess,sys,time
 from pathlib import Path
 root=Path(sys.argv[1]); intent=json.loads((root/'continuing-intent.json').read_text())
 def exact(peer,size):
@@ -512,6 +512,12 @@ for _ in range(30):
 old=admitted(intent['oldOwner'],intent['oldEpoch'])
 assert old is False and new is True
 (root/'continuing-successor-fence.json').write_text(json.dumps({'oldOwnerAdmitted':old,'successorAdmitted':new,'oldEpoch':intent['oldEpoch'],'successorEpoch':intent['newEpoch']}))
+ownership=json.loads((root/'continuing-ownership.json').read_text())
+receipts=json.loads(subprocess.check_output(['/usr/bin/psql',sys.argv[2],'-Atc',"SELECT jsonb_agg(jsonb_build_object('objectiveId',objective_id,'operationId',operation_key,'fingerprint',fingerprint,'outcome',outcome)) FROM shikigami.objective_receipts WHERE operation_key LIKE 'objective-handoff:%'"],text=True))
+assert len(receipts)==1 and receipts[0]['objectiveId']==ownership['objective']
+ownership['commandReceipt']=receipts[0]
+ownership['establishedFence']={'oldOwnerAdmitted':old,'successorAdmitted':new,'oldEpoch':intent['oldEpoch'],'successorEpoch':intent['newEpoch']}
+(root/'continuing-ownership.json').write_text(json.dumps(ownership))
 print('PASS established successor authority refuses the former owner at the live workspace write boundary')
 SUCCESSOR_FENCE
   fi
