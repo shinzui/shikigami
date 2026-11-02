@@ -1,5 +1,5 @@
 {
-  "status": "candidate; committed native gate pending",
+  "status": "accepted",
   "baseline": "6881da43",
   "checks": {
     "complete_build": true,
@@ -10,7 +10,7 @@
       "server": 105,
       "workers": 281
     },
-    "final_tracker_postgres": 39,
+    "final_tracker_postgres": 40,
     "final_tracker_http": 2,
     "final_mixed_outbox": 1,
     "served_real_rei": true,
@@ -18,7 +18,15 @@
     "hurl": true,
     "conventions": true,
     "migration_isolation": true,
-    "user_docs": 17
+    "user_docs": 17,
+    "committed_native_conformance": 177,
+    "committed_native_findings": 0,
+    "replay_impact": "replay-neutral",
+    "committed_served_runner": true,
+    "checkpoint_filter_executed_cases": 39,
+    "disabled_accepted_read_recovery": true,
+    "final_api_tests": 35,
+    "final_server_tests": 105
   },
   "runtime_cohort": {
     "packages": 385,
@@ -52,5 +60,16 @@
     "projected read lag is not non-application proof",
     "SDK pair uses an immutable public source pin rather than a Hackage release",
     "repository containment and Linux runtime qualification are separate"
+  ],
+  "candidate": "bfeb1565",
+  "serving_candidate": "44acf08b",
+  "validation_scope": "Broad package regressions were followed by final qualification of the changed storage/control paths (40 PostgreSQL, two HTTP and one mixed-outbox case), complete final build, 35 API/105 server cases and the committed native gate. The served runner and its nonempty checkpoint/conformance selection pass at 44acf08b; bfeb1565 additionally qualifies disabled-control recovery.",
+  "commands": [
+    "nix develop --no-write-lock-file -c cabal build all -f-objective-tracker-rei-tests -j2",
+    "nix develop --no-write-lock-file -c just keiro-gate 6881da43",
+    "nix develop --no-write-lock-file -c bash tests/objective-trackers/run.sh",
+    "nix develop --no-write-lock-file -c bash tests/objective-tracking/run.sh",
+    "nix develop --no-write-lock-file -c just hurl",
+    "nix develop --no-write-lock-file -c just user-docs-validate"
   ]
 }

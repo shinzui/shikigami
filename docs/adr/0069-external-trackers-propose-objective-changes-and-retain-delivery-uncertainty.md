@@ -104,8 +104,7 @@ full-document digests. The serving perimeter limits commands to 1 MiB and protec
 replies to 16 KiB. A local instructions preview supports before/after review without
 expanding the original objective metadata view. The real server/worker/CLI journey
 qualifies uncertain append recovery, exact attestation/replay, local conflicts,
-independent lifecycle, revocation, access loss and incarnation isolation. Public
-compatibility and regression evidence belongs to plan 105's completion record.
+independent lifecycle, revocation, access loss and incarnation isolation. [Public compatibility and regression evidence](../evidence/plan-105/qualification.json) accepts the served journey and final 177-check native gate, with no findings and neutral replay.
 MasterPlan 17's no-Rei feature and acceptance gate remain independently useful.
 
 ## References

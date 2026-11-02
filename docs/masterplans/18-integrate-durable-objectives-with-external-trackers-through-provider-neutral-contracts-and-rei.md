@@ -65,7 +65,7 @@ Upstream decisions were discovered through Mori: `mori://shinzui/rei/okf/adrs/co
 |---|---|---|---|---|---|
 | EP-1 | Persist provider-neutral bindings and synchronization receipts | [103-persist-provider-neutral-objective-tracker-bindings-and-synchronization-receipts.md](../plans/103-persist-provider-neutral-objective-tracker-bindings-and-synchronization-receipts.md) | MasterPlan 17 Complete | None | Complete |
 | EP-2 | Adapt Rei intentions and actions | [104-adapt-rei-intentions-and-actions-to-objective-tracker-contracts.md](../plans/104-adapt-rei-intentions-and-actions-to-objective-tracker-contracts.md) | EP-1 | None | Complete |
-| EP-3 | Expose and qualify external synchronization | [105-expose-and-qualify-recoverable-external-objective-synchronization.md](../plans/105-expose-and-qualify-recoverable-external-objective-synchronization.md) | EP-1, EP-2 | None | In Progress |
+| EP-3 | Expose and qualify external synchronization | [105-expose-and-qualify-recoverable-external-objective-synchronization.md](../plans/105-expose-and-qualify-recoverable-external-objective-synchronization.md) | EP-1, EP-2 | None | Complete |
 
 Whole-child dependencies require Complete. Status values are Not Started, In Progress, Complete and Cancelled. Planning can precede prerequisites; implementation cannot.
 
@@ -98,7 +98,7 @@ EP-1 consumes the delivered objective transaction and authorization owner. EP-2 
 
 ## Progress
 
-2026-11-02: EP-1 and EP-2 are Complete. [Plan 103 evidence](../evidence/plan-103/qualification.json) accepts the provider-neutral engine; [plan 104 evidence](../evidence/plan-104/qualification.json) accepts the pinned real Rei adapter, supervised polling, mixed outbox routing, 17 live fault cases, complete build, four-package regression and 177 native conformance checks. Rei's weak append capability retains Unknown without resend. EP-3 is the next eligible child and owns public controls plus full served interoperability. MasterPlan 17's independent no-Rei acceptance remains intact.
+2026-11-02: All three children are Complete. [Plan 103 evidence](../evidence/plan-103/qualification.json) accepts the provider-neutral engine; [plan 104 evidence](../evidence/plan-104/qualification.json) accepts the real pinned Rei adapter; [plan 105 evidence](../evidence/plan-105/qualification.json) accepts authenticated API/client/CLI controls and the served two-service recovery journey. Final code `bfeb1565` passes complete build, final changed-path checks, API/server regression and 177 native conformance checks with no findings and neutral replay. MasterPlan 17's independent no-Rei continuity and Hurl gates pass with tracking disabled.
 
 
 ## Surprises & Discoveries
@@ -106,7 +106,7 @@ EP-1 consumes the delivered objective transaction and authorization owner. EP-2 
 2026-11-02: EP-1 required separate objective/tracker projection ownership on the same ObjectiveLifecycle source; both group fences and callbacks now share one append transaction. Connection incarnation labels alone cannot detect endpoint/account edits, so retained target fingerprints prevent redirection and configuration permits historical incarnations for read-only recovery. ADR 0069 records these shared constraints.
 
 
-The existing ReiAction sink claims Rei has no HTTP API and posts to `/v1/agent-actions`; Mori-discovered source now exposes a v2 API. The current action handler generates a fresh remote action ID on every request, while its request type has no idempotency key. This prevents safe automatic replay after an ambiguous send and determines EP-2’s quarantine requirement. The real disposable-server adapter qualification now passes, including lost responses and fresh dispatcher processes. Public-entrypoint qualification remains EP-3’s gate.
+The existing ReiAction sink claims Rei has no HTTP API and posts to `/v1/agent-actions`; Mori-discovered source now exposes a v2 API. The current action handler generates a fresh remote action ID on every request, while its request type has no idempotency key. This prevents safe automatic replay after an ambiguous send and determines EP-2’s quarantine requirement. The real disposable-server adapter qualification now passes, including lost responses and fresh dispatcher processes. Public-entrypoint qualification now passes through the real Shikigami server, worker and configured-operator CLI.
 
 
 ## Decision Log
@@ -133,7 +133,11 @@ The existing ReiAction sink claims Rei has no HTTP API and posts to `/v1/agent-a
 ## Outcomes & Retrospective
 
 
-(To be filled during and after implementation; no runtime acceptance is claimed.)
+Complete. The provider-neutral engine retains authoritative objective execution, reviewed external proposals, immutable publications and independent delivery receipts. The qualified Rei adapter uses the real v2 typed contract, with no server idempotency or conditional append claim. Lost acknowledgement remains Unknown across process restart until exact verified, authenticated attestation establishes delivery; matching markers and empty projected reads never authorize resend.
+
+The public API, typed client and operator CLI preserve caller identity, resource/connection grants, exact operation replay, bounded previews and scoped pages. Queued provider reads share the existing preserved command target and primary key, preserving catalog identity. Real served qualification passes proposal conflicts/rejection, independent lifecycle, both Shikigami process restarts, zero second POSTs, revocation, remote access loss, paused export and incarnation isolation. The final tracker suite has 40 PostgreSQL cases; broader regressions, the 17-case real-adapter suite, no-Rei continuity, Hurl, OpenAPI and documentation validation pass. Final native compatibility has 177 checks, no findings and neutral replay; EP-1's separately recorded additive fold warning remains understood in its own evidence.
+
+Rei client/contract 0.2.0.0 and server 8.0.0.0 are qualified at public immutable commit `c109222db550537ec998ecc6fc1866cc7a35e29a` in `mori://shinzui/rei`. The SDK pair is not a Hackage release; its explicit source pin follows the dependency policy. The production export contains 385 packages/seven immutable repositories and only the Rei client/contract packages. No cold Nix build, production deployment or repository containment claim follows. Durable authority, uncertainty and queue ownership are distilled in ADR 0069; the exact CLI composition exception is recorded in ADR 0075. MasterPlan 17 and the original IR-13 boundary remain intact.
 
 
 ## Revision Notes
