@@ -1,5 +1,5 @@
 {
-  "status": "candidate; native gate pending",
+  "status": "accepted",
   "baseline": "a787d3fe",
   "server": {
     "project": "mori://shinzui/rei",
@@ -19,7 +19,10 @@
     "mixed_outbox_test": true,
     "cohort_tool_tests": 21,
     "migration_isolation": true,
-    "haskell_conventions": true
+    "haskell_conventions": true,
+    "native_conformance": 177,
+    "native_compatibility_gate": true,
+    "final_worker_router_rebuild": true
   },
   "runtime_cohort": {
     "packages": 385,
@@ -56,5 +59,6 @@
   ],
   "friction": {
     "FRIC-41": "accepted; enter owning checkout before foreign dev shell"
-  }
+  },
+  "candidate": "c3e7f7f7"
 }

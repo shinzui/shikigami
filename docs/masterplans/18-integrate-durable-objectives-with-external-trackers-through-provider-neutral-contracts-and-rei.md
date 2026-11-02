@@ -64,7 +64,7 @@ Upstream decisions were discovered through Mori: `mori://shinzui/rei/okf/adrs/co
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|---|---|---|---|---|
 | EP-1 | Persist provider-neutral bindings and synchronization receipts | [103-persist-provider-neutral-objective-tracker-bindings-and-synchronization-receipts.md](../plans/103-persist-provider-neutral-objective-tracker-bindings-and-synchronization-receipts.md) | MasterPlan 17 Complete | None | Complete |
-| EP-2 | Adapt Rei intentions and actions | [104-adapt-rei-intentions-and-actions-to-objective-tracker-contracts.md](../plans/104-adapt-rei-intentions-and-actions-to-objective-tracker-contracts.md) | EP-1 | None | In Progress |
+| EP-2 | Adapt Rei intentions and actions | [104-adapt-rei-intentions-and-actions-to-objective-tracker-contracts.md](../plans/104-adapt-rei-intentions-and-actions-to-objective-tracker-contracts.md) | EP-1 | None | Complete |
 | EP-3 | Expose and qualify external synchronization | [105-expose-and-qualify-recoverable-external-objective-synchronization.md](../plans/105-expose-and-qualify-recoverable-external-objective-synchronization.md) | EP-1, EP-2 | None | Not Started |
 
 Whole-child dependencies require Complete. Status values are Not Started, In Progress, Complete and Cancelled. Planning can precede prerequisites; implementation cannot.
@@ -98,16 +98,7 @@ EP-1 consumes the delivered objective transaction and authorization owner. EP-2 
 
 ## Progress
 
-2026-11-02 EP-2 milestone 1: the real Rei 8.0.0.0 server and paired typed 0.2.0.0 client/contract at public commit `c109222db550537ec998ecc6fc1866cc7a35e29a` pass an API-created intention read, action publication and receipt verification through the shared executor, plus real bearer refusal. The pair is not on Hackage and uses the documented immutable source-pin exception. EP-2 stays In Progress for worker routing, fault/restart qualification and packaging evidence.
-
-2026-11-02 EP-1 Complete: candidate `9b34e4e5` passes final 22 tracker unit and 34 PostgreSQL cases, complete build, convention/migration checks and the native gate (177 checks; 11 additive findings, one understood fold-surface warning, neutral replay). [Plan 103 evidence](../evidence/plan-103/qualification.json) retains the broad regression run and recovery boundary. EP-2 is now eligible; EP-3 still requires EP-2 Complete. The real disposable Rei and public-control gates remain open.
-
-2026-11-02 EP-1 qualification: the provider-neutral engine and shared objective transaction seam are implemented. The four-package regression run passes 660 core, 533 PostgreSQL, 103 server and 280 worker cases; final focused qualification passes 22 tracker unit and 34 PostgreSQL cases. Complete build, migration isolation and convention checks pass. EP-1 remains In Progress pending its committed-candidate native gate; EP-2 and EP-3 retain their whole-child prerequisites. No Rei runtime or public tracker controls are claimed.
-
-2026-11-02: MasterPlan 17 and all five children are Complete, with retained no-Rei serving qualification in `docs/evidence/plan-102/qualification.json`. Verified at implementation baseline `6d816d5ed49292ff48f985e066d787a1ac146a41`. EP-1 is In Progress; its delivered objective owner is `Objective/Capability.hs` and `Objective/Store.hs`, and the current checked domain is `domain/shikigami/objective.keiro`. EP-2 and EP-3 retain whole-child prerequisites.
-
-
-2026-10-29 review at `05030629901d7ce95cdcd9aba3b1fa01b25f06c0`: Planning only. Objective modules and the no-Rei qualification runner are still absent; the prerequisite has not advanced. Rei remains at the inspected revision. Review fixes define shared dispatch ownership, both outbox routing callbacks, and the missing attestation contract across all children. All children are Not Started and implementation waits on MasterPlan 17. The registry owns status. Remaining initiative acceptance is a real disposable Rei roundtrip plus fault/restart qualification through public controls; an adapter mock alone cannot close it.
+2026-11-02: EP-1 and EP-2 are Complete. [Plan 103 evidence](../evidence/plan-103/qualification.json) accepts the provider-neutral engine; [plan 104 evidence](../evidence/plan-104/qualification.json) accepts the pinned real Rei adapter, supervised polling, mixed outbox routing, 17 live fault cases, complete build, four-package regression and 177 native conformance checks. Rei's weak append capability retains Unknown without resend. EP-3 is the next eligible child and owns public controls plus full served interoperability. MasterPlan 17's independent no-Rei acceptance remains intact.
 
 
 ## Surprises & Discoveries
@@ -115,7 +106,7 @@ EP-1 consumes the delivered objective transaction and authorization owner. EP-2 
 2026-11-02: EP-1 required separate objective/tracker projection ownership on the same ObjectiveLifecycle source; both group fences and callbacks now share one append transaction. Connection incarnation labels alone cannot detect endpoint/account edits, so retained target fingerprints prevent redirection and configuration permits historical incarnations for read-only recovery. ADR 0069 records these shared constraints.
 
 
-The existing ReiAction sink claims Rei has no HTTP API and posts to `/v1/agent-actions`; Mori-discovered source now exposes a v2 API. The current action handler generates a fresh remote action ID on every request, while its request type has no idempotency key. This prevents safe automatic replay after an ambiguous send and determines EP-2’s quarantine requirement. No live interoperability test has yet run.
+The existing ReiAction sink claims Rei has no HTTP API and posts to `/v1/agent-actions`; Mori-discovered source now exposes a v2 API. The current action handler generates a fresh remote action ID on every request, while its request type has no idempotency key. This prevents safe automatic replay after an ambiguous send and determines EP-2’s quarantine requirement. The real disposable-server adapter qualification now passes, including lost responses and fresh dispatcher processes. Public-entrypoint qualification remains EP-3’s gate.
 
 
 ## Decision Log
