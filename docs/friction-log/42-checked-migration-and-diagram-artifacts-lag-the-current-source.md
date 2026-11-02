@@ -6,13 +6,18 @@ generated:
   by: "codex-cli/gpt-6.1-sol"
   at: "2026-11-02T18:24:43Z"
 frictionId: FRIC-42
-status: logged
+status: "resolved"
 impact: detour
 kind: tooling
 origin: "mori://shinzui/shikigami"
 affects: "mori://shinzui/shikigami"
 plan: "docs/plans/96-provide-governed-mutable-repository-workspaces-for-durable-agents.md"
 workaround: "Regenerate the checked artifacts using the repository commands, inspect their changes against current source, then rerun the failed suites."
+resolution: "Regenerated the missing migration checksums, reviewed schema additions and lifecycle atlas; all nine migration definition, eleven database smoke and diagram tests pass."
+amended:
+  - by: "codex-cli/gpt-6.1-sol"
+    at: "2026-11-02T18:27:26Z"
+    change: "Restore final qualification against the current source without changing deployed SQL."
 ---
 # Checked migration and diagram artifacts lag the current source
 

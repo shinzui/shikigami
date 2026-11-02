@@ -1,6 +1,8 @@
 # Bundle Update Log
 
 ## 2026-11-02
+* **Addition**: FRIC-43 records slowdown tooling friction with mori://shinzui/shikigami: Joint successor qualification waits for a cold frozen runtime build
+* **Update**: FRIC-42 resolved: Restore final qualification against the current source without changing deployed SQL.
 * **Addition**: FRIC-42 records detour tooling friction with mori://shinzui/shikigami: Checked migration and diagram artifacts lag the current source
 * **Update**: FRIC-41 accepted: Accept the isolated launcher workaround; no upstream repository changes are needed for this qualification.
 * **Addition**: FRIC-41 records detour environment friction with mori://shinzui/rei: A foreign dev shell installs hooks in the caller checkout

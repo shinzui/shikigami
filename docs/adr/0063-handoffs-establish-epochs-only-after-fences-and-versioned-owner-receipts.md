@@ -112,6 +112,16 @@ accepted-read and instrumented process/Git tests pass; production selection
 remains on the qualified older adapters until real Linux successor writes and
 handoff pass.
 
+Configured process-backed workers compose the transfer-aware host and the
+real objective ownership provider through the same peer-checked supervisor
+endpoint used for process admission. File-only configuration supplies no
+process fence. The coordination owner derives the parent actor from the retained
+session binding; a submitted transfer cannot choose its authenticated host.
+Ownership response loss leaves the session frozen even after the objective
+command commits. A new controller recovers that exact receipt before conditional
+successor workspace admission. Receipt recovery and ownership establishment
+remain separate from fresh authority for the successor's file or process effect.
+
 ## Alternatives rejected
 
 Transferring on lease expiry would permit simultaneous writers. Cancelling a

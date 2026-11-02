@@ -22,10 +22,11 @@ adapter have passed the native accepted-executor qualification. An explicit
 `workspaces.process` configuration installs them into the configured worker;
 omitting it retains file revision 1. The normal parent/child workflow passes
 the full fourteen-case native gate.
-The complete workspace-owned matrix now passes 22 cases, including integration,
-follow-up writes/cleanup and native fencing. Real objective ownership, accepted
-successor writes and final IR-11 qualification remain delivery gates in
-[plan 96](../plans/96-provide-governed-mutable-repository-workspaces-for-durable-agents.md).
+The workspace-owned matrix covers integration, follow-up writes/cleanup and
+native fencing. The full `--qualify` matrix also requires real objective
+ownership recovery and accepted successor writes across restart; see
+[plan 96](../plans/96-provide-governed-mutable-repository-workspaces-for-durable-agents.md)
+for the accepted runtime and evidence.
 Enablement requires the explicit reviewed process configuration and a qualified
 image and containment profile.
 
@@ -44,6 +45,7 @@ bash tests/workspace/run-apple.sh --prototype
 bash tests/workspace/run-apple.sh --git
 bash tests/workspace/run-apple.sh --workflow
 bash tests/workspace/run-apple.sh --workspace-gates
+bash tests/workspace/run-apple.sh --qualify
 ```
 
 The first command checks ten process/provisioning cases. The second includes
@@ -64,10 +66,13 @@ on runtime `20e8e80`;
 [bounded native facts](../evidence/plan-96/native-workspace-facts.json) retain
 artifacts, validation receipts, follow-up ownership and the fence. The focused
 `--continuing-only` and `--handoff-only` modes run seven and six cases
-respectively. `--qualify` runs the same checks and then
-refuses full qualification while the real objective ownership provider is
-unavailable. It never substitutes an objective ownership receipt. Neither mode
-enables the transfer-aware adapters in production.
+respectively. `--qualify` adds three cases: the real objective owner commits
+ownership while a lost acknowledgement leaves the session frozen, then a new
+controller recovers its exact receipt after supervisor restart and requires an
+accepted successor edit and native validation in the same workspace. Finally it
+checks that the live write boundary admits the established successor and refuses
+the former owner under restored authority. It expects 25 cases overall. Receipts come from the production objective and workspace
+owners. The runner creates no production configuration.
 
 The runner builds its controller through the configured Nix builder, copies its closure
 through Nix, creates a task-specific container and temporary SSH credentials,
@@ -87,7 +92,7 @@ commands retain the separately cleared environment from their admitted rule.
 
 ## Local Git contracts
 
-The local Git adapter is `workspace.git:1`, with namespaced `status`, `diff`
+Fresh supervised assignments use `workspace.git:2`, with namespaced `status`, `diff`
 and `commit` tools. Exact operator installation, an explicit capability
 declaration, the process-aware filesystem profile and a ready retained Unix
 profile are all required. Tool description performs no repository IO.
@@ -142,9 +147,12 @@ transfer-aware tools. The explicit `configuredWorkspaceHostWithTransfers`
 composition selects file revision 3, process revision 2 and Git revision 2 under
 `ascii-exact-transfer-v1`. It preserves old adapters, pinned instructions and the
 ready Unix identity, and requires a separate retained successor admission.
-Production selection remains on the previously qualified revisions until the
-real objective ownership and accepted native successor-write gate passes.
-Workspace-side native fencing and same-owner follow-up writes are qualified.
+Configured production workers select this composition and install its
+peer-checked workspace transfer client into objective coordination. A successor
+requires the retained session fence and real objective ownership receipt before
+its separate conditional workspace admission. File-only hosts supply no process
+fence. Historical file/process/Git revisions remain registered for accepted
+snapshots; installing newer descriptors does not change their frozen authority.
 Same-owner follow-ups at the original epoch reuse that allocation only after
 the preceding assignments and executions are terminal and all receipts settle.
 An unsettled allocation refuses reuse; it does not create a replacement copy.
@@ -152,8 +160,7 @@ An unsettled allocation refuses reuse; it does not create a replacement copy.
 Do not repair exposed receipt-directory permissions and then trust its contents.
 Do not remove pending workspace directories, replace receipt files, clear
 reservations or recycle reserved Unix identities to regain capacity. Explicit terminal cleanup retains provider metadata and receipts. The operator commands
-below are implemented. Native integration and workspace fencing pass; real
-ownership transfer and accepted successor-write qualification remain open.
+below require the retained terminal execution and settled effects.
 
 ## Terminal cleanup
 
@@ -192,7 +199,7 @@ uncertain effects or provide general deletion of arbitrary host directories.
 
 ## Exact artifact integration
 
-The explicit qualification host also offers `workspace.integrate:1`. An agent
+The supervised configured host also offers `workspace.integrate:1`. An agent
 must declare that capability to see `overlay__workspace-integrate__plan`.
 Supply an exact target parent and two to eight retained worker artifact
 references (`operationId`, `bindingDigest`, `base`, `revision`). Sources must be
@@ -210,6 +217,6 @@ replacements/creation in existing directories; deletions, binary changes, new
 directories and executable-mode changes refuse. Unchanged binary objects remain
 exact. The complete proposal is limited to 32 KiB and 256 changed paths.
 
-The production host still selects the earlier qualified revisions. Native
-successor writes and the real objective ownership provider remain separate
-activation gates; an integration test supplies neither.
+The integration planner supplies no ownership authority. Transfer continues to
+require the session fence and separate real objective receipt, even when all
+worker and combined validations succeed.

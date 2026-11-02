@@ -86,6 +86,15 @@ committed attempts. Local driving has a bounded advance allowance and yields for
 human decisions, live claims and unresolved effects. Existing workspace provider
 lifetime and recovery limits remain unchanged.
 
+Continuing follow-ups and ownership successors reuse the original allocation,
+ready Unix profile and frozen instruction bundle. Each actual child retains a
+separate admission binding its run, assignment, owner and epoch. The process-backed
+worker selects `ascii-exact-transfer-v1` and file/process/Git revisions 3/2/2 for
+fresh assignments, while registering earlier exact adapters for retained
+snapshots. Neither a successor's current configuration nor repository edits can
+reinterpret the original instruction scopes. Historical execution can resume
+without provisioning a new profile or gaining the newer tools.
+
 ## Consequences
 
 Workers, conversations and both one-off commands receive policy from the shared

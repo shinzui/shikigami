@@ -1,0 +1,59 @@
+{
+  "build": {
+    "command": "nix develop --no-write-lock-file -c cabal build all",
+    "exitCode": 0
+  },
+  "candidateCommit": "8d1ee35e948c785d568e517cbe6ad113b1c5d14c",
+  "date": "2026-11-02",
+  "historicalCompatibility": {
+    "case": "installing the transfer-aware host preserves an admitted file-only execution without provisioning it",
+    "count": 1,
+    "exitCode": 0
+  },
+  "migrationSchemaIsolation": {
+    "command": "bash tools/check-migration-schema-isolation.sh",
+    "existingChecksumsChanged": false,
+    "existingSqlChanged": false,
+    "exitCode": 0,
+    "newCheckedEntries": [
+      35,
+      36,
+      37
+    ]
+  },
+  "nativeAcceptance": "Recorded separately; host checks alone do not establish containment or ownership fencing.",
+  "nixChecks": {
+    "command": "nix flake check --no-write-lock-file",
+    "count": 2,
+    "exitCode": 0,
+    "system": "aarch64-darwin"
+  },
+  "packaging": {
+    "command": "python3 -m unittest discover -s tools/qualification -p 'test_*.py'",
+    "count": 21,
+    "exitCode": 0
+  },
+  "plan": "docs/plans/96-provide-governed-mutable-repository-workspaces-for-durable-agents.md",
+  "tests": {
+    "command": "nix develop --no-write-lock-file -c cabal test all --test-options=-j2 --test-show-details=direct </dev/null",
+    "counts": {
+      "agent": 37,
+      "api": 35,
+      "client": 9,
+      "core": 661,
+      "diagrams": 6,
+      "migrationDefinition": 9,
+      "migrationSmoke": 11,
+      "postgres": 543,
+      "server": 105,
+      "workers": 281
+    },
+    "exitCode": 0,
+    "generatedDomainAndConformance": "passed"
+  },
+  "workflow": {
+    "command": "nix develop --no-write-lock-file -c just keiro-gate 0e099c12",
+    "exitCode": 0,
+    "storedDataReplay": "neutral"
+  }
+}

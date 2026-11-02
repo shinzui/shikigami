@@ -610,10 +610,13 @@ recovery contracts.
 ### Supervised repository files, validation and local Git
 
 Add an optional `process` object inside the same `workspaces` setting to select
-`workspace.edit:2`, `workspace.exec:1` and `workspace.git:1`. Each Skill still
-needs to declare each requested capability. New process assignments use
-`ascii-exact-process-v1`; accepted file-only snapshots retain their original
-profile and exact adapter. This installation adds no workflow labels: the
+`workspace.edit:3`, `workspace.exec:2`, `workspace.git:2` and the optional
+`workspace.integrate:1` planner. Each Skill still needs to declare each requested
+capability. New process assignments use `ascii-exact-transfer-v1`; accepted
+file-only and process snapshots retain their original profiles and exact adapters.
+The same peer-checked supervisor client supplies fencing to the objective
+ownership provider. Session ownership, its objective receipt and a separate
+conditional workspace admission must agree before successor effects. This installation adds no workflow labels: the
 existing governed-workspace branch already freezes the selected descriptors.
 
 The host runs on the qualified Linux/systemd/cgroup-v2 environment as a trusted

@@ -486,6 +486,34 @@ LIFECYCLE
     fi
     "$prototype" continuing "$config" "$prefix" successor >"$prefix/continuing-successor.log" 2>&1
     cat "$prefix/continuing-successor.log"
+    python3 - "$prefix" <<'SUCCESSOR_FENCE'
+import json,socket,struct,sys,time
+from pathlib import Path
+root=Path(sys.argv[1]); intent=json.loads((root/'continuing-intent.json').read_text())
+def exact(peer,size):
+    value=b''
+    while len(value)<size:
+        chunk=peer.recv(size-len(value)); assert chunk; value+=chunk
+    return value
+def admitted(owner,epoch):
+    with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as peer:
+        peer.settimeout(5); peer.connect(str(root/'rpc/supervisor.sock'))
+        _,uid,_=struct.unpack('3i',peer.getsockopt(socket.SOL_SOCKET,socket.SO_PEERCRED,12)); assert uid==0
+        body=json.dumps({'format':2,'action':'admitWrite','workspace':intent['workspace'],'sessionId':intent['sessionId'],'owner':owner,'epoch':epoch,'operationId':intent['operationId']},separators=(',',':')).encode(); assert 0<len(body)<=4096
+        peer.sendall(struct.pack('!I',len(body))+body)
+        size=struct.unpack('!I',exact(peer,4))[0]; assert 0<size<=8192
+        reply=json.loads(exact(peer,size)); assert reply.get('format')==2 and type(reply.get('admitted')) is bool
+        return reply['admitted']
+new=False
+for _ in range(30):
+    new=admitted(intent['newOwner'],intent['newEpoch'])
+    if new: break
+    time.sleep(.1)
+old=admitted(intent['oldOwner'],intent['oldEpoch'])
+assert old is False and new is True
+(root/'continuing-successor-fence.json').write_text(json.dumps({'oldOwnerAdmitted':old,'successorAdmitted':new,'oldEpoch':intent['oldEpoch'],'successorEpoch':intent['newEpoch']}))
+print('PASS established successor authority refuses the former owner at the live workspace write boundary')
+SUCCESSOR_FENCE
   fi
   /usr/bin/psql "$connection" -Atc "SELECT to_jsonb(e) FROM shikigami.executions e UNION ALL SELECT to_jsonb(o) FROM shikigami.execution_transcript_operations o UNION ALL SELECT result FROM keiro.keiro_workflow_steps" >"$prefix/public-metadata.jsonl"
   python3 - "$prefix" <<'PRIVACY'
@@ -509,6 +537,6 @@ PRIVACY
   fi
 
   if [[ "$mode" == --qualify ]]; then
-    echo 'Full governed workspace qualification passed (24 cases), including real objective ownership and accepted successor writes across restart.'
+    echo 'Full governed workspace qualification passed (25 cases), including real objective ownership and accepted successor writes across restart.'
   fi
 fi
