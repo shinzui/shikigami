@@ -21,7 +21,7 @@ authority="$task-authority.service"
 oauth="$task-oauth.service"
 prototype="$runtime/bin/shikigami-workspace-prototype"
 config="$prefix/config.json"
-pg_bindir=$(/usr/bin/pg_config --bindir)
+pg_bindir=
 pg_started=false
 cases=(duplicate worker-restart supervisor-restart cancellation completion-recovery denials capture-loss authority-denial)
 if [[ "$mode" == --git || "$mode" == --workflow || "$mode" == --workspace-gates || "$mode" == --qualify ]]; then cases+=(git-upgrade git-recovery git-denial); fi
@@ -81,6 +81,14 @@ printf fixture-host-secret >"$prefix/host-secret"
 printf fixture-sibling-secret >"$prefix/sibling/secret"
 printf immutable >"$prefix/root/etc/probe-immutable"
 chmod 666 "$prefix/root/etc/probe-immutable"
+# Allocation now uses PostgreSQL 18's native uuidv7(), as do host tests and the
+# frozen runtime. Materialize that existing pinned package for the guest's
+# native architecture instead of selecting the image's older apt server.
+postgres_reference='github:NixOS/nixpkgs/d5dfd8e6716dde34398bc14bc87c10dece9c8c68#postgresql_18'
+nix --extra-experimental-features 'nix-command flakes' build --no-link --no-write-lock-file "$postgres_reference" >"$prefix/nix-postgres.log" 2>&1
+postgres=$(nix --extra-experimental-features 'nix-command flakes' path-info "$postgres_reference")
+pg_bindir="$postgres/bin"
+"$pg_bindir/postgres" --version >"$prefix/postgres-version.log"
 runuser -u postgres -- "$pg_bindir/initdb" -D "$prefix/pg" --auth=trust --no-locale --encoding=UTF8 >"$prefix/pg-init.log" 2>&1
 port=$(python3 - <<'PY'
 import socket
