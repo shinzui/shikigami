@@ -32,6 +32,13 @@ workflow AgentRun
     step decision-result-investigate -> DecisionOutcome
     step route-catalog-architecture-practice -> CandidateCatalog
     step worker-coordination-policy -> CoordinationPolicyResolution
+    patch shikigami-objective-tracking-v1 {
+      step objectives-policy -> ObjectivePolicyResolution
+      step objectives-example-create -> ObjectiveReply
+      step objectives-example-plan -> ObjectiveReply
+      step objectives-example-progress -> ObjectiveReply
+      step objectives-example-inspect -> ObjectiveReply
+    }
     step route-decision-architecture-practice -> RouteDecision
     step recall-risk-history -> RecalledLearnings
     step remember-acknowledged -> RecordedLearning

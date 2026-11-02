@@ -15,6 +15,7 @@ import Shikigami.GrantStoreSpec qualified as GrantStoreSpec
 import Shikigami.Migrations.TestSupport (withShikigamiMigratedSuite)
 import Shikigami.ObjectiveCheckpointSpec qualified as ObjectiveCheckpointSpec
 import Shikigami.ObjectiveStoreSpec qualified as ObjectiveStoreSpec
+import Shikigami.ObjectiveWorkflowSpec qualified as ObjectiveWorkflowSpec
 import Shikigami.PracticeReviewMemorySpec qualified as PracticeReviewMemorySpec
 import Shikigami.PracticeReviewOrchestrationSpec qualified as PracticeReviewOrchestrationSpec
 import Shikigami.ProfileResolutionSpec qualified as ProfileResolutionSpec
@@ -45,6 +46,7 @@ suite = withShikigamiMigratedSuite \databaseFixture ->
         [ AppSpec.tests databaseFixture,
           ObjectiveStoreSpec.tests databaseFixture,
           ObjectiveCheckpointSpec.tests databaseFixture,
+          ObjectiveWorkflowSpec.tests databaseFixture,
           LedgerSpec.tests databaseFixture,
           AgentWorkflowSpec.tests databaseFixture,
           DecisionEvidenceSpec.tests databaseFixture,

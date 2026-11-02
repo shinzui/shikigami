@@ -432,7 +432,7 @@ withAcceptedWorkspaceTool toolCount install agent wire token env admission runti
   registry <- right (installDurableAdapters [adapter] emptyCapabilityProviderRegistry)
   catalog <- right (mkCapabilityCatalog [adapter.descriptor])
   capabilities <- right (resolveGovernedCapabilityOverlays (durableAdapterInstalled registry) catalog (\_ _ -> Right ()) (ResolutionSubject (fmap declarationCoordinate ((Just (agentNameText agent)))) Durable (Skill (declarationCoordinate ("fixture"))) Nothing) [adapter.descriptor.capability])
-  let initial = ExecutionSnapshot V1 (executionIdFor assignment) admission.runId agent identity session selection Nothing (SkillInstructions (ExecutionValue.executionCoordinate "fixture") "system" "body") (ReplayContext RequestContext (Just (instructionPrompt admission.instructions)) [RequestTurn [TextBlock "edit fixture"] Nothing]) capabilities (Aeson.toJSON ([] :: [Aeson.Value])) defaultHarnessPolicy [] (Just admission)
+  let initial = ExecutionSnapshot V1 (executionIdFor assignment) admission.runId agent identity session selection Nothing (SkillInstructions (ExecutionValue.executionCoordinate "fixture") "system" "body") (ReplayContext RequestContext (Just (instructionPrompt admission.instructions)) [RequestTurn [TextBlock "edit fixture"] Nothing]) capabilities (Aeson.toJSON ([] :: [Aeson.Value])) defaultHarnessPolicy [] (Just admission) Nothing
       native = Tools.NativeToolFactory (\_ -> pure (Right [])) (\_ _ _ -> pure (Right []))
   menu <- right =<< Tools.describeExecutionTools Log.silentLogger allowAllActionAuthorizerForTests registry native initial
   let chosen = filter (\tool -> executionCoordinateText tool.name == wire) menu.toolBindings

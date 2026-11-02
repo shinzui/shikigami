@@ -159,6 +159,7 @@ workflowCase configFile prefix stage = do
               capabilities = host.capabilities,
               workspace = Just host,
               coordination = Nothing,
+              objectives = Nothing,
               agents = [declaration],
               kizashi = KizashiConfig "http://localhost:1" (declarationCoordinate "recipient"),
               kawa = KawaConfig "http://localhost:1" (activityCoordinate "fixture"),

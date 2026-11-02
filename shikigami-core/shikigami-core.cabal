@@ -146,6 +146,8 @@ library
     Shikigami.Flow.Decision
     Shikigami.Flow.Delegate
     Shikigami.Flow.Lifecycle.AtRiskCustomer
+    Shikigami.Flow.ObjectiveExample
+    Shikigami.Flow.Objectives
     Shikigami.Flow.OpenTelemetryPracticeReview
     Shikigami.Flow.Routing
     Shikigami.Flow.ShikumiDecisionExample
@@ -172,11 +174,15 @@ library
     Shikigami.Objective.Inspection
     Shikigami.Objective.Keys
     Shikigami.Objective.Live
+    Shikigami.Objective.Operation
     Shikigami.Objective.Origin
     Shikigami.Objective.Ownership
     Shikigami.Objective.Reference
     Shikigami.Objective.Runtime
+    Shikigami.Objective.Schema
+    Shikigami.Objective.Scope
     Shikigami.Objective.Store
+    Shikigami.Objective.Tools
     Shikigami.Objective.Types
     Shikigami.ObjectiveLifecycle.BehaviorHoles
     Shikigami.ObjectiveLifecycle.Conformance
@@ -503,6 +509,7 @@ test-suite shikigami-core-test
     Shikigami.KeiroSpecificationSpec
     Shikigami.LogSpec
     Shikigami.ObjectiveSpec
+    Shikigami.ObjectiveToolsSpec
     Shikigami.PackageArchitectureSpec
     Shikigami.PayloadValueSpec
     Shikigami.PracticeReviewEvidenceSpec
@@ -608,6 +615,7 @@ test-suite shikigami-core-postgres-test
     Shikigami.GrantStoreSpec
     Shikigami.ObjectiveCheckpointSpec
     Shikigami.ObjectiveStoreSpec
+    Shikigami.ObjectiveWorkflowSpec
     Shikigami.PracticeReviewEvidenceSpec
     Shikigami.PracticeReviewMemorySpec
     Shikigami.PracticeReviewOrchestrationSpec

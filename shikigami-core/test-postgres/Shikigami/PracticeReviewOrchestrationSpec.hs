@@ -701,6 +701,7 @@ specialistAgentRunDeps appEnv behaviorEnv practiceReview =
       AgentWorkflow.actionAuthorizer = allowAllActionAuthorizerForTests,
       AgentWorkflow.capabilities = CapabilityProvider.emptyCapabilityRuntime,
       AgentWorkflow.coordination = Nothing,
+      AgentWorkflow.objectives = Nothing,
       AgentWorkflow.workspace = Nothing,
       AgentWorkflow.agents = [reviewerDecl],
       AgentWorkflow.kizashi = KizashiConfig {baseUrl = "http://localhost:1", defaultRecipient = (declarationCoordinate "recipient_unused")},

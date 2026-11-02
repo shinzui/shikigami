@@ -20,9 +20,9 @@ workflowFacts =
     { name = "shikigami.danwa-conversation"
     , idVia = "conversationWorkflowId"
     , idField = "input"
-    , body = ["step:ingest-start", "step:lookup-agent", "step:resolve-conversation-profile", "step:resolve-conversation-execution", "step:resolve-session", "step:record-user", "step:admit-conversation-skill", "child:execution", "step:run-behavior-v2", "step:record-assistant-and-reply", "step:turn-result", "await:next-message", "step:idle-timeout", "continueAsNew:ConversationSeed"]
+    , body = ["step:ingest-start", "step:lookup-agent", "step:resolve-conversation-profile", "step:resolve-conversation-execution", "step:resolve-session", "step:record-user", "patch:shikigami-conversation-objective-tracking-v1(step:objectives-inline-policy)", "step:admit-conversation-skill", "child:execution", "step:run-behavior-v2", "step:record-assistant-and-reply", "step:turn-result", "await:next-message", "step:idle-timeout", "continueAsNew:ConversationSeed"]
     , awaitLabels = ["next-message"]
-    , patchIds = []
+    , patchIds = ["shikigami-conversation-objective-tracking-v1"]
     }
 
 -- | Base-library projection used by the service-level conformance facade.

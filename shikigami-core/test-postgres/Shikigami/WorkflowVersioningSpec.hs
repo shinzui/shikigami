@@ -36,6 +36,7 @@ import Shikigami.Agent.Approval qualified as Approval
 import Shikigami.Agent.Workflow.Input (awaitInput, deliverInputTo)
 import Shikigami.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
+import Shikigami.ObjectiveWorkflowSpec qualified as Objectives
 import Shikigami.Workflow.Versioning (shikigamiActivePatches, shikigamiWorkflowResumeOptions)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertEqual, testCase)
@@ -56,9 +57,11 @@ tests databaseFixture =
         assertEqual "resume worker, not direct runs, installs the instance heartbeat" Nothing leaseHeartbeat,
       testCase "in-flight workflow survives a simulated deploy under a patch guard" (inFlightSurvivesDeploy databaseFixture),
       testCase "failed workflows resurrect through the public owner" (failedWorkflowResurrects databaseFixture),
+      testCase "an old agent journal replays without objective policy or tools" (Objectives.oldAgentReplay databaseFixture),
+      testCase "an old conversation journal replays without objective policy or tools" (Objectives.oldConversationReplay databaseFixture),
       testCase "approval review identity has a frozen public vector" approvalReviewIdentityIsStable,
-      testCase "the first-release baseline has no obsolete application patches" do
-        assertEqual "active application patches" Set.empty shikigamiActivePatches
+      testCase "only the declared objective workflow patches are active" do
+        assertEqual "active application patches" (Set.fromList [PatchId "shikigami-objective-tracking-v1", PatchId "shikigami-conversation-objective-tracking-v1"]) shikigamiActivePatches
     ]
 
 -- ── Test A: the patch primitive, end to end ─────────────────────────────────

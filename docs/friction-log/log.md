@@ -1,6 +1,8 @@
 # Bundle Update Log
 
 ## 2026-11-02
+* **Update**: FRIC-40 resolved: Resolved the helper assumption and qualified recovery through the actual conversation workflow.
+* **Addition**: FRIC-40 records detour tooling friction with mori://shinzui/shikigami: Execution fixture driver counted superseded attempts
 * **Update**: FRIC-39 resolved: Fix migration scaffolding to preserve deployed filename gaps.
 * **Addition**: FRIC-39 records detour tooling friction with mori://shinzui/shikigami: Migration scaffolder refuses the existing manifest gap
 

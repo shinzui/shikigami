@@ -1,6 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 
-module Shikigami.ExecutionTranscriptSpec (tests) where
+module Shikigami.ExecutionTranscriptSpec (tests, withFixture, withConfiguredResourceFixture, driverRuntime, pumpDriver, run) where
 
 import Baikai.Api (Api (OpenAIResponses))
 import Baikai.Content qualified as Content
@@ -806,7 +806,10 @@ tests fixture =
           let future = anotherSnapshot snapshot "future"
               huge = anotherSnapshot snapshot "huge" & #instructions . #body .~ Text.replicate 1048577 "x"
           case Aeson.toJSON future of
-            Aeson.Object fields ->
+            Aeson.Object fields -> do
+              assertBool "old snapshot bytes do not acquire objective metadata" (not (KeyMap.member "objectiveScope" fields))
+              Aeson.fromJSON (Aeson.Object fields) @?= Aeson.Success future
+              future.objectiveScope @?= Nothing
               assertBool "unsupported complete snapshot refused at decoding" (case Aeson.fromJSON (Aeson.Object (KeyMap.insert "format" (Aeson.Number 2) fields)) :: Aeson.Result ExecutionSnapshot of Aeson.Error _ -> True; _ -> False)
             _ -> assertFailure "valid snapshot was not an object"
           inspect env future.executionId >>= (@?= Nothing)
@@ -1429,7 +1432,7 @@ withConfiguredResourceFixture fixture configure editLimits use = withShikigamiFr
   let env = AppEnv (defaultConnectionSettings connection) tracer Nothing Nothing
       limits = editLimits (Map.insert R.Tokens (R.Limited (fixtureAmount 1000)) (Map.fromList [(dimension, R.ExplicitlyUnbounded) | dimension <- [minBound .. maxBound]]))
       selection = mustRight (resolveExecutionSelection (fixtureAssignment "transcript-assignment") (mustRight (modelCatalog [])) (defaultBinding stubModel emptyOptions) Nothing Nothing Nothing Nothing (Just rootId) now)
-      snapshot = configure (ExecutionSnapshot V1 (executionIdFor selection.assignmentId) (WorkflowId "transcript-run") (fixtureAgentName "worker") (compatibilityIdentity (fixtureAgentName "worker")) session selection Nothing (SkillInstructions (ExecutionValue.executionCoordinate "fixture") "system" "PRIVATE_REPLAY_MARKER") (ReplayContext LegacyContext (Just "system") [UserTurn [TextBlock "PRIVATE_REPLAY_MARKER"] Nothing]) emptyResolvedCapabilitySet (toJSON ([] :: [Value])) defaultHarnessPolicy [] Nothing)
+      snapshot = configure (ExecutionSnapshot V1 (executionIdFor selection.assignmentId) (WorkflowId "transcript-run") (fixtureAgentName "worker") (compatibilityIdentity (fixtureAgentName "worker")) session selection Nothing (SkillInstructions (ExecutionValue.executionCoordinate "fixture") "system" "PRIVATE_REPLAY_MARKER") (ReplayContext LegacyContext (Just "system") [UserTurn [TextBlock "PRIVATE_REPLAY_MARKER"] Nothing]) emptyResolvedCapabilitySet (toJSON ([] :: [Value])) defaultHarnessPolicy [] Nothing Nothing)
   _ <- expectRight =<< run env Catalog.registerProjectionCatalog
   run env (Roots.enrollRoot rootId (R.Envelope limits (addUTCTime 3600 now))) >>= (@?= Right R.Accepted)
   run env (Store.admitExecution snapshot) >>= (@?= Right R.Accepted)

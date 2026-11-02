@@ -150,6 +150,7 @@ import Shikigami.Flow.Acknowledgement
 import Shikigami.Flow.Capability qualified as FlowCapability
 import Shikigami.Flow.Decision qualified as FlowDecision
 import Shikigami.Flow.Delegate qualified as FlowDelegate
+import Shikigami.Flow.Objectives qualified as FlowObjectives
 import Shikigami.Flow.Routing (RoutingRuntime)
 import Shikigami.Flow.Routing qualified as FlowRouting
 import Shikigami.Flow.Workers qualified as FlowWorkers
@@ -157,6 +158,10 @@ import Shikigami.Log qualified as Log
 import Shikigami.Log.Correlation (runCorrelationId)
 import Shikigami.Memory.Access (agentActor, shikigamiMemorySpace, shikigamiWriteContext)
 import Shikigami.Memory.Scope (agentScope)
+import Shikigami.Objective.Runtime qualified as Objectives
+import Shikigami.Objective.Store qualified as ObjectiveStore
+import Shikigami.Objective.Tools qualified as ObjectiveTools
+import Shikigami.Objective.Types qualified as Objective
 import Shikigami.PracticeReview.Attention qualified as PracticeReviewAttention
 import Shikigami.PracticeReview.Capability qualified as PracticeReview
 import Shikigami.PracticeReview.Memory qualified as PracticeReviewMemory
@@ -202,6 +207,7 @@ data AgentRunDeps = AgentRunDeps
     workspace :: !(Maybe WorkspaceHost),
     -- | No production scope/provider is selected until IR-11/IR-13 deliver it.
     coordination :: !(Maybe WorkerCapability.CoordinationHost),
+    objectives :: !(Maybe Objectives.ObjectiveRuntime),
     agents :: ![AgentDecl],
     kizashi :: !KizashiConfig,
     kawa :: !KawaConfig,
@@ -515,7 +521,7 @@ executionRuntime deps =
 
 executionTools :: AgentRunDeps -> ExecutionTools.NativeToolFactory
 -- Accepted execution bindings determine which coordination scope is reacquired.
-executionTools deps = WorkerTools.appendNativeFactory (ExecutionTools.staticNativeTools deps.behaviorEnv.tools) (WorkerTools.coordinationTools deps.coordination deps.actionAuthorizer)
+executionTools deps = WorkerTools.appendNativeFactory (WorkerTools.appendNativeFactory (ExecutionTools.staticNativeTools deps.behaviorEnv.tools) (WorkerTools.coordinationTools deps.coordination deps.actionAuthorizer)) (ObjectiveTools.objectiveTools deps.objectives)
 
 workerSessionRuntime :: AgentRunDeps -> WorkerSession.SessionRuntime
 workerSessionRuntime deps = case deps.coordination of
@@ -597,46 +603,52 @@ runSessionedAgent deps activeBehaviorEnv durableSelection resolvedProfile resolv
     withSpan' "behavior" (spanArgs Internal) \traceSpan -> do
       addAttribute traceSpan "agent.name" (agentDeclName decl)
       addAttribute traceSpan "behavior.kind" (behaviorKindText ((.behavior) decl))
-      case (.behavior) decl of
-        CoordinatingSkill {path}
-          | Just selection <- durableSelection ->
-              first PermanentAgentRunFailure <$> runDurableSkillStep deps resolvedProfile resolvedOverlays job decl sid prior selection path
-          | otherwise -> pure (Left (PermanentAgentRunFailure "coordinating Skills require compatible durable execution and no routing policy"))
-        Skill {path}
-          | Just selection <- durableSelection ->
-              first PermanentAgentRunFailure <$> runDurableSkillStep deps resolvedProfile resolvedOverlays job decl sid prior selection path
-        Flow {} -> first PermanentAgentRunFailure <$> runBehaviorStep deps activeBehaviorEnv resolvedProfile approvalPolicyForRun recordedIdentity sid decl job prior
-        _
-          | not (null ((.delegates) decl)) ->
-              first PermanentAgentRunFailure <$> runBehaviorStep deps activeBehaviorEnv resolvedProfile approvalPolicyForRun recordedIdentity sid decl job prior
-          | otherwise ->
-              first PermanentAgentRunFailure
-                <$> runStep
-                  deps
-                  (StepName "run-behavior-v2")
-                  ( liftIO
-                      ( runBehaviorAttemptWith
-                          (durationTime (depsRunTimeout deps))
-                          do
-                            acquired <-
-                              runBehaviorWithCapabilities
-                                (depsLogger deps)
-                                ((.actionAuthorizer) deps)
-                                ((.capabilities) deps)
-                                (capabilityScopeForRun job)
-                                resolvedOverlays
-                                activeBehaviorEnv
-                                decl
-                                BehaviorInput {payload = (.triggerPayload) job, recalled = prior}
-                            case acquired of
-                              Left runtimeError ->
-                                throwIO
-                                  ( TransientBehaviorFailure
-                                      (boundedBehaviorDetail (Text.pack (show runtimeError)))
-                                  )
-                              Right behaviorResult -> pure behaviorResult
+      useObjectives <- Workflow.patch (Workflow.PatchId "shikigami-objective-tracking-v1")
+      let requested = isJust job.objective || maybe False (\host -> ObjectiveStore.creationAllowed host.settings (Objective.RecordedAgent job.identity)) deps.objectives
+          supported = case decl.behavior of Flow {} -> True; Skill {} -> isJust durableSelection; CoordinatingSkill {} -> isJust durableSelection; _ -> False
+      if useObjectives && requested && not supported
+        then pure (Left (PermanentAgentRunFailure "objective work requires durable Skill or Flow execution"))
+        else do
+          case (.behavior) decl of
+            CoordinatingSkill {path}
+              | Just selection <- durableSelection ->
+                  first PermanentAgentRunFailure <$> runDurableSkillStep deps resolvedProfile resolvedOverlays job decl sid prior selection path
+              | otherwise -> pure (Left (PermanentAgentRunFailure "coordinating Skills require compatible durable execution and no routing policy"))
+            Skill {path}
+              | Just selection <- durableSelection ->
+                  first PermanentAgentRunFailure <$> runDurableSkillStep deps resolvedProfile resolvedOverlays job decl sid prior selection path
+            Flow {} -> first PermanentAgentRunFailure <$> runBehaviorStep deps activeBehaviorEnv resolvedProfile approvalPolicyForRun recordedIdentity sid decl job prior
+            _
+              | not (null ((.delegates) decl)) ->
+                  first PermanentAgentRunFailure <$> runBehaviorStep deps activeBehaviorEnv resolvedProfile approvalPolicyForRun recordedIdentity sid decl job prior
+              | otherwise ->
+                  first PermanentAgentRunFailure
+                    <$> runStep
+                      deps
+                      (StepName "run-behavior-v2")
+                      ( liftIO
+                          ( runBehaviorAttemptWith
+                              (durationTime (depsRunTimeout deps))
+                              do
+                                acquired <-
+                                  runBehaviorWithCapabilities
+                                    (depsLogger deps)
+                                    ((.actionAuthorizer) deps)
+                                    ((.capabilities) deps)
+                                    (capabilityScopeForRun job)
+                                    resolvedOverlays
+                                    activeBehaviorEnv
+                                    decl
+                                    BehaviorInput {payload = (.triggerPayload) job, recalled = prior}
+                                case acquired of
+                                  Left runtimeError ->
+                                    throwIO
+                                      ( TransientBehaviorFailure
+                                          (boundedBehaviorDetail (Text.pack (show runtimeError)))
+                                      )
+                                  Right behaviorResult -> pure behaviorResult
+                          )
                       )
-                  )
   case behaviorE of
     Left err -> finishRunFailure deps recordedIdentity decl sid err
     Right output -> finishSuccessfulRun deps (maybe (behaviorModelId activeBehaviorEnv) (\selection -> providerCoordinateText selection.descriptor.modelId) durableSelection) approvalPolicyForRun recordedIdentity job decl sid prior output
@@ -646,7 +658,12 @@ runSessionedAgent deps activeBehaviorEnv durableSelection resolvedProfile resolv
 -- owners and step labels below.
 runDurableSkillStep :: AgentRunDeps -> Maybe ResolvedProfile -> ResolvedCapabilitySet -> RunJob -> AgentDecl -> SessionId -> [MemoryRecord] -> Selection.ExecutionSelection -> DeclarationCoordinate "skill-path" -> Eff (Workflow : AppEffects) (Either Text Value)
 runDurableSkillStep deps profile overlays job decl sid prior selection path = do
+  useObjectives <- Workflow.patch (Workflow.PatchId "shikigami-objective-tracking-v1")
   let runtime = executionRuntime deps
+      loadObjectives = case deps.objectives of
+        Nothing | isNothing job.objective -> pure (Right Nothing)
+        Nothing -> pure (Left (Execution.ExecutionPolicyRefused "objective authority is unavailable"))
+        Just host -> Objectives.resolveExecutionScope host job decl sid selection >>= objectiveAdmission
       coordinating = case decl.behavior of CoordinatingSkill {} -> True; _ -> False
       factory = executionTools deps
       describe snapshot
@@ -679,11 +696,11 @@ runDurableSkillStep deps profile overlays job decl sid prior selection path = do
           ( liftIO
               ( case deps.workspace of
                   Nothing -> pure (Left (Execution.ExecutionPolicyRefused "workspace host is unavailable"))
-                  Just host -> ExecutionStart.admitWorkspaceSkillExecution (host.load assignment) runtime describe assignment
+                  Just host -> if useObjectives then ExecutionStart.admitObjectiveWorkspaceSkillExecution (host.load assignment) loadObjectives runtime describe assignment else ExecutionStart.admitWorkspaceSkillExecution (host.load assignment) runtime describe assignment
               )
               >>= liftIO . executionResult
           )
-      else runStep deps (StepName "admit-skill-execution") (liftIO (ExecutionStart.admitSkillExecution runtime describe assignment >>= executionResult))
+      else runStep deps (StepName "admit-skill-execution") (liftIO ((if useObjectives then ExecutionStart.admitObjectiveSkillExecution loadObjectives runtime describe assignment else ExecutionStart.admitSkillExecution runtime describe assignment) >>= executionResult))
   case admitted of
     Left err -> pure (Left err)
     Right start -> do
@@ -697,6 +714,13 @@ runDurableSkillStep deps profile overlays job decl sid prior selection path = do
       Left Execution.ExecutionRevisionConflict -> throwIO (TransientBehaviorFailure "execution admission changed concurrently")
       Left err -> pure (Left (boundedBehaviorDetail (Text.pack (show err))))
       Right value -> pure (Right value)
+
+objectiveAdmission :: Either Objective.ObjectiveError a -> IO (Either Execution.ExecutionError a)
+objectiveAdmission = \case
+  Left Objective.ObjectiveUnavailable -> throwIO (TransientBehaviorFailure "objective authority unavailable")
+  Left Objective.ObjectiveUnresolved -> throwIO (TransientBehaviorFailure "objective authority unresolved")
+  Left err -> pure (Left (Execution.ExecutionPolicyRefused (Text.pack (show err))))
+  Right value -> pure (Right value)
 
 finishSuccessfulRun ::
   AgentRunDeps ->
@@ -1021,6 +1045,20 @@ runFlowBehavior deps activeBehaviorEnv resolvedProfile approvalPolicyForRun reco
       (_, childWorkflowId) <- currentWorkflow
       let coordinator = WorkerCapability.CoordinatorRun childWorkflowId job.identity sid job.executionRootId job.executionPermissions
       coordinationPolicy <- step (StepName "worker-coordination-policy") (liftIO (FlowWorkers.resolveCoordinationPolicy deps.coordination deps.actionAuthorizer coordinator))
+      useObjectives <- Workflow.patch (Workflow.PatchId "shikigami-objective-tracking-v1")
+      objectivePolicy <-
+        if useObjectives
+          then step (StepName "objectives-policy") do
+            (nativeName, nativeRun) <- currentWorkflow
+            generation <- Workflow.currentRunGeneration
+            liftIO case deps.objectives of
+              Nothing | isNothing job.objective -> pure (Right Nothing)
+              Nothing -> pure (Left Objective.ObjectiveDenied)
+              Just host ->
+                Objectives.resolveFlowScope host nativeName nativeRun (toInteger generation) job sid (either (const Nothing) id coordinationPolicy) >>= \case
+                  Left Objective.ObjectiveUnavailable -> throwIO (TransientBehaviorFailure "objective authority unavailable")
+                  value -> pure value
+          else pure (Right Nothing)
       let decisionTimeout = DecisionContract.parseDecisionTimeout (floor (durationTime (depsRunTimeout deps) * 1000000))
           attentionInterpreter = PracticeReviewAttention.runPracticeReviewAttentionAtomic practiceReviewAttentionEnv
           decisionInterpreter action
@@ -1050,6 +1088,7 @@ runFlowBehavior deps activeBehaviorEnv resolvedProfile approvalPolicyForRun reco
               . FlowCapability.runSink sinkEnv
               . FlowDelegate.runDelegate delegateEnv
               . FlowWorkers.runWorkers deps.coordination deps.actionAuthorizer coordinator coordinationPolicy
+              . FlowObjectives.runObjectives deps.objectives objectivePolicy
               . FlowRouting.runRouting routingEnv
               . decisionInterpreter
               . acknowledgementInterpreter

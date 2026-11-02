@@ -40,6 +40,8 @@ import Shikigami.Flow.Decision (Decision)
 import Shikigami.Flow.Delegate (Delegate)
 import Shikigami.Flow.Delegate qualified as Delegate
 import Shikigami.Flow.Lifecycle.AtRiskCustomer (atRiskCustomerMermaid, atRiskCustomerValidationWarnings)
+import Shikigami.Flow.ObjectiveExample (objectiveExample)
+import Shikigami.Flow.Objectives (Objectives)
 import Shikigami.Flow.OpenTelemetryPracticeReview
   ( opentelemetryPracticeReviewFlow,
     opentelemetryPracticeReviewFlowName,
@@ -87,6 +89,7 @@ type FlowEffects es =
     Acknowledgement :> es,
     Delegate :> es,
     Workers :> es,
+    Objectives :> es,
     Routing :> es,
     Decision :> es,
     ExecutionContext :> es,
@@ -149,6 +152,13 @@ atRiskCustomerLifecycleDiagram =
 flowRegistry :: [FlowDef]
 flowRegistry =
   [ FlowDef
+      { name = declarationCoordinate "objective-example",
+        decisionSlots = [],
+        requiresDefaultModel = DefaultModelOptional,
+        lifecycle = LifecycleDiagram "flowchart LR\n Create --> Plan --> Progress --> Inspect" [],
+        run = objectiveExample
+      },
+    FlowDef
       { name = declarationCoordinate "shikumi-decision-example",
         decisionSlots = exampleSlots,
         requiresDefaultModel = DefaultModelOptional,

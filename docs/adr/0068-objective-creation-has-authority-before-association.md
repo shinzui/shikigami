@@ -2,7 +2,7 @@
 
 Date: 2026-10-29
 
-Status: accepted; persistence and runtime-origin primitives implemented; frozen scope admission pending plan 101
+Status: accepted; persistence, runtime-origin proofs and frozen durable adapters implemented and qualified
 
 ## Context
 
@@ -42,6 +42,33 @@ and durable adapters. This lets plan 100 consume shared configuration without wa
 for worker-provider wiring. Accepted bindings and old journal branches remain governed
 by ADRs 0057 and 0058.
 
+The protected execution snapshot retains an optional objective scope alongside its
+frozen tool bindings. Absence is omitted on write and defaults on read, preserving
+old snapshots. A new scope binds the recorded principal, run, memory session,
+original root and execution assignment or conversation turn, plus the creation
+policy commitment and permitted operations. Existing execution recovery precedes
+scope loading, so configuration changes cannot replace an accepted grant. The
+snapshot owner retains it independently of parent journal collection. A Flow
+retains the equivalent admission in its own guarded journal. Both owning workflow
+guards have real old branches; native pre-objective journals qualify those branches
+with objective runtime access poisoned. The retained scope also includes the
+original cutoff so retries derive identical assignment-command bytes without
+consulting a changed resource owner before receipt recovery.
+
+The model tool does not accept actors, resource roots or new operation keys.
+Planning a creator's own assignment derives its owner and any resource cutoff
+from the admitted scope and resource owner. Membership administration stays with
+the authenticated API or trusted typed caller; every model command still passes
+the single owner's current role and exact-action checks.
+
+Unavailable or unresolved command outcomes remain retryable at the adapter boundary.
+They are not journaled as definitive negative tool replies: the owner may already
+have committed, and the model must not be prompted to manufacture a second create.
+Accepted recovery retains its original operation, scope and menu; current lifecycle,
+membership and exact action authority still apply. A tool-contract/schema revision
+must retain the accepted revision's implementation rather than mutate its binding
+in place.
+
 ## Alternatives rejected
 
 Requiring an API-created objective prevents autonomous first creation. Trusting a model
@@ -56,7 +83,7 @@ Creation and access to existing objectives have distinct authority checks within
 command owner. Recovery tests must start with no objective, lose the creation
 acknowledgement, recover exactly one receipt and origin, and continue through the same
 frozen binding. Denied creation and unrelated objective selectors must fail. Later-run
-and conversation continuity must work with memory recall disabled. Plan 98 now qualifies creator-scoped persistence, origin/receipt atomicity, default-deny creation and recovery after process exit. Plan 99 also qualifies opaque runtime-origin proofs and receipt-backed continuation lookup against accepted execution operations, already admitted conversation turns and native Flow workflow/generation/static-label coordinates. Flow operation commitments include the workflow name because workflow IDs are scoped by name. Conversation proofs check the addressed message against the execution assignment, rather than accepting another turn in the same session. A later operation may find the original creation receipt within the same scope; current membership and exact action authority are still required. Frozen scope admission, durable tool invocation and later-run/conversation continuity remain acceptance for plans 101–102.
+and conversation continuity must work with memory recall disabled. Plan 98 now qualifies creator-scoped persistence, origin/receipt atomicity, default-deny creation and recovery after process exit. Plan 99 also qualifies opaque runtime-origin proofs and receipt-backed continuation lookup against accepted execution operations, already admitted conversation turns and native Flow workflow/generation/static-label coordinates. Flow operation commitments include the workflow name because workflow IDs are scoped by name. Conversation proofs check the addressed message against the execution assignment, rather than accepting another turn in the same session. A later operation may find the original creation receipt within the same scope; current membership and exact action authority are still required. Plan 101 qualifies frozen scope admission, real Skill/Flow/conversation invocation, creation and evidence acknowledgement loss, unrelated-selector refusal, current membership revocation and later-run/conversation continuity. Its native gate reports additive guards and neutral replay. Plan 102 retains serving-process restart qualification, integrated completion and IR-13 closure.
 
 ## References
 

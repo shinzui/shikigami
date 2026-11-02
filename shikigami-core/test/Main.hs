@@ -56,6 +56,7 @@ import Shikigami.KeiroSpecificationSpec qualified as KeiroSpecificationSpec
 import Shikigami.Log qualified as Log
 import Shikigami.LogSpec qualified as LogSpec
 import Shikigami.ObjectiveSpec qualified as ObjectiveSpec
+import Shikigami.ObjectiveToolsSpec qualified as ObjectiveToolsSpec
 import Shikigami.PackageArchitectureSpec qualified as PackageArchitectureSpec
 import Shikigami.PayloadValueSpec qualified as PayloadValueSpec
 import Shikigami.PracticeReviewEvidenceSpec qualified as PracticeReviewEvidenceSpec
@@ -113,6 +114,7 @@ main =
           AgentLoaderSpec.tests,
           ApprovalNotificationSpec.tests,
           ObjectiveSpec.tests,
+          ObjectiveToolsSpec.tests,
           AppConfigSpec.tests,
           AttestationContractsSpec.tests,
           BehaviorInputSpec.tests,

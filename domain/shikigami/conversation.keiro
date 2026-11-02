@@ -14,6 +14,9 @@ workflow DanwaConversation
     step resolve-conversation-execution -> ExecutionSelectionResolution
     step resolve-session -> SessionId
     step record-user -> RecordedTurn
+    patch shikigami-conversation-objective-tracking-v1 {
+      step objectives-inline-policy -> ObjectivePolicyResolution
+    }
     step admit-conversation-skill -> ExecutionAdmissionResult
     child execution id input via executionWorkflowId -> ExecutionDriverResult
     step run-behavior-v2 -> BehaviorOutput

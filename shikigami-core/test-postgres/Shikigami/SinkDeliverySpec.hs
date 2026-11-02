@@ -564,6 +564,7 @@ withFixtureUsingTracer databaseFixture tracer label sinks kizashi danwa use =
                 AgentWorkflow.actionAuthorizer = allowAllActionAuthorizerForTests,
                 AgentWorkflow.capabilities = emptyCapabilityRuntime,
                 AgentWorkflow.coordination = Nothing,
+                AgentWorkflow.objectives = Nothing,
                 AgentWorkflow.workspace = Nothing,
                 AgentWorkflow.agents = [declaration],
                 AgentWorkflow.kizashi = kizashi,

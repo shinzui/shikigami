@@ -147,6 +147,7 @@ runDurableAgent logger KirokuStore {pool} appEnv workspace config decl = do
             AgentWorkflow.actionAuthorizer = denyAllActionAuthorizer,
             AgentWorkflow.capabilities = capabilities,
             AgentWorkflow.coordination = Nothing,
+            AgentWorkflow.objectives = Nothing,
             AgentWorkflow.workspace = Nothing,
             AgentWorkflow.agents = [decl],
             AgentWorkflow.kizashi = kizashiConfig,

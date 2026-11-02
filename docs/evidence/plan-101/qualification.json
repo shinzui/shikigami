@@ -1,0 +1,51 @@
+{
+  "baseline": "ad5529f",
+  "qualified_at": "2026-11-02T08:48:11Z",
+  "scope": "Plan 101: frozen objective scopes, native model tools, typed Flow effects and guarded agent/conversation admission through the objective command owner.",
+  "suites": {
+    "shikigami-core-test": 639,
+    "shikigami-api-test": 35,
+    "shikigami-core-postgres-test": 502,
+    "shikigami-agent-test": 37,
+    "shikigami-workers-test": 280
+  },
+  "objective_workflow_cases": 10,
+  "objective_deployment_cases": 2,
+  "native_conformance_checks": 169,
+  "native_diff": {
+    "verdict": "additive",
+    "patches": [
+      "shikigami-objective-tracking-v1",
+      "shikigami-conversation-objective-tracking-v1"
+    ],
+    "breaking_findings": 0
+  },
+  "replay_impact": "replay-neutral",
+  "checks": [
+    "cabal build all",
+    "just keiro-gate ad5529f",
+    "python3 tools/style/check_haskell.py",
+    "bash tools/check-migration-schema-isolation.sh",
+    "git diff --check"
+  ],
+  "qualified_behaviors": [
+    "Unassociated declared Skill creates, loses acknowledgement, recovers the same receipt and records progress under its original scope and menu.",
+    "Native creation and evidence both recover identical receipts after lost acknowledgements; creation policy revocation leaves accepted recovery available.",
+    "Registered objective-example Flow recovers a creation committed before a failed native journal append.",
+    "A recorded conversation turn creates and recovers an objective; an explicitly bound later turn reads the current revision after creator permission is removed.",
+    "An associated later run reads current progress with both hybrid and fallback learning-memory views unavailable; the journaled recall is empty.",
+    "Membership revocation after admission and an unrelated accessible goal selector both refuse model writes without replacing accepted bindings.",
+    "A missing creation grant creates nothing; unavailable creation authority refuses before model/execution dispatch.",
+    "Pre-objective agent and conversation ingest journals complete with objective runtime access poisoned, no new policy steps, no objective scope and no objective tools."
+  ],
+  "boundaries": [
+    "Model replies are capped at 16 KiB.",
+    "Operation identity, principal, assignment owner, original root and cutoff are runtime-owned.",
+    "Flow labels are static and declared under the owning patch.",
+    "No workspace fence, process containment, adaptive coordinator or recurring scheduler is qualified here.",
+    "IR-13 remains in progress until plan 102."
+  ],
+  "friction": {
+    "FRIC-40": "resolved: shared fixture driver selects logical attempts, excluding superseded attempts."
+  }
+}

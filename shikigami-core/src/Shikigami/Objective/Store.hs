@@ -31,6 +31,7 @@ module Shikigami.Objective.Store
     mayCoordinate,
     validateSnapshot,
     creationAllowed,
+    checkCreationAdmission,
   )
 where
 
@@ -116,6 +117,13 @@ creationAllowed settings actor =
     VerifiedCaller _ -> True
     LocalOperator identity -> settings.operator == Just identity
     RecordedAgent identity -> either (const False) (`elem` map principalText settings.agentCreation) (identityText identity)
+
+-- Creator-scope admission checks the real owner without allocating an entity.
+checkCreationAdmission :: (ObjectiveEffects es) => Access -> Eff es (Either ObjectiveError ())
+checkCreationAdmission access = protected do
+  now <- Tx.statement () currentTime
+  unless (now < access.expiresAt && creationAllowed access.settings access.actor) (abort ObjectiveDenied)
+  Tx.statement () (preparable "SELECT objective_id FROM shikigami.objectives LIMIT 0" E.noParams D.noResult)
 
 rolesFor :: Objective -> AccessPrincipal -> [Role]
 rolesFor objective actor = concatMap (.roles) (filter ((== actor) . (.principal)) objective.members)

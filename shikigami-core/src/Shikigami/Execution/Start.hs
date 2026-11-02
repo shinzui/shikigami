@@ -6,6 +6,8 @@ module Shikigami.Execution.Start
     SkillInput (..),
     admitSkillExecution,
     admitWorkspaceSkillExecution,
+    admitObjectiveSkillExecution,
+    admitObjectiveWorkspaceSkillExecution,
     readExecutionResult,
   )
 where
@@ -33,6 +35,7 @@ import Shikigami.Execution.Store qualified as Store
 import Shikigami.Execution.Tools (ExecutionToolMenu (..))
 import Shikigami.Execution.Transcript
 import Shikigami.FormatVersion (FormatVersion (V1))
+import Shikigami.Objective.Scope (ObjectiveScope)
 import Shikigami.Prelude
 import Shikigami.Workspace.Instructions (WorkspaceAdmission (..), instructionPrompt)
 import System.Timeout (timeout)
@@ -66,7 +69,18 @@ admitWorkspaceSkillExecution :: IO (Either ExecutionError WorkspaceAdmission) ->
 admitWorkspaceSkillExecution load = admitSkillExecutionWithWorkspace (fmap Just <$> load)
 
 admitSkillExecutionWithWorkspace :: IO (Either ExecutionError (Maybe WorkspaceAdmission)) -> ExecutionRuntime -> (ExecutionSnapshot -> IO (Either ExecutionError ExecutionToolMenu)) -> SkillAssignment -> IO (Either ExecutionError ExecutionStart)
-admitSkillExecutionWithWorkspace loadWorkspace runtime describe assignment = do
+admitSkillExecutionWithWorkspace loadWorkspace = admitSkillExecutionWithAdmissions loadWorkspace (pure (Right Nothing))
+
+-- Both loaders are trusted process resources. Accepted execution recovery reads
+-- the frozen snapshot before consulting either loader or mutable configuration.
+admitObjectiveSkillExecution :: IO (Either ExecutionError (Maybe ObjectiveScope)) -> ExecutionRuntime -> (ExecutionSnapshot -> IO (Either ExecutionError ExecutionToolMenu)) -> SkillAssignment -> IO (Either ExecutionError ExecutionStart)
+admitObjectiveSkillExecution = admitSkillExecutionWithAdmissions (pure (Right Nothing))
+
+admitObjectiveWorkspaceSkillExecution :: IO (Either ExecutionError WorkspaceAdmission) -> IO (Either ExecutionError (Maybe ObjectiveScope)) -> ExecutionRuntime -> (ExecutionSnapshot -> IO (Either ExecutionError ExecutionToolMenu)) -> SkillAssignment -> IO (Either ExecutionError ExecutionStart)
+admitObjectiveWorkspaceSkillExecution load = admitSkillExecutionWithAdmissions (fmap Just <$> load)
+
+admitSkillExecutionWithAdmissions :: IO (Either ExecutionError (Maybe WorkspaceAdmission)) -> IO (Either ExecutionError (Maybe ObjectiveScope)) -> ExecutionRuntime -> (ExecutionSnapshot -> IO (Either ExecutionError ExecutionToolMenu)) -> SkillAssignment -> IO (Either ExecutionError ExecutionStart)
+admitSkillExecutionWithAdmissions loadWorkspace loadObjectives runtime describe assignment = do
   existing <- owned (Store.inspectExecution execution)
   case existing of
     Left err -> pure (Left err)
@@ -92,9 +106,13 @@ admitSkillExecutionWithWorkspace loadWorkspace runtime describe assignment = do
               Left reason -> pure (Left (ExecutionPolicyRefused reason))
               Right policy -> do
                 loadedWorkspace <- loadWorkspace
-                case loadedWorkspace of
+                loadedObjectives <- case loadedWorkspace of
                   Left err -> pure (Left err)
-                  Right workspace -> do
+                  Right _ -> fromMaybe (Left (ExecutionPolicyRefused "objective admission exceeded its deadline")) <$> timeout (max 1 (min 30 (floor (durationTime runtime.timeoutSeconds))) * 1000000) loadObjectives
+                case (loadedWorkspace, loadedObjectives) of
+                  (Left err, _) -> pure (Left err)
+                  (_, Left err) -> pure (Left err)
+                  (Right workspace, Right objectiveScope) -> do
                     let initial =
                           ExecutionSnapshot
                             { format = V1,
@@ -111,7 +129,8 @@ admitSkillExecutionWithWorkspace loadWorkspace runtime describe assignment = do
                               offeredTools = toJSON ([] :: [Aeson.Value]),
                               policy,
                               toolBindings = [],
-                              workspace
+                              workspace,
+                              objectiveScope
                             }
                     case validateSnapshot initial >> when (isJust workspace) (void (selectContextView policy initial.initialContext)) >> void (Store.payloadReference (toJSON initial)) of
                       Left err -> pure (Left err)
@@ -132,7 +151,7 @@ admitSkillExecutionWithWorkspace loadWorkspace runtime describe assignment = do
                                   -- Another admission may have won after the initial
                                   -- read. Its frozen snapshot wins even if the file or
                                   -- process configuration changed between attempts.
-                                  Left ExecutionIdentityConflict -> admitSkillExecutionWithWorkspace loadWorkspace runtime describe assignment
+                                  Left ExecutionIdentityConflict -> admitSkillExecutionWithAdmissions loadWorkspace loadObjectives runtime describe assignment
                                   Left err -> pure (Left err)
   where
     execution = executionIdFor assignment.selection.assignmentId

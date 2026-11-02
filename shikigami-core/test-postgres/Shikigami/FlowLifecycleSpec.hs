@@ -64,6 +64,7 @@ import Shikigami.Flow.Capability
   )
 import Shikigami.Flow.Decision qualified as FlowDecision
 import Shikigami.Flow.Delegate qualified as FlowDelegate
+import Shikigami.Flow.Objectives qualified as FlowObjectives
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Flow.Workers qualified as FlowWorkers
 import Shikigami.Memory.Access (shikigamiMemorySpace)
@@ -106,7 +107,7 @@ tests databaseFixture =
       testCase "a Flow behavior naming an unregistered flow is a declaration error" do
         assertEqual
           "unknown flow is refused, and the message names what is registered"
-          ["unknown flow no-such-flow; registered flows: shikumi-decision-example, at-risk-customer, delegation-proof, architecture-practice-router, opentelemetry-practice-review"]
+          ["unknown flow no-such-flow; registered flows: objective-example, shikumi-decision-example, at-risk-customer, delegation-proof, architecture-practice-router, opentelemetry-practice-review"]
           (flowDeclarationErrors (flowBehaviorAgent (Flow {name = declarationCoordinate ("no-such-flow")})))
         assertEqual
           "a registered flow is accepted"
@@ -556,6 +557,7 @@ runFlowBody appEnv runtime flowAgent FlowDef {run} workflowId input =
             . runSink sinkEnv
             . FlowDecision.runDecisionDisabled
             . FlowDelegate.runDelegate delegateEnv
+            . FlowObjectives.runObjectives Nothing (Right Nothing)
             . FlowWorkers.runWorkers Nothing denyAllActionAuthorizer (CoordinatorRun (WorkflowId "disabled-flow-fixture") (compatibilityIdentity (fixtureAgentName flowAgent)) runtime.approval.currentSession Nothing Nothing) (Right Nothing)
             . Routing.runRouting
               Routing.RoutingEnv

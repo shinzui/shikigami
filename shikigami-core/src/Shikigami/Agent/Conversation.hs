@@ -64,6 +64,7 @@ import Keiro.Workflow
     runWorkflowWith,
     step,
   )
+import Keiro.Workflow qualified as Workflow
 import Keiro.Workflow.Awakeable (AwakeableId, awakeableIdText, awakeableIdToUuid, cancelAwakeable)
 import Keiro.Workflow.Awakeable.Schema (AwakeableRow (..), completeAwakeableTx, lookupAwakeable)
 import Keiro.Workflow.Awakeable.Schema qualified as Awakeable
@@ -125,10 +126,14 @@ import Shikigami.Log qualified as Log
 import Shikigami.Log.Correlation (runCorrelationId)
 import Shikigami.Memory.Access (agentActor, shikigamiMemorySpace, shikigamiWriteContext)
 import Shikigami.Memory.Scope (agentScope)
+import Shikigami.Objective.Runtime qualified as Objectives
+import Shikigami.Objective.Tools qualified as ObjectiveTools
+import Shikigami.Objective.Types qualified as Objective
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.Sink.Config (DanwaConfig)
 import Shikigami.Sink.GrantStore (GrantSource)
 import Shikigami.Sink.Types (DanwaTarget (..), SinkOutcome (Delivered, Enqueued), SinkResult (..))
+import Shikigami.WorkerSession.Tools qualified as WorkerTools
 import Shikigami.Workflow.Versioning (shikigamiWorkflowRunOptions)
 import Text.Read (readMaybe)
 
@@ -136,6 +141,7 @@ data ConversationEnv = ConversationEnv
   { appEnv :: !AppEnv,
     behaviorEnv :: !BehaviorEnv,
     decisions :: !FlowDecision.DecisionServices,
+    objectives :: !(Maybe Objectives.ObjectiveRuntime),
     deliveryPool :: !(Maybe Pool),
     resolveRunProfile :: !(ProfileId -> Maybe ProfileVersion -> IO (Either ProfileResolutionError ResolvedProfile)),
     runTimeout :: !(Duration "agent-run"),
@@ -917,10 +923,26 @@ processSelectedTurn env selectedBehavior recordedIdentity decl msg@AddressedMess
     DurableConversation profile selection -> case decl.behavior of
       Agent.Skill {path} -> runConversationSkillStep env recordedIdentity decl msg sid userTurn profile selection path
       _ -> pure (Left "durable conversation execution requires a Skill")
-    InlineConversation active ->
-      step (StepName "run-behavior-v2") do
-        prior <- liftIO (loadTurns env sid)
-        liftIO (runBehaviorAttempt (durationTime (conversationRunTimeout env)) active decl (triggerOnly (behaviorPayload msg prior)))
+    InlineConversation active -> do
+      useObjectives <- Workflow.patch (Workflow.PatchId "shikigami-conversation-objective-tracking-v1")
+      policy <-
+        if useObjectives
+          then step (StepName "objectives-inline-policy") do
+            (_, run) <- currentWorkflow
+            liftIO case (env.objectives, Objective.parseConversationRef (declarationCoordinateText msgConversationId)) of
+              (Nothing, _) -> pure (Right Nothing)
+              (Just host, Right conversation) ->
+                Objectives.resolveConversationScope host run (resolvedIdentity recordedIdentity) sid Nothing [] (SelectionRuntime.conversationAssignmentIdFor run.unWorkflowId (declarationCoordinateText msgMessageId)) conversation (Objective.turnReference (declarationCoordinateText userTurn.turnId)) >>= \case
+                  Left Objective.ObjectiveUnavailable -> throwIO (TransientBehaviorFailure "conversation objective authority unavailable")
+                  value -> pure value
+              _ -> pure (Left Objective.ObjectiveDenied)
+          else pure (Right Nothing)
+      case policy of
+        Left err -> pure (Left (Text.pack (show err)))
+        Right (Just _) -> pure (Left "objective work requires durable Skill execution")
+        Right Nothing -> step (StepName "run-behavior-v2") do
+          prior <- liftIO (loadTurns env sid)
+          liftIO (runBehaviorAttempt (durationTime (conversationRunTimeout env)) active decl (triggerOnly (behaviorPayload msg prior)))
   case outputE of
     Left err -> pure (Left err)
     Right output -> do
@@ -947,8 +969,19 @@ processSelectedTurn env selectedBehavior recordedIdentity decl msg@AddressedMess
 runConversationSkillStep :: ConversationEnv -> ResolvedAgentIdentity -> AgentDecl -> AddressedMessage -> SessionId -> RecordedTurn -> Maybe ResolvedProfile -> Selection.ExecutionSelection -> DeclarationCoordinate "skill-path" -> Eff (Workflow : AppEffects) (Either Text Value)
 runConversationSkillStep env recordedIdentity decl msg sid userTurn profile selection path = do
   (_, workflowId) <- currentWorkflow
+  useObjectives <- Workflow.patch (Workflow.PatchId "shikigami-conversation-objective-tracking-v1")
   let runtime = conversationExecutionRuntime env
-      describe = ExecutionTools.describeExecutionTools Log.silentLogger denyAllActionAuthorizer emptyCapabilityProviderRegistry (ExecutionTools.staticNativeTools env.behaviorEnv.tools)
+      describe = ExecutionTools.describeExecutionTools Log.silentLogger denyAllActionAuthorizer emptyCapabilityProviderRegistry (conversationTools env)
+      loadObjectives = case env.objectives of
+        Nothing -> pure (Right Nothing)
+        Just host -> case Objective.parseConversationRef (declarationCoordinateText msg.conversationId) of
+          Left _ -> pure (Left (Execution.ExecutionPolicyRefused "invalid objective conversation"))
+          Right conversation ->
+            Objectives.resolveConversationScope host workflowId (resolvedIdentity recordedIdentity) sid selection.rootId selection.permittedAliases selection.assignmentId conversation (Objective.turnReference (declarationCoordinateText userTurn.turnId)) >>= \case
+              Left Objective.ObjectiveUnavailable -> throwIO (TransientBehaviorFailure "conversation objective authority unavailable")
+              Left Objective.ObjectiveUnresolved -> throwIO (TransientBehaviorFailure "conversation objective authority unresolved")
+              Left err -> pure (Left (Execution.ExecutionPolicyRefused (Text.pack (show err))))
+              Right scope -> pure (Right scope)
       assignment =
         ExecutionStart.SkillAssignment
           { runId = workflowId,
@@ -969,7 +1002,7 @@ runConversationSkillStep env recordedIdentity decl msg sid userTurn profile sele
                       value -> value
                 Right (ExecutionStart.SkillInput (triggerOnly payload) history)
           }
-  admitted <- step (StepName "admit-conversation-skill") (liftIO (ExecutionStart.admitSkillExecution runtime describe assignment >>= executionResult))
+  admitted <- step (StepName "admit-conversation-skill") (liftIO ((if useObjectives then ExecutionStart.admitObjectiveSkillExecution loadObjectives runtime describe assignment else ExecutionStart.admitSkillExecution runtime describe assignment) >>= executionResult))
   case admitted of
     Left err -> pure (Left err)
     Right start -> do
@@ -1010,12 +1043,15 @@ conversationExecutionRuntime env =
             authorize = authority snapshot,
             transact = SelectionRuntime.selectionTransaction env.appEnv env.deliveryPool
           },
-      withTools = ExecutionTools.withExecutionTools Log.silentLogger denyAllActionAuthorizer emptyCapabilityProviderRegistry (ExecutionTools.staticNativeTools env.behaviorEnv.tools),
+      withTools = ExecutionTools.withExecutionTools Log.silentLogger denyAllActionAuthorizer emptyCapabilityProviderRegistry (conversationTools env),
       timeoutSeconds = env.runTimeout
     }
   where
     authority :: Execution.ExecutionSnapshot -> IO (Either Text ())
     authority snapshot = SelectionRuntime.currentExecutionAuthority (Directory.identityLifecycleAdmission env.directory snapshot.identity) snapshot.sanctionedProfile env.resolveRunProfile
+
+conversationTools :: ConversationEnv -> ExecutionTools.NativeToolFactory
+conversationTools env = WorkerTools.appendNativeFactory (ExecutionTools.staticNativeTools env.behaviorEnv.tools) (ObjectiveTools.objectiveTools env.objectives)
 
 runConversationWorkflow ::
   ConversationEnv ->

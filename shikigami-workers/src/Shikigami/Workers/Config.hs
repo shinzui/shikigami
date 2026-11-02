@@ -222,6 +222,7 @@ agentRunDeps env =
       AgentWorkflow.capabilities = maybe emptyCapabilityRuntime (.capabilities) env.workspace,
       AgentWorkflow.workspace = env.workspace,
       AgentWorkflow.coordination = Just (Objectives.coordinationHost env.appEnv env.objectiveSettings env.directory env.actionAuthorizer env.agents env.delegationBudget Nothing),
+      AgentWorkflow.objectives = Just (objectiveRuntime env),
       AgentWorkflow.agents = (.agents) env,
       AgentWorkflow.kizashi = (.kizashi) env,
       AgentWorkflow.kawa = (.kawa) env,
@@ -256,6 +257,7 @@ conversationEnv env =
     { Conversation.appEnv = (.appEnv) env,
       Conversation.behaviorEnv = (.behaviorEnv) env,
       Conversation.decisions = env.decisions,
+      Conversation.objectives = Just (objectiveRuntime env),
       Conversation.deliveryPool = Just (envPool env),
       Conversation.resolveRunProfile = (agentRunDeps env).resolveRunProfile,
       Conversation.runTimeout = envRunTimeout env,
@@ -266,6 +268,9 @@ conversationEnv env =
       Conversation.grants = envGrants env,
       Conversation.directory = envDirectory env
     }
+
+objectiveRuntime :: WorkerEnv -> Objectives.ObjectiveRuntime
+objectiveRuntime env = Objectives.ObjectiveRuntime env.appEnv env.objectiveSettings env.directory env.actionAuthorizer (Just (Objectives.coordinationHost env.appEnv env.objectiveSettings env.directory env.actionAuthorizer env.agents env.delegationBudget Nothing))
 
 -- | Resolve every scheduled agent's declared cron, once, at boot.
 --

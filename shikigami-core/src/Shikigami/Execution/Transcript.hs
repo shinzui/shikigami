@@ -46,6 +46,7 @@ import Shikigami.Execution.Progress
 import Shikigami.Execution.Selection (ExecutionSelection (..))
 import Shikigami.Execution.ToolPosition
 import Shikigami.FormatVersion (FormatVersion (V1))
+import Shikigami.Objective.Scope qualified as ObjectiveScope
 import Shikigami.Prelude hiding (Options, (.=))
 import Shikigami.StateRevision
 import Shikigami.Workspace.Instructions (WorkspaceAdmission (..), instructionPrompt)
@@ -243,7 +244,8 @@ data ExecutionSnapshot = ExecutionSnapshot
     offeredTools :: !Aeson.Value,
     policy :: !HarnessPolicy,
     toolBindings :: ![ToolBinding],
-    workspace :: !(Maybe WorkspaceAdmission)
+    workspace :: !(Maybe WorkspaceAdmission),
+    objectiveScope :: !(Maybe ObjectiveScope.ObjectiveScope)
   }
   deriving stock (Eq, Generic)
 
@@ -266,13 +268,14 @@ instance ToJSON ExecutionSnapshot where
         ]
           <> ["toolBindings" .= snapshot.toolBindings | not (null snapshot.toolBindings)]
           <> ["workspace" .= value | Just value <- [snapshot.workspace]]
+          <> ["objectiveScope" .= value | Just value <- [snapshot.objectiveScope]]
       )
 
 instance Show ExecutionSnapshot where show snapshot = "ExecutionSnapshot " <> show snapshot.executionId <> " <protected>"
 
 instance FromJSON ExecutionSnapshot where
   parseJSON = Aeson.withObject "ExecutionSnapshot" \fields -> do
-    snapshot <- ExecutionSnapshot <$> fields .: "format" <*> fields .: "executionId" <*> (WorkflowId <$> fields .: "runId") <*> fields .: "agent" <*> fields .: "identity" <*> fields .: "sessionId" <*> fields .: "selection" <*> fields .:? "sanctionedProfile" <*> fields .: "instructions" <*> fields .: "initialContext" <*> fields .: "capabilities" <*> fields .: "offeredTools" <*> fields .: "policy" <*> (fields .:? "toolBindings" .!= []) <*> fields .:? "workspace"
+    snapshot <- ExecutionSnapshot <$> fields .: "format" <*> fields .: "executionId" <*> (WorkflowId <$> fields .: "runId") <*> fields .: "agent" <*> fields .: "identity" <*> fields .: "sessionId" <*> fields .: "selection" <*> fields .:? "sanctionedProfile" <*> fields .: "instructions" <*> fields .: "initialContext" <*> fields .: "capabilities" <*> fields .: "offeredTools" <*> fields .: "policy" <*> (fields .:? "toolBindings" .!= []) <*> fields .:? "workspace" <*> fields .:? "objectiveScope"
     unless (snapshot.format == V1 && snapshot.executionId == executionIdFor snapshot.selection.assignmentId && snapshot.selection.profile == (((.ref) . resolvedProfileView) <$> snapshot.sanctionedProfile)) (fail "unsupported execution snapshot version or identity")
     case snapshot.selection.effectiveOptions of
       Aeson.Object options -> unless (all (\key -> case KeyMap.lookup key options of Nothing -> True; Just Aeson.Null -> True; Just (Aeson.Object fields) -> KeyMap.null fields; _ -> False) ["headers", "metadata", "apiKey"]) (fail "execution snapshot contains unsupported private model options")
@@ -285,6 +288,7 @@ instance FromJSON ExecutionSnapshot where
       unless (admission.runId == snapshot.runId && admission.assignmentId == snapshot.selection.assignmentId && Just admission.rootId == snapshot.selection.rootId && admission.owner == snapshot.identity) (fail "workspace differs from its accepted execution")
       unless (admission.workspace.provider == workspaceCoordinate "shikigami.workspace/1" && not (Text.null (workspaceCoordinateText admission.workspace.resource)) && Text.length (workspaceCoordinateText admission.workspace.resource) <= 128 && Text.length (workspaceCoordinateText admission.bindingDigest) == 71 && "sha256:" `Text.isPrefixOf` workspaceCoordinateText admission.bindingDigest) (fail "unsupported workspace binding")
       unless (maybe False (instructionPrompt admission.instructions `Text.isSuffixOf`) snapshot.initialContext.systemPrompt) (fail "workspace instructions are absent from fixed context")
+    forM_ snapshot.objectiveScope \scope -> unless (ObjectiveScope.matchesExecution scope snapshot.runId snapshot.identity snapshot.sessionId snapshot.selection.rootId snapshot.selection.permittedAliases snapshot.selection.assignmentId) (fail "objective scope differs from its accepted execution")
     pure snapshot
     where
       validBinding binding = all (\value -> not (Text.null value) && Text.length value <= 256) [executionCoordinateText binding.name, executionCoordinateText binding.revision, executionDigestText binding.schemaDigest]

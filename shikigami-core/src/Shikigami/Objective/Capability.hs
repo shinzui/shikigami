@@ -4,6 +4,7 @@
 -- verified caller/runtime context; none is populated from command JSON.
 module Shikigami.Objective.Capability
   ( ObjectiveHost (..),
+    checkCreationAdmission,
     createObjective,
     createObjectiveWithDisposition,
     listObjectives,
@@ -76,6 +77,11 @@ admit host label semantic = do
         pure (Access actor host.settings (addUTCTime 30 now) [] Nothing <$ exact)
       Right _ -> pure (Left ObjectiveDenied)
   pure (either (const (Left ObjectiveUnavailable)) id attempted)
+
+checkCreationAdmission :: (Store.ObjectiveEffects es) => ObjectiveHost -> Aeson.Value -> Eff es (Either ObjectiveError ())
+checkCreationAdmission host source = do
+  grant <- liftIO (admit host "admit-creation-scope" source)
+  either (pure . Left) Store.checkCreationAdmission grant
 
 createObjective :: (Store.ObjectiveEffects es) => ObjectiveHost -> OperationId -> Maybe CreationOrigin -> CreateRequest -> Eff es (Either ObjectiveError Receipt)
 createObjective host operation origin request = fmap (fmap snd) (createObjectiveWithDisposition host operation origin request)

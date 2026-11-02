@@ -180,7 +180,7 @@ tests fixture =
               selection = select now root catalog "coordinator"
               selectedRuntime = runtime app store base catalog
               execution = Replay.executionIdFor selection.assignmentId
-              snapshot = Replay.ExecutionSnapshot V1 execution (WorkflowId "prepared-http") (fixtureAgentName "worker") (compatibilityIdentity (fixtureAgentName "worker")) session selection Nothing (Replay.SkillInstructions (ExecutionValue.executionCoordinate "fixture") "system" "body") (Replay.ReplayContext Replay.LegacyContext (Just "system") [Replay.UserTurn [Replay.TextBlock "marker"] Nothing]) emptyResolvedCapabilitySet (toJSON ([] :: [Value])) defaultHarnessPolicy [] Nothing
+              snapshot = Replay.ExecutionSnapshot V1 execution (WorkflowId "prepared-http") (fixtureAgentName "worker") (compatibilityIdentity (fixtureAgentName "worker")) session selection Nothing (Replay.SkillInstructions (ExecutionValue.executionCoordinate "fixture") "system" "body") (Replay.ReplayContext Replay.LegacyContext (Just "system") [Replay.UserTurn [Replay.TextBlock "marker"] Nothing]) emptyResolvedCapabilitySet (toJSON ([] :: [Value])) defaultHarnessPolicy [] Nothing Nothing
               operationId = Replay.operationIdFor execution (fixtureRevision 0)
               specification = Replay.OperationSpec operationId Replay.ModelTurn RepeatableObservation (ExecutionValue.executionCoordinate "model") (ExecutionValue.executionDigestFor "shikigami.harness-policy/1" (toJSON snapshot.policy)) (ExecutionValue.executionDigest "scope") Nothing
               context = systemUser "system" "marker"
@@ -226,7 +226,7 @@ tests fixture =
               selection = select now root catalog "coordinator"
               selectedRuntime = runtime app store base catalog
               execution = Replay.executionIdFor selection.assignmentId
-              snapshot = Replay.ExecutionSnapshot V1 execution (WorkflowId "executor-http") (fixtureAgentName "worker") (compatibilityIdentity (fixtureAgentName "worker")) session selection Nothing (Replay.SkillInstructions (ExecutionValue.executionCoordinate "fixture") "system" "body") (Replay.ReplayContext Replay.LegacyContext (Just "system") [Replay.UserTurn [Replay.TextBlock "marker"] Nothing]) emptyResolvedCapabilitySet (toJSON ([] :: [Value])) defaultHarnessPolicy [] Nothing
+              snapshot = Replay.ExecutionSnapshot V1 execution (WorkflowId "executor-http") (fixtureAgentName "worker") (compatibilityIdentity (fixtureAgentName "worker")) session selection Nothing (Replay.SkillInstructions (ExecutionValue.executionCoordinate "fixture") "system" "body") (Replay.ReplayContext Replay.LegacyContext (Just "system") [Replay.UserTurn [Replay.TextBlock "marker"] Nothing]) emptyResolvedCapabilitySet (toJSON ([] :: [Value])) defaultHarnessPolicy [] Nothing Nothing
               operationId = Replay.operationIdFor execution (fixtureRevision 0)
               specification = Replay.OperationSpec operationId Replay.ModelTurn RepeatableObservation (ExecutionValue.executionCoordinate "model") (ExecutionValue.executionDigestFor "shikigami.harness-policy/1" (toJSON snapshot.policy)) (ExecutionValue.executionDigest "scope") Nothing
               executor authority = Executor.ExecutionRuntime app (const authority) (const authority) (const selectedRuntime) (\_ _ _ use -> Right <$> use []) ((either (error . show) id . parseDuration) (5))
@@ -409,6 +409,7 @@ tests fixture =
                   { appEnv = app,
                     behaviorEnv = base,
                     decisions = dependencies.decisions,
+                    objectives = Nothing,
                     deliveryPool = Just store.pool,
                     resolveRunProfile = dependencies.resolveRunProfile,
                     runTimeout = (either (error . show) id (parseDuration (30))),
@@ -572,7 +573,7 @@ driveExecutionChild app executor execution remaining
           Just (state, binding, _) <- expectRight =<< run app (Durable.inspectExecution execution)
           operation <- maybe (assertFailure "driver suspended without active work" >> fail "operation") pure state.activeOperation
           attempts <- expectRight =<< run app (Durable.inspectOperationAttempts operation)
-          case filter (\attempt -> attempt.phase /= Attempt.AttemptAbandoned) attempts of
+          case filter Attempt.logicalAttempt attempts of
             [attempt] -> Executor.executeAcceptedAttempt executor binding.identity (Attempt.JobReference V1 execution operation attempt.request.attemptId) >>= (@?= Right Executor.ExecutorDone)
             _ -> assertFailure "driver child has no accepted attempt"
           driveExecutionChild app executor execution (remaining - 1)
