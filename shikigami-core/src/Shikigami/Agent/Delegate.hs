@@ -174,6 +174,7 @@ delegateWith expectedIdentity executionRequest declarations directory decl ctx d
           { agentName = childAgent,
             identity = childIdentity,
             triggerKind = TriggeredByDelegation,
+            objective = Nothing,
             routeKind = AgentWorkflowRoute,
             occurredAt = now,
             triggerPayload = payload,

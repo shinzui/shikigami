@@ -9,7 +9,7 @@ module Shikigami.Agent.RunJob
   )
 where
 
-import Data.Aeson (Value, (.:), (.=))
+import Data.Aeson (Value, (.:), (.:?), (.=))
 import Data.Aeson qualified as Aeson
 import Data.UUID qualified as UUID
 import Data.UUID.V5 qualified as UUID
@@ -24,6 +24,7 @@ import Shikigami.Agent.Run.Key (RunKey, runKeyText)
 import Shikigami.Decision.ModelAlias (ModelAlias)
 import Shikigami.Execution.Identity (ExecutionRootId)
 import Shikigami.Execution.Request (ExecutionRequest)
+import Shikigami.Objective.Reference (ObjectiveAssociation)
 import Shikigami.Prelude hiding ((.=))
 
 -- | Which trigger class produced the job.
@@ -63,6 +64,7 @@ data RunJob = RunJob
     executionPermissions :: !(Maybe [ModelAlias]),
     executionRootId :: !(Maybe ExecutionRootId),
     delegationBudgetId :: !(Maybe DelegationBudgetId),
+    objective :: !(Maybe ObjectiveAssociation),
     routeKind :: !RunRouteKind
   }
   deriving stock (Eq, Show, Generic)
@@ -72,22 +74,24 @@ data RunJob = RunJob
 instance ToJSON RunJob where
   toJSON job =
     Aeson.object
-      [ "agentName" .= job.agentName,
-        "identity" .= job.identity,
-        "triggerKind" .= job.triggerKind,
-        "occurredAt" .= job.occurredAt,
-        "triggerPayload" .= job.triggerPayload,
-        "idempotencyKey" .= job.idempotencyKey,
-        "parentSessionId" .= job.parentSessionId,
-        "parentRunWorkflowId" .= fmap (.unWorkflowId) job.parentRunWorkflowId,
-        "delegationDepth" .= job.delegationDepth,
-        "lineage" .= job.lineage,
-        "executionRequest" .= job.executionRequest,
-        "executionPermissions" .= job.executionPermissions,
-        "executionRootId" .= job.executionRootId,
-        "delegationBudgetId" .= job.delegationBudgetId,
-        "routeKind" .= job.routeKind
-      ]
+      ( maybe [] (\value -> ["objective" .= value]) job.objective
+          <> [ "agentName" .= job.agentName,
+               "identity" .= job.identity,
+               "triggerKind" .= job.triggerKind,
+               "occurredAt" .= job.occurredAt,
+               "triggerPayload" .= job.triggerPayload,
+               "idempotencyKey" .= job.idempotencyKey,
+               "parentSessionId" .= job.parentSessionId,
+               "parentRunWorkflowId" .= fmap (.unWorkflowId) job.parentRunWorkflowId,
+               "delegationDepth" .= job.delegationDepth,
+               "lineage" .= job.lineage,
+               "executionRequest" .= job.executionRequest,
+               "executionPermissions" .= job.executionPermissions,
+               "executionRootId" .= job.executionRootId,
+               "delegationBudgetId" .= job.delegationBudgetId,
+               "routeKind" .= job.routeKind
+             ]
+      )
 
 instance FromJSON RunJob where
   parseJSON = Aeson.withObject "RunJob" \value -> do
@@ -108,8 +112,9 @@ instance FromJSON RunJob where
     executionPermissions <- value .: "executionPermissions"
     executionRootId <- value .: "executionRootId"
     delegationBudgetId <- value .: "delegationBudgetId"
+    objective <- value .:? "objective"
     routeKind <- value .: "routeKind"
-    pure RunJob {agentName, identity, triggerKind, occurredAt, triggerPayload, idempotencyKey, parentSessionId, parentRunWorkflowId, delegationDepth, lineage, delegationBudgetId, executionRootId, executionRequest, executionPermissions, routeKind}
+    pure RunJob {agentName, identity, triggerKind, occurredAt, triggerPayload, idempotencyKey, parentSessionId, parentRunWorkflowId, delegationDepth, lineage, delegationBudgetId, executionRootId, executionRequest, executionPermissions, objective, routeKind}
 
 -- | Preserve valid natural workflow keys. Keys containing Keiro journal
 -- separators become deterministic UUIDv5 technical identities; they are not

@@ -385,6 +385,7 @@ agentRunSpecialistTests databaseFixture =
                 { agentName = fixtureAgentName reviewerAgent,
                   identity = compatibilityIdentity (fixtureAgentName reviewerAgent),
                   triggerKind = TriggeredByEvent,
+                  objective = Nothing,
                   routeKind = AgentWorkflowRoute,
                   occurredAt = UTCTime (fromGregorian 2026 8 26) 0,
                   triggerPayload = Aeson.toJSON trigger,

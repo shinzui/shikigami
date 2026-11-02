@@ -632,6 +632,7 @@ prepareEventHits directory receivedAt agents payloadValue event =
               { agentName = (agent ^. #name),
                 identity = UnresolvedLegacyIdentity,
                 triggerKind = TriggeredByEvent,
+                objective = Nothing,
                 routeKind = eventRouteOf agent,
                 occurredAt = receivedAt,
                 triggerPayload = payloadValue,

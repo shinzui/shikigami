@@ -63,6 +63,20 @@ the criterion and, where required, a verified journey. A human-verifiable
 criterion requires an explicit attestation by an owner or completer. The model
 supplies references and statements, never authoritative pass/fail flags.
 
+Run associations are admitted in the HTTP ledger's transaction, with the queue
+send and acceptance row. The application input envelope carries a typed objective
+and assignment selector separately from arbitrary trigger JSON. Omitted selectors
+retain their original journal, queue and fingerprint bytes; associated request
+fingerprints use a separate UUIDv5 namespace and include both selectors and input.
+A lock on the acceptance coordinate orders duplicate requests before checking the
+retained winner. Current objective coordination permission is checked under the
+objective lock before returning an associated receipt, including a conflict.
+Fresh acceptance additionally checks the assigned agent's current membership and
+ownership. Receipt recovery retains the accepted selector after assignment changes
+and cannot downgrade to the unassociated entry point. Development-mode anonymous
+HTTP access cannot admit an association. Conversation, creation-origin and worker
+provider qualification remain separate acceptance gates in plan 99.
+
 ## Alternatives rejected
 
 Independent adapter executors would drift on retry ordering and revocation races.

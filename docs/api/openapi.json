@@ -35,6 +35,29 @@
             "minLength": 1,
             "type": "string"
           },
+          "objective": {
+            "properties": {
+              "assignmentId": {
+                "properties": {
+                  "value": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "value"
+                ],
+                "type": "object"
+              },
+              "objectiveId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "objectiveId",
+              "assignmentId"
+            ],
+            "type": "object"
+          },
           "payload": {
             "additionalProperties": true,
             "type": "object"

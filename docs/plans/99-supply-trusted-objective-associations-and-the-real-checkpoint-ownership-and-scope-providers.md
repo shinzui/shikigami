@@ -23,6 +23,11 @@ provenance:
       at: 2026-10-29T13:05:53Z
       mode: "update"
       note: "Specify codec-preserving instruction invalidation, creation-origin validation and consumer acceptance; consume EP-1 configuration."
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-11-02T02:51:11Z
+      mode: "implement"
+      note: "Implement trusted run association admission and compatible run envelopes."
 ---
 
 # Supply trusted objective associations and the real checkpoint, ownership and scope providers
@@ -44,7 +49,13 @@ After this plan, continuing worker sessions run against a real objective owner i
 - [ ] Milestone 2: `CheckpointProvider` and `OwnershipProvider` are implemented by `shikigami-objective-v1` with assignment-scoped conflict; two sibling checkpoints from one expected objective revision both commit, and a lost acknowledgement followed by retry returns the original receipt.
 - [ ] Milestone 3: explicit checkpoint-conflict reconciliation, `CoordinationAuthority` from retained scopes, production wiring using plan 98’s operator configuration pass `ObjectiveCheckpointSpec`; plan 84's Progress and the MasterPlan 14 registry record the real IR-13 provider evidence.
 
-Planning baseline `3900c0e634d9b559e92a6989bb10f9943e0beab1`, inspected 2026-10-28. No implementation or test results are claimed. Hard prerequisite: plan 98 Complete.
+2026-11-02 UTC implementation checkpoint: the run-association portion of milestone 1 is implemented. `Objective.Reference` supplies the typed selector; `Objective.Association` validates current caller coordination permission and assigned-agent membership under the objective lock inside the acceptance ledger transaction. Association, acceptance and queue delivery commit together. The HTTP handler refuses anonymous development callers; existing unassociated requests retain their fingerprint and journal/queue bytes. Associated fingerprints use a separate namespace, and six concurrent admissions produce one send and one immutable receipt. Retry checks current permission before returning the retained receipt, including after assignment withdrawal; omitting the selector cannot downgrade authentication. A trigger-induced ledger insert failure after association and enqueue rolls all three back.
+
+Acceptance evidence: 632 core tests, 32 API tests, 473 PostgreSQL tests, 280 worker tests and 96 server tests pass. The latest objective-store rerun passes all 28 cases, including the post-enqueue failure injection and concurrent association acceptance. `just keiro-gate HEAD` passes with 156 conformance checks and a neutral replay diff; Haskell conventions pass. ADR 0070 records the run-admission boundary. No workflow step or generated domain shape changed.
+
+Milestone 1 remains incomplete: implement verified conversation bindings and per-turn association snapshots, creation-origin validation/lookup against accepted runtime records, and their acceptance tests. Then implement milestones 2 and 3; production providers, retained coordination scopes, explicit conflict reconciliation and plan 84's real-provider gate remain open. EP-3 milestone 3 and EP-4 retain their existing prerequisites.
+
+Planning baseline `3900c0e634d9b559e92a6989bb10f9943e0beab1`, inspected 2026-10-28. Hard prerequisite: plan 98 Complete.
 
 
 ## Surprises & Discoveries

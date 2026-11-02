@@ -1,7 +1,7 @@
 module Shikigami.ObjectiveStoreSpec (tests, crashWriter) where
 
 import Contravariant.Extras (contrazip2, contrazip3)
-import Control.Concurrent.Async (concurrently)
+import Control.Concurrent.Async (concurrently, replicateConcurrently)
 import Control.Exception (SomeException, try)
 import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
@@ -13,19 +13,27 @@ import Data.Int (Int64)
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Text
 import Data.Time (addUTCTime)
+import Data.Vector qualified as Vector
 import Effectful (Eff)
 import Hasql.Decoders qualified as D
 import Hasql.Encoders qualified as E
+import Hasql.Pool qualified as Pool
+import Hasql.Session qualified as Session
 import Hasql.Statement (preparable)
 import Hasql.Transaction qualified as Tx
-import Kiroku.Store.Connection (defaultConnectionSettings)
+import Hasql.Transaction.Sessions qualified as Transactions
+import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
 import Kiroku.Store.Read qualified as StoreRead
 import Kiroku.Store.Transaction (runTransaction)
 import Kiroku.Store.Types qualified as StoreTypes
+import Pgmq qualified
 import Shikigami.Action.Authorization (allowAllActionAuthorizerForTests, denyAllActionAuthorizer)
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
 import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (AgentIdentity (..), compatibilityIdentity, mkAgentPrincipal)
+import Shikigami.Agent.RunJob (RunRouteKind (..), runJobWorkflowId)
+import Shikigami.AgentRun.Ledger qualified as Ledger
+import Shikigami.AgentRun.RequestKey (parseRequestKey)
 import Shikigami.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
 import Shikigami.Execution.Identity (ExecutionRootId, OperationId, operationIdText)
 import Shikigami.Execution.Payload (payloadIdText)
@@ -33,12 +41,16 @@ import Shikigami.Execution.Transcript (ExecutionId (..), PayloadRef (..), execut
 import Shikigami.Fixture.ExecutionIdentity (fixtureOperationId, fixtureRootId)
 import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
+import Shikigami.Objective.Association qualified as Association
 import Shikigami.Objective.Capability qualified as O
 import Shikigami.Objective.Command
+import Shikigami.Objective.Reference (ObjectiveAssociation (..))
 import Shikigami.Objective.Store qualified as S
 import Shikigami.Objective.Types
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.RunEvidence.Catalog qualified as Catalog
+import Shikigami.RunJobs (decodeRunJob)
+import Shikigami.Trigger.Enqueue (addressedRunJob, ensureRunQueue, runQueueName)
 import Shikigami.WorkerSession.Checkpoint qualified as CP
 import Shikigami.WorkerSession.Input (InstructionText, parseInstructionText)
 import Shikigami.WorkerSession.Store qualified as Sessions
@@ -55,7 +67,8 @@ tests :: DatabaseFixture -> TestTree
 tests fixture =
   testGroup
     "ObjectiveStore"
-    [ testCase "corrupt snapshot refuses through the owner and recovery preserves the retained objective" $
+    [ testCase "run associations commit with acceptance, refuse revoked callers and preserve queue selectors" (runAssociations fixture),
+      testCase "corrupt snapshot refuses through the owner and recovery preserves the retained objective" $
         withObjective fixture \env _ objective -> do
           current <- get env objective
           beforeEvents <- objectiveEventCount env
@@ -620,3 +633,58 @@ fixtureAgentName = either (error . show) id . mkAgentName
 
 caller :: Text -> CallerId
 caller = either (error . show) id . parseCallerId
+
+runAssociations :: DatabaseFixture -> IO ()
+runAssociations fixture = withDatabase fixture \env -> withStore env.connectionSettings \store -> do
+  _ <- right =<< ensureRunQueue store.pool
+  created <- right =<< run env (O.createObjective ownerHost (fixtureOperationId "create") Nothing request)
+  now <- getCurrentTime
+  let assignment = draft now "run-assignment"
+      second = draft now "other-assignment"
+      reference = ObjectiveAssociation created.objectiveId assignment.assignmentId
+      identity = assignment.owner
+      agent = fixtureAgentName "worker"
+      settings = ownerHost.settings
+      key = either (error . show) id (parseRequestKey "associated")
+      base = addressedRunJob now identity agent AgentWorkflowRoute (Aeson.object []) (Ledger.httpRunKey agent key)
+      job = base & #objective .~ Just reference
+      accept caller = Ledger.acceptObjectiveRunRequest settings store.pool job key (Ledger.callerAttribution caller)
+      lookupBinding = right =<< Pool.use store.pool (Transactions.transaction Transactions.ReadCommitted Transactions.Write (Association.lookupRunTx (runJobWorkflowId job)))
+      queueLength = (.queueLength) <$> (right =<< Pool.use store.pool (Pgmq.queueMetrics runQueueName))
+  _ <- right =<< run env (O.executeCommand ownerHost created.objectiveId (revision 0) (fixtureOperationId "assign") (SetAssignments [assignment, second]))
+  _ <- right =<< run env (O.executeCommand ownerHost created.objectiveId (revision 1) (fixtureOperationId "worker") (GrantMember (RecordedAgent identity) [Worker]))
+  accept "intruder" >>= assertBool "association refused" . isLeft
+  queueLength >>= (@?= 0)
+  lookupBinding >>= (@?= Right Nothing)
+  Ledger.acceptRunRequest store.pool job key (Ledger.callerAttribution "owner") >>= assertBool "association refused" . isLeft
+  outcomes <- replicateConcurrently 6 (accept "owner") >>= traverse right
+  [accepted] <- pure [row | Ledger.Accepted row <- outcomes]
+  length [() | Ledger.Replayed _ <- outcomes] @?= 5
+  accepted.payloadFingerprint @?= Ledger.runRequestFingerprint job
+  assertBool "association changes fingerprint" (accepted.payloadFingerprint /= Ledger.runRequestFingerprint base)
+  lookupBinding >>= (@?= Right (Just reference))
+  accept "owner" >>= (@?= Right (Ledger.Replayed accepted))
+  queueLength >>= (@?= 1)
+  messages <- right =<< Pool.use store.pool (Pgmq.readMessage (Pgmq.ReadMessage runQueueName 30 (Just 10) Nothing))
+  map (decodeRunJob . (.body.unMessageBody)) (Vector.toList messages) @?= [Right job]
+  Ledger.acceptRunRequest store.pool base key (Ledger.callerAttribution "owner") >>= assertBool "associated replay cannot downgrade authentication" . isLeft
+  let changed = job & #objective .~ Just (ObjectiveAssociation created.objectiveId second.assignmentId)
+  Ledger.acceptObjectiveRunRequest settings store.pool changed key (Ledger.callerAttribution "owner") >>= (@?= Right (Ledger.Conflicting accepted))
+  lookupBinding >>= (@?= Right (Just reference))
+  -- Current permission is still required for receipt recovery.
+  _ <- right =<< run env (O.executeCommand ownerHost created.objectiveId (revision 2) (fixtureOperationId "grant") (GrantMember (VerifiedCaller (caller "coordinator")) [Coordinator]))
+  accept "coordinator" >>= (@?= Right (Ledger.Replayed accepted))
+  _ <- right =<< run env (O.executeCommand ownerHost created.objectiveId (revision 3) (fixtureOperationId "revoke") (RevokeMember (VerifiedCaller (caller "coordinator"))))
+  accept "coordinator" >>= assertBool "association refused" . isLeft
+  queueLength >>= (@?= 1)
+  _ <- right =<< run env (O.executeCommand ownerHost created.objectiveId (revision 4) (fixtureOperationId "withdraw") (SetAssignments [assignment & #state .~ Withdrawn, second]))
+  accept "owner" >>= (@?= Right (Ledger.Replayed accepted))
+  -- Loss of the ledger after association admission rolls back the binding too.
+  let failedKey = either (error . show) id (parseRequestKey "atomic-failure")
+      failed = changed & #idempotencyKey .~ Ledger.httpRunKey agent failedKey
+  _ <- right =<< Pool.use store.pool (Session.script "CREATE FUNCTION shikigami.reject_associated_fixture() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'injected failure after association and enqueue'; END $$; CREATE TRIGGER reject_associated_fixture BEFORE INSERT ON shikigami.agent_run_requests FOR EACH ROW EXECUTE FUNCTION shikigami.reject_associated_fixture()")
+  Ledger.acceptObjectiveRunRequest settings store.pool failed failedKey (Ledger.callerAttribution "owner") >>= assertBool "association refused" . isLeft
+  failedBinding <- right =<< Pool.use store.pool (Transactions.transaction Transactions.ReadCommitted Transactions.Write (Association.lookupRunTx (runJobWorkflowId failed)))
+  failedBinding @?= Right Nothing
+  Ledger.lookupRunRequest store.pool agent (runJobWorkflowId failed) >>= (@?= Right Nothing)
+  queueLength >>= (@?= 1)

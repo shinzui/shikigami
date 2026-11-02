@@ -5,6 +5,7 @@ import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.ByteString.Builder (toLazyByteString)
 import Data.ByteString.Lazy qualified as LBS
+import Data.Generics.Labels ()
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Text
 import Keiro.Workflow.Types (WorkflowId (..))
@@ -22,6 +23,7 @@ import Shikigami.AgentRun.Ledger qualified as Ledger
 import Shikigami.AgentRun.RequestKey (requestKeyText)
 import Shikigami.AgentRun.Status qualified as Status
 import Shikigami.Api.Problem
+import Shikigami.App.Config (AppConfig (..), HttpAuthSettings (..))
 import Shikigami.Caller.Api
 import Shikigami.Directory qualified as Directory
 import Shikigami.Log qualified as Log
@@ -55,6 +57,7 @@ agentRunServer env caller agent = AgentRunApi {request = requestRun, show = show
     requestRun body = case Catalog.lookupAgent env.catalog agent of
       Nothing -> pure (RunAgentMissing (problem AgentNotFound "No declared agent has this name."))
       Just decl | not (agentEnabled decl.enabled) -> pure (RunAgentNotRunnable (problem AgentNotRunnable "The agent is disabled in its declaration."))
+      Just _ | isJust body.objective, AuthDisabled <- env.appConfig.httpAuth -> pure (RunRequestInvalid (problem InvalidBody "Objective association requires a verified caller."))
       Just decl -> do
         admission <- liftIO (Directory.identityAdmission env.directory ((.principal) <$> decl.identity) agent)
         case admission of
@@ -65,8 +68,8 @@ agentRunServer env caller agent = AgentRunApi {request = requestRun, show = show
             | LBS.length (Aeson.encode body.payload) > 65536 -> pure (RunPayloadTooLarge (problem PayloadTooLarge "The encoded payload exceeds 65536 bytes."))
             | otherwise -> do
                 now <- liftIO getCurrentTime
-                let job = addressedRunJob now identity agent AgentWorkflowRoute body.payload (Ledger.httpRunKey agent body.idempotencyKey)
-                outcome <- liftIO (Ledger.acceptRunRequest env.pool job body.idempotencyKey (Ledger.callerAttribution caller.callerId))
+                let job = addressedRunJob now identity agent AgentWorkflowRoute body.payload (Ledger.httpRunKey agent body.idempotencyKey) & #objective .~ body.objective
+                outcome <- liftIO (Ledger.acceptObjectiveRunRequest env.appConfig.objectiveSettings env.pool job body.idempotencyKey (Ledger.callerAttribution caller.callerId))
                 case outcome of
                   Left _ -> pure (RunRequestUnavailable unavailable)
                   Right (Ledger.Accepted row) -> logOutcome "server.run.accepted" row >> pure (RunAccepted (accepted row, location row))

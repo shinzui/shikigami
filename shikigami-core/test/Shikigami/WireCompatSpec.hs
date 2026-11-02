@@ -195,6 +195,7 @@ sampleRunJob =
     { agentName = fixtureAgentName "at-risk-watch",
       identity = compatibilityIdentity (fixtureAgentName "at-risk-watch"),
       triggerKind = TriggeredByStream,
+      objective = Nothing,
       routeKind = AgentWorkflowRoute,
       occurredAt = sampleTime,
       triggerPayload = triggerPayloadValue,

@@ -7,6 +7,8 @@ import Data.OpenApi (validateToJSON)
 import Data.Text qualified as Text
 import Data.Time (UTCTime (..), fromGregorian)
 import Shikigami.AgentRun.Api
+import Shikigami.Objective.Reference (ObjectiveAssociation (..))
+import Shikigami.Objective.Types (parseObjectiveAssignmentId, parseObjectiveId)
 import Test.Tasty
 import Test.Tasty.HUnit
 
@@ -14,12 +16,17 @@ tests :: TestTree
 tests =
   testGroup
     "agent-run wire contract"
-    [ testCase "HTTP request keys preserve valid strings and reject invalid input" do
+    [ testCase "an objective selector roundtrips and satisfies its schema" do
+        let reference = ObjectiveAssociation (either (error . show) id (parseObjectiveId "shikigami_objective_01h455vb4pex5vsknk084sn02q")) (either (error . show) id (parseObjectiveAssignmentId "worker-a"))
+            associated = AgentRunRequest (key "associated") (object []) (Just reference)
+        Aeson.eitherDecode (encode associated) @?= Right associated
+        validateToJSON associated @?= [],
+      testCase "HTTP request keys preserve valid strings and reject invalid input" do
         mapM_
           ( \value -> do
               Aeson.eitherDecode (encode value) @?= Right (key value)
               encode (key value) @?= encode value
-              Aeson.eitherDecode (encode (AgentRunRequest (key value) (object []))) @?= Right (AgentRunRequest (key value) (object []))
+              Aeson.eitherDecode (encode (AgentRunRequest (key value) (object []) Nothing)) @?= Right (AgentRunRequest (key value) (object []) Nothing)
           )
           [" ", "a:http:b", "日本", Text.replicate 200 "x"]
         mapM_
@@ -41,7 +48,7 @@ tests =
         validateToJSON accepted @?= []
     ]
   where
-    request = AgentRunRequest (key "key") (object [])
+    request = AgentRunRequest (key "key") (object []) Nothing
     accepted = AgentRunAccepted "heartbeat:http:key" "heartbeat" "key" "accepted" (UTCTime (fromGregorian 2026 10 25) 0)
 
 statusTests :: TestTree

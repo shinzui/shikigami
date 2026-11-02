@@ -19,7 +19,7 @@ module Shikigami.AgentRun.Api
   )
 where
 
-import Data.Aeson ((.:))
+import Data.Aeson ((.:), (.:?), (.=))
 import Data.Aeson qualified as Aeson
 import Data.Either (isRight)
 import Data.HashMap.Strict.InsOrd.Compat qualified as Map
@@ -32,21 +32,25 @@ import Servant.API
 import Servant.API.MultiVerb
 import Shikigami.AgentRun.RequestKey
 import Shikigami.Api.Problem
-import Shikigami.Prelude
+import Shikigami.Objective.Reference (ObjectiveAssociation)
+import Shikigami.Prelude hiding ((.=))
 
 validRunKey :: Text -> Bool
 validRunKey = isRight . parseRequestKey
 
-data AgentRunRequest = AgentRunRequest {idempotencyKey :: !RequestKey, payload :: !Aeson.Value}
+data AgentRunRequest = AgentRunRequest {idempotencyKey :: !RequestKey, payload :: !Aeson.Value, objective :: !(Maybe ObjectiveAssociation)}
   deriving stock (Eq, Show, Generic)
-  deriving anyclass (ToJSON)
+
+instance ToJSON AgentRunRequest where
+  toJSON request = Aeson.object (["idempotencyKey" .= request.idempotencyKey, "payload" .= request.payload] <> maybe [] (\value -> ["objective" .= value]) request.objective)
 
 instance FromJSON AgentRunRequest where
   parseJSON = Aeson.withObject "AgentRunRequest" \object -> do
     key <- object .: "idempotencyKey"
     payload <- object .: "payload"
+    objective <- object .:? "objective"
     case payload of
-      Aeson.Object _ -> pure (AgentRunRequest key payload)
+      Aeson.Object _ -> pure (AgentRunRequest key payload objective)
       _ -> fail "payload must be a JSON object"
 
 instance ToSchema AgentRunRequest where
@@ -62,6 +66,7 @@ instance ToSchema AgentRunRequest where
             & O.properties
             .~ Map.fromList
               [ ("idempotencyKey", O.Inline (mempty & O.type_ ?~ O.OpenApiTypeSingle O.OpenApiString & O.minLength ?~ 1 & O.maxLength ?~ 200)),
+                ("objective", O.Inline (mempty & O.type_ ?~ O.OpenApiTypeSingle O.OpenApiObject & O.required .~ ["objectiveId", "assignmentId"] & O.properties .~ Map.fromList [("objectiveId", O.Inline (mempty & O.type_ ?~ O.OpenApiTypeSingle O.OpenApiString)), ("assignmentId", O.Inline (mempty & O.type_ ?~ O.OpenApiTypeSingle O.OpenApiObject & O.required .~ ["value"] & O.properties .~ Map.singleton "value" (O.Inline (mempty & O.type_ ?~ O.OpenApiTypeSingle O.OpenApiString))))])),
                 ("payload", O.Inline (mempty & O.type_ ?~ O.OpenApiTypeSingle O.OpenApiObject & O.additionalProperties ?~ O.AdditionalPropertiesAllowed True))
               ]
         )

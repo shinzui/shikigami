@@ -27,6 +27,11 @@ provenance:
       at: 2026-10-30T19:36:19Z
       mode: "update"
       note: "Record EP-1 implementation, shared store interfaces and remaining provider/API/tool qualification gates."
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-11-02T02:51:11Z
+      mode: "implement"
+      note: "Begin EP-2 trusted associations after completed EP-1."
 ---
 
 # Track durable objectives and authoritative assignment checkpoints without Rei
@@ -71,7 +76,7 @@ The reviewed contracts are recorded in [ADR 0067](../adr/0067-objective-checkpoi
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
 | EP-1 | Persist authoritative objectives and conditional commands | [docs/plans/98-persist-authoritative-objectives-and-conditional-commands.md](../plans/98-persist-authoritative-objectives-and-conditional-commands.md) | None | None | Complete |
-| EP-2 | Supply trusted objective associations and the real checkpoint, ownership and scope providers | [docs/plans/99-supply-trusted-objective-associations-and-the-real-checkpoint-ownership-and-scope-providers.md](../plans/99-supply-trusted-objective-associations-and-the-real-checkpoint-ownership-and-scope-providers.md) | EP-1 | External plan 96 (real fence proof) | Not Started |
+| EP-2 | Supply trusted objective associations and the real checkpoint, ownership and scope providers | [docs/plans/99-supply-trusted-objective-associations-and-the-real-checkpoint-ownership-and-scope-providers.md](../plans/99-supply-trusted-objective-associations-and-the-real-checkpoint-ownership-and-scope-providers.md) | EP-1 | External plan 96 (real fence proof) | In Progress |
 | EP-3 | Expose governed objective inspection through the API and CLI | [docs/plans/100-expose-governed-objective-inspection-through-the-api-and-cli.md](../plans/100-expose-governed-objective-inspection-through-the-api-and-cli.md) | EP-1; EP-2 M1 for its milestone 3 | None | Not Started |
 | EP-4 | Make objective capabilities durable for agents and conversations | [docs/plans/101-make-objective-capabilities-durable-for-agents-and-conversations.md](../plans/101-make-objective-capabilities-durable-for-agents-and-conversations.md) | EP-1, EP-2 | None | Not Started |
 | EP-5 | Qualify no-Rei objective continuity and close IR-13 | [docs/plans/102-qualify-no-rei-objective-continuity-and-close-ir-13.md](../plans/102-qualify-no-rei-objective-continuity-and-close-ir-13.md) | EP-2, EP-3, EP-4 | External plan 96 (real fence); plan 84 completion | Not Started |
@@ -127,7 +132,11 @@ EP-1 exposes `Objective.Capability.readObjectiveVersion` over indexed references
 
 ## Progress
 
-2026-10-30: EP-1 is Complete: the objective store, shared configuration and acceptance boundary pass 542 unit tests, 377 PostgreSQL tests (19 objective cases), the complete build, migration isolation and the committed-candidate gate (122 conformance checks; replay-neutral). [Plan 98 qualification](../evidence/plan-98/qualification.json) retains evidence and the inherited request-bundle metadata limit. EP-2 through EP-5 remain unstarted. The real-provider gate on plan 84 remains open. The single-plan draft, plan 97, remains superseded. Cross-plan gates:
+2026-10-30: EP-1 is Complete: the objective store, shared configuration and acceptance boundary pass 542 unit tests, 377 PostgreSQL tests (19 objective cases), the complete build, migration isolation and the committed-candidate gate (122 conformance checks; replay-neutral). [Plan 98 qualification](../evidence/plan-98/qualification.json) retains evidence and the inherited request-bundle metadata limit. EP-2 is now In Progress; EP-3 through EP-5 remain unstarted. The real-provider gate on plan 84 remains open. The single-plan draft, plan 97, remains superseded.
+
+2026-11-02 UTC: EP-2 has implemented the trusted HTTP run-association slice of milestone 1: association, acceptance and queue send are atomic, unassociated codecs/fingerprints retain their bytes, concurrent acceptance deduplicates, and retries recheck current permission. Core, API, PostgreSQL, worker and server suites pass; the workflow gate is replay-neutral (156 conformance checks). Conversation admission and creation-origin verification still keep milestone 1 open. EP-2's remaining providers and reconciliation, and all later child acceptance, remain outstanding. See plan 99 for the implementation checkpoint.
+
+Cross-plan gates:
 
 - [ ] Plan 84's IR-13 completion gate: closed when EP-2 is Complete and plan 84's Progress and the MasterPlan 14 registry carry the real provider evidence.
 - [ ] IR-13 lifecycle: `in-progress` with this MasterPlan as `targetPlan`; `completed` only with EP-5 evidence.

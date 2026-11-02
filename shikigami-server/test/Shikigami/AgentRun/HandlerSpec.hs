@@ -49,7 +49,13 @@ tests :: DatabaseFixture -> TestTree
 tests fixture =
   testGroup
     "agent-run HTTP"
-    [ testCase "HTTP reconciles automatic pre-workflow exhaustion and retains failure after purge" $
+    [ testCase "development anonymous access cannot associate an objective" $
+        withRunServer fixture Directory.disabledDirectoryHandle \pool request -> do
+          response <- request "POST" "/agents/heartbeat/runs" (Aeson.object ["idempotencyKey" .= ("anonymous-objective" :: Text), "payload" .= Aeson.object [], "objective" .= Aeson.object ["objectiveId" .= ("shikigami_objective_01h455vb4pex5vsknk084sn02q" :: Text), "assignmentId" .= Aeson.object ["value" .= ("worker-a" :: Text)]]])
+          assertProblem 400 "invalid_body" response
+          metrics <- right =<< Pool.use pool (Pgmq.queueMetrics runQueueName)
+          metrics.queueLength @?= 0,
+      testCase "HTTP reconciles automatic pre-workflow exhaustion and retains failure after purge" $
         withRunServerStore fixture Directory.disabledDirectoryHandle \store request -> do
           response <- request "POST" "/agents/heartbeat/runs" (Aeson.object ["idempotencyKey" .= ("exhaustion" :: Text), "payload" .= Aeson.object []])
           accepted <- decodeBody response

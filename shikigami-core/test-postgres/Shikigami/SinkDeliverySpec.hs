@@ -666,6 +666,7 @@ testJob label =
     { agentName = fixtureAgentName "heartbeat",
       identity = compatibilityIdentity (fixtureAgentName "heartbeat"),
       triggerKind = TriggeredByEvent,
+      objective = Nothing,
       routeKind = AgentWorkflowRoute,
       occurredAt = UTCTime (fromGregorian 2026 8 21) 0,
       triggerPayload = object [],

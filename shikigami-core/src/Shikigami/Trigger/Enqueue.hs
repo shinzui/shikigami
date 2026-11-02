@@ -77,6 +77,7 @@ runJobFromEnvelopeWithIdentity resolvedOccurredAt identity decl env =
     { agentName = ((.name) decl),
       identity,
       triggerKind = TriggeredByStream,
+      objective = Nothing,
       routeKind = AgentWorkflowRoute,
       occurredAt = resolvedOccurredAt,
       triggerPayload = toJSON env,
@@ -169,6 +170,7 @@ addressedRunJob now identity agent route payload key =
     { agentName = agent,
       identity,
       triggerKind = TriggeredByEvent,
+      objective = Nothing,
       routeKind = route,
       occurredAt = now,
       triggerPayload = payload,
@@ -192,6 +194,7 @@ enqueueScheduledRun pool identity agent dueAt =
       { agentName = agent,
         identity,
         triggerKind = TriggeredBySchedule,
+        objective = Nothing,
         routeKind = AgentWorkflowRoute,
         occurredAt = dueAt,
         triggerPayload =

@@ -13,6 +13,8 @@ module Shikigami.AgentRun.Ledger
     callerAttribution,
     callerAttributionText,
     acceptRunRequest,
+    acceptObjectiveRunRequest,
+    runRequestFingerprint,
     lookupRunRequest,
     lookupRunRequestTx,
     lookupRunRequestById,
@@ -57,6 +59,8 @@ import Shikigami.Agent.RunJob (RunJob (..), runJobWorkflowId)
 import Shikigami.AgentRun.RequestKey
 import Shikigami.Behavior.Error (boundedBehaviorDetail)
 import Shikigami.Decision.Contract (versionedDigest)
+import Shikigami.Objective.Association qualified as Association
+import Shikigami.Objective.Types (AccessPrincipal (VerifiedCaller), ObjectiveSettings, parseCallerId)
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.RunJobs qualified as RunJobs
 import Shikigami.Trigger.Enqueue (enqueueRunJobTx)
@@ -138,31 +142,65 @@ data AcceptOutcome = Accepted !RunRequestRow | Replayed !RunRequestRow | Conflic
   deriving stock (Eq, Show)
 
 acceptRunRequest :: Pool -> RunJob -> RequestKey -> CallerAttribution -> IO (Either Text AcceptOutcome)
-acceptRunRequest pool job key caller
+acceptRunRequest pool job key caller = case job.objective of
+  Nothing -> acceptRunRequestWith unassociated pool job key caller
+  Just _ -> pure (Left "Objective run acceptance requires authenticated admission.")
+  where
+    unassociated Nothing = pure (Right ())
+    unassociated (Just row) =
+      Association.lookupRunTx row.runId >>= \case
+        Right Nothing -> pure (Right ())
+        _ -> Tx.condemn >> pure (Left "Objective run acceptance requires authenticated admission.")
+
+acceptObjectiveRunRequest :: ObjectiveSettings -> Pool -> RunJob -> RequestKey -> CallerAttribution -> IO (Either Text AcceptOutcome)
+acceptObjectiveRunRequest settings pool job key caller = case job.objective of
+  Nothing -> acceptRunRequest pool job key caller
+  Just reference -> case parseCallerId (callerAttributionText caller) of
+    Left _ -> pure (Left "Invalid objective caller.")
+    Right principal -> acceptRunRequestWith (admit principal reference) pool job key caller
+  where
+    admit principal reference existing = case existing of
+      Nothing -> Association.admitRunTx Association.NewRun settings (VerifiedCaller principal) job.identity (runJobWorkflowId job) reference
+      Just row ->
+        Association.lookupRunTx row.runId >>= \case
+          Left err -> pure (Left err)
+          Right Nothing | row.payloadFingerprint == runRequestFingerprint job -> Tx.condemn >> pure (Left "The retained objective association is missing.")
+          Right retained -> Association.admitRunTx Association.RetainedRun settings (VerifiedCaller principal) job.identity row.runId (fromMaybe reference retained)
+
+-- Absent associations retain the original payload commitment exactly.
+runRequestFingerprint :: RunJob -> PayloadFingerprint
+runRequestFingerprint job = case job.objective of
+  Nothing -> payloadFingerprint job.triggerPayload
+  Just reference -> PayloadFingerprint (UUID.generateNamed UUID.namespaceOID (BS.unpack (LBS.toStrict (encode (object ["format" .= (1 :: Int), "payload" .= job.triggerPayload, "objective" .= reference])))))
+
+acceptRunRequestWith :: (Maybe RunRequestRow -> Tx.Transaction (Either Text ())) -> Pool -> RunJob -> RequestKey -> CallerAttribution -> IO (Either Text AcceptOutcome)
+acceptRunRequestWith admission pool job key caller
   | job.idempotencyKey /= httpRunKey job.agentName key = pure (Left "HTTP run key does not match its acceptance coordinates.")
   | otherwise = do
       result <- Pool.use pool (Tx.transaction Tx.ReadCommitted Tx.Write accept)
-      case result of
-        Left _ -> pure (Left "The run acceptance store is unavailable.")
-        Right (Just row) -> pure (Right (Accepted row))
-        Right Nothing -> do
-          existing <- runRead pool (Tx.statement (agent, key) lookupKeyStatement >>= checkedRead . sequence)
-          pure $ case existing of
-            Right (Just row)
-              | row.payloadFingerprint == fingerprint -> Right (Replayed row)
-              | otherwise -> Right (Conflicting row)
-            Right Nothing -> Left "The accepted request could not be read."
-            Left err -> Left err
+      pure (either (const (Left "The run acceptance store is unavailable.")) id result)
   where
     agent = job.agentName
-    fingerprint = payloadFingerprint job.triggerPayload
+    fingerprint = runRequestFingerprint job
     accept = do
-      message <- enqueueRunJobTx job
-      let row = RunRequestRow agent key (runJobWorkflowId job) job.idempotencyKey fingerprint caller message job.occurredAt RunAccepted Nothing Nothing
-      inserted <- Tx.statement row insertStatement
-      case inserted of
-        Just acceptedAt -> pure (Just (row & #acceptedAt .~ acceptedAt))
-        Nothing -> Tx.condemn >> pure Nothing
+      -- Serialize the acceptance coordinate before inspecting a winner. Hash
+      -- collisions only serialize unrelated requests; they cannot alias rows.
+      Tx.statement (runKeyText job.idempotencyKey) (preparable "SELECT pg_advisory_xact_lock(hashtextextended($1,0))" (E.param (E.nonNullable E.text)) D.noResult)
+      stored <- Tx.statement (agent, key) lookupKeyStatement >>= checkedRead . sequence
+      case stored of
+        Left err -> pure (Left err)
+        Right existing ->
+          admission existing >>= \case
+            Left err -> Tx.condemn >> pure (Left err)
+            Right () -> case existing of
+              Just row -> pure (Right (if row.payloadFingerprint == fingerprint then Replayed row else Conflicting row))
+              Nothing -> do
+                message <- enqueueRunJobTx job
+                let row = RunRequestRow agent key (runJobWorkflowId job) job.idempotencyKey fingerprint caller message job.occurredAt RunAccepted Nothing Nothing
+                inserted <- Tx.statement row insertStatement
+                case inserted of
+                  Just acceptedAt -> pure (Right (Accepted (row & #acceptedAt .~ acceptedAt)))
+                  Nothing -> Tx.condemn >> pure (Left "The accepted request could not be read.")
 
 lookupRunRequest :: Pool -> AgentName -> WorkflowId -> IO (Either Text (Maybe RunRequestRow))
 lookupRunRequest pool agent runId = runRead pool (lookupRunRequestTx agent runId)

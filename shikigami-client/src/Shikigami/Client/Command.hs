@@ -163,7 +163,7 @@ runsInfo =
                   url = config.server
               let name = agent
               body <- readPayload payload
-              callServer url ((.request) ((.runs) (agentsClient credential) name) (Run.AgentRunRequest key body)) >>= \case
+              callServer url ((.request) ((.runs) (agentsClient credential) name) (Run.AgentRunRequest key body Nothing)) >>= \case
                 Right (Run.RunAccepted (accepted, location)) -> reportRun "accepted" accepted location
                 Right (Run.RunReplayed (accepted, location)) -> reportRun "replayed" accepted location
                 Right result -> hPutStrLn stderr (show result) >> exitFailure

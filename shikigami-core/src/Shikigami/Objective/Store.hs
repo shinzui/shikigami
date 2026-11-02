@@ -15,6 +15,8 @@ module Shikigami.Objective.Store
     referenceFor,
     validateTransition,
     authorized,
+    mayCoordinate,
+    validateSnapshot,
     creationAllowed,
   )
 where
@@ -95,6 +97,11 @@ administrates access = case access.actor of
 
 canRead :: Access -> Objective -> Bool
 canRead access objective = access.settings.enabled == ObjectivesEnabled && validPrincipal access.actor && (administrates access || not (null (rolesFor objective access.actor)))
+
+mayCoordinate :: Access -> Objective -> Bool
+mayCoordinate access objective = canRead access objective && (administrates access || objective.owner == access.actor && Owner `elem` roles || Coordinator `elem` roles)
+  where
+    roles = rolesFor objective access.actor
 
 -- This check runs under the same row lock as revocations and receipt lookup.
 authorized :: Access -> Objective -> Mutation -> Bool

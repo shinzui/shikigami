@@ -136,6 +136,7 @@ runDurableAgent logger KirokuStore {pool} appEnv workspace config decl = do
             executionPermissions = Nothing,
             executionRootId = Nothing,
             delegationBudgetId = Nothing,
+            objective = Nothing,
             routeKind = AgentWorkflowRoute
           }
       deps =

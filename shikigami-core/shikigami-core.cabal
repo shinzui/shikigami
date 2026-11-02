@@ -162,12 +162,14 @@ library
     Shikigami.Memory.AliasStore
     Shikigami.Memory.Scope
     Shikigami.Objective.Acceptance
+    Shikigami.Objective.Association
     Shikigami.Objective.Capability
     Shikigami.Objective.Catalog
     Shikigami.Objective.Command
     Shikigami.Objective.Content
     Shikigami.Objective.Keys
     Shikigami.Objective.Live
+    Shikigami.Objective.Reference
     Shikigami.Objective.Store
     Shikigami.Objective.Types
     Shikigami.ObjectiveLifecycle.BehaviorHoles
