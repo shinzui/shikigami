@@ -3,7 +3,7 @@
     "command": "nix develop --no-write-lock-file -c cabal build all",
     "exitCode": 0
   },
-  "candidateCommit": "8d1ee35e948c785d568e517cbe6ad113b1c5d14c",
+  "candidateCommit": "d38d2793a692ebe4ea664d6e354dd28904d2426f",
   "date": "2026-11-02",
   "historicalCompatibility": {
     "case": "installing the transfer-aware host preserves an admitted file-only execution without provisioning it",

@@ -26,7 +26,8 @@ The workspace-owned matrix covers integration, follow-up writes/cleanup and
 native fencing. The full `--qualify` matrix also requires real objective
 ownership recovery and accepted successor writes across restart; see
 [plan 96](../plans/96-provide-governed-mutable-repository-workspaces-for-durable-agents.md)
-for the accepted runtime and evidence.
+for the accepted runtime and evidence. Runtime `d38d2793` passes all 25 cases;
+[bounded joint facts](../evidence/plan-96/joint-native-qualification.json) retain the actual receipts and artifacts.
 Enablement requires the explicit reviewed process configuration and a qualified
 image and containment profile.
 

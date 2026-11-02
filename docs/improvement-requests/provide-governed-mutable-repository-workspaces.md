@@ -2,12 +2,14 @@
 type: Improvement Request
 title: Provide governed mutable repository workspaces for durable agent runs
 description: Let a declared durable agent resolve an operator-approved repository into an isolated worktree and use bounded read, edit, validation, and Git capabilities under exact per-action authorization, returning structured change evidence.
-timestamp: "2026-10-30T18:30:48Z"
+timestamp: "2026-11-02T19:57:20Z"
 generated:
   by: process:codex
   at: "2026-10-11T03:04:54Z"
 requestId: IR-11
-status: in-progress
+status: completed
+completedAt: "2026-11-02T19:57:20Z"
+resolution: "Implemented by plan 96; all 25 native cases and final host checks pass, including real ownership receipt recovery, accepted successor effects and exact integrated artifacts."
 targetPlan: docs/plans/96-provide-governed-mutable-repository-workspaces-for-durable-agents.md
 origin: mori://shinzui/mori
 reviews:
@@ -139,6 +141,15 @@ an operator-owned durable-run provider for repository work that preserves those 
 9. Reassign an existing workspace with a pending write and resume after a restart. The old
    owner cannot write after the handoff; accepted files and uncertain operations remain visible.
    A continuing idle worker's workspace is retained, and scoped repository instructions apply.
+
+Implementation evidence (2026-11-02): [plan 96](../plans/96-provide-governed-mutable-repository-workspaces-for-durable-agents.md)
+completes this request with [25 native cases](../evidence/plan-96/joint-native-qualification.json) and
+[full host qualification](../evidence/plan-96/host-qualification.json).
+The evidence includes real objective ownership recovery after acknowledgement
+loss and restart, accepted successor edits/validation in the original workspace,
+post-establishment old-owner refusal, exact worker/integrated commits and
+validation receipts, terminal cleanup, and frozen scoped instructions.
+Consumer adaptive coordination and live coding trials remain separately owned.
 
 ## Non-goals
 

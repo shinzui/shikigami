@@ -1,6 +1,8 @@
 # Bundle Update Log
 
 ## 2026-11-02
+* **Update**: FRIC-45 accepted: Accept the repeated cohort rebuild cost while preserving final native acceptance.
+* **Addition**: FRIC-45 records slowdown tooling friction with mori://shinzui/shikigami: Corrected successor fixture recompiles the complete runtime cohort
 * **Update**: FRIC-44 resolved: Match the native database environment to the current UUIDv7 allocator requirement.
 * **Addition**: FRIC-44 records detour environment friction with mori://shinzui/shikigami: Apple fixture selects PostgreSQL 17 for an allocator requiring 18
 * **Update**: FRIC-43 accepted: Triage the observed qualification constraint with its retained bounded workaround.

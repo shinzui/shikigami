@@ -81,8 +81,8 @@ Implement [IR-11](../improvement-requests/provide-governed-mutable-repository-wo
 - [x] Milestone 2: Enforce fresh exact authority and conditional ownership for contained reads and structured edits, with scoped repository instructions frozen into model context; refuse malicious paths without effects (2026-10-29).
 - [x] Milestone 3: Qualify Linux/systemd containment and independent process supervision, then execute bounded validation and local Git operations with retained receipts and restart reconciliation (2026-10-30).
 - [x] Milestone 4: Install declared mutation providers in durable workers and prove replay-safe end-to-end dependency upgrades (2026-10-30).
-- [ ] Milestone 5: Fence real processes during handoff, integrate revision-pinned artifacts and safely clean terminal workspaces; final real-owner successor qualification is running.
-- [ ] Milestone 6: Qualify all IR-11 acceptance cases, update operational documentation and consumer plan gates, and distill durable decisions.
+- [x] Milestone 5: Fence real processes during handoff, integrate revision-pinned artifacts and safely clean terminal workspaces (2026-11-02; real ownership recovery and accepted successor effects pass).
+- [x] Milestone 6: Qualify all IR-11 acceptance cases, update operational documentation and consumer plan gates, and distill durable decisions (2026-11-02; 25 native cases and all final host checks pass).
 
 Milestone 1 reserves immutable assignment/run/root/principal/owner/epoch/repository/base/policy/source/storage-root coordinates in PostgreSQL before private Git allocation. Seven real PostgreSQL/Git allocation cases qualified concurrent convergence, conflicting coordinates, independent files and metadata, interruption, lost acknowledgement, non-commit and substituted/missing-directory refusal. Source fixture evidence includes bytes, permissions and modification times, including Git metadata. Concrete IO belongs in workers; core owns shared contracts and transactions.
 
@@ -96,9 +96,18 @@ Milestone 5 already implements independent factual file recovery, native termina
 
 The complete workspace-owned native matrix passed all 22 cases on runtime `20e8e80` (2026-10-30, `/tmp/shikigami-96-final-native-apple.log`, private evidence `/tmp/shikigami-workspace-run.roOtWM/evidence`). This includes exact artifact success/conflict/combined failure, same-owner accepted follow-up writes and latest-run cleanup, a held collector and detached writer retaining an unresolved fence, supervisor restart with authority denied, original-attempt settlement, accepted late old-owner refusal and public metadata/log privacy. The [native facts artifact](../evidence/plan-96/native-workspace-facts.json) retains exact bases, worker and integrated commits/trees, validations, follow-up admission/cleanup ownership and factual fence. Focused continuing/fence modes passed seven/six cases. Those results did not establish a real successor epoch.
 
-The remaining joint gate now has its real prerequisite: [plan 99](99-supply-trusted-objective-associations-and-the-real-checkpoint-ownership-and-scope-providers.md) supplies the objective owner. Candidate `8d1ee35e` installs the transfer-aware production worker host and its workspace client into objective coordination. The native `--qualify` matrix creates an objective through its real command owner, commits ownership after the factual fence, drops that acknowledgement, restarts supervisor and controller, then requires an accepted successor edit and native validation in the same workspace. The normal upgrade fixture also uses the selected transfer-aware host. No fence or ownership receipt is manufactured.
+The joint gate uses its real prerequisite: [plan 99](99-supply-trusted-objective-associations-and-the-real-checkpoint-ownership-and-scope-providers.md) supplies the objective owner. Configured workers install the transfer-aware host and its workspace client into objective coordination. The native `--qualify` matrix creates an objective through its real command owner, commits ownership after the factual fence, drops that acknowledgement, restarts supervisor and controller, then requires an accepted successor edit and native validation in the same workspace. The normal upgrade fixture also uses the selected transfer-aware host. No fence or ownership receipt is manufactured.
 
-Final host verification for this candidate passes `cabal build all` and the complete `cabal test all --test-options=-j2` with stdin from `/dev/null`: 661 core, 543 PostgreSQL, 281 worker, 105 server, 37 agent, 35 API, nine client, nine migration-definition, eleven migration-smoke and six diagram cases, plus generated domain/conformance suites. The workflow gate against `0e099c12`, both native-system Nix checks, all 21 qualification-tool tests, migration schema isolation and `git diff --check` pass. FRIC-42 records and resolves stale checked migration/schema/diagram artifacts; existing SQL and existing checksums were unchanged. The configured builder is building the frozen Linux runtime for the joint matrix; no milestone is closed by fixture code or host tests alone.
+Final host verification on `d38d2793` passes `cabal build all` and the complete `cabal test all --test-options=-j2` with stdin from `/dev/null`: 661 core, 543 PostgreSQL, 281 worker, 105 server, 37 agent, 35 API, nine client, nine migration-definition, eleven migration-smoke and six diagram cases, plus generated domain/conformance suites. The workflow gate against `0e099c12`, both native-system Nix checks, all 21 qualification-tool tests, migration schema isolation and `git diff --check` pass. FRIC-42 records and resolves stale checked migration/schema/diagram artifacts; existing SQL and existing checksums were unchanged. The final runtime `d38d2793` passes the complete 25-case Linux matrix after the focused nine-case real-owner run. The [joint native evidence](../evidence/plan-96/joint-native-qualification.json) retains actual ownership command, fence, successor admission, process and integrated artifact facts. Containers and generated credentials were removed successfully. Strict IR validation retains the same nine pre-existing recommended-metadata findings in other requests as the final-candidate baseline; this change adds none.
+
+The corrected runtime `d38d2793` passes the focused nine-case real ownership
+and successor gate (2026-11-02, `/tmp/shikigami-96-focused-owner-native2.log`,
+private evidence `/tmp/shikigami-workspace-run.w4Moup/evidence`). The
+[bounded focused facts](../evidence/plan-96/focused-native-ownership.json)
+retain the actual objective command receipt, old local epoch before recovery,
+exact fence and accepted successor admission/validation. Restored authority
+admits epoch 1 and refuses the former owner at epoch 0. Public metadata/log
+privacy passes; the container and generated credentials were removed. The full 25-case matrix subsequently passes on this same runtime, completing Milestones 5–6.
 
 ## Surprises & Discoveries
 
@@ -111,14 +120,13 @@ but the fixture supplied two principals under `fixture`. The corrected fixture
 uses distinct `fixture` and `successor` declarations and freezes the successor
 name in its accepted snapshot. A focused `--ownership-only` mode exercises nine
 real ownership/fence/successor cases before the mandatory full 25-case matrix.
-The provider implementation is unchanged; the controller must be rebuilt.
+This required a controller rebuild; the corrected candidate is qualified above.
 
 The first final native run refused allocation before any workspace or Unix
 identity was reserved. Its guest selected PostgreSQL 17 from apt, while the
 current store allocates UUIDv7 through PostgreSQL 18. The runner now materializes
 the existing pinned `postgresql_18` Nix package for the native guest architecture
-and records its version. The Haskell runtime is unchanged and reused; no SQL
-identity fallback is introduced. The previous run is failure evidence, not a
+and records its version. That rerun reused the Haskell runtime; no SQL identity fallback was introduced. The previous run is failure evidence, not a
 passing containment result.
 
 2026-11-02 validation: checked execution-root identities are opaque allocated
@@ -168,6 +176,13 @@ The baseline build fails before solving dependencies because `kikan-en-contract`
 
 ## Decision Log
 
+2026-11-02: Select transfer-aware file/process/Git revisions 3/2/2 in configured
+process-backed workers after the real ownership and native successor gate.
+Keep earlier exact adapters for retained snapshots. The process and transfer
+clients use one peer-checked supervisor endpoint; objective ownership remains
+separately owned. Qualify on the existing pinned PostgreSQL 18 server for the
+current UUIDv7 allocator, without introducing an identity fallback.
+
 2026-10-30: Keep successor authority separate from immutable allocation and old
 effect receipts. Derive session/assignment coordinates from retained child rows,
 never trigger payloads. Transfer-aware adapters require a distinct filesystem
@@ -213,15 +228,17 @@ admission. This supplies no synthetic IR-13 production receipt.
 ## Outcomes & Retrospective
 
 
-Milestones 1–4 are verified. Configured workers now install transfer-aware
+All six milestones are complete. Configured workers install transfer-aware
 file/process/Git tools and the concrete workspace client beside the real
-objective owner. Native integration, same-owner follow-ups/cleanup and workspace
-freeze/restart/refusal have prior accepted evidence. Final host qualification
-passes on the current implementation and is retained in
-[the host evidence artifact](../evidence/plan-96/host-qualification.json).
-The final joint native gate is running; Milestones 5–6 and IR-11 remain open
-until real ownership recovery and successor effects pass. Plans 84/86 and
-MasterPlan 14 retain their separately owned full-request and adaptive gates.
+objective owner. Runtime `d38d2793` passes all 25 native cases, including
+revision-pinned integration, same-owner follow-ups/cleanup, real detached-process
+fencing, acknowledgement loss after objective ownership commit, supervisor and
+controller restart, accepted successor editing/validation, and former-epoch
+refusal after establishment. Actual bounded facts are retained in
+[the joint native artifact](../evidence/plan-96/joint-native-qualification.json); the complete
+[host qualification](../evidence/plan-96/host-qualification.json) also passes.
+IR-11 is complete. Plans 84/86 and MasterPlan 14 consume this provider evidence
+while retaining their full IR-15, adaptive and live-trial acceptance gates.
 
 The durable result is the separation of allocation, accepted effect facts,
 session ownership and fresh successor authority. ADR 0063 records the fence and
@@ -249,7 +266,8 @@ FRIC-30 is accepted with final rebuilding after fixture corrections.
 FRIC-31 is accepted with stdin from `/dev/null` for unattended batch tests.
 FRIC-42 is resolved by regenerating checked migration/schema/diagram artifacts without changing existing SQL or checksums.
 FRIC-43 is accepted with the cold frozen build at the joint ownership gate; host tests do not replace native acceptance.
-FRIC-44 is resolved by selecting the existing pinned native PostgreSQL 18 server output; both provisioning cases pass with the unchanged runtime.
+FRIC-44 is resolved by selecting the existing pinned native PostgreSQL 18 server output; the full native matrix passes.
+FRIC-45 is accepted with focused ownership iteration followed by full qualification of the rebuilt frozen candidate.
 
 ## Context and Orientation
 
@@ -397,3 +415,10 @@ Implementation revision (2026-10-29): Complete the allocation milestone with dur
 Implementation revision (2026-10-29): Add bounded immutable instruction discovery, protected snapshot admission and restart/model-request tests; add actual attempt dispatch coordinates and the exact durable-adapter registry and tool path. Preserve generic and historical behavior. The concrete authorized edit provider and patched worker integration are implemented; the complete PostgreSQL suite and workflow gate pass, closing Milestone 2. Record the Apple container preference in AGENTS.md for future plans.
 
 Implementation revision (2026-10-29): Deliver the contained file adapter, exact target/claim proofs, independent receipt recovery, explicit native path qualification, operator-reviewed worker configuration and the real governed-workspace workflow patch. The accepted parent/child fixture proves one file edit and retained model instructions across restart. Process supervision, Git operations, ownership transfer and complete IR-11 qualification remain separate unfinished milestones.
+
+Completion revision (2026-11-02): Connect the real objective owner and native
+workspace client, qualify accepted successor effects after lost ownership
+acknowledgement and restart, retain the exact command receipt and post-transfer
+old-owner refusal, and close all six milestones on runtime `d38d2793`. Refresh
+consumer readiness, operating/configuration guidance and ADRs 0025/0059/0063;
+triage all recorded friction. Preserve the consumers' separately owned scopes.

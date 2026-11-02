@@ -69,7 +69,7 @@ authorization refusal, and non-`Skill` behavior are permanent typed refusals. Ge
 admits only observation tools. A one-off invocation may admit a mutation only when its explicit
 local policy authorizes it; the operation class remains visible rather than being weakened.
 
-[Plan 96](../plans/96-provide-governed-mutable-repository-workspaces-for-durable-agents.md) amendment (2026-10-30; file/process/Git adapters and patched worker admission qualified; handoff gates pending): a separate governed resolution path
+[Plan 96](../plans/96-provide-governed-mutable-repository-workspaces-for-durable-agents.md) amendment (2026-10-30; file/process/Git adapters and patched worker admission qualified; real handoff/successor gate qualified on 2026-11-02): a separate governed resolution path
 may admit workspace mutation descriptors only through an operator-installed durable adapter
 keyed by exact capability, revision and descriptor digest. `installDurableAdapters`
 validates immutable logical tool schemas and explicit recovery contracts independently

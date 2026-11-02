@@ -61,12 +61,13 @@ retains its adaptive coordinator, objective completion and UC-1 acceptance
 gates. Plan 85
 and the real IR-13 provider still gate this plan's live milestones.
 
-2026-11-02 prerequisite update: plan 99 supplies the real objective provider,
-and plan 96 now installs the transfer-aware workspace composition into normal
-workers. Its final real-owner/native successor matrix is running; host evidence
-alone supplies no process fence. This plan remains Not Started and still
-requires plan 85, its adaptive coordinator, integrated objective acceptance and
-the bounded live coding trial. No provider result completes UC-1 by itself.
+2026-11-02 prerequisites accepted: plan 99 supplies the real objective owner,
+and plan 96's runtime `d38d2793` passes the complete 25-case native workspace
+matrix. The [joint provider evidence](../evidence/plan-96/joint-native-qualification.json) retains exact
+artifacts, real ownership recovery, successor effects and process fences.
+This plan remains Not Started and still requires plan 85, adaptive coordinator
+acceptance, integrated objective completion and the bounded live coding trial.
+These provider facts do not complete UC-1 or its two-repository trial.
 
 ## Surprises & Discoveries
 

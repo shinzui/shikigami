@@ -89,12 +89,15 @@ acceptance stay open; workspace-only facts cannot close them.
 
 2026-11-02 UTC IR-13 completion-gate evidence: [plan 99](99-supply-trusted-objective-associations-and-the-real-checkpoint-ownership-and-scope-providers.md) qualifies and installs the real objective adapters. [Provider completion qualification](../evidence/plan-99/provider-completion-qualification.json) covers simultaneous sibling commits, lost acknowledgement plus local cursor failure, instruction/criteria invalidation and explicit non-commit reconciliation, immutable accepted-result references, stale checkpoint refusal after fenced owner change, and retained scopes after source workflow GC. The actual command owner opens distinct worker scopes with original roots and limits. Eleven provider cases and the full suites pass (632 core, 490 PostgreSQL, 280 worker, 96 server, 37 agent); the native gate is neutral with 169 conformance checks. The deterministic fence qualifies only objective-side receipt recovery. The IR-11 and joint real successor/late-writer/restart gate remains open, this plan remains In Progress, and plan 85 still waits for this whole child.
 
-2026-11-02 workspace composition update: plan 96 now connects the real
-workspace transfer client and transfer-aware host to objective coordination in
-normal workers. Its host qualification passes on `8d1ee35e`; the native joint
-ownership/successor matrix is running. This closes no milestone here until the
-required real-provider evidence exists. Full IR-15 acceptance and this child's
-completion remain separately owned; plan 85 still requires this whole child.
+2026-11-02 workspace prerequisite accepted: plan 96's runtime `d38d2793`
+passes all 25 native cases with the real objective owner. The
+[joint provider evidence](../evidence/plan-96/joint-native-qualification.json) proves held-process uncertainty,
+restart with original-attempt settlement, lost ownership acknowledgement,
+recovered successor editing/validation and former-owner refusal after epoch
+establishment. Normal workers install this composition. This satisfies the
+workspace and joint provider boundary; this plan retains its full IR-15 consumer
+acceptance and milestone 4 review. Its status stays In Progress, and plan 85
+still requires this whole child Complete.
 
 ## Surprises & Discoveries
 

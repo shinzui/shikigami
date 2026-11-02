@@ -1,0 +1,632 @@
+{
+  "caseCount": 25,
+  "cases": [
+    "native provisioning retains its original identity after ready acknowledgement loss",
+    "native duplicate provisioning recovers the exact ready profile",
+    "duplicate original requests and delivery retain one real launch and receipt",
+    "SIGKILL of the accepted worker preserves the original invocation and independent acknowledgement",
+    "supervisor SIGKILL recovers original facts through the same manager-owned listener",
+    "root cancellation settles a detached SIGTERM-ignoring descendant before releasing its actual",
+    "completion retained while intake is offline recovers before any replacement launch",
+    "native payload denies host, sibling, metadata, network, mount, inherited-descriptor and privilege access",
+    "lost output remains unresolved with its original capacity and file barrier retained",
+    "denied fresh exact authority records a proven refusal without a repository launch",
+    "accepted native edit and validation produce one exact local commit, including after duplicate delivery",
+    "independent Git receipt recovery settles the original actual after worker SIGKILL, ownership freeze and fresh-authority denial",
+    "fresh publication denial after tree capture refuses the retained candidate without changing HEAD",
+    "configured durable parent/child upgrades, validates and commits once across worker restart and parent redelivery",
+    "two exact worker commits integrate, validate and commit in a third configured workspace",
+    "overlapping exact worker artifacts report conflicts without publishing files or HEAD",
+    "successful worker-local validations do not conceal a failing exact combined tree",
+    "configured followup writes retain files, frozen instructions and Unix identity; idle retention and terminal cleanup converge",
+    "a real in-flight descendant and held collector keep the transfer fence unresolved",
+    "provider restart recovers the original actual and exact settled fence after authority denial",
+    "a real accepted late old-owner edit and unestablished successor admission both refuse under fresh authority",
+    "real objective ownership commits once while acknowledgement loss leaves the local session frozen",
+    "restarted real ownership recovery admits an accepted successor write and native validation in the original workspace",
+    "established successor authority refuses the former owner at the live workspace write boundary",
+    "retained workflow/operation metadata and public logs exclude fixture contents, credentials and bearer authority"
+  ],
+  "command": "bash tests/workspace/run-apple.sh --qualify RUNTIME",
+  "date": "2026-11-02",
+  "environment": {
+    "clockChangeExpiry": "enabled",
+    "controller": "x86_64-linux",
+    "existingHostCredentials": false,
+    "host": "disposable Apple container",
+    "hostMounts": false,
+    "payloadAndGuard": "aarch64-linux",
+    "postgres": "postgres (PostgreSQL) 18.6"
+  },
+  "exitCode": 0,
+  "fence": {
+    "fence": {
+      "fingerprint": "sha256:347aa31ff940778f8d6b33324f3135626d838eba267e6dec493cc4e48284103f",
+      "format": 1,
+      "newEpoch": 1,
+      "oldEpoch": 0,
+      "operationId": "native-freeze",
+      "receipt": "sha256:55b19b449913f504929aa3766f40208721e9f878ba0f6e0e26f68dbe94be1408",
+      "workspace": {
+        "provider": "shikigami.workspace/1",
+        "resource": "541b238d679bbbf1076f0f634ff3fbad4061f17cd3296a9761862fed5d5cf58f"
+      }
+    },
+    "receipt": {
+      "attemptId": "shikigami_execution_attempt_01j0000000f3vrd46cbprekb4h",
+      "bindingDigest": "sha256:8d9faf881c026af6acd17b17a9e287cb350abbc7d02e4910b4b29a0fccfdade4",
+      "bootId": "70b68e18-755d-4f23-88e5-3106d8e3f596",
+      "descendantsEmpty": true,
+      "exitCode": 143,
+      "fingerprint": "sha256:6d686170539471fc325be059c4e5e7a2a33ec5412e5ce1f2a269da4244a2ea0d",
+      "generation": 1,
+      "invocationId": "65283359ae1243a886e9262eac4a9215",
+      "operationId": "operation:sha256:ec146a06c6339ce7c49639990be2fdd7af218dfb8e62e049f3153dbb447838bb",
+      "outputComplete": true,
+      "stderr": {
+        "artifact": "stderr",
+        "bytes": 0,
+        "digest": "sha256:75384fd75cdef76c52b2f4bca3f2a749405a70653924190c5b0f2f26abe614e2",
+        "truncated": false
+      },
+      "stdout": {
+        "artifact": "stdout",
+        "bytes": 0,
+        "digest": "sha256:75384fd75cdef76c52b2f4bca3f2a749405a70653924190c5b0f2f26abe614e2",
+        "truncated": false
+      },
+      "termination": "ProcessCancelled",
+      "unit": "shikigami-workspace-c6d15da1c056ab49058d3f8d7a49fdb2c9238d25939e657dfb88a0d41dd3d39a.service"
+    }
+  },
+  "followup": {
+    "base": "d7a8377e474109759a3c461acc526ff79b017d89",
+    "cleanup": {
+      "bindingDigest": "sha256:c84977628192fc0ace24d6bd2e719231a3d7f45e937bf23c03b07e394be26249",
+      "filesTarget": "65040:49351",
+      "ownership": {
+        "assignment": [
+          "f6e7b208-3dc9-51f9-9601-c6165acc5d0f",
+          "5411c868-287e-53ad-9a0c-ee0ac68b6eec"
+        ],
+        "epoch": 0,
+        "owner": {
+          "kind": "verified",
+          "principalId": "agent_01h000000000000000triage"
+        },
+        "principal": {
+          "kind": "verified",
+          "principalId": "agent_01h000000000000000triage"
+        },
+        "rootId": "shikigami_execution_root_01j0000000ft0rxwseftvk075g",
+        "runId": "544ccf41-5bc0-5fc0-b61f-6966f55bc383"
+      },
+      "scratchTarget": "65040:49352",
+      "userId": 64020
+    },
+    "complete": true,
+    "followup": {
+      "assignmentId": "assignment:sha256:4a434162e35d889c2f56ed4f58d3b3a30d108d0fe7fd77de0bcddc27bd8bc07e",
+      "epoch": 0,
+      "owner": {
+        "kind": "verified",
+        "principalId": "agent_01h000000000000000triage"
+      },
+      "runId": "544ccf41-5bc0-5fc0-b61f-6966f55bc383",
+      "workspace": {
+        "provider": "shikigami.workspace/1",
+        "resource": "80aecf12e640fe640dad24e896a2844d0295fe71a7bc01d733854a725b29e8ec"
+      }
+    },
+    "original": {
+      "assignment": [
+        "f6e7b208-3dc9-51f9-9601-c6165acc5d0f",
+        "eb66f6bf-9031-517b-803e-28940e335050"
+      ],
+      "epoch": 0,
+      "owner": {
+        "kind": "verified",
+        "principalId": "agent_01h000000000000000triage"
+      },
+      "principal": {
+        "kind": "verified",
+        "principalId": "agent_01h000000000000000triage"
+      },
+      "rootId": "shikigami_execution_root_01j0000000ft0rxwseftvk075g",
+      "runId": "a1515b01-944b-56b8-90e8-7db9ce886a0b"
+    },
+    "profile": {
+      "bindingDigest": "sha256:c84977628192fc0ace24d6bd2e719231a3d7f45e937bf23c03b07e394be26249",
+      "instructionDigest": "sha256:551f381deeb28c9def96b654af34e89f018a3c8483bd557f52ecc81f8ddd5a26",
+      "ready": true,
+      "userId": 64020
+    },
+    "repository": "mori://fixture/repo",
+    "workspace": {
+      "provider": "shikigami.workspace/1",
+      "resource": "80aecf12e640fe640dad24e896a2844d0295fe71a7bc01d733854a725b29e8ec"
+    }
+  },
+  "integration": {
+    "artifacts": [
+      {
+        "base": "d7a8377e474109759a3c461acc526ff79b017d89",
+        "bindingDigest": "sha256:13e548f9851e902f4f4a1b776e6cbbef4bf4d872f320180c3a62eecfd243c407",
+        "operationId": "operation:sha256:aec0a4703d6f1d84a8992aa88dbde5033bc0e59bb2dfcae2b57873fbdaf0baad",
+        "revision": "eef688fe752c58dd6b7020d5268419f9ca44dc27"
+      },
+      {
+        "base": "d7a8377e474109759a3c461acc526ff79b017d89",
+        "bindingDigest": "sha256:acc27699e16774fc103d62353d23127b0a251981464043fbc8ba840d0382f9f9",
+        "operationId": "operation:sha256:59f75e2e03f1eff2514bdeeddc4ffe57c7d2f90304fae217b8730c94acbb8c62",
+        "revision": "759af35317d1fb6942af7604738eefca23254c97"
+      },
+      {
+        "base": "d7a8377e474109759a3c461acc526ff79b017d89",
+        "bindingDigest": "sha256:d1d637cd11b695c6cb650921270637da364a4e4bddd8c88fba22ae366645c069",
+        "operationId": "operation:sha256:ef2bb895384dcff7ed61cd03fb8a18df10fa4dd86defd649bf7c396f9223ec7c",
+        "revision": "8534dd389cc1b0a362429b69b12b1c3b05a86b75"
+      },
+      {
+        "base": "d7a8377e474109759a3c461acc526ff79b017d89",
+        "bindingDigest": "sha256:b4a07a89c3af6c0725973144c8d458a1f4ebb3f4fa82a545e6c1e23c1bd7d4e8",
+        "operationId": "operation:sha256:86e6fd7fca25e1b979ac284df7bc8d6020b4177d50d65777d3252be1c74024c4",
+        "revision": "341e8fdcfd543b515a3ce9c350640b1dc05ec7c8"
+      }
+    ],
+    "combined": {
+      "parent": "d7a8377e474109759a3c461acc526ff79b017d89",
+      "paths": [
+        "src/dependency.txt",
+        "src/integration-a",
+        "src/integration-c"
+      ],
+      "result": "22eb3fc894f2053f2ebe77043907f9d77aeaf5fe",
+      "tree": "eeff47b417a8020639442e59311f41beff0c4507"
+    },
+    "combinedFailure": {
+      "attemptId": "shikigami_execution_attempt_01j0000000er88xgsygz0j3eds",
+      "bindingDigest": "sha256:d635ca4398130b852d8e991a2ecf5d8ebc4bf5f52c58daf696dd8fa7ea0fad8b",
+      "bootId": "70b68e18-755d-4f23-88e5-3106d8e3f596",
+      "descendantsEmpty": true,
+      "exitCode": 77,
+      "fingerprint": "sha256:e3995a7498b75c07c0560e76a3e1a6d27375724f1681c0fc9293a41050984b7b",
+      "generation": 1,
+      "invocationId": "57c988d856df463c8cfc6dfea079fef4",
+      "operationId": "operation:sha256:3b337626567572f2f6736dd703c1d7550c6badcc558ae9edfb8294b840868822",
+      "outputComplete": true,
+      "stderr": {
+        "artifact": "stderr",
+        "bytes": 0,
+        "digest": "sha256:75384fd75cdef76c52b2f4bca3f2a749405a70653924190c5b0f2f26abe614e2",
+        "truncated": false
+      },
+      "stdout": {
+        "artifact": "stdout",
+        "bytes": 0,
+        "digest": "sha256:75384fd75cdef76c52b2f4bca3f2a749405a70653924190c5b0f2f26abe614e2",
+        "truncated": false
+      },
+      "termination": "ProcessExited",
+      "unit": "shikigami-workspace-21f116acefc48914e3becf5b78207b29448de2b78c361ae36134763159b1342f.service"
+    },
+    "validation": {
+      "attemptId": "shikigami_execution_attempt_01j0000000ezgrfy8w86m198xt",
+      "bindingDigest": "sha256:0c86c5e8b0fc45b51e8b0119caa8e7d8bdee7dd907856607004d076e248d9a1d",
+      "bootId": "70b68e18-755d-4f23-88e5-3106d8e3f596",
+      "descendantsEmpty": true,
+      "exitCode": 0,
+      "fingerprint": "sha256:9d35f102494a8d23ff0dba4f5f4f90bac43a41468e35fd7f81e776645d8eaa7f",
+      "generation": 1,
+      "invocationId": "c371c1bb75fe490eb11b5e659e430e65",
+      "operationId": "operation:sha256:a78ba0fe64386416a2b82ff69c31b7fa345e02bcf6bc1251808ab2f28f52bd12",
+      "outputComplete": true,
+      "stderr": {
+        "artifact": "stderr",
+        "bytes": 0,
+        "digest": "sha256:75384fd75cdef76c52b2f4bca3f2a749405a70653924190c5b0f2f26abe614e2",
+        "truncated": false
+      },
+      "stdout": {
+        "artifact": "stdout",
+        "bytes": 18,
+        "digest": "sha256:2236be18523a97b775796da60dcde4a57a0990343241ca94fd9e162b6b9e38a4",
+        "truncated": false
+      },
+      "termination": "ProcessExited",
+      "unit": "shikigami-workspace-cb0b87c2ba5d2bed9204594caf6bf7e9b12f1362786e0ba817634bd49fab3816.service"
+    }
+  },
+  "integrationProcessReceipts": [
+    {
+      "base": "d7a8377e474109759a3c461acc526ff79b017d89",
+      "phase": "ProcessSettled",
+      "receipt": {
+        "attemptId": "shikigami_execution_attempt_01j0000000ebpr9g8j54padpn5",
+        "bindingDigest": "sha256:b4a07a89c3af6c0725973144c8d458a1f4ebb3f4fa82a545e6c1e23c1bd7d4e8",
+        "bootId": "70b68e18-755d-4f23-88e5-3106d8e3f596",
+        "descendantsEmpty": true,
+        "exitCode": 0,
+        "fingerprint": "sha256:fa52c8d54edb21f297bd3e07acbb6623aed731c8e420d46d9c348ea90b8a7a7b",
+        "generation": 1,
+        "invocationId": "5069debe4f0f4f8d8ece452d7c4251db",
+        "operationId": "operation:sha256:16813044fe54e3fe70fc309231d0e7968b8fbbd4794b8423c53fd12089bc9124",
+        "outputComplete": true,
+        "stderr": {
+          "artifact": "stderr",
+          "bytes": 0,
+          "digest": "sha256:75384fd75cdef76c52b2f4bca3f2a749405a70653924190c5b0f2f26abe614e2",
+          "truncated": false
+        },
+        "stdout": {
+          "artifact": "stdout",
+          "bytes": 18,
+          "digest": "sha256:2236be18523a97b775796da60dcde4a57a0990343241ca94fd9e162b6b9e38a4",
+          "truncated": false
+        },
+        "termination": "ProcessExited",
+        "unit": "shikigami-workspace-d54f5a0d0241d84c54111a417d4bf2f82725e38606f21f1e8558e70f2c9c8600.service"
+      },
+      "repository": "mori://fixture/repo"
+    },
+    {
+      "base": "d7a8377e474109759a3c461acc526ff79b017d89",
+      "phase": "ProcessSettled",
+      "receipt": {
+        "attemptId": "shikigami_execution_attempt_01j0000000f70rtp2stdfh0g9p",
+        "bindingDigest": "sha256:acc27699e16774fc103d62353d23127b0a251981464043fbc8ba840d0382f9f9",
+        "bootId": "70b68e18-755d-4f23-88e5-3106d8e3f596",
+        "descendantsEmpty": true,
+        "exitCode": 0,
+        "fingerprint": "sha256:8bc3cf98f86542d20154df1d9009d3311a3d11ddd8a61f36e81d05d995a8408b",
+        "generation": 1,
+        "invocationId": "fdc87122a39744efb921a33978f3eab4",
+        "operationId": "operation:sha256:37814742b3e528aedcad1d8853bdae1e8da82050c86d272a3ca265f263c1943d",
+        "outputComplete": true,
+        "stderr": {
+          "artifact": "stderr",
+          "bytes": 0,
+          "digest": "sha256:75384fd75cdef76c52b2f4bca3f2a749405a70653924190c5b0f2f26abe614e2",
+          "truncated": false
+        },
+        "stdout": {
+          "artifact": "stdout",
+          "bytes": 18,
+          "digest": "sha256:2236be18523a97b775796da60dcde4a57a0990343241ca94fd9e162b6b9e38a4",
+          "truncated": false
+        },
+        "termination": "ProcessExited",
+        "unit": "shikigami-workspace-68c7a55245fd1aaadd5e6c3e69ba23155640c29a09abad78a3dd140d05e28661.service"
+      },
+      "repository": "mori://fixture/repo"
+    },
+    {
+      "base": "d7a8377e474109759a3c461acc526ff79b017d89",
+      "phase": "ProcessSettled",
+      "receipt": {
+        "attemptId": "shikigami_execution_attempt_01j0000000er88xgsygz0j3eds",
+        "bindingDigest": "sha256:d635ca4398130b852d8e991a2ecf5d8ebc4bf5f52c58daf696dd8fa7ea0fad8b",
+        "bootId": "70b68e18-755d-4f23-88e5-3106d8e3f596",
+        "descendantsEmpty": true,
+        "exitCode": 77,
+        "fingerprint": "sha256:e3995a7498b75c07c0560e76a3e1a6d27375724f1681c0fc9293a41050984b7b",
+        "generation": 1,
+        "invocationId": "57c988d856df463c8cfc6dfea079fef4",
+        "operationId": "operation:sha256:3b337626567572f2f6736dd703c1d7550c6badcc558ae9edfb8294b840868822",
+        "outputComplete": true,
+        "stderr": {
+          "artifact": "stderr",
+          "bytes": 0,
+          "digest": "sha256:75384fd75cdef76c52b2f4bca3f2a749405a70653924190c5b0f2f26abe614e2",
+          "truncated": false
+        },
+        "stdout": {
+          "artifact": "stdout",
+          "bytes": 0,
+          "digest": "sha256:75384fd75cdef76c52b2f4bca3f2a749405a70653924190c5b0f2f26abe614e2",
+          "truncated": false
+        },
+        "termination": "ProcessExited",
+        "unit": "shikigami-workspace-21f116acefc48914e3becf5b78207b29448de2b78c361ae36134763159b1342f.service"
+      },
+      "repository": "mori://fixture/repo"
+    },
+    {
+      "base": "d7a8377e474109759a3c461acc526ff79b017d89",
+      "phase": "ProcessSettled",
+      "receipt": {
+        "attemptId": "shikigami_execution_attempt_01j0000000fyzrescpg02pry9g",
+        "bindingDigest": "sha256:d1d637cd11b695c6cb650921270637da364a4e4bddd8c88fba22ae366645c069",
+        "bootId": "70b68e18-755d-4f23-88e5-3106d8e3f596",
+        "descendantsEmpty": true,
+        "exitCode": 0,
+        "fingerprint": "sha256:e4a1462f90e4b13e1c35388de21d16adfec6e2b275363ff1204a1d8515b7d96a",
+        "generation": 1,
+        "invocationId": "1558f78134124b13ba17430d03ce4988",
+        "operationId": "operation:sha256:64bc0d2d9acd874bb900f3d322ca528e154ae587c57d4bd43c0e7cbeb039b88f",
+        "outputComplete": true,
+        "stderr": {
+          "artifact": "stderr",
+          "bytes": 0,
+          "digest": "sha256:75384fd75cdef76c52b2f4bca3f2a749405a70653924190c5b0f2f26abe614e2",
+          "truncated": false
+        },
+        "stdout": {
+          "artifact": "stdout",
+          "bytes": 18,
+          "digest": "sha256:2236be18523a97b775796da60dcde4a57a0990343241ca94fd9e162b6b9e38a4",
+          "truncated": false
+        },
+        "termination": "ProcessExited",
+        "unit": "shikigami-workspace-4aed3df4d835a546971c07d876ec7b87636918e751ad262354aeaae19a89b98b.service"
+      },
+      "repository": "mori://fixture/repo"
+    },
+    {
+      "base": "d7a8377e474109759a3c461acc526ff79b017d89",
+      "phase": "ProcessSettled",
+      "receipt": {
+        "attemptId": "shikigami_execution_attempt_01j0000000f5trjz7rwe7zp31f",
+        "bindingDigest": "sha256:13e548f9851e902f4f4a1b776e6cbbef4bf4d872f320180c3a62eecfd243c407",
+        "bootId": "70b68e18-755d-4f23-88e5-3106d8e3f596",
+        "descendantsEmpty": true,
+        "exitCode": 0,
+        "fingerprint": "sha256:23b21bddd430bb50c73154499286400dd3431c09f1352d4326e07ad8080ff3b0",
+        "generation": 1,
+        "invocationId": "a12d17cf9ec74ec98725d7a12a5d70c2",
+        "operationId": "operation:sha256:6b84239fe0d0d1ad44ffadff006bc425c8b13f6832131b1a6f0bbb97761e6c07",
+        "outputComplete": true,
+        "stderr": {
+          "artifact": "stderr",
+          "bytes": 0,
+          "digest": "sha256:75384fd75cdef76c52b2f4bca3f2a749405a70653924190c5b0f2f26abe614e2",
+          "truncated": false
+        },
+        "stdout": {
+          "artifact": "stdout",
+          "bytes": 18,
+          "digest": "sha256:2236be18523a97b775796da60dcde4a57a0990343241ca94fd9e162b6b9e38a4",
+          "truncated": false
+        },
+        "termination": "ProcessExited",
+        "unit": "shikigami-workspace-da86692332179e8b99c7da4f99ec958458a9892f680397efd2e90a2e913ee01b.service"
+      },
+      "repository": "mori://fixture/repo"
+    },
+    {
+      "base": "d7a8377e474109759a3c461acc526ff79b017d89",
+      "phase": "ProcessSettled",
+      "receipt": {
+        "attemptId": "shikigami_execution_attempt_01j0000000ezgrfy8w86m198xt",
+        "bindingDigest": "sha256:0c86c5e8b0fc45b51e8b0119caa8e7d8bdee7dd907856607004d076e248d9a1d",
+        "bootId": "70b68e18-755d-4f23-88e5-3106d8e3f596",
+        "descendantsEmpty": true,
+        "exitCode": 0,
+        "fingerprint": "sha256:9d35f102494a8d23ff0dba4f5f4f90bac43a41468e35fd7f81e776645d8eaa7f",
+        "generation": 1,
+        "invocationId": "c371c1bb75fe490eb11b5e659e430e65",
+        "operationId": "operation:sha256:a78ba0fe64386416a2b82ff69c31b7fa345e02bcf6bc1251808ab2f28f52bd12",
+        "outputComplete": true,
+        "stderr": {
+          "artifact": "stderr",
+          "bytes": 0,
+          "digest": "sha256:75384fd75cdef76c52b2f4bca3f2a749405a70653924190c5b0f2f26abe614e2",
+          "truncated": false
+        },
+        "stdout": {
+          "artifact": "stdout",
+          "bytes": 18,
+          "digest": "sha256:2236be18523a97b775796da60dcde4a57a0990343241ca94fd9e162b6b9e38a4",
+          "truncated": false
+        },
+        "termination": "ProcessExited",
+        "unit": "shikigami-workspace-cb0b87c2ba5d2bed9204594caf6bf7e9b12f1362786e0ba817634bd49fab3816.service"
+      },
+      "repository": "mori://fixture/repo"
+    }
+  ],
+  "ir11Acceptance": {
+    "1": {
+      "nativeFacts": "workflow",
+      "outcome": "Normal durable upgrade returns one exact local commit and zero-exit validation, leaving the source clean."
+    },
+    "2": {
+      "hostFixture": "shikigami-workers/test/Shikigami/WorkspaceStoreSpec.hs",
+      "nativeFacts": "integration.artifacts",
+      "outcome": "Concurrent allocation reserves independent files/Git metadata; native workers publish distinct revision-pinned artifacts."
+    },
+    "3": {
+      "hostFixtures": [
+        "shikigami-core/test/Shikigami/WorkspaceCatalogSpec.hs",
+        "shikigami-workers/test/Shikigami/WorkspaceFileProviderSpec.hs",
+        "shikigami-workers/test/Shikigami/WorkspaceSupervisorSpec.hs"
+      ],
+      "nativeFacts": "cases",
+      "outcome": "Catalog, path, command, claim and exact authorization refusals precede protected effects."
+    },
+    "4": {
+      "nativeFacts": "workflow and cases",
+      "outcome": "Duplicate delivery reuses accepted results and publishes one edit/commit."
+    },
+    "5": {
+      "nativeFacts": "workflow and cases",
+      "outcome": "Worker and supervisor restarts recover original invocations/receipts and one normal workflow result."
+    },
+    "6": {
+      "hostFixtures": [
+        "shikigami-core/test/Shikigami/WorkspaceAdapterSpec.hs",
+        "shikigami-workers/test/Shikigami/WorkspaceWorkflowSpec.hs"
+      ],
+      "outcome": "Absent declarations and historical branches gain no mutation adapters."
+    },
+    "7": {
+      "nativeFacts": "followup",
+      "outcome": "Idle sessions retain workspaces; terminal cleanup converges on the latest admitted run and retains metadata."
+    },
+    "8": {
+      "nativeFacts": "integration and integrationProcessReceipts",
+      "outcome": "Exact worker artifacts integrate in a third workspace; conflicts are explicit and a combined-only failure retains exit 77."
+    },
+    "9": {
+      "hostFixtures": [
+        "shikigami-core/test/Shikigami/WorkspaceInstructionsSpec.hs",
+        "shikigami-workers/test/Shikigami/WorkspaceTransferSpec.hs"
+      ],
+      "nativeFacts": "fence, ownership and successor",
+      "outcome": "A live descendant/held collector blocks transfer; real ownership receipt recovery admits a successor after restart and the former epoch refuses. Instructions and Unix identity remain pinned."
+    }
+  },
+  "limits": "Native arm64 payloads and guards; short commands coordinated after guest clock steps. No translated payload or long-running clock-step qualification.",
+  "ownership": {
+    "assignment": {
+      "instructionsRevision": 0,
+      "ownerEpoch": 1,
+      "revision": 2
+    },
+    "commandReceipt": {
+      "fingerprint": "sha256:dc1b5dc4f32f42cfb905296c664967215625c6c141504e5b2e72e2856c8f0a0f",
+      "objectiveId": "shikigami_objective_01m6ex7t16e58sw3tmyfx2nb30",
+      "operationId": "objective-handoff:sha256:fbc70fa6ca0755545e3240463e5ff45dd64960026babcd8df8b9a17e62c76374",
+      "outcome": {
+        "Right": {
+          "fingerprint": "sha256:dc1b5dc4f32f42cfb905296c664967215625c6c141504e5b2e72e2856c8f0a0f",
+          "objectiveId": "shikigami_objective_01m6ex7t16e58sw3tmyfx2nb30",
+          "operationId": "objective-handoff:sha256:fbc70fa6ca0755545e3240463e5ff45dd64960026babcd8df8b9a17e62c76374",
+          "payloadDigest": "sha256:81ee02d4f169f06f71bd8b774f21572f3913d39ed72fa2ae01f8d1b9179b7906",
+          "revision": 4
+        }
+      }
+    },
+    "establishedFence": {
+      "oldEpoch": 0,
+      "oldOwnerAdmitted": false,
+      "successorAdmitted": true,
+      "successorEpoch": 1
+    },
+    "objectiveId": "shikigami_objective_01m6ex7t16e58sw3tmyfx2nb30",
+    "owner": {
+      "kind": "verified",
+      "principalId": "agent_01h000000000000000successor"
+    },
+    "revision": 4,
+    "sessionEpochBeforeRecovery": 0,
+    "sessionOwnerBeforeRecovery": {
+      "kind": "verified",
+      "principalId": "agent_01h000000000000000triage"
+    }
+  },
+  "plan": "docs/plans/96-provide-governed-mutable-repository-workspaces-for-durable-agents.md",
+  "privacy": "Instruction bodies, source contents, credentials and bearer permits omitted; protected output artifact references retain bounded metadata only.",
+  "runnerSha256": "d8ab8b6acf4937aa66a117bb45149937e4bbe3df3e0a7d7d26c78e09720d7d62",
+  "runtime": "/nix/store/qnympl2l9zjifknhi1s8ap86nv0ih8vz-shikigami-workspace-prototype-0.1.0.0-d38d279",
+  "runtimeCommit": "d38d2793a692ebe4ea664d6e354dd28904d2426f",
+  "successor": {
+    "admission": {
+      "assignmentId": "assignment:sha256:497bb63b971fc70273a80338eb659d21b56c82f17a854e37b4b2951bf787987a",
+      "bindingDigest": "sha256:8d9faf881c026af6acd17b17a9e287cb350abbc7d02e4910b4b29a0fccfdade4",
+      "epoch": 1,
+      "filePolicy": "ascii-exact-transfer-v1",
+      "owner": {
+        "kind": "verified",
+        "principalId": "agent_01h000000000000000successor"
+      },
+      "rootId": "shikigami_execution_root_01j0000000fjp8xw9aeaz802w0",
+      "runId": "865a3ae9-9b58-55b8-ae2e-2dba72115ff3",
+      "workspace": {
+        "provider": "shikigami.workspace/1",
+        "resource": "541b238d679bbbf1076f0f634ff3fbad4061f17cd3296a9761862fed5d5cf58f"
+      }
+    },
+    "base": "d7a8377e474109759a3c461acc526ff79b017d89",
+    "handoff": {
+      "contents": [
+        {
+          "kind": "verified",
+          "principalId": "agent_01h000000000000000successor"
+        },
+        1
+      ],
+      "tag": "HandoffEstablished"
+    },
+    "instructionDigest": "sha256:551f381deeb28c9def96b654af34e89f018a3c8483bd557f52ecc81f8ddd5a26",
+    "profile": {
+      "bindingDigest": "sha256:8d9faf881c026af6acd17b17a9e287cb350abbc7d02e4910b4b29a0fccfdade4",
+      "groupId": 64021,
+      "instructionDigest": "sha256:551f381deeb28c9def96b654af34e89f018a3c8483bd557f52ecc81f8ddd5a26",
+      "userId": 64021
+    },
+    "receipt": {
+      "attemptId": "shikigami_execution_attempt_01j0000000fhj8gxe19cg24pk9",
+      "bindingDigest": "sha256:8d9faf881c026af6acd17b17a9e287cb350abbc7d02e4910b4b29a0fccfdade4",
+      "bootId": "70b68e18-755d-4f23-88e5-3106d8e3f596",
+      "descendantsEmpty": true,
+      "exitCode": 0,
+      "fingerprint": "sha256:c32fc13bc72c56bec1fc4d4badb0f4a7ba34d59c77ad4c4bdf2d86e39b9e7d08",
+      "generation": 1,
+      "invocationId": "c10cb254893a4355949f5d934bad827c",
+      "operationId": "operation:sha256:000f43e2f3752f940d242976afc1acb7b1932e2774f107d72ef529be248b33a8",
+      "outputComplete": true,
+      "stderr": {
+        "artifact": "stderr",
+        "bytes": 0,
+        "digest": "sha256:75384fd75cdef76c52b2f4bca3f2a749405a70653924190c5b0f2f26abe614e2",
+        "truncated": false
+      },
+      "stdout": {
+        "artifact": "stdout",
+        "bytes": 18,
+        "digest": "sha256:2236be18523a97b775796da60dcde4a57a0990343241ca94fd9e162b6b9e38a4",
+        "truncated": false
+      },
+      "termination": "ProcessExited",
+      "unit": "shikigami-workspace-beacb2cc431c0da0ecf26aa1e0a45dee936888058bceeafcfdda9ef7e0426846.service"
+    },
+    "repository": "mori://fixture/repo"
+  },
+  "workflow": {
+    "git": {
+      "attemptId": "shikigami_execution_attempt_01m6ex0436ed1rhpz1zyzwx6n0",
+      "base": "d7a8377e474109759a3c461acc526ff79b017d89",
+      "bindingDigest": "sha256:30c37effc9b5707ed6dd39871f28ec61522e0ea2202042b80cf27313ce90c2c1",
+      "commit": {
+        "parent": "d7a8377e474109759a3c461acc526ff79b017d89",
+        "paths": [
+          "src/dependency.txt"
+        ],
+        "result": "31bdc5aea9e9dbf55f7579d95c32dd9e6c9e5604",
+        "tree": "79e5bea45a567b67e4de0c67bce20963a0965587"
+      },
+      "generation": 1,
+      "instructionDigest": "sha256:551f381deeb28c9def96b654af34e89f018a3c8483bd557f52ecc81f8ddd5a26",
+      "operationId": "operation:sha256:c3697ffceea9954eeb01728805d3328c6ccb8ade99d0f3740baae0a0c0c2cddd",
+      "repository": "mori://fixture/repo"
+    },
+    "summary": "Upgraded dependency and validated the committed tree.",
+    "validation": {
+      "attemptId": "shikigami_execution_attempt_01m6ex03dde3t9jc3x5sewft5q",
+      "bindingDigest": "sha256:30c37effc9b5707ed6dd39871f28ec61522e0ea2202042b80cf27313ce90c2c1",
+      "bootId": "70b68e18-755d-4f23-88e5-3106d8e3f596",
+      "descendantsEmpty": true,
+      "exitCode": 0,
+      "fingerprint": "sha256:78ee69cf7ac90b136f1a11529e263ccc8247f7bb05e41453584fe715c3cc0783",
+      "generation": 1,
+      "invocationId": "3d78da55217c421bafb6db5f4ce7b80a",
+      "operationId": "operation:sha256:8e7cd8c8d31b0176b4e13e1f1cbe80e61d45d2f95d3328899cdf067fec7094e7",
+      "outputComplete": true,
+      "stderr": {
+        "artifact": "stderr",
+        "bytes": 0,
+        "digest": "sha256:75384fd75cdef76c52b2f4bca3f2a749405a70653924190c5b0f2f26abe614e2",
+        "truncated": false
+      },
+      "stdout": {
+        "artifact": "stdout",
+        "bytes": 18,
+        "digest": "sha256:2236be18523a97b775796da60dcde4a57a0990343241ca94fd9e162b6b9e38a4",
+        "truncated": false
+      },
+      "termination": "ProcessExited",
+      "unit": "shikigami-workspace-71aa3aad10304685491346770f46a06573452aad011dbfdd9992db54e0d1e926.service"
+    }
+  }
+}

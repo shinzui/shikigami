@@ -1,0 +1,79 @@
+{
+  "caseCount": 14,
+  "cases": [
+    "native provisioning retains its original identity after ready acknowledgement loss",
+    "native duplicate provisioning recovers the exact ready profile",
+    "duplicate original requests and delivery retain one real launch and receipt",
+    "SIGKILL of the accepted worker preserves the original invocation and independent acknowledgement",
+    "supervisor SIGKILL recovers original facts through the same manager-owned listener",
+    "root cancellation settles a detached SIGTERM-ignoring descendant before releasing its actual",
+    "completion retained while intake is offline recovers before any replacement launch",
+    "native payload denies host, sibling, metadata, network, mount, inherited-descriptor and privilege access",
+    "lost output remains unresolved with its original capacity and file barrier retained",
+    "denied fresh exact authority records a proven refusal without a repository launch",
+    "accepted native edit and validation produce one exact local commit, including after duplicate delivery",
+    "independent Git receipt recovery settles the original actual after worker SIGKILL, ownership freeze and fresh-authority denial",
+    "fresh publication denial after tree capture refuses the retained candidate without changing HEAD",
+    "configured durable parent/child upgrades, validates and commits once across worker restart and parent redelivery"
+  ],
+  "command": "bash tests/workspace/run-apple.sh --qualify RUNTIME",
+  "date": "2026-11-02",
+  "environment": {
+    "controller": "x86_64-linux",
+    "existingHostCredentials": false,
+    "host": "disposable Apple container",
+    "hostMounts": false,
+    "payloadAndGuard": "aarch64-linux",
+    "postgres": "postgres (PostgreSQL) 18.6"
+  },
+  "privacy": "No instruction bodies, source contents, credentials or bearer permits included.",
+  "profile": "ascii-exact-transfer-v1",
+  "runOutcome": "Failed after fourteen passing cases: the integration fixture configured two principals under one agent declaration. This artifact supplies no integration, ownership or successor acceptance.",
+  "runtimeCommit": "8d1ee35e948c785d568e517cbe6ad113b1c5d14c",
+  "workflow": {
+    "git": {
+      "attemptId": "shikigami_execution_attempt_01m6etgh9ke7gb2aw2vw8nkhfn",
+      "base": "4a595b4dfa2e2a10cf0d71bf37ebd457df5c95d6",
+      "bindingDigest": "sha256:588864972479a9805ab995e2cffbef38369abfc132091b1926769d3614d8cb11",
+      "commit": {
+        "parent": "4a595b4dfa2e2a10cf0d71bf37ebd457df5c95d6",
+        "paths": [
+          "src/dependency.txt"
+        ],
+        "result": "3a7acfdafad804f66befe29c1de05cb785c49bf5",
+        "tree": "79e5bea45a567b67e4de0c67bce20963a0965587"
+      },
+      "generation": 1,
+      "instructionDigest": "sha256:445016d2187cda93a9d7b072bf9ff933aa022431153a46bc56cfc1f4fe57a932",
+      "operationId": "operation:sha256:c3697ffceea9954eeb01728805d3328c6ccb8ade99d0f3740baae0a0c0c2cddd",
+      "repository": "mori://fixture/repo"
+    },
+    "summary": "Upgraded dependency and validated the committed tree.",
+    "validation": {
+      "attemptId": "shikigami_execution_attempt_01m6etggneezg8ffk5mxmx27ms",
+      "bindingDigest": "sha256:588864972479a9805ab995e2cffbef38369abfc132091b1926769d3614d8cb11",
+      "bootId": "df9b12ce-a072-42ff-aa0f-04cd7882fad1",
+      "descendantsEmpty": true,
+      "exitCode": 0,
+      "fingerprint": "sha256:c6e9c5e8cc57287d670bfbe9dcecbe2d000d9775f17c3895684b20bb01455313",
+      "generation": 1,
+      "invocationId": "9f24e85111174a4e9b68ba6777d60819",
+      "operationId": "operation:sha256:8e7cd8c8d31b0176b4e13e1f1cbe80e61d45d2f95d3328899cdf067fec7094e7",
+      "outputComplete": true,
+      "stderr": {
+        "artifact": "stderr",
+        "bytes": 0,
+        "digest": "sha256:75384fd75cdef76c52b2f4bca3f2a749405a70653924190c5b0f2f26abe614e2",
+        "truncated": false
+      },
+      "stdout": {
+        "artifact": "stdout",
+        "bytes": 18,
+        "digest": "sha256:2236be18523a97b775796da60dcde4a57a0990343241ca94fd9e162b6b9e38a4",
+        "truncated": false
+      },
+      "termination": "ProcessExited",
+      "unit": "shikigami-workspace-def194ad671da14d8fc6ea21875c1a497bff4542e6d440d7e42beaaa03d56f4d.service"
+    }
+  }
+}

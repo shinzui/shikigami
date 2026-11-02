@@ -56,7 +56,7 @@ tests are deliberately separate from that production acceptance. Missing
 providers refuse new handoff admission; they never default to a successful
 fence or fabricate a receipt.
 
-[Plan 96](../plans/96-provide-governed-mutable-repository-workspaces-for-durable-agents.md) amendment (2026-10-29; implementation pending): the first real process owner uses
+[Plan 96](../plans/96-provide-governed-mutable-repository-workspaces-for-durable-agents.md) amendment (2026-10-29; initial backend decision): the first real process owner uses
 Linux systemd system services with cgroup v2, an independently supervised workspace service,
 and an immutable filesystem root exposing only the admitted workspace and scratch writes.
 Unsupported hosts refuse process admission. The supervisor retains operation/attempt,
@@ -84,9 +84,8 @@ from authoritative child mappings. A distinct successor admission binds the
 actual new child to an already established session owner and its retained fence
 and objective receipt. Only that conditional admission advances workspace
 control; allocation and original effect receipts remain unchanged. Historical
-writers must refuse the new filesystem profile before IO. The store contract is
-implemented; concrete process fencing, transfer-aware adapters and native
-successor writes remain plan-96 qualification gates.
+writers must refuse the new filesystem profile before IO. The store, concrete process fencing, transfer-aware adapters and native
+successor writes are qualified by plan 96's real-owner gate.
 
 The concrete workspace provider now treats its retained freeze as cancellation
 control for the independent process owner. The shared lock serializes freeze
@@ -96,8 +95,8 @@ and settled file/Git effects permit the retained fence. A restarted service may
 recover an already admitted intent and return its factual proof after revocation,
 without requesting a new launch or fabricating objective ownership. Version-2
 peer-checked RPC carries this workspace-side contract; historical process frames
-keep version 1. Instrumented process tests establish this boundary; real Linux
-handoff and accepted successor writes remain plan-96 gates.
+keep version 1. Instrumented process tests establish this boundary, supplemented by the
+real-owner native qualification recorded below.
 
 Transfer-aware file/process/Git adapters now check explicit retained successor
 admission, current session ownership and the real actual claim at every effect
@@ -107,10 +106,9 @@ successor run as well as assignment, owner and epoch; the original run was
 previously implicit in immutable allocation. Successor loading preserves the
 original ready Unix profile and pinned base instructions, then obtains fresh
 exact authority before conditional control establishment. Cleanup follows the
-latest retained successor execution, retaining live and idle sessions. The
-accepted-read and instrumented process/Git tests pass; production selection
-remains on the qualified older adapters until real Linux successor writes and
-handoff pass.
+latest retained successor execution, retaining live and idle sessions. Configured workers select transfer-aware revisions 3/2/2; retained snapshots
+continue using their exact earlier adapters. The real-owner native gate
+qualifies successor effects and handoff.
 
 Configured process-backed workers compose the transfer-aware host and the
 real objective ownership provider through the same peer-checked supervisor
@@ -146,8 +144,8 @@ The lock is held through durable receipt acknowledgement and is released by
 process death. Future freeze, transfer, Git and process launch owners must share
 this boundary and reconcile unsettled reservations. File operations require all
 supervised repository processes settled. Neither acquiring that file lock nor
-reading an allocation/applied-edit marker proves descendant settlement; full
-supervisor and transfer qualification remains pending in plan 96.
+reading an allocation/applied-edit marker proves descendant settlement; full supervisor and transfer qualification is recorded by plan 96's
+25-case native matrix.
 
 Terminal retirement (2026-10-30) uses a separate retained cleanup intent. Only
 known terminal execution metadata, zero pending receipts, settled provider
@@ -157,7 +155,17 @@ Fresh exact operator authority and the shared workspace lock guard deletion of
 only the two recorded files/scratch root inodes. Recovery keeps that plan and
 preserves provider metadata, receipts, source and Unix reservations. A missing
 execution is not evidence that an orphan is safe to adopt. Retirement provides
-no ownership-transfer proof; the real handoff/integration gates remain open.
+no ownership-transfer proof; handoff and integration require their separate factual receipts.
+
+The real-owner native gate passed on 2026-11-02 with runtime `d38d2793`.
+The [bounded qualification](../evidence/plan-96/joint-native-qualification.json) proves ownership commits
+while the session remains frozen after response loss, then a restarted
+controller recovers the same real receipt and admits the successor's structured
+write and native validation in the original workspace. Under restored authority,
+the live boundary admits the new epoch and refuses the former owner. Configured
+workers select revisions 3/2/2; retained snapshots keep their exact earlier
+adapters. These provider facts do not by themselves close all IR-15 or adaptive
+consumer acceptance.
 
 ## Consequences
 
@@ -184,18 +192,19 @@ require the prior assignment results and actual executions to be terminal and
 all receipts settled. The original allocation, Unix profile and instruction
 bundle remain pinned; cleanup follows the latest retained admission.
 
-The native workspace-side gate now proves an in-flight detached writer and held
+The initial 2026-10-30 workspace-side gate proves an in-flight detached writer and held
 collector keep a transfer unresolved, then recovers the original actual and
 exact fence across supervisor restart with authority denied. A real accepted
 late old-owner file edit refuses after fresh authority returns. These facts do
 not establish a successor epoch: no foreign ownership receipt is manufactured.
-Accepted native successor writes and joint objective integration remain open.
+The later real-owner gate recorded above separately establishes successor
+authority and qualifies its native effects.
 
 The complete 22-case workspace-owned native matrix also verifies same-owner
 follow-up writes and terminal cleanup bound to the latest retained execution,
 while preserving the pinned instruction bundle, Unix identity and metadata.
-This does not waive the separate real ownership/successor gate or activate the
-new production composition.
+That earlier matrix did not activate the production composition; the later
+25-case real-owner gate supplies its separate successor qualification.
 
 Plan 108 retains workspace admission freeze as the closed `AdmissionOpen` /
 `AdmissionFrozen` state. The SQL `frozen` boolean and its JSON projection retain

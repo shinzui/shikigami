@@ -1,0 +1,151 @@
+{
+  "caseCount": 9,
+  "cases": [
+    "native provisioning retains its original identity after ready acknowledgement loss",
+    "native duplicate provisioning recovers the exact ready profile",
+    "a real in-flight descendant and held collector keep the transfer fence unresolved",
+    "provider restart recovers the original actual and exact settled fence after authority denial",
+    "a real accepted late old-owner edit and unestablished successor admission both refuse under fresh authority",
+    "real objective ownership commits once while acknowledgement loss leaves the local session frozen",
+    "restarted real ownership recovery admits an accepted successor write and native validation in the original workspace",
+    "established successor authority refuses the former owner at the live workspace write boundary",
+    "retained workflow/operation metadata and public logs exclude fixture contents, credentials and bearer authority"
+  ],
+  "command": "bash tests/workspace/run-apple.sh --ownership-only",
+  "date": "2026-11-02",
+  "exitCode": 0,
+  "fence": {
+    "fence": {
+      "fingerprint": "sha256:66108b7a982f4f4784c94f2ae0f745d66ebdf6d15c679fe0202e111026164d2b",
+      "format": 1,
+      "newEpoch": 1,
+      "oldEpoch": 0,
+      "operationId": "native-freeze",
+      "receipt": "sha256:0133ca3c95b2b752f8dced1079074593c337f3eccc2c30caf30d5f55af98b289",
+      "workspace": {
+        "provider": "shikigami.workspace/1",
+        "resource": "541b238d679bbbf1076f0f634ff3fbad4061f17cd3296a9761862fed5d5cf58f"
+      }
+    },
+    "receipt": {
+      "attemptId": "shikigami_execution_attempt_01j0000000f3vrd46cbprekb4h",
+      "bindingDigest": "sha256:3ea18cc593ff2070cc17c8dced3c76118d0347a245b8d1770e485af0a26bbe42",
+      "bootId": "75794768-8edd-4285-bfca-acfb23121871",
+      "descendantsEmpty": true,
+      "exitCode": 143,
+      "fingerprint": "sha256:5d3918e56d6fcb507af0b1f89b5af20db87e4334ed588a99a75ef7275811d73e",
+      "generation": 1,
+      "invocationId": "888d17b63b4b4b1f9f88ad2109f1bba8",
+      "operationId": "operation:sha256:ec146a06c6339ce7c49639990be2fdd7af218dfb8e62e049f3153dbb447838bb",
+      "outputComplete": true,
+      "stderr": {
+        "artifact": "stderr",
+        "bytes": 0,
+        "digest": "sha256:75384fd75cdef76c52b2f4bca3f2a749405a70653924190c5b0f2f26abe614e2",
+        "truncated": false
+      },
+      "stdout": {
+        "artifact": "stdout",
+        "bytes": 0,
+        "digest": "sha256:75384fd75cdef76c52b2f4bca3f2a749405a70653924190c5b0f2f26abe614e2",
+        "truncated": false
+      },
+      "termination": "ProcessCancelled",
+      "unit": "shikigami-workspace-17ab8cd529fba86aae94289d458fa38637c0009de05e1ea89d30aa229c16fb29.service"
+    }
+  },
+  "ownership": {
+    "commandReceipt": {
+      "fingerprint": "sha256:48417fef21cbc4bf1f77851bd65d4d08a0406d6289c11d6866cec7eab5972678",
+      "objectiveId": "shikigami_objective_01m6ewhedked8s8aw4yxwvjhaq",
+      "operationId": "objective-handoff:sha256:fbc70fa6ca0755545e3240463e5ff45dd64960026babcd8df8b9a17e62c76374",
+      "outcome": {
+        "Right": {
+          "fingerprint": "sha256:48417fef21cbc4bf1f77851bd65d4d08a0406d6289c11d6866cec7eab5972678",
+          "objectiveId": "shikigami_objective_01m6ewhedked8s8aw4yxwvjhaq",
+          "operationId": "objective-handoff:sha256:fbc70fa6ca0755545e3240463e5ff45dd64960026babcd8df8b9a17e62c76374",
+          "payloadDigest": "sha256:4246efdf599de99b405f844d12d018dc2b43b1d9883c2ac089b5cb39933c0c9b",
+          "revision": 4
+        }
+      }
+    },
+    "establishedFence": {
+      "oldEpoch": 0,
+      "oldOwnerAdmitted": false,
+      "successorAdmitted": true,
+      "successorEpoch": 1
+    },
+    "objective": "shikigami_objective_01m6ewhedked8s8aw4yxwvjhaq",
+    "revision": 4,
+    "sessionEpoch": 0,
+    "sessionOwner": {
+      "kind": "verified",
+      "principalId": "agent_01h000000000000000triage"
+    }
+  },
+  "postgres": "postgres (PostgreSQL) 18.6",
+  "privacy": "Instruction bodies, source contents, credentials and bearer permits omitted.",
+  "runtimeCommit": "d38d2793a692ebe4ea664d6e354dd28904d2426f",
+  "scope": "Focused real-owner qualification only; the full 25-case matrix remains a separate acceptance gate.",
+  "successor": {
+    "admission": {
+      "assignmentId": "assignment:sha256:497bb63b971fc70273a80338eb659d21b56c82f17a854e37b4b2951bf787987a",
+      "bindingDigest": "sha256:3ea18cc593ff2070cc17c8dced3c76118d0347a245b8d1770e485af0a26bbe42",
+      "epoch": 1,
+      "filePolicy": "ascii-exact-transfer-v1",
+      "owner": {
+        "kind": "verified",
+        "principalId": "agent_01h000000000000000successor"
+      },
+      "rootId": "shikigami_execution_root_01j0000000fjp8xw9aeaz802w0",
+      "runId": "865a3ae9-9b58-55b8-ae2e-2dba72115ff3",
+      "workspace": {
+        "provider": "shikigami.workspace/1",
+        "resource": "541b238d679bbbf1076f0f634ff3fbad4061f17cd3296a9761862fed5d5cf58f"
+      }
+    },
+    "handoff": {
+      "contents": [
+        {
+          "kind": "verified",
+          "principalId": "agent_01h000000000000000successor"
+        },
+        1
+      ],
+      "tag": "HandoffEstablished"
+    },
+    "instructionDigest": "sha256:92e29a65bebb78fa3783aa51090dc5bdfb67e78d7b4a43145f98b28d5c9a6fd2",
+    "profile": {
+      "bindingDigest": "sha256:3ea18cc593ff2070cc17c8dced3c76118d0347a245b8d1770e485af0a26bbe42",
+      "groupId": 64001,
+      "instructionDigest": "sha256:92e29a65bebb78fa3783aa51090dc5bdfb67e78d7b4a43145f98b28d5c9a6fd2",
+      "userId": 64001
+    },
+    "receipt": {
+      "attemptId": "shikigami_execution_attempt_01j0000000fhj8gxe19cg24pk9",
+      "bindingDigest": "sha256:3ea18cc593ff2070cc17c8dced3c76118d0347a245b8d1770e485af0a26bbe42",
+      "bootId": "75794768-8edd-4285-bfca-acfb23121871",
+      "descendantsEmpty": true,
+      "exitCode": 0,
+      "fingerprint": "sha256:480811bed8d8c0149fb9b2692d7f3d4f25dae0acb785092ed5aa60c4d169ad8f",
+      "generation": 1,
+      "invocationId": "1ea405da5d874339b78f5a3b72535cbf",
+      "operationId": "operation:sha256:000f43e2f3752f940d242976afc1acb7b1932e2774f107d72ef529be248b33a8",
+      "outputComplete": true,
+      "stderr": {
+        "artifact": "stderr",
+        "bytes": 0,
+        "digest": "sha256:75384fd75cdef76c52b2f4bca3f2a749405a70653924190c5b0f2f26abe614e2",
+        "truncated": false
+      },
+      "stdout": {
+        "artifact": "stdout",
+        "bytes": 18,
+        "digest": "sha256:2236be18523a97b775796da60dcde4a57a0990343241ca94fd9e162b6b9e38a4",
+        "truncated": false
+      },
+      "termination": "ProcessExited",
+      "unit": "shikigami-workspace-b79aaf5e628261cd01bd574d0b0c068a27fc825b738e25a69bc1b9cefe46b836.service"
+    }
+  }
+}

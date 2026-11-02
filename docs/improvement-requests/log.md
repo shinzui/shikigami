@@ -1,7 +1,7 @@
 # Bundle Update Log
 
 ## 2026-11-02
-
+* **Implement**: Complete IR-11 with plan 96: all 25 native workspace cases and final host checks pass, including real ownership receipt recovery, accepted successor effects, exact integration and terminal cleanup.
 * **Completion**: IR-13 completed by MasterPlan 17, plans 98–102. Real API/worker restart, first agent creation and receipt recovery, cross-run/bound-turn continuity, integrated explicit acceptance, stale/denied inputs and source uncertainty pass. Full qualification: 1,597 package tests, 169 native checks, Hurl and complete build. Human-verifiable review, deterministic fixture fencing and remaining workspace/adaptive/recurring gates are explicit; no IR-11/IR-15 or plan 84–87 completion is inferred.
 
 ## 2026-10-30
