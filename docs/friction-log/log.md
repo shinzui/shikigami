@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-11-02
+* **Addition**: FRIC-42 records detour tooling friction with mori://shinzui/shikigami: Checked migration and diagram artifacts lag the current source
 * **Update**: FRIC-41 accepted: Accept the isolated launcher workaround; no upstream repository changes are needed for this qualification.
 * **Addition**: FRIC-41 records detour environment friction with mori://shinzui/rei: A foreign dev shell installs hooks in the caller checkout
 * **Update**: FRIC-40 resolved: Resolved the helper assumption and qualified recovery through the actual conversation workflow.

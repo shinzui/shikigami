@@ -255,7 +255,7 @@ tests fixture =
           journal <- run env (loadStepIndex Agent.agentRunWorkflowName (runJobWorkflowId job) 0)
           assertBool "new admission label belongs to the real parent" (Map.member "admit-workspace-skill-execution" journal)
           assertBool "historical admission label is not reused" (not (Map.member "admit-skill-execution" journal)),
-      testCase "installing the supervised host preserves an admitted file-only execution without provisioning it" $
+      testCase "installing the transfer-aware host preserves an admitted file-only execution without provisioning it" $
         withWorkflow fixture \env root job _ deps observed -> withStore env.connectionSettings \store -> do
           Agent.runAgentRunWorkflow deps job >>= assertSuspended
           binding <- admittedBinding env job
@@ -269,7 +269,7 @@ tests fixture =
               policy = ((either (error . show) id . mkProcessPolicy) (ProcessPolicyInput ProcessPolicyV1 (((either (error . show) id . mkProcessImage) (ProcessImageInput (workspaceLocator "/qualified/root") digest (workspaceLocator "/bin/env") (workspaceLocator "/bin/deadline") (workspaceLocator "/qualified/collector")))) digest [((either (error . show) id . mkCommandRule) (CommandRuleInput (workspaceCoordinate "validate") (workspaceCoordinate "/bin/validate") [] (workspaceCoordinate "") Map.empty ((either (error . show) id . parseProcessSeconds) 30) ((either (error . show) id . parseProcessOutputBytes) 1024)))] [(workspaceCoordinate "")] [(workspaceCoordinate "dependency.txt")]))
               process = WorkspaceProcessSettings (workspaceLocator "/run/shikigami/supervisor.sock") ((either (error . show) id . parseRpcPeerUserId) 0) ((either (error . show) id . parseRpcRequestSeconds) 5) ((either (error . show) id . parseRpcWaitSeconds) 60) (((either (error . show) id . mkIdentityRange) (IdentityRangeInput ((either (error . show) id . parseWorkspaceIdentity) 64000) ((either (error . show) id . parseWorkspaceIdentity) 64031)))) (Map.singleton binding.repository policy)
               settings = WorkspaceSettings (workspaceLocator root) [WorkspaceRepository binding.repository binding.source [WorkspaceRevision binding.base (bundleDigest admission.instructions)] binding.base (workspaceCoordinate "policy-1") [(workspaceCoordinate "")] [(workspaceCoordinate "dependency.txt")]] [WorkspaceGrant ((either (error . show) id . mkAgentName) "workspace-worker") (declarationCoordinate principal) binding.repository Nothing] (Just process)
-          host <- right (configuredWorkspaceHost env store.pool disabledDirectoryHandle allowAllActionAuthorizerForTests settings)
+          host <- right (configuredWorkspaceHostWithTransfers env store.pool disabledDirectoryHandle allowAllActionAuthorizerForTests settings)
           let resumed = (deps & #capabilities .~ (host.capabilities) & #workspace .~ (Just ((host & #load .~ (\_ -> assertFailure "old file assignment attempted process provisioning" >> fail "unreachable")))))
           _ <- right =<< driveExecutionForeground (Agent.executionRuntime resumed) (ExecutionStart execution) 30
           Agent.runAgentRunWorkflow resumed job >>= assertCompleted

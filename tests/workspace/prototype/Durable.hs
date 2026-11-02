@@ -112,7 +112,7 @@ workflowCase configFile prefix stage = do
         settings = WorkspaceSettings initial.binding.storageRoot [repository] [WorkspaceGrant ((either (error . show) id . mkAgentName) "workspace-upgrade") (declarationCoordinate principal) repository.identity Nothing] (Just process)
         code = "/var/lib/shikigami-workspace-fixture-code"
         skill = code </> "agents/skills/triage-note"
-    host <- right (configuredWorkspaceHost env store.pool directory.handle authorizer settings)
+    host <- right (configuredWorkspaceHostWithTransfers env store.pool directory.handle authorizer settings)
     original <- right =<< loadAgent (code </> "agents/triage-note.dhall")
     base <- newBehaviorEnv
     let complete model context options = do
@@ -220,7 +220,7 @@ workflowCase configFile prefix stage = do
         (snapshot, state) <- right =<< run env (Execution.loadExecution access)
         admission <- maybe (fail "admitted workspace absent") pure snapshot.workspace
         Just (binding, _) <- right =<< run env (runTransaction (Store.inspectWorkspaceTx admission.workspace))
-        unless (admission.filePolicy == Just supervisedFilePolicy) (fail "wrong filesystem profile")
+        unless (admission.filePolicy == Just transferableFilePolicy) (fail "wrong filesystem profile")
         let metadataPath = workspaceMetadata (workspaceLocatorPath binding.storageRoot) binding
         headId <- right =<< Objects.readHead metadataPath
         count <- right =<< runWorkspaceGit prefix 128 ["--git-dir=" <> metadataPath, "rev-list", "--count", Text.unpack (workspaceCoordinateText binding.base) <> "..HEAD"]

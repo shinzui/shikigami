@@ -123,6 +123,47 @@ column	objective_receipts.outcome	jsonb not null
 column	objective_scopes.fingerprint	text not null
 column	objective_scopes.objective_id	text not null
 column	objective_scopes.scope	jsonb not null
+column	objective_tracker_attempts.attempt	jsonb not null
+column	objective_tracker_attempts.attempt_id	text not null
+column	objective_tracker_attempts.publication_id	text not null
+column	objective_tracker_bindings.active	boolean not null
+column	objective_tracker_bindings.binding_id	text not null
+column	objective_tracker_bindings.connection_id	text not null
+column	objective_tracker_bindings.incarnation	text not null
+column	objective_tracker_bindings.last_observed_at	timestamp with time zone
+column	objective_tracker_bindings.objective_id	text not null
+column	objective_tracker_bindings.resource_id	text not null
+column	objective_tracker_bindings.state	jsonb not null
+column	objective_tracker_commands.control	jsonb
+column	objective_tracker_commands.control_actor	jsonb
+column	objective_tracker_commands.fingerprint	text not null
+column	objective_tracker_commands.objective_id	text not null
+column	objective_tracker_commands.operation_key	text not null
+column	objective_tracker_commands.pending	boolean not null default false
+column	objective_tracker_commands.receipt	jsonb
+column	objective_tracker_observations.binding_id	text not null
+column	objective_tracker_observations.disposition	text not null
+column	objective_tracker_observations.observation	jsonb not null
+column	objective_tracker_observations.observation_key	text not null
+column	objective_tracker_observations.observed_at	timestamp with time zone
+column	objective_tracker_observations.position	bigint not null
+column	objective_tracker_proposals.binding_id	text not null
+column	objective_tracker_proposals.proposal_id	text not null
+column	objective_tracker_proposals.state	jsonb not null
+column	objective_tracker_publications.binding_id	text not null
+column	objective_tracker_publications.intent	jsonb not null
+column	objective_tracker_publications.objective_revision	bigint not null
+column	objective_tracker_publications.publication_id	text not null
+column	objective_tracker_publications.receipt	jsonb not null
+column	objective_tracker_publications.receipt_state	text not null
+column	objective_tracker_verifications.evidence	jsonb not null
+column	objective_tracker_verifications.publication_id	text not null
+column	objective_tracker_verifications.verification_key	text not null
+column	objective_turn_admissions.admission	jsonb not null
+column	objective_turn_admissions.objective_id	text
+column	objective_turn_admissions.principal_key	text not null
+column	objective_turn_admissions.run_id	text not null
+column	objective_turn_admissions.turn_id	text not null
 column	objectives.objective_id	text not null
 column	objectives.state	jsonb not null
 column	objectives.updated_at	timestamp with time zone not null default clock_timestamp()
@@ -464,6 +505,61 @@ constraint	objective_scopes.objective_scopes_objective_id_fkey	FOREIGN KEY (obje
 constraint	objective_scopes.objective_scopes_objective_id_not_null	NOT NULL objective_id
 constraint	objective_scopes.objective_scopes_pkey	PRIMARY KEY (fingerprint)
 constraint	objective_scopes.objective_scopes_scope_not_null	NOT NULL scope
+constraint	objective_tracker_attempts.objective_tracker_attempts_attempt_id_not_null	NOT NULL attempt_id
+constraint	objective_tracker_attempts.objective_tracker_attempts_attempt_not_null	NOT NULL attempt
+constraint	objective_tracker_attempts.objective_tracker_attempts_pkey	PRIMARY KEY (attempt_id)
+constraint	objective_tracker_attempts.objective_tracker_attempts_publication_id_fkey	FOREIGN KEY (publication_id) REFERENCES shikigami.objective_tracker_publications(publication_id)
+constraint	objective_tracker_attempts.objective_tracker_attempts_publication_id_not_null	NOT NULL publication_id
+constraint	objective_tracker_bindings.objective_tracker_bindings_active_not_null	NOT NULL active
+constraint	objective_tracker_bindings.objective_tracker_bindings_binding_id_not_null	NOT NULL binding_id
+constraint	objective_tracker_bindings.objective_tracker_bindings_connection_id_not_null	NOT NULL connection_id
+constraint	objective_tracker_bindings.objective_tracker_bindings_incarnation_not_null	NOT NULL incarnation
+constraint	objective_tracker_bindings.objective_tracker_bindings_objective_id_fkey	FOREIGN KEY (objective_id) REFERENCES shikigami.objectives(objective_id)
+constraint	objective_tracker_bindings.objective_tracker_bindings_objective_id_not_null	NOT NULL objective_id
+constraint	objective_tracker_bindings.objective_tracker_bindings_pkey	PRIMARY KEY (binding_id)
+constraint	objective_tracker_bindings.objective_tracker_bindings_resource_id_not_null	NOT NULL resource_id
+constraint	objective_tracker_bindings.objective_tracker_bindings_state_not_null	NOT NULL state
+constraint	objective_tracker_commands.objective_tracker_command_payload	CHECK ((((receipt IS NOT NULL) OR (control IS NOT NULL)) AND (((control IS NULL) AND (control_actor IS NULL) AND (NOT pending)) OR ((control IS NOT NULL) AND (control_actor IS NOT NULL)))))
+constraint	objective_tracker_commands.objective_tracker_commands_fingerprint_not_null	NOT NULL fingerprint
+constraint	objective_tracker_commands.objective_tracker_commands_objective_id_fkey	FOREIGN KEY (objective_id) REFERENCES shikigami.objectives(objective_id)
+constraint	objective_tracker_commands.objective_tracker_commands_objective_id_not_null	NOT NULL objective_id
+constraint	objective_tracker_commands.objective_tracker_commands_operation_key_not_null	NOT NULL operation_key
+constraint	objective_tracker_commands.objective_tracker_commands_pending_not_null	NOT NULL pending
+constraint	objective_tracker_commands.objective_tracker_commands_pkey	PRIMARY KEY (objective_id, operation_key)
+constraint	objective_tracker_observations.objective_tracker_observations_binding_id_fkey	FOREIGN KEY (binding_id) REFERENCES shikigami.objective_tracker_bindings(binding_id)
+constraint	objective_tracker_observations.objective_tracker_observations_binding_id_not_null	NOT NULL binding_id
+constraint	objective_tracker_observations.objective_tracker_observations_disposition_not_null	NOT NULL disposition
+constraint	objective_tracker_observations.objective_tracker_observations_observation_key_not_null	NOT NULL observation_key
+constraint	objective_tracker_observations.objective_tracker_observations_observation_not_null	NOT NULL observation
+constraint	objective_tracker_observations.objective_tracker_observations_pkey	PRIMARY KEY (observation_key)
+constraint	objective_tracker_observations.objective_tracker_observations_position_key	UNIQUE ("position")
+constraint	objective_tracker_observations.objective_tracker_observations_position_not_null	NOT NULL "position"
+constraint	objective_tracker_proposals.objective_tracker_proposals_binding_id_fkey	FOREIGN KEY (binding_id) REFERENCES shikigami.objective_tracker_bindings(binding_id)
+constraint	objective_tracker_proposals.objective_tracker_proposals_binding_id_not_null	NOT NULL binding_id
+constraint	objective_tracker_proposals.objective_tracker_proposals_pkey	PRIMARY KEY (proposal_id)
+constraint	objective_tracker_proposals.objective_tracker_proposals_proposal_id_not_null	NOT NULL proposal_id
+constraint	objective_tracker_proposals.objective_tracker_proposals_state_not_null	NOT NULL state
+constraint	objective_tracker_publications.objective_tracker_publications_binding_id_fkey	FOREIGN KEY (binding_id) REFERENCES shikigami.objective_tracker_bindings(binding_id)
+constraint	objective_tracker_publications.objective_tracker_publications_binding_id_not_null	NOT NULL binding_id
+constraint	objective_tracker_publications.objective_tracker_publications_intent_not_null	NOT NULL intent
+constraint	objective_tracker_publications.objective_tracker_publications_objective_revision_check	CHECK ((objective_revision >= 0))
+constraint	objective_tracker_publications.objective_tracker_publications_objective_revision_not_null	NOT NULL objective_revision
+constraint	objective_tracker_publications.objective_tracker_publications_pkey	PRIMARY KEY (publication_id)
+constraint	objective_tracker_publications.objective_tracker_publications_publication_id_not_null	NOT NULL publication_id
+constraint	objective_tracker_publications.objective_tracker_publications_receipt_not_null	NOT NULL receipt
+constraint	objective_tracker_publications.objective_tracker_publications_receipt_state_check	CHECK ((receipt_state = ANY (ARRAY['Pending'::text, 'Attempting'::text, 'Delivered'::text, 'Rejected'::text, 'Conflict'::text, 'Unknown'::text, 'Suppressed'::text])))
+constraint	objective_tracker_publications.objective_tracker_publications_receipt_state_not_null	NOT NULL receipt_state
+constraint	objective_tracker_verifications.objective_tracker_verifications_evidence_not_null	NOT NULL evidence
+constraint	objective_tracker_verifications.objective_tracker_verifications_pkey	PRIMARY KEY (verification_key)
+constraint	objective_tracker_verifications.objective_tracker_verifications_publication_id_fkey	FOREIGN KEY (publication_id) REFERENCES shikigami.objective_tracker_publications(publication_id)
+constraint	objective_tracker_verifications.objective_tracker_verifications_publication_id_not_null	NOT NULL publication_id
+constraint	objective_tracker_verifications.objective_tracker_verifications_verification_key_not_null	NOT NULL verification_key
+constraint	objective_turn_admissions.objective_turn_admissions_admission_not_null	NOT NULL admission
+constraint	objective_turn_admissions.objective_turn_admissions_objective_id_fkey	FOREIGN KEY (objective_id) REFERENCES shikigami.objectives(objective_id)
+constraint	objective_turn_admissions.objective_turn_admissions_pkey	PRIMARY KEY (run_id, turn_id, principal_key)
+constraint	objective_turn_admissions.objective_turn_admissions_principal_key_not_null	NOT NULL principal_key
+constraint	objective_turn_admissions.objective_turn_admissions_run_id_not_null	NOT NULL run_id
+constraint	objective_turn_admissions.objective_turn_admissions_turn_id_not_null	NOT NULL turn_id
 constraint	objectives.objectives_objective_id_not_null	NOT NULL objective_id
 constraint	objectives.objectives_pkey	PRIMARY KEY (objective_id)
 constraint	objectives.objectives_state_not_null	NOT NULL state
@@ -728,6 +824,22 @@ index	objective_origins_pkey	CREATE UNIQUE INDEX objective_origins_pkey ON shiki
 index	objective_payloads_pkey	CREATE UNIQUE INDEX objective_payloads_pkey ON shikigami.objective_payloads USING btree (objective_id, digest)
 index	objective_receipts_pkey	CREATE UNIQUE INDEX objective_receipts_pkey ON shikigami.objective_receipts USING btree (objective_id, operation_key)
 index	objective_scopes_pkey	CREATE UNIQUE INDEX objective_scopes_pkey ON shikigami.objective_scopes USING btree (fingerprint)
+index	objective_tracker_attempts_pkey	CREATE UNIQUE INDEX objective_tracker_attempts_pkey ON shikigami.objective_tracker_attempts USING btree (attempt_id)
+index	objective_tracker_bindings_pkey	CREATE UNIQUE INDEX objective_tracker_bindings_pkey ON shikigami.objective_tracker_bindings USING btree (binding_id)
+index	objective_tracker_by_objective	CREATE INDEX objective_tracker_by_objective ON shikigami.objective_tracker_bindings USING btree (objective_id, binding_id)
+index	objective_tracker_commands_pkey	CREATE UNIQUE INDEX objective_tracker_commands_pkey ON shikigami.objective_tracker_commands USING btree (objective_id, operation_key)
+index	objective_tracker_controls_pending	CREATE INDEX objective_tracker_controls_pending ON shikigami.objective_tracker_commands USING btree (objective_id, operation_key) WHERE pending
+index	objective_tracker_observation_page	CREATE INDEX objective_tracker_observation_page ON shikigami.objective_tracker_observations USING btree (binding_id, lpad(("position")::text, 20, '0'::text))
+index	objective_tracker_observations_pkey	CREATE UNIQUE INDEX objective_tracker_observations_pkey ON shikigami.objective_tracker_observations USING btree (observation_key)
+index	objective_tracker_observations_position_key	CREATE UNIQUE INDEX objective_tracker_observations_position_key ON shikigami.objective_tracker_observations USING btree ("position")
+index	objective_tracker_proposal_page	CREATE INDEX objective_tracker_proposal_page ON shikigami.objective_tracker_proposals USING btree (binding_id, proposal_id)
+index	objective_tracker_proposals_pkey	CREATE UNIQUE INDEX objective_tracker_proposals_pkey ON shikigami.objective_tracker_proposals USING btree (proposal_id)
+index	objective_tracker_publication_order	CREATE INDEX objective_tracker_publication_order ON shikigami.objective_tracker_publications USING btree (binding_id, objective_revision, publication_id)
+index	objective_tracker_publication_page	CREATE INDEX objective_tracker_publication_page ON shikigami.objective_tracker_publications USING btree (binding_id, publication_id)
+index	objective_tracker_publications_pkey	CREATE UNIQUE INDEX objective_tracker_publications_pkey ON shikigami.objective_tracker_publications USING btree (publication_id)
+index	objective_tracker_resource_active	CREATE UNIQUE INDEX objective_tracker_resource_active ON shikigami.objective_tracker_bindings USING btree (connection_id, incarnation, resource_id) WHERE active
+index	objective_tracker_verifications_pkey	CREATE UNIQUE INDEX objective_tracker_verifications_pkey ON shikigami.objective_tracker_verifications USING btree (verification_key)
+index	objective_turn_admissions_pkey	CREATE UNIQUE INDEX objective_turn_admissions_pkey ON shikigami.objective_turn_admissions USING btree (run_id, turn_id, principal_key)
 index	objectives_pkey	CREATE UNIQUE INDEX objectives_pkey ON shikigami.objectives USING btree (objective_id)
 index	practice_review_attention_outbox_message_id_key	CREATE UNIQUE INDEX practice_review_attention_outbox_message_id_key ON shikigami.practice_review_attention USING btree (outbox_message_id)
 index	practice_review_attention_pkey	CREATE UNIQUE INDEX practice_review_attention_pkey ON shikigami.practice_review_attention USING btree (attention_key)
@@ -805,6 +917,14 @@ table	objective_origins	kind=r
 table	objective_payloads	kind=r
 table	objective_receipts	kind=r
 table	objective_scopes	kind=r
+table	objective_tracker_attempts	kind=r
+table	objective_tracker_bindings	kind=r
+table	objective_tracker_commands	kind=r
+table	objective_tracker_observations	kind=r
+table	objective_tracker_proposals	kind=r
+table	objective_tracker_publications	kind=r
+table	objective_tracker_verifications	kind=r
+table	objective_turn_admissions	kind=r
 table	objectives	kind=r
 table	practice_review_attention	kind=r
 table	practice_review_attention_reviews	kind=r

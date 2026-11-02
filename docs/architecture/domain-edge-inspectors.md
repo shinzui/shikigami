@@ -360,6 +360,14 @@
   - guard (structural): PAnd PInCtor PAnd PAnd PEq PEq PCmp CmpGt
   - guard (pretty): (SubscribeSessionEvents && ((SubscribeSessionEvents.sessionId.WorkerSessionIdentity == sessionId.WorkerSessionIdentity && SubscribeSessionEvents.expected == revision) && SubscribeSessionEvents.revision > revision))
   - written slots: revision
+- **WorkerSessionLifecycleIdle -> WorkerSessionLifecycleIdle**
+  - edge index: 9
+  - input: SupersedeSessionCheckpoint
+  - output: SessionCheckpointSuperseded
+  - output fields: SessionCheckpointSuperseded[field 0: SupersedeSessionCheckpoint.sessionId; field 1: SupersedeSessionCheckpoint.expected; field 2: SupersedeSessionCheckpoint.revision]
+  - guard (structural): PAnd PInCtor PAnd PAnd PEq PEq PCmp CmpGt
+  - guard (pretty): (SupersedeSessionCheckpoint && ((SupersedeSessionCheckpoint.sessionId.WorkerSessionIdentity == sessionId.WorkerSessionIdentity && SupersedeSessionCheckpoint.expected == revision) && SupersedeSessionCheckpoint.revision > revision))
+  - written slots: revision
 
 ### WorkerSessionLifecycleActive
 
@@ -435,6 +443,14 @@
   - guard (structural): PAnd PInCtor PAnd PAnd PEq PEq PCmp CmpGt
   - guard (pretty): (SubscribeSessionEvents && ((SubscribeSessionEvents.sessionId.WorkerSessionIdentity == sessionId.WorkerSessionIdentity && SubscribeSessionEvents.expected == revision) && SubscribeSessionEvents.revision > revision))
   - written slots: revision
+- **WorkerSessionLifecycleActive -> WorkerSessionLifecycleActive**
+  - edge index: 9
+  - input: SupersedeSessionCheckpoint
+  - output: SessionCheckpointSuperseded
+  - output fields: SessionCheckpointSuperseded[field 0: SupersedeSessionCheckpoint.sessionId; field 1: SupersedeSessionCheckpoint.expected; field 2: SupersedeSessionCheckpoint.revision]
+  - guard (structural): PAnd PInCtor PAnd PAnd PEq PEq PCmp CmpGt
+  - guard (pretty): (SupersedeSessionCheckpoint && ((SupersedeSessionCheckpoint.sessionId.WorkerSessionIdentity == sessionId.WorkerSessionIdentity && SupersedeSessionCheckpoint.expected == revision) && SupersedeSessionCheckpoint.revision > revision))
+  - written slots: revision
 
 ### WorkerSessionLifecycleParked
 
@@ -502,6 +518,14 @@
   - guard (structural): PAnd PInCtor PAnd PAnd PEq PEq PCmp CmpGt
   - guard (pretty): (SubscribeSessionEvents && ((SubscribeSessionEvents.sessionId.WorkerSessionIdentity == sessionId.WorkerSessionIdentity && SubscribeSessionEvents.expected == revision) && SubscribeSessionEvents.revision > revision))
   - written slots: revision
+- **WorkerSessionLifecycleParked -> WorkerSessionLifecycleParked**
+  - edge index: 8
+  - input: SupersedeSessionCheckpoint
+  - output: SessionCheckpointSuperseded
+  - output fields: SessionCheckpointSuperseded[field 0: SupersedeSessionCheckpoint.sessionId; field 1: SupersedeSessionCheckpoint.expected; field 2: SupersedeSessionCheckpoint.revision]
+  - guard (structural): PAnd PInCtor PAnd PAnd PEq PEq PCmp CmpGt
+  - guard (pretty): (SupersedeSessionCheckpoint && ((SupersedeSessionCheckpoint.sessionId.WorkerSessionIdentity == sessionId.WorkerSessionIdentity && SupersedeSessionCheckpoint.expected == revision) && SupersedeSessionCheckpoint.revision > revision))
+  - written slots: revision
 
 ### WorkerSessionLifecycleUnresolved
 
@@ -560,6 +584,14 @@
   - output fields: SessionEventsSubscribed[field 0: SubscribeSessionEvents.sessionId; field 1: SubscribeSessionEvents.expected; field 2: SubscribeSessionEvents.revision]
   - guard (structural): PAnd PInCtor PAnd PAnd PEq PEq PCmp CmpGt
   - guard (pretty): (SubscribeSessionEvents && ((SubscribeSessionEvents.sessionId.WorkerSessionIdentity == sessionId.WorkerSessionIdentity && SubscribeSessionEvents.expected == revision) && SubscribeSessionEvents.revision > revision))
+  - written slots: revision
+- **WorkerSessionLifecycleUnresolved -> WorkerSessionLifecycleUnresolved**
+  - edge index: 7
+  - input: SupersedeSessionCheckpoint
+  - output: SessionCheckpointSuperseded
+  - output fields: SessionCheckpointSuperseded[field 0: SupersedeSessionCheckpoint.sessionId; field 1: SupersedeSessionCheckpoint.expected; field 2: SupersedeSessionCheckpoint.revision]
+  - guard (structural): PAnd PInCtor PAnd PAnd PEq PEq PCmp CmpGt
+  - guard (pretty): (SupersedeSessionCheckpoint && ((SupersedeSessionCheckpoint.sessionId.WorkerSessionIdentity == sessionId.WorkerSessionIdentity && SupersedeSessionCheckpoint.expected == revision) && SupersedeSessionCheckpoint.revision > revision))
   - written slots: revision
 
 ### WorkerSessionLifecycleTransferring
@@ -628,6 +660,14 @@
   - guard (structural): PAnd PInCtor PAnd PAnd PEq PEq PCmp CmpGt
   - guard (pretty): (SubscribeSessionEvents && ((SubscribeSessionEvents.sessionId.WorkerSessionIdentity == sessionId.WorkerSessionIdentity && SubscribeSessionEvents.expected == revision) && SubscribeSessionEvents.revision > revision))
   - written slots: revision
+- **WorkerSessionLifecycleTransferring -> WorkerSessionLifecycleTransferring**
+  - edge index: 8
+  - input: SupersedeSessionCheckpoint
+  - output: SessionCheckpointSuperseded
+  - output fields: SessionCheckpointSuperseded[field 0: SupersedeSessionCheckpoint.sessionId; field 1: SupersedeSessionCheckpoint.expected; field 2: SupersedeSessionCheckpoint.revision]
+  - guard (structural): PAnd PInCtor PAnd PAnd PEq PEq PCmp CmpGt
+  - guard (pretty): (SupersedeSessionCheckpoint && ((SupersedeSessionCheckpoint.sessionId.WorkerSessionIdentity == sessionId.WorkerSessionIdentity && SupersedeSessionCheckpoint.expected == revision) && SupersedeSessionCheckpoint.revision > revision))
+  - written slots: revision
 
 ### WorkerSessionLifecycleFailed
 
@@ -654,6 +694,14 @@
   - output fields: SessionEventsSubscribed[field 0: SubscribeSessionEvents.sessionId; field 1: SubscribeSessionEvents.expected; field 2: SubscribeSessionEvents.revision]
   - guard (structural): PAnd PInCtor PAnd PAnd PEq PEq PCmp CmpGt
   - guard (pretty): (SubscribeSessionEvents && ((SubscribeSessionEvents.sessionId.WorkerSessionIdentity == sessionId.WorkerSessionIdentity && SubscribeSessionEvents.expected == revision) && SubscribeSessionEvents.revision > revision))
+  - written slots: revision
+- **WorkerSessionLifecycleFailed -> WorkerSessionLifecycleFailed**
+  - edge index: 3
+  - input: SupersedeSessionCheckpoint
+  - output: SessionCheckpointSuperseded
+  - output fields: SessionCheckpointSuperseded[field 0: SupersedeSessionCheckpoint.sessionId; field 1: SupersedeSessionCheckpoint.expected; field 2: SupersedeSessionCheckpoint.revision]
+  - guard (structural): PAnd PInCtor PAnd PAnd PEq PEq PCmp CmpGt
+  - guard (pretty): (SupersedeSessionCheckpoint && ((SupersedeSessionCheckpoint.sessionId.WorkerSessionIdentity == sessionId.WorkerSessionIdentity && SupersedeSessionCheckpoint.expected == revision) && SupersedeSessionCheckpoint.revision > revision))
   - written slots: revision
 
 ### WorkerSessionLifecycleCancelled
@@ -682,6 +730,14 @@
   - guard (structural): PAnd PInCtor PAnd PAnd PEq PEq PCmp CmpGt
   - guard (pretty): (SubscribeSessionEvents && ((SubscribeSessionEvents.sessionId.WorkerSessionIdentity == sessionId.WorkerSessionIdentity && SubscribeSessionEvents.expected == revision) && SubscribeSessionEvents.revision > revision))
   - written slots: revision
+- **WorkerSessionLifecycleCancelled -> WorkerSessionLifecycleCancelled**
+  - edge index: 3
+  - input: SupersedeSessionCheckpoint
+  - output: SessionCheckpointSuperseded
+  - output fields: SessionCheckpointSuperseded[field 0: SupersedeSessionCheckpoint.sessionId; field 1: SupersedeSessionCheckpoint.expected; field 2: SupersedeSessionCheckpoint.revision]
+  - guard (structural): PAnd PInCtor PAnd PAnd PEq PEq PCmp CmpGt
+  - guard (pretty): (SupersedeSessionCheckpoint && ((SupersedeSessionCheckpoint.sessionId.WorkerSessionIdentity == sessionId.WorkerSessionIdentity && SupersedeSessionCheckpoint.expected == revision) && SupersedeSessionCheckpoint.revision > revision))
+  - written slots: revision
 
 # Objective lifecycle
 
@@ -708,6 +764,13 @@
   - guard (structural): PAnd PInCtor PAnd PAnd PEq PEq PCmp CmpGt
   - guard (pretty): (ApplyObjectiveTransition && ((ApplyObjectiveTransition.objectiveId.ObjectiveId == objectiveId.ObjectiveId && ApplyObjectiveTransition.expected == revision) && ApplyObjectiveTransition.revision > revision))
   - written slots: revision
+- **ObjectiveLifecyclePresent -> ObjectiveLifecyclePresent**
+  - edge index: 1
+  - input: RecordTrackerTransition
+  - output: TrackerTransitionRecorded
+  - output fields: TrackerTransitionRecorded[field 0: RecordTrackerTransition.objectiveId; field 1: RecordTrackerTransition.expected; field 2: RecordTrackerTransition.fingerprint]
+  - guard (structural): PAnd PInCtor PAnd PEq PEq
+  - guard (pretty): (RecordTrackerTransition && (RecordTrackerTransition.objectiveId.ObjectiveId == objectiveId.ObjectiveId && RecordTrackerTransition.expected == revision))
 
 # Run evidence
 
