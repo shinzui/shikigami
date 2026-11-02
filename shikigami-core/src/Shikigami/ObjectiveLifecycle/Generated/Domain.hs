@@ -25,8 +25,16 @@ data ApplyObjectiveTransitionData = ApplyObjectiveTransitionData
   }
   deriving stock (Generic, Eq, Show)
 
+data RecordTrackerTransitionData = RecordTrackerTransitionData
+  { objectiveId :: !ObjectiveId
+  , expected :: !Int
+  , fingerprint :: !Text
+  }
+  deriving stock (Generic, Eq, Show)
+
 data ObjectiveLifecycleCommand = CreateObjective !CreateObjectiveData
   | ApplyObjectiveTransition !ApplyObjectiveTransitionData
+  | RecordTrackerTransition !RecordTrackerTransitionData
   deriving stock (Generic, Eq, Show)
 
 data ObjectiveCreatedData = ObjectiveCreatedData
@@ -42,8 +50,16 @@ data ObjectiveTransitionAppliedData = ObjectiveTransitionAppliedData
   }
   deriving stock (Generic, Eq, Show)
 
+data TrackerTransitionRecordedData = TrackerTransitionRecordedData
+  { objectiveId :: !ObjectiveId
+  , expected :: !Int
+  , fingerprint :: !Text
+  }
+  deriving stock (Generic, Eq, Show)
+
 data ObjectiveLifecycleEvent = ObjectiveCreated !ObjectiveCreatedData
   | ObjectiveTransitionApplied !ObjectiveTransitionAppliedData
+  | TrackerTransitionRecorded !TrackerTransitionRecordedData
   deriving stock (Generic, Eq, Show)
 
 type ObjectiveLifecycleRegs =

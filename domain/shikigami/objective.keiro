@@ -110,8 +110,10 @@ aggregate ObjectiveLifecycle
   states Missing Present
   command CreateObjective { objectiveId:ObjectiveId }
   command ApplyObjectiveTransition { objectiveId:ObjectiveId expected:Int revision:Int fingerprint:Text }
+  command RecordTrackerTransition { objectiveId:ObjectiveId expected:Int fingerprint:Text }
   event ObjectiveCreated = fields(CreateObjective)
   event ObjectiveTransitionApplied = fields(ApplyObjectiveTransition)
+  event TrackerTransitionRecorded = fields(RecordTrackerTransition)
 
   Missing -- CreateObjective -->
     write objectiveId := cmd.objectiveId
@@ -122,6 +124,11 @@ aggregate ObjectiveLifecycle
     guard cmd.objectiveId == reg.objectiveId && cmd.expected == reg.revision && cmd.revision > reg.revision
     write revision := cmd.revision
     emit ObjectiveTransitionApplied
+    goto Present
+
+  Present -- RecordTrackerTransition -->
+    guard cmd.objectiveId == reg.objectiveId && cmd.expected == reg.revision
+    emit TrackerTransitionRecorded
     goto Present
 
   wire kind=ctorName fields=camelCase schemaVersion=1

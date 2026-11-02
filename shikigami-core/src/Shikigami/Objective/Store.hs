@@ -22,6 +22,11 @@ module Shikigami.Objective.Store
     lookupCreatedObjective,
     lookupCreatedInScope,
     execute,
+    executeWithTrackerCommit,
+    trackerTransaction,
+    trackerQuery,
+    locked,
+    checkAccess,
     lookupCommandReceipt,
     readReceipt,
     versionFor,
@@ -85,10 +90,14 @@ import Shikigami.Objective.Command
 import Shikigami.Objective.Conversation qualified as Conversation
 import Shikigami.Objective.Inspection (HistoryEntry (..))
 import Shikigami.Objective.Reference (ObjectiveAssociation (..))
+import Shikigami.Objective.Tracker.Publication qualified as Tracker
+import Shikigami.Objective.Tracker.Sql qualified as TrackerSql
+import Shikigami.Objective.Tracker.Types qualified as TrackerTypes
 import Shikigami.Objective.Types
 import Shikigami.ObjectiveLifecycle.Generated.Domain qualified as G
 import Shikigami.ObjectiveLifecycle.Generated.EventStream (objectiveLifecycleCategory, objectiveLifecycleEventStream)
 import Shikigami.ObjectiveLookup.Generated.ReadModel (objectiveLookupReadModel)
+import Shikigami.ObjectiveTrackerLookup.Generated.ReadModel (objectiveTrackerLookupReadModel)
 import Shikigami.ObjectiveTurnAdmission.Generated.Domain qualified as Turn
 import Shikigami.ObjectiveTurnAdmission.Generated.EventStream (objectiveTurnAdmissionCategory, objectiveTurnAdmissionEventStream)
 import Shikigami.ObjectiveTurnLookup.Generated.ReadModel (objectiveTurnLookupReadModel)
@@ -464,7 +473,12 @@ createWithDisposition access operation origin request verifyOrigin = guarded do
 -- only definitive negative outcomes; a positive transition is repeated inside
 -- the checked aggregate's append/projection transaction.
 execute :: (ObjectiveEffects es) => Access -> ObjectiveId -> StateRevision "objective" -> OperationId -> Mutation -> Eff es (Either ObjectiveError Receipt)
-execute access identifier expected operation mutation = guarded do
+execute access identifier expected operation mutation = executeWithTrackerCommit access identifier expected operation mutation (\_ _ -> pure ())
+
+-- Package-owned seam: the tracker projection and objective projection share the
+-- checked append transaction. This callback is never decoded from a request.
+executeWithTrackerCommit :: (ObjectiveEffects es) => Access -> ObjectiveId -> StateRevision "objective" -> OperationId -> Mutation -> (Objective -> Receipt -> Transaction ()) -> Eff es (Either ObjectiveError Receipt)
+executeWithTrackerCommit access identifier expected operation mutation trackerCommit = guarded do
   unless (validKey (operationKey operation)) (throwIO (Abort (ObjectiveInvalid "invalid operation key")))
   loop (32 :: Int)
   where
@@ -473,6 +487,9 @@ execute access identifier expected operation mutation = guarded do
       current <- locked identifier
       checkAccess access current
       unless (authorized access current mutation) (abort ObjectiveDenied)
+      -- Decode tracker-owned state before retaining any definitive objective
+      -- refusal. Corruption is an abort, never a negative command receipt.
+      void (TrackerSql.bindingsFor identifier)
       old <- readRow ((objectiveIdText identifier), (operationKey operation)) selectReceipt
       case old of
         Just (digest, outcome) -> pure (Left (if digest == fingerprint then outcome else Left ObjectiveConflict))
@@ -496,40 +513,54 @@ execute access identifier expected operation mutation = guarded do
             Right (Right before) -> do
               let nextRevision = advanceRevision before.revision
                   command = G.ApplyObjectiveTransition (G.ApplyObjectiveTransitionData identifier (fromInteger (revisionNumber before.revision)) (fromInteger (revisionNumber nextRevision)) (mutationFingerprintText fingerprint))
-              applied <- persist identifier command do
-                current <- locked identifier
-                checkAccess access current
-                unless (authorized access current mutation) (abort ObjectiveDenied)
-                unless (current.revision == before.revision) (throw Retry)
-                old <- readRow ((objectiveIdText identifier), (operationKey operation)) selectReceipt
-                when (isJust old) (throw Retry)
-                now <- Tx.statement () currentTime
-                next <- prepareTransition now access expected mutation current >>= require
-                case mutation of
-                  Internal (RetainCoordination _ scope) -> do
-                    root <- maybe (abort ObjectiveDenied) pure scope.run.rootId
-                    budget <- maybe (abort ObjectiveDenied) pure scope.context.delegationBudgetId
-                    let seed = if budget == coordinatorBudgetId identifier scope.run.identity then Just (scope.run.runId, scope.context.budgetLimit) else Nothing
-                    Budgets.enrollDelegationBudgetTx root budget seed now >>= either (const (abort ObjectiveDenied)) pure
-                  _ -> pure ()
-                let payload = toJSON (access.actor, mutation, next)
-                    digest = objectivePayloadDigest payload
-                    receipt = Receipt identifier operation fingerprint next.revision digest
-                saveSnapshot next
-                writePayload identifier (objectivePayloadDigestText digest) payload
-                case mutation of
-                  Internal (IngestCheckpoint assignment intent _ _) -> Tx.statement ((objectiveIdText identifier), (objectiveAssignmentIdText assignment), intent.sessionId.value, fromInteger (revisionNumber intent.throughCursor)) saveCursor
-                  Internal (ProjectCheckpoint assignment intent) -> Tx.statement ((objectiveIdText identifier), (objectiveAssignmentIdText assignment), intent.sessionId.value, fromInteger (revisionNumber intent.throughCursor)) saveCursor
-                  Internal (RetainCoordination _ scope) -> do
-                    let fingerprint = executionDigestText (Coordination.scopeFingerprint scope)
-                    Tx.statement (fingerprint, objectiveIdText identifier, scope) insertScope
-                    Tx.statement (scope.run.runId.unWorkflowId, objectiveIdText identifier, toJSON (Coordination.scopeFingerprint scope)) insertScopePointer
-                  Public (BindConversation conversation) -> Conversation.publishBinding next conversation receipt >>= require
-                  _ -> pure ()
-                writeReceipt receipt (Right receipt)
+              applied <- persistWithTracker
+                identifier
+                command
+                ( \next -> do
+                    let digest = objectivePayloadDigest (toJSON (access.actor, mutation, next))
+                        receipt = Receipt identifier operation fingerprint next.revision digest
+                    trackerCommit next receipt
+                )
+                do
+                  current <- locked identifier
+                  checkAccess access current
+                  unless (authorized access current mutation) (abort ObjectiveDenied)
+                  unless (current.revision == before.revision) (throw Retry)
+                  old <- readRow ((objectiveIdText identifier), (operationKey operation)) selectReceipt
+                  when (isJust old) (throw Retry)
+                  now <- Tx.statement () currentTime
+                  next <- prepareTransition now access expected mutation current >>= require
+                  case mutation of
+                    Internal (RetainCoordination _ scope) -> do
+                      root <- maybe (abort ObjectiveDenied) pure scope.run.rootId
+                      budget <- maybe (abort ObjectiveDenied) pure scope.context.delegationBudgetId
+                      let seed = if budget == coordinatorBudgetId identifier scope.run.identity then Just (scope.run.runId, scope.context.budgetLimit) else Nothing
+                      Budgets.enrollDelegationBudgetTx root budget seed now >>= either (const (abort ObjectiveDenied)) pure
+                    _ -> pure ()
+                  let payload = toJSON (access.actor, mutation, next)
+                      digest = objectivePayloadDigest payload
+                      receipt = Receipt identifier operation fingerprint next.revision digest
+                  saveSnapshot next
+                  writePayload identifier (objectivePayloadDigestText digest) payload
+                  case mutation of
+                    Internal (IngestCheckpoint assignment intent _ _) -> Tx.statement ((objectiveIdText identifier), (objectiveAssignmentIdText assignment), intent.sessionId.value, fromInteger (revisionNumber intent.throughCursor)) saveCursor
+                    Internal (ProjectCheckpoint assignment intent) -> Tx.statement ((objectiveIdText identifier), (objectiveAssignmentIdText assignment), intent.sessionId.value, fromInteger (revisionNumber intent.throughCursor)) saveCursor
+                    Internal (RetainCoordination _ scope) -> do
+                      let fingerprint = executionDigestText (Coordination.scopeFingerprint scope)
+                      Tx.statement (fingerprint, objectiveIdText identifier, scope) insertScope
+                      Tx.statement (scope.run.runId.unWorkflowId, objectiveIdText identifier, toJSON (Coordination.scopeFingerprint scope)) insertScopePointer
+                    Public (BindConversation conversation) -> Conversation.publishBinding next conversation receipt >>= require
+                    _ -> pure ()
+                  writeReceipt receipt (Right receipt)
               case applied of
                 Left ObjectiveUnavailable -> pure (Left ObjectiveUnavailable)
                 Left ObjectiveDenied -> pure (Left ObjectiveDenied)
+                Left ObjectiveConflict -> do
+                  latest <- read access identifier
+                  case latest of
+                    Right current | current.revision /= before.revision -> loop (remaining - 1)
+                    Left err -> pure (Left err)
+                    _ -> pure (Left ObjectiveConflict)
                 _ -> loop (remaining - 1)
 
 validateSnapshot :: Objective -> Either ObjectiveError ()
@@ -871,8 +902,20 @@ writeReceipt receipt outcome = Tx.statement ((objectiveIdText receipt.objectiveI
 -- A rejected Keiro command or concurrent duplicate is retried through the locked
 -- inspector. Transport failure remains unavailable/uncertain, never a rejection.
 persist :: (ObjectiveEffects es) => ObjectiveId -> G.ObjectiveLifecycleCommand -> Transaction () -> Eff es (Either ObjectiveError ())
-persist objective command action = guarded do
-  let (catalog, projections) = withLiveObjective (\_ _ -> action)
+persist objective command action =
+  persistWithTracker objective command (\_ -> pure ()) action
+
+persistWithTracker :: (ObjectiveEffects es) => ObjectiveId -> G.ObjectiveLifecycleCommand -> (Objective -> Transaction ()) -> Transaction () -> Eff es (Either ObjectiveError ())
+persistWithTracker objective command trackerCommit action = guarded do
+  let (catalog, projections) =
+        withLiveObjective
+          (\_ _ -> action)
+          ( \_ _ -> do
+              current <- locked objective
+              trackerCommit current
+              now <- Tx.statement () currentTime
+              Tracker.onObjectiveCommit now current
+          )
   options <- commandOptions
   outcome <- runCommandWithCatalogProjections options objectiveLifecycleEventStream (Stream.entityStream objectiveLifecycleCategory (objectiveIdText objective)) command catalog projections
   pure case outcome of
@@ -885,6 +928,22 @@ persist objective command action = guarded do
 
 protected :: (ObjectiveEffects es, ToJSON a, FromJSON a) => Transaction a -> Eff es (Either ObjectiveError a)
 protected = protectedUsing objectiveLookupReadModel
+
+-- Tracker reads validate the fresh objective under its row lock and keep the
+-- tracker catalog read fence around the entire protected transaction.
+trackerQuery :: (ObjectiveEffects es, ToJSON a, FromJSON a) => Access -> ObjectiveId -> (Objective -> Transaction a) -> Eff es (Either ObjectiveError a)
+trackerQuery access objective action = protectedUsing objectiveTrackerLookupReadModel do
+  current <- locked objective
+  checkAccess access current
+  action current
+
+-- A technical tracker event does not advance the objective's semantic revision.
+-- Its stream precondition and row lock fence it against objective mutations.
+trackerTransaction :: (ObjectiveEffects es) => Access -> ObjectiveId -> Text -> (Objective -> Transaction ()) -> Eff es (Either ObjectiveError ())
+trackerTransaction access objective fingerprint action = guarded do
+  current <- read access objective >>= either (throwIO . Abort) pure
+  let command = G.RecordTrackerTransition (G.RecordTrackerTransitionData objective (fromInteger (revisionNumber current.revision)) fingerprint)
+  persistWithTracker objective command (\next -> checkAccess access next >> action next) (pure ())
 
 protectedTurn :: (ObjectiveEffects es, ToJSON a, FromJSON a) => Transaction a -> Eff es (Either ObjectiveError a)
 protectedTurn = protectedUsing objectiveTurnLookupReadModel
@@ -903,7 +962,9 @@ guarded action = do
       ( catchSync action \exception -> case fromException exception of
           Just (Abort err) -> pure (Left err)
           Just Retry -> pure (Left ObjectiveConflict)
-          Nothing -> throwIO exception
+          Nothing -> case fromException exception of
+            Just (TrackerSql.TrackerFailure err) -> pure (Left (case err of TrackerTypes.TrackerDenied -> ObjectiveDenied; TrackerTypes.TrackerMissing -> ObjectiveMissing; TrackerTypes.TrackerUnavailable -> ObjectiveUnavailable; _ -> ObjectiveConflict))
+            Nothing -> throwIO exception
       )
   pure (either (const (Left ObjectiveUnavailable)) id outcome)
 

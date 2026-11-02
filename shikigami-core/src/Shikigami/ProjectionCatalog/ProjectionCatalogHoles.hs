@@ -1,6 +1,6 @@
 -- | Hand-owned bridge to the live evidence boundary. Never reconstruct rich
 -- payloads from lifecycle history or accept an unbound application callback.
-module Shikigami.ProjectionCatalog.ProjectionCatalogHoles (applyRunEvidenceWriterLive, applyExecutionWriterLive, applyWorkerSessionWriterLive, applyObjectiveWriterLive, applyObjectiveTurnWriterLive) where
+module Shikigami.ProjectionCatalog.ProjectionCatalogHoles (applyRunEvidenceWriterLive, applyExecutionWriterLive, applyWorkerSessionWriterLive, applyObjectiveWriterLive, applyObjectiveTurnWriterLive, applyObjectiveTrackerWriterLive) where
 
 import Control.Exception (throw)
 import Hasql.Transaction qualified as Tx
@@ -31,3 +31,6 @@ applyObjectiveWriterLive _ _ = throw MissingLiveObjective
 -- protected source-session or objective membership facts.
 applyObjectiveTurnWriterLive :: ObjectiveTurnAdmissionEvent -> RecordedEvent -> Tx.Transaction ()
 applyObjectiveTurnWriterLive _ _ = throw MissingLiveObjective
+
+applyObjectiveTrackerWriterLive :: ObjectiveLifecycleEvent -> RecordedEvent -> Tx.Transaction ()
+applyObjectiveTrackerWriterLive _ _ = throw MissingLiveObjective

@@ -21,7 +21,7 @@ import Keiro.Codec (Codec (..), EventType (..))
 
 
 objectiveLifecycleEventTypes :: NonEmpty EventType
-objectiveLifecycleEventTypes = EventType "ObjectiveCreated" :| [EventType "ObjectiveTransitionApplied"]
+objectiveLifecycleEventTypes = EventType "ObjectiveCreated" :| [EventType "ObjectiveTransitionApplied", EventType "TrackerTransitionRecorded"]
 
 objectiveLifecycleCodec :: Codec ObjectiveLifecycleEvent
 objectiveLifecycleCodec =
@@ -30,6 +30,7 @@ objectiveLifecycleCodec =
     , eventType = \case
         ObjectiveCreated{} -> EventType "ObjectiveCreated"
         ObjectiveTransitionApplied{} -> EventType "ObjectiveTransitionApplied"
+        TrackerTransitionRecorded{} -> EventType "TrackerTransitionRecorded"
     , schemaVersion = 1
     , encode = encodeObjectiveLifecycleEvent
     , decode = parseObjectiveLifecycleEvent
@@ -51,6 +52,13 @@ encodeObjectiveLifecycleEvent = \case
       , "revision" .= payload.revision
       , "fingerprint" .= payload.fingerprint
       ]
+  TrackerTransitionRecorded payload ->
+    object
+      [ "kind" .= ("TrackerTransitionRecorded" :: Text)
+      , "objectiveId" .= objectiveIdText payload.objectiveId
+      , "expected" .= payload.expected
+      , "fingerprint" .= payload.fingerprint
+      ]
 
 parseObjectiveLifecycleEvent :: EventType -> Value -> Either Text ObjectiveLifecycleEvent
 parseObjectiveLifecycleEvent (EventType tag) = mapLeftText . parseEither (withObject "ObjectiveLifecycleEvent" go)
@@ -68,6 +76,13 @@ parseObjectiveLifecycleEvent (EventType tag) = mapLeftText . parseEither (withOb
                     <$> (unsafeObjectiveIdFromLegacyText <$> o .: "objectiveId")
                     <*> o .: "expected"
                     <*> o .: "revision"
+                    <*> o .: "fingerprint"
+                )
+        "TrackerTransitionRecorded" ->
+          TrackerTransitionRecorded
+            <$> ( TrackerTransitionRecordedData
+                    <$> (unsafeObjectiveIdFromLegacyText <$> o .: "objectiveId")
+                    <*> o .: "expected"
                     <*> o .: "fingerprint"
                 )
         _ -> fail ("unknown event type " <> show tag <> "; expected one of: " <> renderExpectedEventTypes objectiveLifecycleEventTypes)

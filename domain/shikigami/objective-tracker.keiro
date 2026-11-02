@@ -1,0 +1,64 @@
+language keiro-dsl 6
+context shikigami
+layout collocated
+
+target objective_tracker_bindings {
+  schema = "shikigami"
+  table = "objective_tracker_bindings"
+  reset = preserve
+}
+target objective_tracker_observations {
+  schema = "shikigami"
+  table = "objective_tracker_observations"
+  reset = preserve
+}
+target objective_tracker_proposals {
+  schema = "shikigami"
+  table = "objective_tracker_proposals"
+  reset = preserve
+}
+target objective_tracker_commands {
+  schema = "shikigami"
+  table = "objective_tracker_commands"
+  reset = preserve
+}
+target objective_tracker_publications {
+  schema = "shikigami"
+  table = "objective_tracker_publications"
+  reset = preserve
+}
+target objective_tracker_attempts {
+  schema = "shikigami"
+  table = "objective_tracker_attempts"
+  reset = preserve
+}
+target objective_tracker_verifications {
+  schema = "shikigami"
+  table = "objective_tracker_verifications"
+  reset = preserve
+}
+rebuild-group objective_tracker_store {
+  targets = [ objective_tracker_bindings objective_tracker_observations objective_tracker_proposals objective_tracker_commands objective_tracker_publications objective_tracker_attempts objective_tracker_verifications ]
+  order = [ objective_tracker_bindings objective_tracker_observations objective_tracker_proposals objective_tracker_commands objective_tracker_publications objective_tracker_attempts objective_tracker_verifications ]
+}
+projection-owner objective_tracker_writer {
+  source = aggregate ObjectiveLifecycle
+  delivery = inline
+  group = objective_tracker_store
+  targets = [ objective_tracker_bindings objective_tracker_observations objective_tracker_proposals objective_tracker_commands objective_tracker_publications objective_tracker_attempts objective_tracker_verifications ]
+  order = 42
+  replay = live-only "Tracker synchronization requires protected payloads and fresh authority"
+}
+readmodel objective_tracker_lookup {
+  columns {
+    binding_id text required
+    objective_id text required
+    state jsonb required
+  }
+  version = 1
+  shape = "fnv1a:d233890a3827aa80"
+  freshness = immediate
+  group = objective_tracker_store
+  targets = [ objective_tracker_bindings objective_tracker_observations objective_tracker_proposals objective_tracker_commands objective_tracker_publications objective_tracker_attempts objective_tracker_verifications ]
+  backing = objective_tracker_bindings
+}

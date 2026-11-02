@@ -82,6 +82,7 @@ import Options.Applicative (Parser, ParserInfo, (<**>))
 import Options.Applicative qualified as Options
 import Settei
 import Settei.Env
+import Shikigami.Objective.Tracker.Config (validateTrackerSettings)
 import Shikigami.Objective.Types (validateSettings)
 
 -- Imported explicitly: 'SetteiOptions' has fields with the same names as
@@ -273,6 +274,7 @@ appConfigRun role options fileSources environment =
               Right config | Left refusal <- validateProviderSelection ((.behaviorProvider) config) -> failed resolutionExitCode (renderResponseCompatibilityError refusal)
               Right config | Left refusal <- config.decisionModelCatalog -> failed resolutionExitCode (renderDecisionFailure refusal)
               Right config | Left refusal <- validateSettings config.objectiveSettings -> failed resolutionExitCode refusal
+              Right config | Left refusal <- validateTrackerSettings config.trackerSettings -> failed resolutionExitCode refusal
               Right config -> case missingRequirements role config of
                 missing@(_ : _) -> failed resolutionExitCode (renderMissing role missing)
                 [] -> case resolutionDiagnostic ((.diagnosticMode) options) result of

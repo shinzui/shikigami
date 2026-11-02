@@ -30,6 +30,7 @@
     "Objective",
     "ObjectiveLifecycle",
     "ObjectiveLookup",
+    "ObjectiveTrackerLookup",
     "ObjectiveTurnAdmission",
     "ObjectiveTurnLookup",
     "PracticeReview",

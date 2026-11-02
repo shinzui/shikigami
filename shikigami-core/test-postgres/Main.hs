@@ -15,6 +15,7 @@ import Shikigami.GrantStoreSpec qualified as GrantStoreSpec
 import Shikigami.Migrations.TestSupport (withShikigamiMigratedSuite)
 import Shikigami.ObjectiveCheckpointSpec qualified as ObjectiveCheckpointSpec
 import Shikigami.ObjectiveStoreSpec qualified as ObjectiveStoreSpec
+import Shikigami.ObjectiveTrackerStoreSpec qualified as ObjectiveTrackerStoreSpec
 import Shikigami.ObjectiveWorkflowSpec qualified as ObjectiveWorkflowSpec
 import Shikigami.PracticeReviewMemorySpec qualified as PracticeReviewMemorySpec
 import Shikigami.PracticeReviewOrchestrationSpec qualified as PracticeReviewOrchestrationSpec
@@ -36,7 +37,10 @@ import Test.Tasty (defaultMain, testGroup)
 main :: IO ()
 main = do
   args <- getArgs
-  if args == ["--objective-commit-and-exit"] then ObjectiveStoreSpec.crashWriter else suite
+  case args of
+    ["--objective-commit-and-exit"] -> ObjectiveStoreSpec.crashWriter
+    ["--tracker-commit-and-exit"] -> ObjectiveTrackerStoreSpec.crashWriter
+    _ -> suite
 
 suite :: IO ()
 suite = withShikigamiMigratedSuite \databaseFixture ->
@@ -45,6 +49,7 @@ suite = withShikigamiMigratedSuite \databaseFixture ->
         "shikigami postgres"
         [ AppSpec.tests databaseFixture,
           ObjectiveStoreSpec.tests databaseFixture,
+          ObjectiveTrackerStoreSpec.tests databaseFixture,
           ObjectiveCheckpointSpec.tests databaseFixture,
           ObjectiveWorkflowSpec.tests databaseFixture,
           LedgerSpec.tests databaseFixture,

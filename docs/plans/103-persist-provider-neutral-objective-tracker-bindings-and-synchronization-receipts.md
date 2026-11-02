@@ -23,6 +23,11 @@ provenance:
       at: 2026-10-30T03:15:57Z
       mode: "update"
       note: "Clarify shared dispatch and evidence-based delivery attestation; preserve planning status and hard dependencies."
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-11-02T10:34:54Z
+      mode: "implement"
+      note: "Begin binding/provider contracts against delivered objective owner"
 ---
 
 # Persist provider-neutral objective tracker bindings and synchronization receipts
@@ -42,20 +47,28 @@ An objective can retain explicit links to external planning records, stage exter
 ## Progress
 
 
-- [ ] Milestone 1: typed provider capabilities, binding policies and generic configuration compile; pure mapping and authority tests pass.
-- [ ] Milestone 2: real objective transactions atomically retain import decisions, local receipts and publication intents; concurrency and rollback tests pass.
+- [x] Milestone 1 (2026-11-02): versioned provider capabilities, nominal bounded coordinates, protected snapshots, explicit binding/field policy and disabled-by-default connection configuration compile. All 21 new pure mapping/authority cases pass; the full core run exposed two configuration inventories, now updated for the new setting.
+- [x] Milestone 2 (2026-11-02): real objective/import decisions, protected receipts and immutable publications share checked append transactions. All 11 initial PostgreSQL cases pass, including rollback, receipt replay, concurrent resource admission, local divergence/rebase and corruption refusal. The broader run passes 660 core and 529 PostgreSQL cases.
 - [ ] Milestone 3: deterministic strong/weak provider conformance proves retries, quarantine, version ordering and rebinding isolation against PostgreSQL.
 
-Planning only. Hard prerequisite: MasterPlan 17 Complete.
+Implementation baseline `6d816d5ed49292ff48f985e066d787a1ac146a41`; MasterPlan 17 is Complete. Milestone 3 is in progress. The delivered domain layout is `domain/shikigami/objective.keiro`; the new tracker member is `domain/shikigami/objective-tracker.keiro`. Network reads precede a fresh admission and checked commit; publication projection and the objective projection are fenced together. The shared dispatcher passes initial strong/weak provider qualification, including quarantine, safe server-key replay, claim loss, revocation, ordering and audited attestation; The four-package regression run passes 660 core, 533 PostgreSQL, 103 server and 280 worker cases. Final focused qualification passes 22 tracker unit cases and 34 PostgreSQL cases, including a real child-process exit/reconnect, checkpoint invalidation, current revocation, expired keys, cross-binding isolation and exact late acknowledgement. The complete build, convention checks and migration isolation pass. Only the committed-candidate native gate remains outstanding.
 
 
 ## Surprises & Discoveries
 
+A connection incarnation label alone cannot detect an operator changing its endpoint or account in place. Bindings and publications additionally retain a target digest; reads, sends and reconciliation compare it with the current configuration. Old and new incarnations may coexist in configuration so old evidence can still be reconciled.
 
-(None beyond the source constraints recorded in Context and Orientation.)
+
+The checked catalog requires one writer per target. Tracker tables therefore have their own `objective_tracker_writer` projection and preserved group, sourced from the existing ObjectiveLifecycle aggregate. Live command composition merges both generated projection sets before the checked append, so both group fences and both handlers run in one transaction. A technical `RecordTrackerTransition` event retains tracker changes without advancing the semantic objective revision. No workflow journal step changes.
+
+A source advance that changes only display metadata must retain a reviewable replacement for an already pending instructions proposal; merely superseding it would lose unapplied guidance. Observation diagnostics separately retain older positions and equal-position equivocation. Remote outages retain diagnostics without fabricating a new snapshot.
 
 
 ## Decision Log
+
+- Decision: Keep separate objective/tracker projection ownership on the same aggregate source and use an actor-pinned callback in the existing objective command owner for proposal application.
+  Rationale: Keiro rejects multiple independent owners for a target, while both group fences and both writes must share the accepted objective transaction. Existing public command payloads/fingerprints remain unchanged.
+  Date: 2026-11-02
 
 
 - Decision: Default imports to proposals and use local exact-revision commands for application.
@@ -100,7 +113,7 @@ The mapping policy identifies fields, directions and source authority. Local exe
 
 ### Milestone 2 — Atomic decisions and publications
 
-Add `domain/shikigami-objective-tracker.keiro`, generated catalog members and the additive `objective-tracker-sync` migration. Store bindings, versioned observations, protected proposal payloads, command receipts, publication payloads, attempts and independent delivery receipts. EP-1 owns registration in `domain/shikigami.keiro-workspace` and `Runtime.hs`. Objective state and its publication intent must share the objective command’s append/projection transaction, including commands from tools and checkpoint providers; do not rely on an API wrapper or a post-commit callback. Existing command receipts must not be changed to include new fields. Emit only allowlisted progress/evidence/status summaries for revisions whose relevant exported facts changed; never export hidden instructions, credentials, unrestricted artifacts or model context.
+Add `domain/shikigami/objective-tracker.keiro`, generated catalog members and the additive `objective-tracker-sync` migration. Store bindings, versioned observations, protected proposal payloads, command receipts, publication payloads, attempts and independent delivery receipts. EP-1 owns registration in `domain/shikigami.keiro-workspace` and `Runtime.hs`. Objective state and its publication intent must share the objective command’s append/projection transaction, including commands from tools and checkpoint providers; do not rely on an API wrapper or a post-commit callback. Existing command receipts must not be changed to include new fields. Emit only allowlisted progress/evidence/status summaries for revisions whose relevant exported facts changed; never export hidden instructions, credentials, unrestricted artifacts or model context.
 
 The durable key for publication includes binding identity/revision, objective revision, event kind and format. Store its complete immutable request before dispatch, even if the mapping later changes. Local objective completion remains committed when external delivery fails. Binding pause/detach suppresses fresh sends and fresh imports but retains accepted receipts and unknown reconciliation. Authorization checks at dispatch use current connection and objective export permission; a revoked grant cannot send protected content from a previously queued payload.
 

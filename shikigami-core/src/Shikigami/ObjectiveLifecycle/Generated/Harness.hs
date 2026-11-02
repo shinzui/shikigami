@@ -18,6 +18,7 @@ harnessAssertions =
   -- clock-free: spec samples no wall clock (verified at scaffold time)
   , ("golden round-trip: ObjectiveCreated", roundTrips sampleEventObjectiveCreated)
   , ("golden round-trip: ObjectiveTransitionApplied", roundTrips sampleEventObjectiveTransitionApplied)
+  , ("golden round-trip: TrackerTransitionRecorded", roundTrips sampleEventTrackerTransitionRecorded)
   , ("accepts CreateObjective from ObjectiveLifecycleMissing", acceptCreateObjective)
   ]
   ++ forwardReplayCreateObjective
@@ -36,6 +37,9 @@ sampleEventObjectiveCreated = ObjectiveCreated (ObjectiveCreatedData sampleObjec
 
 sampleEventObjectiveTransitionApplied :: ObjectiveLifecycleEvent
 sampleEventObjectiveTransitionApplied = ObjectiveTransitionApplied (ObjectiveTransitionAppliedData sampleObjectiveId 0 0 "sample-fingerprint")
+
+sampleEventTrackerTransitionRecorded :: ObjectiveLifecycleEvent
+sampleEventTrackerTransitionRecorded = TrackerTransitionRecorded (TrackerTransitionRecordedData sampleObjectiveId 0 "sample-fingerprint")
 
 acceptCreateObjective :: Bool
 acceptCreateObjective =

@@ -52,13 +52,25 @@ objectiveLifecycleTransducer =
           , fingerprint = d.fingerprint
           })
         B.goto ObjectiveLifecyclePresent
+      B.onCmd inCtorRecordTrackerTransition $ \d -> B.do
+        let commandObjectiveId = K.inpProj GeneratedNominals.objectiveIdEqualityWitness inCtorRecordTrackerTransition (#objectiveId :: K.Index (RegFieldsOf RecordTrackerTransitionData) ObjectiveId)
+            registerObjectiveId = K.regProj GeneratedNominals.objectiveIdEqualityWitness (#objectiveId :: K.Index ObjectiveLifecycleRegs ObjectiveId)
+        B.requireGuard $
+          commandObjectiveId .== registerObjectiveId
+          .&& d.expected .== B.reg @"revision"
+        B.emit wireTrackerTransitionRecorded (TrackerTransitionRecordedTermFields
+          { objectiveId = d.objectiveId
+          , expected = d.expected
+          , fingerprint = d.fingerprint
+          })
+        B.goto ObjectiveLifecyclePresent
  where
   isTerminal = \case
 
     _ -> False
 
 objectiveLifecycleFoldFingerprint :: Text
-objectiveLifecycleFoldFingerprint = "f36259bde91df3202d0d3fd6ddf14188"
+objectiveLifecycleFoldFingerprint = "b7354fd45a776d75b75ebfc36c31a52f"
 
 data BehaviorOwnership = GeneratedOwned | HoleOwned
   deriving stock (Eq, Show)
@@ -69,6 +81,7 @@ objectiveLifecyclePredicateVerifications :: IO [(Text, BehaviorOwnership, S.Pred
 objectiveLifecyclePredicateVerifications = sequence
   [ verifyTransition "transition1MissingCreateObjective" GeneratedOwned ObjectiveLifecycleMissing 0
   , verifyTransition "transition2PresentApplyObjectiveTransition" GeneratedOwned ObjectiveLifecyclePresent 0
+  , verifyTransition "transition3PresentRecordTrackerTransition" GeneratedOwned ObjectiveLifecyclePresent 1
   ]
  where
   verifyTransition label owner source edgeIndex =

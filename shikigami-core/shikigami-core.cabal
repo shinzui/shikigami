@@ -183,6 +183,15 @@ library
     Shikigami.Objective.Scope
     Shikigami.Objective.Store
     Shikigami.Objective.Tools
+    Shikigami.Objective.Tracker.Command
+    Shikigami.Objective.Tracker.Config
+    Shikigami.Objective.Tracker.Coordinate
+    Shikigami.Objective.Tracker.Dispatch
+    Shikigami.Objective.Tracker.Mapping
+    Shikigami.Objective.Tracker.Provider
+    Shikigami.Objective.Tracker.Publication
+    Shikigami.Objective.Tracker.Store
+    Shikigami.Objective.Tracker.Types
     Shikigami.Objective.Types
     Shikigami.ObjectiveLifecycle.BehaviorHoles
     Shikigami.ObjectiveLifecycle.Conformance
@@ -197,6 +206,10 @@ library
     Shikigami.ObjectiveLookup.Generated.ReadModelHarness
     Shikigami.ObjectiveLookup.Generated.ReadModelTable
     Shikigami.ObjectiveLookup.ReadModelHoles
+    Shikigami.ObjectiveTrackerLookup.Generated.ReadModel
+    Shikigami.ObjectiveTrackerLookup.Generated.ReadModelHarness
+    Shikigami.ObjectiveTrackerLookup.Generated.ReadModelTable
+    Shikigami.ObjectiveTrackerLookup.ReadModelHoles
     Shikigami.PracticeReview
     Shikigami.PracticeReview.Attention
     Shikigami.PracticeReview.Authorization
@@ -322,6 +335,7 @@ library
     Shikigami.Generated.StructuralProjections
     Shikigami.Objective.Authority
     Shikigami.Objective.Conversation
+    Shikigami.Objective.Tracker.Sql
     Shikigami.ObjectiveTurnAdmission.BehaviorHoles
     Shikigami.ObjectiveTurnAdmission.Generated.BehaviorContract
     Shikigami.ObjectiveTurnAdmission.Generated.Codec
@@ -510,6 +524,7 @@ test-suite shikigami-core-test
     Shikigami.LogSpec
     Shikigami.ObjectiveSpec
     Shikigami.ObjectiveToolsSpec
+    Shikigami.ObjectiveTrackerSpec
     Shikigami.PackageArchitectureSpec
     Shikigami.PayloadValueSpec
     Shikigami.PracticeReviewEvidenceSpec
@@ -615,6 +630,7 @@ test-suite shikigami-core-postgres-test
     Shikigami.GrantStoreSpec
     Shikigami.ObjectiveCheckpointSpec
     Shikigami.ObjectiveStoreSpec
+    Shikigami.ObjectiveTrackerStoreSpec
     Shikigami.ObjectiveWorkflowSpec
     Shikigami.PracticeReviewEvidenceSpec
     Shikigami.PracticeReviewMemorySpec

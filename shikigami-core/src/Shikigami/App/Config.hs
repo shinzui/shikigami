@@ -203,6 +203,7 @@ import Shikigami.Directory (DirectorySettings (..))
 import Shikigami.Duration
 import Shikigami.Execution.Policy.Types qualified as Harness
 import Shikigami.Inspection.Settings (InspectionSettings (..))
+import Shikigami.Objective.Tracker.Config (TrackerSettings, defaultTrackerSettings)
 import Shikigami.Objective.Types (ObjectiveSettings, defaultObjectiveSettings)
 import Shikigami.PracticeReview.Capability
   ( AttentionRecipientMap,
@@ -506,7 +507,8 @@ data AppConfig = AppConfig
     actionAuthorization :: !ActionAuthorizationConfig,
     workspaceSettings :: !(Maybe WorkspaceSettings),
     workspaceSupervisorSettings :: !(Maybe WorkspaceSupervisorSettings),
-    objectiveSettings :: !ObjectiveSettings
+    objectiveSettings :: !ObjectiveSettings,
+    trackerSettings :: !TrackerSettings
   }
   deriving stock (Generic, Eq)
 
@@ -567,6 +569,7 @@ appConfig =
     <*> optional (secretSetting workspacesKey "Approved workspace repositories, reviewed instruction digests, path restrictions and exact agent/principal grants" jsonDecoder)
     <*> optional (secretSetting workspaceSupervisorKey "Private systemd socket and bounded peer-checked workspace supervisor intake" jsonDecoder)
     <*> withDefault (secretSetting (stableKey "objectives") "Objective enablement, local operator and default-deny recorded agent creation grants" jsonDecoder) (constant "objectives-disabled" "Objective tracking requires explicit enablement" defaultObjectiveSettings)
+    <*> withDefault (secretSetting (stableKey "objective_trackers") "Provider-neutral objective tracker connections and explicit use/export grants" jsonDecoder) (constant "trackers-disabled" "External objective tracking requires explicit enablement" defaultTrackerSettings)
 
 -- | Which provider runs a Skill behavior, and what the real branch needs.
 --
@@ -1530,6 +1533,7 @@ environmentBindings =
           binding (EnvName "SHIKIGAMI_BEHAVIOR_DECISION_MODELS") behaviorDecisionModelsKey,
           binding (EnvName "SHIKIGAMI_BEHAVIOR_HARNESS") behaviorHarnessKey,
           binding (EnvName "SHIKIGAMI_OBJECTIVES") (stableKey "objectives"),
+          binding (EnvName "SHIKIGAMI_OBJECTIVE_TRACKERS") (stableKey "objective_trackers"),
           binding (EnvName "SHIKIGAMI_WORKSPACES") workspacesKey,
           binding (EnvName "SHIKIGAMI_WORKSPACE_SUPERVISOR") workspaceSupervisorKey,
           binding (EnvName "SHIKIGAMI_BEHAVIOR_MODEL") behaviorModelKey,

@@ -143,6 +143,18 @@ behaviorRequirements =
       , target = Just ObjectiveLifecyclePresent
       , eventKinds = ["ObjectiveTransitionApplied"]
       }
+  , -- ObjectiveLifecycleMissing x RecordTrackerTransition: required rejection
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-49d767e46059d61a"
+      , kind = RequiredRejection
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardNotApplicable
+      , source = ObjectiveLifecycleMissing
+      , commandName = "RecordTrackerTransition"
+      , expectedEdge = Nothing
+      , target = Nothing
+      , eventKinds = []
+      }
   , -- ObjectiveLifecyclePresent x CreateObjective: required rejection
     BehaviorRequirement
       { key = BehaviorKey "behavior-v1-55b9a98f94eedf32"
@@ -154,6 +166,18 @@ behaviorRequirements =
       , expectedEdge = Nothing
       , target = Nothing
       , eventKinds = []
+      }
+  , -- ObjectiveLifecyclePresent x RecordTrackerTransition: live transition
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-5aece6154b420a8a"
+      , kind = LiveTransition
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardUnknown
+      , source = ObjectiveLifecyclePresent
+      , commandName = "RecordTrackerTransition"
+      , expectedEdge = (Just (K.EdgeRef ObjectiveLifecyclePresent 1))
+      , target = Just ObjectiveLifecyclePresent
+      , eventKinds = ["TrackerTransitionRecorded"]
       }
   , -- ObjectiveLifecycleMissing x ApplyObjectiveTransition: required rejection
     BehaviorRequirement
@@ -339,6 +363,7 @@ commandKind :: ObjectiveLifecycleCommand -> Text
 commandKind command = case command of
   CreateObjective _ -> "CreateObjective"
   ApplyObjectiveTransition _ -> "ApplyObjectiveTransition"
+  RecordTrackerTransition _ -> "RecordTrackerTransition"
 
 eventKind :: ObjectiveLifecycleEvent -> Text
 eventKind event = case Codec.eventType objectiveLifecycleCodec event of Codec.EventType tag -> tag

@@ -2,7 +2,7 @@
 
 Date: 2026-10-29
 
-Status: accepted design; implementation pending MasterPlan 18
+Status: accepted; provider-neutral implementation in qualification, Rei integration pending
 
 ## Context
 
@@ -36,7 +36,7 @@ The objective commit records immutable, bounded publication payloads for active
 bindings in the same transaction. Network dispatch occurs afterward under current export
 authority. A delivery receipt is independent of the objective status and transport queue.
 Pausing, detaching or changing a mapping preserves outstanding attempt and receipt facts.
-Connection replacement uses a new incarnation; it cannot reset old source versions or
+Bindings and publications retain a digest of the configured endpoint, account and provider contract. Current composition must match that digest before network access. Old and new incarnations can coexist for reconciliation. Connection replacement uses a new incarnation; it cannot reset old source versions or
 redirect an accepted publication to a different remote account.
 
 Providers declare and prove their capabilities. Unknown effects never retry merely
@@ -76,7 +76,9 @@ transitions as well as receipts; process loops only schedule that engine. Both p
 and post-success outbox reconciliation route by destination, so quarantine cannot be
 interpreted by the legacy sink handler as delivery. The engine is tested with strong and weak deterministic
 providers; Rei is additionally tested against its real disposable API server, including
-lost responses and projection lag. All plans remain unimplemented at this decision.
+lost responses and projection lag. The provider-neutral implementation declares a separate preserved tracker projection group, with one writer per target. Both the objective and tracker projections consume the same ObjectiveLifecycle source and execute under both catalog fences in one append transaction. A technical tracker event does not advance the objective semantic revision. Proposal application uses an actor-pinned callback through the existing objective command owner; it cannot write objective rows independently or change public command fingerprints.
+
+Publication records retain their original timestamp, full request digest and destination fence. Attempt claims are separate from immutable provider attempts, so claim renewal cannot change a replayed request. Receipt lookup uses a protected typed command result; dispatch barriers and the latest export base use bounded indexed queries independently of the public inspection limit. Provider-neutral store and recovery qualification is in progress; the concrete Rei adapter and public serving gate remain pending.
 MasterPlan 17's no-Rei feature and acceptance gate remain independently useful.
 
 ## References
