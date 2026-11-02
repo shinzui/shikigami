@@ -1,0 +1,33 @@
+{
+  "scope": "Plan 99 milestone 2: actor-scoped objective checkpoint and ownership adapters over the single command executor. Production wiring and conflict reconciliation remain milestone 3.",
+  "baseline": "25e80da",
+  "qualified_at": "2026-11-02 UTC",
+  "suites": {
+    "shikigami-core-test": 632,
+    "shikigami-core-postgres-test": 484,
+    "shikigami-server-test": 96,
+    "shikigami-workers-test": 280,
+    "shikigami-agent-test": 37
+  },
+  "focused_provider_scenarios": 6,
+  "checks": [
+    "cabal build all --offline",
+    "just keiro-gate 25e80da",
+    "python3 tools/style/check_haskell.py",
+    "bash tools/check-migration-schema-isolation.sh"
+  ],
+  "native_conformance_checks": 168,
+  "native_diff": "neutral; no findings",
+  "notes": [
+    "Full PostgreSQL suite rerun after moving result-payload validation to the session owner transaction API.",
+    "Consumer checkpoint and transfer codecs/fingerprints remain unchanged. Objective-side operation keys include the source session.",
+    "Reported result references do not assert criterion acceptance.",
+    "A deterministic fence fixture qualifies only objective-side source/receipt recovery; no process containment or workspace fencing is claimed."
+  ],
+  "remaining": [
+    "explicit rejected-intent reconciliation",
+    "retained coordination scopes",
+    "actor-aware production composition",
+    "plan 84 real-provider gate and later MasterPlan children"
+  ]
+}

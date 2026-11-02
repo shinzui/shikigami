@@ -97,7 +97,7 @@ tests =
       testCase "dense acyclic graph stays bounded and validates" do
         validateGraph [draft (showText n) [objectiveAssignment (showText p) | p <- [1 .. n - 1]] | n <- [1 .. 128 :: Int]] @?= Right (),
       testCase "internal checkpoint and transfer tags are absent from public JSON" do
-        forM_ ["IngestCheckpoint", "TransferOwnership"] \tag ->
+        forM_ ["IngestCheckpoint", "ProjectCheckpoint", "TransferSessionOwnership", "TransferOwnership"] \tag ->
           assertBool "private command refused" (case Aeson.fromJSON (Aeson.object ["tag" .= (tag :: Text)]) :: Aeson.Result Command of Aeson.Error _ -> True; _ -> False),
       testCase "criteria require unique, nonempty structured keys" do
         validateCriteria [Criterion (criterionKey "build") (description "build passes") Automatic JourneyOptional] @?= Right ()
@@ -117,7 +117,7 @@ tests =
     proposal = CompletionProposal (revision 0) (revision 0) (revision 0) [artifact "artifact"] [evidenceKey "check"] []
     assignment = Assignment (draft "a" [] & #state .~ Done) initialRevision initialRevision initialRevision []
     evidence = Evidence (Attestation (evidenceKey "check") (criterionKey "human") (artifact "artifact") (statement "reviewed") NoJourney) (EvidenceVerification CheckPassed (Just (criterionKey "human")) NoJourney) (objectiveAssignment "a") (assignmentMeaning assignment) actor initialRevision initialRevision initialRevision
-    objective = Objective (either (error . show) id (parseObjectiveId "shikigami_objective_01h455vb4pex5vsknk084sn02q")) actor [Member actor [Owner]] (title "title") (goal "goal") (instructions "instructions") (revision 1) initialRevision initialRevision [criterion] Open [assignment] [evidence] [] [] [] [] [] (Just (proposal, actor)) Nothing
+    objective = Objective (either (error . show) id (parseObjectiveId "shikigami_objective_01h455vb4pex5vsknk084sn02q")) actor [Member actor [Owner]] (title "title") (goal "goal") (instructions "instructions") (revision 1) initialRevision initialRevision [criterion] Open [assignment] [evidence] [] [] [] [] [] [] (Just (proposal, actor)) Nothing
 
 draft :: Text -> [ObjectiveAssignmentId] -> AssignmentDraft
 draft key dependencies = AssignmentDraft (objectiveAssignment key) (instructions "work") dependencies (compatibilityIdentity (fixtureAgentName "worker")) Pending Nothing (Just (fixtureRootId "root")) (Just (UTCTime (fromGregorian 2027 1 1) 0))

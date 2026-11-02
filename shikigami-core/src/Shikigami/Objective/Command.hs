@@ -7,6 +7,7 @@ import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.Objective.Types
 import Shikigami.Prelude
 import Shikigami.WorkerSession.Checkpoint (CheckpointIntent)
+import Shikigami.WorkerSession.Transfer (FenceProof, TransferIntent)
 
 -- | This is the entire public vocabulary. Internal commands have no public
 -- JSON tags and cannot be selected by a public command envelope.
@@ -35,6 +36,8 @@ instance FromJSON Command where
 -- No FromJSON instance: these are absent from HTTP and model vocabularies.
 data InternalCommand
   = IngestCheckpoint !ObjectiveAssignmentId !CheckpointIntent ![EvidenceInput] ![UnresolvedOperation]
+  | ProjectCheckpoint !ObjectiveAssignmentId !CheckpointIntent
+  | TransferSessionOwnership !ObjectiveAssignmentId !TransferIntent !FenceProof
   | TransferOwnership !ObjectiveAssignmentId !(StateRevision "worker-owner") !AgentIdentity
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON)
@@ -61,6 +64,8 @@ commandTag = \case
     BindConversation {} -> "bind-conversation"
     LinkExternal {} -> "link-external"
   Internal IngestCheckpoint {} -> "ingest-checkpoint"
+  Internal ProjectCheckpoint {} -> "project-checkpoint"
+  Internal TransferSessionOwnership {} -> "transfer-session-ownership"
   Internal TransferOwnership {} -> "transfer-ownership"
 
 evidenceInputs :: Mutation -> [EvidenceInput]

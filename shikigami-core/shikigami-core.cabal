@@ -165,11 +165,13 @@ library
     Shikigami.Objective.Association
     Shikigami.Objective.Capability
     Shikigami.Objective.Catalog
+    Shikigami.Objective.Checkpoint
     Shikigami.Objective.Command
     Shikigami.Objective.Content
     Shikigami.Objective.Keys
     Shikigami.Objective.Live
     Shikigami.Objective.Origin
+    Shikigami.Objective.Ownership
     Shikigami.Objective.Reference
     Shikigami.Objective.Store
     Shikigami.Objective.Types
@@ -599,6 +601,7 @@ test-suite shikigami-core-postgres-test
     Shikigami.Fixture.SinkHttp
     Shikigami.FlowLifecycleSpec
     Shikigami.GrantStoreSpec
+    Shikigami.ObjectiveCheckpointSpec
     Shikigami.ObjectiveStoreSpec
     Shikigami.PracticeReviewEvidenceSpec
     Shikigami.PracticeReviewMemorySpec

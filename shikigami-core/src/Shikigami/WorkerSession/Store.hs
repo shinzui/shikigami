@@ -27,6 +27,7 @@ module Shikigami.WorkerSession.Store
     closeSession,
     recordResult,
     readResult,
+    readResultSourceTx,
     readEvents,
     consumeEventsWith,
     prepareCheckpoint,
@@ -38,6 +39,7 @@ module Shikigami.WorkerSession.Store
     readTransferIntent,
     readTransferOperation,
     readTransferFence,
+    verifyTransferSourceTx,
     markTransferReconciling,
     retainTransferFence,
     establishOwner,
@@ -141,22 +143,25 @@ writePayload session value = do
   pure ref
 
 readPayload :: (FromJSON a) => WorkerSessionId -> Text -> PayloadRef -> Transaction a
-readPayload session kind ref = do
+readPayload session kind ref = readPayloadChecked session kind ref >>= require
+
+-- Transactional source checks return typed refusals to another owner rather
+-- than throwing this owner's private exception across the composition boundary.
+readPayloadChecked :: (FromJSON a) => WorkerSessionId -> Text -> PayloadRef -> Transaction (Either SessionError a)
+readPayloadChecked session kind ref = do
   stored <- Tx.statement (session.value, ref.payloadId) selectPayload
-  case stored of
+  pure case stored of
     Just (Right (digest, bytes, value@(Aeson.Object fields))) -> do
-      actual <- require (payloadReference value)
-      unless (actual == ref && digest == ref.digest && bytes == ref.bytes) (abort SessionBindingConflict)
+      actual <- payloadReference value
+      unless (actual == ref && digest == ref.digest && bytes == ref.bytes) (Left SessionBindingConflict)
       let decoded = do
             version <- fields .: "format"
             actualKind <- fields .: "kind"
             unless (version == (1 :: Int) && actualKind == kind) (fail "unsupported session payload")
             fields .: "content"
-      case parseEither (const decoded) value of
-        Right result -> pure result
-        Left _ -> abort (SessionInputRefused "session payload is unreadable")
-    Just (Left _) -> abort SessionBindingConflict
-    _ -> abort (SessionInputRefused "session payload is unavailable")
+      first (const (SessionInputRefused "session payload is unreadable")) (parseEither (const decoded) value)
+    Just (Left _) -> Left SessionBindingConflict
+    _ -> Left (SessionInputRefused "session payload is unavailable")
 
 openSession :: (SessionEffects es) => SessionAdmission -> Eff es (Either SessionError (Admission, SessionState))
 openSession = openSessionWithLimit maximumSessionCapacity
@@ -470,6 +475,24 @@ readResult access@(SessionAccess session _ _) assignment = protected do
   stored <- readRows (session.value, assignment.value) selectResult
   traverse (\receipt -> (receipt,) <$> readPayload session "assignment-result" receipt.output) stored
 
+-- | Source verification for an authenticated composing owner. Read the result
+-- through this owner's payload decoder so commitments, byte counts, envelope
+-- kind and physical source keys have the same meaning as ordinary result reads.
+readResultSourceTx :: WorkerSessionId -> AssignmentId -> Transaction (Either SessionError (Maybe (ResultReceipt, AssignmentResult)))
+readResultSourceTx session assignment = do
+  stored <- Tx.statement (session.value, assignment.value) selectResult
+  checked <- case stored of
+    Nothing -> pure (Right Nothing)
+    Just (Left _) -> pure (Left SessionBindingConflict)
+    Just (Right receipt) -> do
+      payload <- readPayloadChecked session "assignment-result" receipt.output
+      pure do
+        result <- payload
+        unless (receipt.sessionId == session && receipt.assignmentId == assignment && result.assignmentId == assignment && result.disposition == receipt.disposition) (Left SessionBindingConflict)
+        pure (Just (receipt, result))
+  when (case checked of Left _ -> True; Right _ -> False) Tx.condemn
+  pure checked
+
 readEvents :: (SessionReadEffects es) => SessionAccess -> StateRevision "worker-event" -> Int -> Eff es (Either SessionError [EventReceipt])
 readEvents access@(SessionAccess session _ _) after limit
   | revisionNumber after > 100000 || limit < 1 || limit > 100 = pure (Left (SessionInputRefused "invalid event cursor or page limit"))
@@ -673,6 +696,28 @@ readTransferFence access@(SessionAccess session _ _) = protected do
   checkAccess access state binding
   progress <- maybe (abort AssignmentMissing) pure state.handoff
   traverse (readPayload session "transfer-fence") progress.fence
+
+-- | The session owner validates its own immutable intent and fence payloads
+-- inside the objective owner's transaction. Locking the session prevents an
+-- owner/phase transition from racing the objective-side handoff commit.
+verifyTransferSourceTx :: TransferIntent -> FenceProof -> Transaction (Either SessionError ())
+verifyTransferSourceTx intent proof = do
+  saved <- Tx.statement intent.sessionId.value lockSession
+  result <- case saved of
+    Just (Right (state, binding)) -> case state.handoff of
+      Just progress | progress.operationId == intent.operationId -> do
+        original <- readPayloadChecked intent.sessionId "transfer-intent" progress.intent
+        fenced <- traverse (readPayloadChecked intent.sessionId "transfer-fence") progress.fence
+        pure do
+          actual <- original
+          retained <- sequence fenced >>= maybe (Left AssignmentMissing) Right
+          unless (actual == intent && retained == proof && matchesFence intent proof && state.sessionId == intent.sessionId && binding.sessionId == intent.sessionId && binding.parentIdentity == intent.actor && binding.objective == intent.objective && binding.rootId == intent.rootId) (Left SessionBindingConflict)
+          unless (state.phase == Transferring && progress.stage == TransferFenced && state.owner == intent.oldOwner && state.epoch == intent.oldEpoch && isNothing state.activeAssignment && isNothing state.checkpointIntent) (Left AssignmentConflict)
+      _ -> pure (Left AssignmentMissing)
+    Just (Left _) -> pure (Left SessionBindingConflict)
+    Nothing -> pure (Left SessionMissing)
+  when (case result of Left AssignmentConflict -> False; Left _ -> True; Right _ -> False) Tx.condemn
+  pure result
 
 markTransferReconciling :: (SessionEffects es) => SessionAccess -> StateRevision "worker-session" -> StateRevision "worker-owner" -> OperationId -> OperationId -> Eff es (Either SessionError (Admission, HandoffProgress))
 markTransferReconciling access expected epoch operation transfer = guarded $

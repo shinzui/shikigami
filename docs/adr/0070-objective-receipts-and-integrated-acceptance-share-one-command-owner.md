@@ -94,6 +94,15 @@ their own live-only, preserved projection group. The original objective writer
 and query retain their target sets and lifecycle identities;
 workflow wiring and frozen tool scopes remain plan 101's responsibility.
 
+Provider checkpoints retain bounded latest reported-result references per objective
+assignment; immutable command payloads and receipts retain each earlier observation.
+The backward-compatible objective codec omits this collection when empty and reads
+old snapshots as empty. Reported artifacts have no criterion or pass/fail assertion;
+providers never invent a criterion mapping from arbitrary worker output. Explicit
+criterion evidence and completion keep their existing owner and verifier rules.
+Checkpoint publication may attach the first retained session only after validating
+its root, assignment, owner and parent against the admitted slot. It allocates no root.
+
 Fresh creation by a recorded agent requires a verified origin whose operation matches
 its creation key. Accepted creation receipts are recovered before applying new source
 checks or creation-policy checks, while current membership and exact action authority

@@ -8,6 +8,9 @@ module Shikigami.Objective.Store
     create,
     read,
     readVersion,
+    resolveAssignment,
+    currentCheckpoint,
+    readMutationReceipt,
     admitConversationTurn,
     readConversationTurn,
     lookupCreatedObjective,
@@ -27,7 +30,6 @@ where
 
 import Contravariant.Extras (contrazip2, contrazip3, contrazip4, contrazip6)
 import Control.Exception (Exception, fromException, throw)
-import Data.Aeson ((.:))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Types qualified as Aeson
 import Data.ByteString.Lazy qualified as Lazy
@@ -55,14 +57,18 @@ import Shikigami.Agent.Principal (identityText, principalText)
 import Shikigami.App (CommandEffects, commandOptions)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Identity (OperationId, operationIdText)
-import Shikigami.Execution.Payload (parsePayloadDigest)
-import Shikigami.Execution.Transcript (PayloadRef (..))
+import Shikigami.Execution.Progress (noPendingReceipts)
+import Shikigami.Execution.Resources qualified as Resources
+import Shikigami.Execution.ResourcesStore qualified as Roots
+import Shikigami.Execution.Store qualified as Execution
+import Shikigami.Execution.Transcript qualified as Execution
 import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Objective.Acceptance
 import Shikigami.Objective.Authority (Access (..))
 import Shikigami.Objective.Catalog (withLiveObjective, withLiveObjectiveTurn)
 import Shikigami.Objective.Command
 import Shikigami.Objective.Conversation qualified as Conversation
+import Shikigami.Objective.Reference (ObjectiveAssociation (..))
 import Shikigami.Objective.Types
 import Shikigami.ObjectiveLifecycle.Generated.Domain qualified as G
 import Shikigami.ObjectiveLifecycle.Generated.EventStream (objectiveLifecycleCategory, objectiveLifecycleEventStream)
@@ -73,6 +79,8 @@ import Shikigami.ObjectiveTurnLookup.Generated.ReadModel (objectiveTurnLookupRea
 import Shikigami.Prelude
 import Shikigami.WorkerSession.Checkpoint qualified as CP
 import Shikigami.WorkerSession.Input qualified as WorkerInput
+import Shikigami.WorkerSession.Store qualified as Sessions
+import Shikigami.WorkerSession.Transfer qualified as Transfer
 import Shikigami.WorkerSession.Types qualified as WS
 import Prelude hiding (read)
 
@@ -130,6 +138,8 @@ authorized access objective mutation = canRead access objective && (administrate
         RecordProgress key _ _ _ -> manage || owns key
         _ -> manage
       Internal (IngestCheckpoint _ _ _ _) -> manage
+      Internal ProjectCheckpoint {} -> manage
+      Internal TransferSessionOwnership {} -> manage
       Internal TransferOwnership {} -> manage
 
 checkAccess :: Access -> Objective -> Transaction ()
@@ -145,13 +155,39 @@ read access objective = protected do
 
 readVersion :: (ObjectiveEffects es) => Access -> WS.ObjectiveRef -> Eff es (Either ObjectiveError CP.ObjectiveVersion)
 readVersion access reference = protected do
+  (current, key) <- resolveAssignmentTx access reference
+  require (versionFor current key)
+
+resolveAssignment :: (ObjectiveEffects es) => Access -> WS.ObjectiveRef -> Eff es (Either ObjectiveError ObjectiveAssociation)
+resolveAssignment access reference = protected do
+  (current, key) <- resolveAssignmentTx access reference
+  unless (mayCoordinate access current) (abort ObjectiveDenied)
+  pure (ObjectiveAssociation current.objectiveId key)
+
+resolveAssignmentTx :: Access -> WS.ObjectiveRef -> Transaction (Objective, ObjectiveAssignmentId)
+resolveAssignmentTx access reference = do
   unless (WorkerInput.workerCoordinateText reference.provider == "shikigami-objective-v1") (abort ObjectiveMissing)
   (objective, assignment) <- Tx.statement (WorkerInput.workerCoordinateText reference.key) selectReference >>= maybe (abort ObjectiveMissing) pure
   identifier <- requireDecoded (parseObjectiveId objective)
+  key <- requireDecoded (parseObjectiveAssignmentId assignment)
+  unless (referenceFor identifier key == reference) (abort ObjectiveConflict)
   current <- locked identifier
   checkAccess access current
-  key <- requireDecoded (parseObjectiveAssignmentId assignment)
-  require (versionFor current key)
+  unless (current.objectiveId == identifier) (abort ObjectiveConflict)
+  pure (current, key)
+
+-- Resource control is read from its owning transaction primitive. The effective
+-- cutoff cannot outlive the retained resource envelope.
+currentCheckpoint :: (ObjectiveEffects es) => Access -> WS.ObjectiveRef -> Eff es (Either ObjectiveError CP.ObjectiveVersion)
+currentCheckpoint access reference = protected do
+  (current, key) <- resolveAssignmentTx access reference
+  unless (mayCoordinate access current) (abort ObjectiveDenied)
+  version <- require (versionFor current key)
+  root <- Roots.inspectRootTx version.rootId >>= either (const (abort ObjectiveUnavailable)) pure
+  now <- Tx.statement () currentTime
+  let cutoff = min version.cutoff root.envelope.cutoff
+      active = if version.active == WorkerInput.ObjectiveActive && root.cancelled == Resources.ContinueWork && root.overage == Resources.NoOverage && now < cutoff then WorkerInput.ObjectiveActive else WorkerInput.ObjectiveInactive
+  pure (version & #cutoff .~ cutoff & #active .~ active)
 
 -- | Look up a turn that was already admitted; origin validation must never
 -- manufacture an association for an execution that is already running.
@@ -265,6 +301,15 @@ lookupCommandReceipt access objective operation mutation = protected do
   unless (authorized access current mutation) (abort ObjectiveDenied)
   fmap snd <$> readRow ((objectiveIdText objective), operationKey operation) selectReceipt
 
+readMutationReceipt :: (ObjectiveEffects es) => Access -> ObjectiveId -> StateRevision "objective" -> OperationId -> Mutation -> Eff es (Either ObjectiveError (Maybe (Either ObjectiveError Receipt)))
+readMutationReceipt access objective expected operation mutation = protected do
+  current <- locked objective
+  checkAccess access current
+  unless (authorized access current mutation) (abort ObjectiveDenied)
+  stored <- readRow (objectiveIdText objective, operationKey operation) selectReceipt
+  let wanted = commandFingerprint (toJSON (access.actor, objective, expected, operation, commandTag mutation, mutation))
+  forM stored \(actual, outcome) -> if actual == wanted then pure outcome else abort ObjectiveConflict
+
 create :: (ObjectiveEffects es) => Access -> OperationId -> Maybe CreationOrigin -> CreateRequest -> IO (Either ObjectiveError ()) -> Eff es (Either ObjectiveError Receipt)
 create access operation origin request verifyOrigin = guarded do
   unless (validKey (operationKey operation)) (throwIO (Abort (ObjectiveInvalid "invalid operation key")))
@@ -272,7 +317,7 @@ create access operation origin request verifyOrigin = guarded do
   identifier <- either (const (throwIO (Abort ObjectiveUnavailable))) pure (parseObjectiveId allocated)
   let creator = versionedDigest "shikigami.objective-creator/1" (toJSON access.actor)
       fingerprint = creationFingerprint (toJSON (access.actor, operation, origin, request))
-      initial = Objective identifier access.actor [Member access.actor [Owner, Coordinator, Completer]] request.title request.goal request.instructions initialRevision initialRevision initialRevision request.criteria Open [] [] [] [] [] request.external [] Nothing Nothing
+      initial = Objective identifier access.actor [Member access.actor [Owner, Coordinator, Completer]] request.title request.goal request.instructions initialRevision initialRevision initialRevision request.criteria Open [] [] [] [] [] [] request.external [] Nothing Nothing
       payload = toJSON (request, origin, initial)
       digest = objectivePayloadDigest payload
       receipt = Receipt identifier operation fingerprint initialRevision digest
@@ -331,8 +376,7 @@ execute access identifier expected operation mutation = guarded do
         Just (digest, outcome) -> pure (Left (if digest == fingerprint then outcome else Left ObjectiveConflict))
         Nothing -> do
           now <- Tx.statement () currentTime
-          checked <- validateSources current mutation
-          let next = maybe checked Left access.refusal >> validateTransition now access expected mutation current
+          next <- prepareTransition now access expected mutation current
           case next of
             Left err | err == ObjectiveUnavailable -> pure (Left (Left err))
             Left err -> do
@@ -357,8 +401,7 @@ execute access identifier expected operation mutation = guarded do
                 old <- readRow ((objectiveIdText identifier), (operationKey operation)) selectReceipt
                 when (isJust old) (throw Retry)
                 now <- Tx.statement () currentTime
-                validateSources current mutation >>= require
-                next <- require (validateTransition now access expected mutation current)
+                next <- prepareTransition now access expected mutation current >>= require
                 let payload = toJSON (access.actor, mutation, next)
                     digest = objectivePayloadDigest payload
                     receipt = Receipt identifier operation fingerprint next.revision digest
@@ -366,6 +409,7 @@ execute access identifier expected operation mutation = guarded do
                 writePayload identifier (objectivePayloadDigestText digest) payload
                 case mutation of
                   Internal (IngestCheckpoint assignment intent _ _) -> Tx.statement ((objectiveIdText identifier), (objectiveAssignmentIdText assignment), intent.sessionId.value, fromInteger (revisionNumber intent.throughCursor)) saveCursor
+                  Internal (ProjectCheckpoint assignment intent) -> Tx.statement ((objectiveIdText identifier), (objectiveAssignmentIdText assignment), intent.sessionId.value, fromInteger (revisionNumber intent.throughCursor)) saveCursor
                   Public (BindConversation conversation) -> Conversation.publishBinding next conversation receipt >>= require
                   _ -> pure ()
                 writeReceipt receipt (Right receipt)
@@ -378,7 +422,7 @@ validateSnapshot :: Objective -> Either ObjectiveError ()
 validateSnapshot objective = do
   validateCriteria objective.criteria
   validateGraph (map (.definition) objective.assignments)
-  unless (length objective.external <= 64 && length objective.members <= 256 && length objective.decisions <= 64 && length objective.assumptions <= 64 && length objective.nextActions <= 64 && length objective.evidence <= 256 && length objective.unresolved <= 128 && Lazy.length (Aeson.encode objective) <= 1048576) (Left (ObjectiveInvalid "objective exceeds its bounds"))
+  unless (length objective.external <= 64 && length objective.members <= 256 && length objective.decisions <= 64 && length objective.assumptions <= 64 && length objective.nextActions <= 64 && length objective.evidence <= 256 && length objective.reportedResults <= 128 && length objective.unresolved <= 128 && Lazy.length (Aeson.encode objective) <= 1048576) (Left (ObjectiveInvalid "objective exceeds its bounds"))
 
 versionFor :: Objective -> ObjectiveAssignmentId -> Either ObjectiveError CP.ObjectiveVersion
 versionFor objective key = do
@@ -392,16 +436,19 @@ validateTransition _now access expected mutation current = do
   unless (authorized access current mutation) (Left ObjectiveDenied)
   unless (revisionNumber current.revision < toInteger (maxBound :: Int)) (Left ObjectiveUnavailable)
   case mutation of
-    Internal (IngestCheckpoint key intent _ _) -> do
-      actual <- versionFor current key
-      let wanted = intent.expected
-      unless (intent.format == V1 && expected == wanted.revision && expected <= actual.revision && actual.assignmentRevision == wanted.assignmentRevision && actual.criteriaRevision == wanted.criteriaRevision && actual.owner == wanted.owner && actual.ownerEpoch == wanted.ownerEpoch && actual.rootId == wanted.rootId && actual.active == wanted.active && intent.epoch == actual.ownerEpoch && wanted.cutoff == actual.cutoff) (Left ObjectiveConflict)
+    Internal (IngestCheckpoint key intent _ _) -> checkpointVersion key intent
+    Internal (ProjectCheckpoint key intent) -> checkpointVersion key intent
     _ -> unless (expected == current.revision) (Left ObjectiveConflict)
   next <- transition
   let advanced = next & #revision .~ (advanceRevision current.revision)
   validateSnapshot advanced
   pure advanced
   where
+    checkpointVersion key intent = do
+      actual <- versionFor current key
+      let wanted = intent.expected
+          cutoffMatches = case mutation of Internal ProjectCheckpoint {} -> wanted.cutoff <= actual.cutoff; _ -> wanted.cutoff == actual.cutoff
+      unless (intent.format == V1 && expected == wanted.revision && expected <= actual.revision && actual.assignmentRevision == wanted.assignmentRevision && actual.criteriaRevision == wanted.criteriaRevision && actual.owner == wanted.owner && actual.ownerEpoch == wanted.ownerEpoch && actual.rootId == wanted.rootId && actual.active == wanted.active && intent.epoch == actual.ownerEpoch && cutoffMatches) (Left ObjectiveConflict)
     active = unless (current.status == Open) (Left (ObjectiveInvalid "objective is not open"))
     editable = unless (current.status `elem` [Open, Blocked]) (Left (ObjectiveInvalid "objective is terminal"))
     invalidate objective = objective & #assignments %~ map (\a -> a & #revision %~ advanceRevision)
@@ -468,16 +515,60 @@ validateTransition _now access expected mutation current = do
           pure (current & #members %~ filter ((/= principal) . (.principal)))
         BindConversation conversation -> editable >> (if validKey (conversationRefText conversation) then Right current else Left (ObjectiveInvalid "invalid conversation"))
         LinkExternal reference -> editable >> pure (current & #external %~ (\refs -> nub (refs <> [reference])))
+      Internal (TransferSessionOwnership key intent proof) -> do
+        unless (access.actor == RecordedAgent intent.actor && intent.format == V1 && Transfer.matchesFence intent proof && intent.newEpoch == advanceRevision intent.oldEpoch && intent.oldOwner /= intent.newOwner && intent.actor /= intent.newOwner) (Left ObjectiveDenied)
+        actual <- versionFor current key
+        let wanted = intent.expected
+        unless (wanted.revision == expected && wanted.assignmentRevision == actual.assignmentRevision && wanted.criteriaRevision == actual.criteriaRevision && wanted.owner == actual.owner && wanted.ownerEpoch == actual.ownerEpoch && wanted.rootId == actual.rootId && wanted.active == actual.active && wanted.owner == intent.oldOwner && wanted.ownerEpoch == intent.oldEpoch && intent.rootId == wanted.rootId) (Left ObjectiveConflict)
+        changeAssignment key \assignment -> pure (assignment & #definition . #owner .~ intent.newOwner & #ownerEpoch .~ intent.newEpoch)
       Internal (TransferOwnership key epoch owner) -> do
         unless (either (const False) validKey (identityText owner)) (Left ObjectiveDenied)
         changeAssignment key \assignment -> do
           unless (assignment.ownerEpoch == epoch) (Left ObjectiveConflict)
           pure (assignment & #definition . #owner .~ owner & #ownerEpoch %~ advanceRevision)
+      Internal (ProjectCheckpoint key intent) -> do
+        unless (access.actor == RecordedAgent intent.actor) (Left ObjectiveDenied)
+        changeAssignment key (Right . (\a -> a & #definition . #sessionId .~ Just intent.sessionId))
       Internal (IngestCheckpoint key _ inputs unresolved) -> do
         changed <- changeAssignment key (Right . (\a -> a & #acceptedResults %~ (<> map (.key) inputs)))
         recorded <- withEvidence changed key inputs
         unless (all ((== key) . (.assignmentId)) unresolved) (Left ObjectiveInvalidEvidence)
         pure (recorded & #unresolved .~ (filter ((/= key) . (.assignmentId)) current.unresolved <> unresolved))
+
+-- Source-derived observations are computed inside both inspection and commit.
+-- Only the immutable intent enters the command fingerprint, so a retry never
+-- changes its request after another source observation becomes available.
+prepareTransition :: UTCTime -> Access -> StateRevision "objective" -> Mutation -> Objective -> Transaction (Either ObjectiveError Objective)
+prepareTransition now access expected mutation current = do
+  checked <- validateSources current mutation
+  reports <- case mutation of
+    Internal (ProjectCheckpoint key intent) -> traverse (reportedResult key intent) [receipt | WS.EventReceipt {event = WS.ResultAvailable receipt} <- intent.events]
+    _ -> pure []
+  pure do
+    maybe checked Left access.refusal
+    next <- validateTransition now access expected mutation current
+    sources <- sequence reports
+    let withReports = foldl' (\objective result -> objective & #reportedResults %~ (\previous -> filter ((/= result.assignmentId) . (.assignmentId)) previous <> [result])) next sources
+    validateSnapshot withReports
+    pure withReports
+
+reportedResult :: ObjectiveAssignmentId -> CP.CheckpointIntent -> WS.ResultReceipt -> Transaction (Either ObjectiveError ReportedResult)
+reportedResult assignment intent receipt = do
+  stored <- Sessions.readResultSourceTx receipt.sessionId receipt.assignmentId >>= either (const (abort ObjectiveUnavailable)) pure
+  case stored of
+    Nothing -> pure (Left ObjectiveInvalidEvidence)
+    Just (actual, result) -> do
+      forM_ result.executionId \execution -> do
+        source <- Execution.inspectExecutionTx execution >>= either (const (abort ObjectiveUnavailable)) pure >>= maybe (abort ObjectiveUnavailable) pure
+        let (state, binding) = source
+        unless (binding.rootId == Just intent.expected.rootId && binding.identity == intent.expected.owner) (abort ObjectiveInvalidEvidence)
+        -- An uncertain effect cannot become an immutable negative receipt. Wait
+        -- on the original intent until its execution owner settles the effects.
+        unless (state.pendingReceipts == noPendingReceipts && state.phase `elem` [Execution.Succeeded, Execution.Failed, Execution.Cancelled]) (abort ObjectiveUnresolved)
+      pure do
+        unless (actual == receipt) (Left ObjectiveInvalidEvidence)
+        artifacts <- traverse (either (const (Left ObjectiveInvalidEvidence)) Right . parseArtifactRef . WorkerInput.artifactReferenceText) result.artifacts
+        pure (ReportedResult assignment receipt artifacts)
 
 -- | Source authenticity is checked again inside the commit transaction. Future
 -- provider adapters additionally validate accepted execution/fence coordinates.
@@ -487,14 +578,9 @@ validateSources objective mutation = do
     ResultEvidence {result = WorkerResult receipt artifact} -> do
       let addressed = case mutation of Public (RecordEvidence key _) -> Just key; Internal (IngestCheckpoint key _ _ _) -> Just key; _ -> Nothing
           bound = any (\a -> Just a.definition.assignmentId == addressed && a.definition.sessionId == Just receipt.sessionId) objective.assignments
-      stored <- readRow (receipt.sessionId.value, receipt.assignmentId.value) selectWorkerResult
+      stored <- Sessions.readResultSourceTx receipt.sessionId receipt.assignmentId >>= either (const (abort ObjectiveConflict)) pure
       case stored of
-        Just (actual, payload, result) -> do
-          expectedDigest <- requireDecoded (parsePayloadDigest (versionedDigest "shikigami.worker-session-payload/1" payload))
-          -- Check the retained source against its own keys/body before judging
-          -- the caller's evidence. Source corruption is never a definitive
-          -- negative receipt for an otherwise recoverable checkpoint command.
-          unless (actual.sessionId == receipt.sessionId && actual.assignmentId == receipt.assignmentId && actual.output.digest == expectedDigest && result.assignmentId == actual.assignmentId && result.disposition == actual.disposition) (requireDecoded (Left () :: Either () ()))
+        Just (actual, result) ->
           pure do
             unless (bound && actual == receipt) (Left ObjectiveInvalidEvidence)
             unless (WorkerInput.artifactReference (artifactRefText artifact) `elem` result.artifacts) (Left ObjectiveInvalidEvidence)
@@ -514,6 +600,19 @@ validateSources objective mutation = do
           _ -> Left ObjectiveConflict
     _ -> pure []
   checkpoint <- case mutation of
+    Internal (TransferSessionOwnership key intent proof) -> do
+      settled <- Sessions.verifyTransferSourceTx intent proof
+      case settled of
+        Left WS.AssignmentConflict -> pure (Left ObjectiveConflict)
+        Left _ -> abort ObjectiveUnavailable
+        Right () -> case find ((== key) . (.definition.assignmentId)) objective.assignments of
+          Just assignment -> do
+            root <- Roots.inspectRootTx intent.rootId >>= either (const (abort ObjectiveUnavailable)) pure
+            now <- Tx.statement () currentTime
+            pure do
+              cutoff <- maybe (Left ObjectiveConflict) Right assignment.definition.cutoff
+              unless (assignment.definition.sessionId == Just intent.sessionId && intent.objective == referenceFor objective.objectiveId key && intent.expected.active == WorkerInput.ObjectiveActive && intent.expected.cutoff == min cutoff root.envelope.cutoff && now < intent.expected.cutoff && root.cancelled == Resources.ContinueWork && root.overage == Resources.NoOverage) (Left ObjectiveConflict)
+          Nothing -> pure (Left ObjectiveMissing)
     Internal (IngestCheckpoint key intent inputs _) -> do
       original <- readRow (intent.sessionId.value, operationKey intent.operationId) selectCheckpoint
       cursor <- fromMaybe initialRevision <$> readRow ((objectiveIdText objective.objectiveId), (objectiveAssignmentIdText key), intent.sessionId.value) selectCursor
@@ -525,6 +624,22 @@ validateSources objective mutation = do
             ResultEvidence {result = WorkerResult receipt _} -> unless (receipt `elem` results) (Left ObjectiveInvalidEvidence)
             _ -> Left ObjectiveInvalidEvidence
         Nothing -> pure (Left ObjectiveMissing)
+    Internal (ProjectCheckpoint key intent) -> do
+      original <- readRow (intent.sessionId.value, operationKey intent.operationId) selectCheckpoint
+      retained <- readRow intent.sessionId.value selectWorkerBinding
+      sourceEvents <- Tx.statement (intent.sessionId.value, fromInteger (revisionNumber intent.previousCursor), fromInteger (revisionNumber intent.throughCursor)) selectSourceEvents >>= traverse requireDecoded
+      unless (sourceEvents == intent.events) (abort ObjectiveUnavailable)
+      cursor <- fromMaybe initialRevision <$> readRow (objectiveIdText objective.objectiveId, objectiveAssignmentIdText key, intent.sessionId.value) selectCursor
+      case (find ((== key) . (.definition.assignmentId)) objective.assignments, retained) of
+        (Just assignment, Just (state, binding)) -> do
+          root <- Roots.inspectRootTx binding.rootId >>= either (const (abort ObjectiveUnavailable)) pure
+          now <- Tx.statement () currentTime
+          pure do
+            cutoff <- maybe (Left ObjectiveConflict) Right assignment.definition.cutoff
+            unless (original == Just intent && intent.actor == binding.parentIdentity && binding.sessionId == intent.sessionId && state.sessionId == intent.sessionId && state.owner == intent.expected.owner && state.epoch == intent.epoch && binding.objective == referenceFor objective.objectiveId key && binding.rootId == intent.expected.rootId && (isNothing assignment.definition.sessionId || assignment.definition.sessionId == Just intent.sessionId)) (Left ObjectiveConflict)
+            unless (cursor == intent.previousCursor && intent.throughCursor > cursor && revisionNumber intent.throughCursor - revisionNumber cursor <= 100 && map (revisionNumber . (.cursor)) intent.events == [revisionNumber cursor + 1 .. revisionNumber intent.throughCursor]) (Left ObjectiveConflict)
+            unless (root.cancelled == Resources.ContinueWork && root.overage == Resources.NoOverage && intent.expected.cutoff == min cutoff root.envelope.cutoff && now < intent.expected.cutoff) (Left ObjectiveConflict)
+        _ -> pure (Left ObjectiveConflict)
     _ -> pure (Right ())
   pure (sequence_ evidence >> conversation >> sequence_ bindings >> checkpoint)
   where
@@ -664,15 +779,6 @@ lockKey = preparable "SELECT pg_advisory_xact_lock(hashtextextended($1,0))" text
 currentTime :: Statement () UTCTime
 currentTime = preparable "SELECT clock_timestamp()" E.noParams (D.singleRow (D.column (D.nonNullable D.timestamptz)))
 
-selectWorkerResult :: Statement (Text, Text) (Maybe (Either () (WS.ResultReceipt, Aeson.Value, WS.AssignmentResult)))
-selectWorkerResult = preparable "SELECT r.state,p.body FROM shikigami.worker_session_results r LEFT JOIN shikigami.worker_session_payloads p ON p.session_id=r.session_id AND p.payload_id=r.state->'output'->>'payloadId' WHERE r.session_id=$1 AND r.assignment_id=$2" (contrazip2 textParam textParam) (D.rowMaybe (decode <$> jsonRow <*> D.column (D.nullable D.jsonb)))
-  where
-    decode receipt payload = do
-      actual <- receipt
-      body <- maybe (Left ()) Right payload
-      result <- either (const (Left ())) Right (Aeson.parseEither (Aeson.withObject "worker result payload" (.: "content")) body)
-      pure (actual, body, result)
-
 selectCheckpoint :: Statement (Text, Text) (Maybe (Either () CP.CheckpointIntent))
 selectCheckpoint = preparable "SELECT state FROM shikigami.worker_session_commands WHERE session_id=$1 AND operation_id=$2" (contrazip2 textParam textParam) (D.rowMaybe jsonRow)
 
@@ -687,3 +793,13 @@ selectReference = preparable "SELECT objective_id,assignment_id FROM shikigami.o
 
 selectWorkerBinding :: Statement Text (Maybe (Either () (WS.SessionState, WS.SessionBinding)))
 selectWorkerBinding = preparable "SELECT state,binding FROM shikigami.worker_sessions WHERE session_id=$1" textParam (D.rowMaybe ((\state binding -> (,) <$> state <*> binding) <$> jsonRow <*> jsonRow))
+
+-- Compare both physical cursors and typed bodies. A substituted well-typed
+-- event must not become new evidence merely because an intent row still exists.
+selectSourceEvents :: Statement (Text, Int64, Int64) [Either () WS.EventReceipt]
+selectSourceEvents = preparable "SELECT cursor,state FROM shikigami.worker_session_events WHERE session_id=$1 AND cursor>$2 AND cursor<=$3 ORDER BY cursor" (contrazip3 textParam intParam intParam) (D.rowList (check <$> D.column (D.nonNullable D.int8) <*> jsonRow))
+  where
+    check cursor value = do
+      receipt <- value
+      unless (revisionNumber receipt.cursor == toInteger cursor) (Left ())
+      pure receipt

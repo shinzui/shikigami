@@ -148,6 +148,16 @@ data UnresolvedOperation = UnresolvedOperation {assignmentId :: !ObjectiveAssign
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
+-- | A source observation, without a criterion or an assertion of acceptance.
+-- Full output remains with the session owner; receipts retain its commitment.
+data ReportedResult = ReportedResult
+  { assignmentId :: !ObjectiveAssignmentId,
+    receipt :: !ResultReceipt,
+    artifacts :: ![ArtifactRef]
+  }
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (ToJSON, FromJSON)
+
 data Objective = Objective
   { objectiveId :: !ObjectiveId,
     owner :: !AccessPrincipal,
@@ -162,6 +172,7 @@ data Objective = Objective
     status :: !Status,
     assignments :: ![Assignment],
     evidence :: ![Evidence],
+    reportedResults :: ![ReportedResult],
     decisions :: ![DecisionNote],
     assumptions :: ![AssumptionNote],
     nextActions :: ![NextAction],
@@ -171,7 +182,15 @@ data Objective = Objective
     acceptance :: !(Maybe ObjectiveAcceptance)
   }
   deriving stock (Eq, Generic)
-  deriving anyclass (ToJSON, FromJSON)
+
+instance ToJSON Objective where
+  toJSON objective = case Aeson.genericToJSON Aeson.defaultOptions objective of
+    Aeson.Object fields | null objective.reportedResults -> Aeson.Object (KeyMap.delete "reportedResults" fields)
+    value -> value
+
+instance FromJSON Objective where
+  parseJSON = Aeson.withObject "Objective" \fields ->
+    Aeson.genericParseJSON Aeson.defaultOptions (Aeson.Object (if KeyMap.member "reportedResults" fields then fields else KeyMap.insert "reportedResults" (toJSON ([] :: [ReportedResult])) fields))
 
 instance Show Objective where show _ = "Objective <protected>"
 

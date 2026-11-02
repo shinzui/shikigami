@@ -7,6 +7,9 @@ module Shikigami.Objective.Capability
     createObjective,
     readObjective,
     readObjectiveVersion,
+    resolveAssignment,
+    readCheckpointVersion,
+    readInternalReceipt,
     executeCommand,
     executeInternal,
     readCommandReceipt,
@@ -32,6 +35,7 @@ import Shikigami.Execution.Identity (OperationId)
 import Shikigami.Objective.Authority (Access (..))
 import Shikigami.Objective.Command
 import Shikigami.Objective.Conversation qualified as Conversation
+import Shikigami.Objective.Reference (ObjectiveAssociation)
 import Shikigami.Objective.Store qualified as Store
 import Shikigami.Objective.Types
 import Shikigami.Prelude
@@ -88,6 +92,21 @@ readObjectiveVersion :: (Store.ObjectiveEffects es) => ObjectiveHost -> WS.Objec
 readObjectiveVersion host reference = do
   grant <- liftIO (admit host "read-version" (toJSON reference))
   either (pure . Left) (\access -> Store.readVersion access reference) grant
+
+resolveAssignment :: (Store.ObjectiveEffects es) => ObjectiveHost -> WS.ObjectiveRef -> Eff es (Either ObjectiveError ObjectiveAssociation)
+resolveAssignment host reference = do
+  grant <- liftIO (admit host "resolve-assignment" (toJSON reference))
+  either (pure . Left) (\access -> Store.resolveAssignment access reference) grant
+
+readCheckpointVersion :: (Store.ObjectiveEffects es) => ObjectiveHost -> WS.ObjectiveRef -> Eff es (Either ObjectiveError CP.ObjectiveVersion)
+readCheckpointVersion host reference = do
+  grant <- liftIO (admit host "current-checkpoint" (toJSON reference))
+  either (pure . Left) (\access -> Store.currentCheckpoint access reference) grant
+
+readInternalReceipt :: (Store.ObjectiveEffects es) => ObjectiveHost -> ObjectiveId -> StateRevision "objective" -> OperationId -> InternalCommand -> Eff es (Either ObjectiveError (Maybe (Either ObjectiveError Receipt)))
+readInternalReceipt host objective expected operation command = do
+  grant <- liftIO (admit host (commandTag (Internal command)) (toJSON (objective, expected, operation, Internal command)))
+  either (pure . Left) (\access -> Store.readMutationReceipt access objective expected operation (Internal command)) grant
 
 executeCommand :: (Store.ObjectiveEffects es) => ObjectiveHost -> ObjectiveId -> StateRevision "objective" -> OperationId -> Command -> Eff es (Either ObjectiveError Receipt)
 executeCommand host objective expected operation command = execute host objective expected operation (Public command)

@@ -2,7 +2,7 @@
 
 Date: 2026-10-29
 
-Status: accepted; persistence implemented by plan 98, runtime adapters pending MasterPlan 17
+Status: accepted; persistence and checkpoint/ownership adapters implemented; production wiring pending plan 99 milestone 3
 
 ## Context
 
@@ -39,6 +39,28 @@ validation. A definitive non-commit outcome remains immutable; an uncertain tran
 outcome is not rejection. Explicit reconciliation retains the original intent and
 revalidates its evidence before preparing a new operation.
 
+The production adapters are actor-scoped closures. Resolving a worker reference checks
+its canonical assignment commitment and current coordination permission. Current
+versions inspect the original resource root and use the earlier of its cutoff and
+the assignment cutoff. Accepted retries do not require the source or fence provider
+to be available again.
+
+Session operation keys are scoped by session, whereas objective command receipts are
+scoped by objective. The adapter derives its objective-side key from the source
+session and operation together, with separate versioned namespaces for checkpoints
+and handoffs. Consumer receipts retain their original operation and fingerprint.
+Two siblings may use the same session-local key without colliding at the objective.
+
+A checkpoint command fingerprints the immutable intent. The owner derives result
+observations inside its inspection and commit transactions, validating the retained
+session binding, parent actor, exact event bodies, physical cursors and result
+commitments. Missing or corrupt source facts produce uncertainty without retaining
+a non-commit proof. An execution with unresolved effects remains pending until its
+owner settles them. Only an exact persisted non-commit outcome becomes a consumer
+conflict. Ownership commands similarly fingerprint the full intent and fence, check
+the session owner's retained source in the commit transaction, and require the
+configured workspace provider's settled proof before fresh transfer.
+
 ## Alternatives rejected
 
 Whole-objective equality for checkpoints makes independent progress conflict. Omitting
@@ -51,7 +73,7 @@ invalidation. A second provider executor would duplicate authorization and recei
 Instruction and status changes update the bounded assignment graph under the objective
 lock. The graph must remain bounded as planned. Store and provider tests must prove
 sibling commits, public conflicts, instruction-only invalidation, reverted-instruction
-invalidation and accepted-receipt recovery after later changes. Plan 98 now supplies those store tests using real worker-session results and retained intents. An inactive flag is an equality precondition, not a requirement that the flag be true: newly prepared intents can reconcile previously accepted results after cancellation, while fresh work remains denied. The production objective provider remains plan 99.
+invalidation and accepted-receipt recovery after later changes. Plan 98 now supplies those store tests using real worker-session results and retained intents. An inactive flag is an equality precondition, not a requirement that the flag be true: newly prepared intents can reconcile previously accepted results after cancellation, while fresh work remains denied. Plan 99 now exercises these rules through the real session integrator and objective adapters, including a lost acknowledgement followed by local cursor failure. Production composition and explicit rejected-intent reconciliation remain its milestone 3. Deterministic fence fixtures qualify only the objective/session protocol, not workspace containment.
 
 ## References
 
