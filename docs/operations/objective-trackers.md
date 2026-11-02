@@ -47,7 +47,9 @@ then checks current membership, connection grants and binding revision. A truste
 configured scheduler may retain a refusal after revocation but cannot turn it
 into caller authority. Queue and local commands share operation-key ownership;
 a changed request cannot claim another operation's receipt. A control's failure
-is retained; retry a transient failed read with a new reviewed key.
+is retained; retry a transient failed read with a new reviewed key. Disabling
+tracking stops fresh admission while retaining status and exact replay of
+already accepted reads under current membership and connection grants.
 
 The queue shares the existing preserved tracker command target and its operation primary key.
 Migration 0037 adds versioned control columns and local observation timestamps without inventing times

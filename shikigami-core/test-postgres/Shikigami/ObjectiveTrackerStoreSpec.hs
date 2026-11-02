@@ -85,6 +85,15 @@ tests fixture =
           _ <- right =<< run env (Control.runPending scheduler Nothing)
           _ <- right =<< run env (S.execute host objective (operation "bind") bindCommand)
           readIORef reads >>= (@?= 1),
+      testCase "disabled tracking preserves queued read status and refuses fresh provider work" $
+        withTracker fixture \env objective host _ -> do
+          _ <- bind env objective host
+          let request = Control.Observe bindingId initialRevision
+          (_, accepted) <- right =<< run env (Control.enqueue host objective (operation "poll") request)
+          let disabled = host & #settings . #enabled .~ TrackersDisabled & #providerFor .~ (\_ -> fail "disabled inspection resolved a provider")
+          run env (Control.inspect disabled objective (operation "poll")) >>= (@?= Right accepted)
+          run env (Control.enqueue disabled objective (operation "poll") request) >>= (@?= Right (False, accepted))
+          run env (Control.enqueue disabled objective (operation "fresh-poll") request) >>= (@?= Left TrackerDenied),
       testCase "revoked queued callers cannot perform provider reads" $
         withTracker fixture \env objective host _ -> do
           _ <- bind env objective host

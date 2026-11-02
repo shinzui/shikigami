@@ -32,15 +32,20 @@ permission host access current = \case
   Observe binding _ -> do
     S.requireManage access current
     retained <- S.bindingFor current.objectiveId binding
-    unless (mayUseConnection host.settings access.actor retained.scope) (Sql.abort TrackerDenied)
+    unless (connectionUse retained.scope) (Sql.abort TrackerDenied)
   Reconcile identifier -> do
     S.requireManage access current
     (intent, _) <- Sql.publicationById identifier
-    unless (intent.objectiveId == current.objectiveId && mayUseConnection host.settings access.actor intent.scope) (Sql.abort TrackerDenied)
+    unless (intent.objectiveId == current.objectiveId && connectionUse intent.scope) (Sql.abort TrackerDenied)
   Verify identifier _ -> do
     S.requireReconciliation host access
     (intent, _) <- Sql.publicationById identifier
     unless (intent.objectiveId == current.objectiveId) (Sql.abort TrackerDenied)
+  where
+    -- Disabling dispatch does not hide an already admitted operation. Current
+    -- membership and connection grants still apply; fresh admission separately
+    -- requires enablement before resolving a provider.
+    connectionUse scope = either (const False) (elem access.actor . (.useGrants)) (connectionFor host.settings scope)
 
 precondition :: OT.ObjectiveId -> ControlRequest -> Transaction ()
 precondition objective = \case
