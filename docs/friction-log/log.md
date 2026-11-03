@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-11-03
+* **Update**: FRIC-49 resolved: Resolve the pre-transport judgment-streaming blocker after verifying tagged Hackage descriptors and the real public provider through the application wrapper; broader plan acceptance remains separate.
 * **Update**: FRIC-49 promoted: Filed Shikumi IR-5 for public judgment streaming, settings-aware typed derivation, atomic structured events and acknowledged attempt evidence; complete/stream acceptance remains blocked on a qualifying release.
 * **Addition**: FRIC-49 records blocked interface friction with mori://shinzui/shikumi/packages/shikumi: Released Shikumi rejects streaming decision outputs before transport
 * **Update**: FRIC-48 resolved: Verified Hackage descriptors and v0.12.0.2 tag at 5a62c3ef29cad50543f7bae97126e0431225998d, then solved the application against the fixed 2026-11-03T02:59:02Z index without new bounds overrides.

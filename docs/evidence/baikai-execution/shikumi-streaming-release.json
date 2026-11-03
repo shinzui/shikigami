@@ -1,0 +1,39 @@
+{
+  "indexState": "2026-11-03T12:48:57Z",
+  "packages": {
+    "shikumi": {
+      "descriptorMatchesTag": true,
+      "descriptorUrl": "https://hackage.haskell.org/package/shikumi-0.5.1.0/shikumi.cabal",
+      "sha256": "fd774963fda3b1b2fc55a5b5773ac8f9646d92ec6ffcbd2872b580a53b4688e6",
+      "tag": "shikumi-0.5.1.0",
+      "taggedDescriptorSha256": "fd774963fda3b1b2fc55a5b5773ac8f9646d92ec6ffcbd2872b580a53b4688e6",
+      "version": "0.5.1.0"
+    },
+    "shikumi-cache": {
+      "descriptorMatchesTag": true,
+      "descriptorUrl": "https://hackage.haskell.org/package/shikumi-cache-0.2.1.1/shikumi-cache.cabal",
+      "sha256": "a4f4dc1f30077f662cfad26c02b86f93783c27dbba7c16f87d4f2acbc58cb1e9",
+      "tag": "shikumi-cache-0.2.1.1",
+      "taggedDescriptorSha256": "a4f4dc1f30077f662cfad26c02b86f93783c27dbba7c16f87d4f2acbc58cb1e9",
+      "version": "0.2.1.1"
+    },
+    "shikumi-tools": {
+      "descriptorMatchesTag": true,
+      "descriptorUrl": "https://hackage.haskell.org/package/shikumi-tools-0.4.2.1/shikumi-tools.cabal",
+      "sha256": "4615cb735e6d35d02f7adb22d7ae2407979734c366322d6c143b68c724268b4a",
+      "tag": "shikumi-tools-0.4.2.1",
+      "taggedDescriptorSha256": "4615cb735e6d35d02f7adb22d7ae2407979734c366322d6c143b68c724268b4a",
+      "version": "0.4.2.1"
+    },
+    "shikumi-trace": {
+      "descriptorMatchesTag": true,
+      "descriptorUrl": "https://hackage.haskell.org/package/shikumi-trace-0.3.2.0/shikumi-trace.cabal",
+      "sha256": "be92e0085a2f89d9205dfe42206ab3504a4b145124a6af3ffd0c65b63041a6f4",
+      "tag": "shikumi-trace-0.3.2.0",
+      "taggedDescriptorSha256": "be92e0085a2f89d9205dfe42206ab3504a4b145124a6af3ffd0c65b63041a6f4",
+      "version": "0.3.2.0"
+    }
+  },
+  "project": "mori://shinzui/shikumi",
+  "releaseCommit": "7b96ecf06364b37de44b15c4f58b2528b5a3e0f5"
+}

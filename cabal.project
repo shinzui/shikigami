@@ -28,7 +28,7 @@ with-compiler: ghc-9.12.4
 -- The co-developed cohort is selected by the components' own build-depends
 -- bounds, resolved against this fixed Hackage snapshot. Advance it to move the
 -- cohort; docs/dependency-cohort.md records the release matrix and evidence.
-index-state: 2026-11-03T02:59:02Z
+index-state: 2026-11-03T12:48:57Z
 -- Nothing links keiro-dsl, so no bound ties it to the runtime's Keiro release;
 -- the toolchain and the runtime move in lockstep.
 -- Preserve the qualified runtime closure while adding released Baikai surfaces.
@@ -300,11 +300,11 @@ constraints:
   shibuya-kafka-adapter ==0.12.0.0,
   shibuya-kiroku-adapter ==0.7.0.0,
   shibuya-pgmq-adapter ==0.18.0.0,
-  shikumi ==0.5.0.0,
-  shikumi-cache ==0.2.1.0,
+  shikumi ==0.5.1.0,
+  shikumi-cache ==0.2.1.1,
   shikumi-eval ==0.3.1.0,
-  shikumi-tools ==0.4.2.0,
-  shikumi-trace ==0.3.1.0,
+  shikumi-tools ==0.4.2.1,
+  shikumi-trace ==0.3.2.0,
   shikumi-trace-otel ==0.1.3.0,
   simple-sendfile ==0.2.32,
   singleton-bool ==0.1.8,

@@ -9,7 +9,7 @@ import Data.IORef
 import Data.Map.Strict qualified as Map
 import Effectful (liftIO)
 import Keiro.PGMQ qualified as Job
-import Keiro.Workflow (StepName (..), WorkflowId (..), WorkflowOutcome (..), loadStepIndex)
+import Keiro.Workflow (StepName (..), WorkflowId (..), WorkflowName (..), WorkflowOutcome (..), defaultWorkflowRunOptions, loadStepIndex, runWorkflowWith, step)
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
 import Shikigami.Agent.Decl (AgentDecl (..))
 import Shikigami.Agent.Loader (loadAgent)
@@ -29,11 +29,13 @@ import Shikigami.Log.Correlation (runCorrelationId)
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Shikigami.Program.Decision
 import Shikigami.Program.Decision.JudgmentExample
+import Shikigami.Program.DecisionRunner
 import Shikigami.RouterWorkflowSpec qualified as Fixture
 import Shikigami.RunJobs qualified as RunJobs
 import Shikigami.Trigger.Enqueue qualified as Enqueue
 import Shikumi.Decision.Setting (DecisionSetting (..))
 import Shikumi.Program (emptyParams, setDecisionSetting)
+import Shikumi.Stream qualified as SS
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit
 
@@ -122,6 +124,45 @@ tests fixture =
                   details.complete @?= True
                 Nothing -> assertFailure "actual-attempt report missing"
             server.requests >>= (\calls -> length calls @?= 1),
+      testCase "a public judgment stream acknowledges PostgreSQL evidence before completion and replays its stored outcome" $
+        withTypeSafeFixture 200 0 fixtureResponse \server ->
+          withShikigamiFreshDatabase fixture \connection -> do
+            tracer <- noopTracer
+            let app = AppEnv {connectionSettings = defaultConnectionSettings connection, tracer, metrics = Nothing, store = Nothing}
+                name = WorkflowName "test.shikigami-judgment-stream"
+                catalog = fixtureCatalog server.endpoint
+                prepared = fixturePrepared catalog
+                workflow = prepared.workflowId
+                readReport store = do
+                  report <- either (assertFailure . show) pure =<< readDecisionReport (postgresDecisionEvidenceStore store.pool) prepared.runId
+                  case report of
+                    Just details -> do
+                      length details.calls @?= 1
+                      details.complete @?= True
+                      pure details
+                    Nothing -> assertFailure "stream attempt report missing"
+            original <- withStore (defaultConnectionSettings connection) \store -> do
+              runtime <- fixtureRuntime catalog (decisionCallHooks (postgresDecisionEvidenceStore store.pool) Nothing)
+              let observe = \case
+                    SS.StreamStatus status | status.phase == SS.LmEnd -> readReport store >> pure ()
+                    _ -> pure ()
+                  body = step (StepName "judgment") do
+                    (result, answers) <- liftIO (streamDecisionProgramWithAnswers runtime prepared (programRef judgmentProgram) fixtureTicket observe)
+                    calls <- liftIO (readReport store)
+                    pure (decisionOutcome prepared.identity prepared.program (toJSON <$> result) (map (.callId) calls.calls) answers)
+              outcome <- runAppIO app (runWorkflowWith defaultWorkflowRunOptions name workflow body)
+              case outcome of
+                Right (Completed result) -> do
+                  assertBool "typed result succeeds" (case result.result of Right _ -> True; Left _ -> False)
+                  length (outcomeAnswers result) @?= 1
+                  pure result
+                _ -> assertFailure "streamed workflow did not complete"
+            restored <- runAppIO app (runWorkflowWith defaultWorkflowRunOptions name workflow (step (StepName "judgment") (liftIO (ioError (userError "committed stream redispatched")))))
+            restored @?= Right (Completed original)
+            withStore (defaultConnectionSettings connection) \store -> do
+              _ <- readReport store
+              pure ()
+            server.requests >>= (\requests -> length requests @?= 1),
       testCase "pending judgment refuses an unavailable pinned model before dispatch" $
         withTypeSafeFixture 200 0 fixtureResponse \server ->
           withShikigamiFreshDatabase fixture \connection ->

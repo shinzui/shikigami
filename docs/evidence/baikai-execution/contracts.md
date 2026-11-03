@@ -1,5 +1,21 @@
 # Baikai execution contracts
 
+## IR-5 released streaming follow-up — 2026-11-03 UTC
+
+The application now selects Shikumi 0.5.1.0, cache 0.2.1.1, tools 0.4.2.1 and
+trace 0.3.2.0 at index `2026-11-03T12:48:57Z`. Authoritative Hackage versions,
+descriptor hashes and matching upstream tag bytes are retained in
+[the release record](shikumi-streaming-release.json). All four tags peel to
+`7b96ecf06364b37de44b15c4f58b2528b5a3e0f5` in `mori://shinzui/shikumi`.
+The coupled application solve succeeds without new bounds overrides or changes
+to the Kioku, Baikai, Effectful or Handan selections.
+
+All 15 real TypeSafe consumer checks pass through complete and streamed public
+execution, including exact request/raw/typed parity, atomic event ordering,
+acknowledged terminals and failure/cancellation boundaries. FRIC-49 is resolved.
+The following 0.5.0 and October records retain their historical meaning; they
+do not describe the current streaming capability.
+
 ## Released-cohort consumer checkpoint — 2026-11-03 UTC
 
 Kioku API/core/migrations 0.12.0.2 now admits Shikumi 0.5.0.0; tag

@@ -1,6 +1,8 @@
 module Shikigami.TypeSafeDecisionSpec (tests) where
 
 import Baikai.Content (DataContent (..))
+import Baikai.Provider.Registry (ApiProvider (..))
+import Baikai.Stream.Event (AssistantMessageEvent (..), DataEndPayload (..))
 import Baikai.ThinkingLevel (ThinkingLevel (ThinkingNone))
 import Control.Concurrent (forkIO, killThread)
 import Control.Concurrent.MVar (newEmptyMVar, putMVar, takeMVar)
@@ -11,16 +13,19 @@ import Data.Aeson (Value (..), eitherDecode, encode, object, toJSON, (.=))
 import Data.Aeson.KeyMap qualified as KM
 import Data.Either (isLeft)
 import Data.Generics.Labels ()
+import Data.IORef (modifyIORef', newIORef, readIORef)
 import Data.Map.Strict qualified as Map
 import Shikigami.Decision.Answer (answerBlocks)
 import Shikigami.Decision.Contract
 import Shikigami.Decision.ModelCatalog
 import Shikigami.Fixture.TypeSafe
-import Shikigami.Program.Decision (SomeProgram (..), descriptor, programRef, programRegistry)
+import Shikigami.Program.Decision (DecisionProgramRef, SomeProgram (..), descriptor, programRef, programRegistry)
 import Shikigami.Program.Decision.JudgmentExample
 import Shikigami.Program.DecisionRunner
 import Shikumi.Decision.Setting (DecisionSetting (NoulSetting))
 import Shikumi.Program (emptyParams, setDecisionSetting)
+import Shikumi.Stream qualified as SS
+import Streamly.Data.Stream qualified as Stream
 import System.Timeout (timeout)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit
@@ -29,12 +34,21 @@ tests :: TestTree
 tests =
   testGroup
     "TypeSafe judgments"
+    [ runnerTests "complete" runDecisionProgramWithAnswers,
+      runnerTests "stream" (\env prepared ref input -> streamDecisionProgramWithAnswers env prepared ref input (const (pure ()))),
+      streamTests
+    ]
+
+runnerTests :: String -> (DecisionRuntime -> PreparedDecision -> DecisionProgramRef Ticket TicketJudgment -> Ticket -> IO (Either DecisionFailure TicketJudgment, [DecisionAnswer])) -> TestTree
+runnerTests label runProgram =
+  testGroup
+    label
     [ testCase "configured public adapter returns raw answers and pinned rich local derivation" $
         withTypeSafeFixture 200 0 fixtureResponse \fixture -> do
           let catalog = fixtureCatalog fixture.endpoint
           (hooks, inspect) <- newMemoryCallHooks
           env <- fixtureRuntime catalog hooks
-          (result, answers) <- runDecisionProgramWithAnswers env (fixturePrepared catalog) (programRef judgmentProgram) fixtureTicket
+          (result, answers) <- runProgram env (fixturePrepared catalog) (programRef judgmentProgram) fixtureTicket
           output <- either (assertFailure . show) pure result
           output.urgent.value @?= True
           output.urgent.probability @?= 0.83
@@ -73,10 +87,10 @@ tests =
               changedRef = programRef changed
           (hooks, _) <- newMemoryCallHooks
           env <- fixtureRuntime catalog hooks
-          (firstResult, firstAnswers) <- runDecisionProgramWithAnswers env prepared (programRef judgmentProgram) fixtureTicket
+          (firstResult, firstAnswers) <- runProgram env prepared (programRef judgmentProgram) fixtureTicket
           let secondEnv = env & #programs .~ mustRight (programRegistry [SomeProgram changed])
               secondPrepared = prepared & #program .~ descriptor changedRef
-          (secondResult, secondAnswers) <- runDecisionProgramWithAnswers secondEnv secondPrepared changedRef fixtureTicket
+          (secondResult, secondAnswers) <- runProgram secondEnv secondPrepared changedRef fixtureTicket
           first <- either (assertFailure . show) pure firstResult
           second <- either (assertFailure . show) pure secondResult
           first.urgent.value @?= True
@@ -93,7 +107,7 @@ tests =
           let catalog = fixtureCatalog fixture.endpoint
           (hooks, inspect) <- newMemoryCallHooks
           env <- fixtureRuntime catalog hooks
-          (result, answers) <- runDecisionProgramWithAnswers env (fixturePrepared catalog) (programRef judgmentProgram) fixtureTicket
+          (result, answers) <- runProgram env (fixturePrepared catalog) (programRef judgmentProgram) fixtureTicket
           assertBool "provider refusal" (isLeft result)
           answers @?= []
           calls <- inspect
@@ -106,7 +120,7 @@ tests =
           (hooks, inspect) <- newMemoryCallHooks
           let broken = hooks & #finishCall .~ (\_ _ _ -> pure (Left (decisionFailure EvidenceFailure "fixture unavailable")))
           env <- fixtureRuntime catalog broken
-          (result, answers) <- runDecisionProgramWithAnswers env (fixturePrepared catalog) (programRef judgmentProgram) fixtureTicket
+          (result, answers) <- runProgram env (fixturePrepared catalog) (programRef judgmentProgram) fixtureTicket
           fmap failureCode (either Right (const (Left ())) result) @?= Right EvidenceFailure
           answers @?= []
           calls <- inspect
@@ -119,7 +133,7 @@ tests =
           (hooks, inspect) <- newMemoryCallHooks
           env <- fixtureRuntime catalog hooks
           finished <- newEmptyMVar
-          worker <- forkIO (try @SomeException (runDecisionProgramWithAnswers env (fixturePrepared catalog) (programRef judgmentProgram) fixtureTicket) >>= putMVar finished)
+          worker <- forkIO (try @SomeException (runProgram env (fixturePrepared catalog) (programRef judgmentProgram) fixtureTicket) >>= putMVar finished)
           ready <- timeout 2000000 (takeMVar fixture.ready)
           ready @?= Just ()
           void (forkIO (killThread worker))
@@ -145,4 +159,71 @@ tests =
             ]
           assertBool "missing credential refused" (isLeft (bind (bindingOptions pinned) Nothing))
           fixture.requests >>= (@?= [])
+    ]
+
+streamTests :: TestTree
+streamTests =
+  testGroup
+    "stream parity and terminal ordering"
+    [ testCase "real public complete and atomic stream retain identical typed results and raw answers" $
+        withTypeSafeFixture 200 0 fixtureResponse \fixture -> do
+          let catalog = fixtureCatalog fixture.endpoint
+              prepared = fixturePrepared catalog
+          (hooks, inspect) <- newMemoryCallHooks
+          env <- fixtureRuntime catalog hooks
+          (completeResult, completeAnswers) <- runDecisionProgramWithAnswers env prepared (programRef judgmentProgram) fixtureTicket
+          events <- newIORef []
+          callbacks <- newIORef []
+          let watch provider = provider & #stream .~ (\model context options -> Stream.mapM (\event -> modifyIORef' events (<> [event]) >> pure event) (provider.stream model context options))
+              streamed = env & #providers .~ map watch env.providers
+              observe event = do
+                modifyIORef' callbacks (<> [event])
+                case event of
+                  SS.StreamStatus status | status.phase == SS.LmEnd -> do
+                    calls <- inspect
+                    Map.size calls @?= 2
+                    assertBool "terminal acknowledged before LM completion" (all (\call -> call.terminal /= Nothing) calls)
+                  _ -> pure ()
+          (streamResult, streamAnswers) <- streamDecisionProgramWithAnswers streamed prepared (programRef judgmentProgram) fixtureTicket observe
+          streamResult @?= completeResult
+          assertBool "a rich typed answer returned" (not (isLeft streamResult))
+          length streamAnswers @?= 1
+          map (toJSON . (.snapshot)) streamAnswers @?= map (toJSON . (.snapshot)) completeAnswers
+          actualEvents <- readIORef events
+          let tags = concatMap (\case DataStart {} -> ["start" :: String]; DataEnd {} -> ["end"]; EventDone {} -> ["done"]; _ -> []) actualEvents
+          tags @?= ["start", "end", "done"]
+          [dat | DataEnd (DataEndPayload _ dat) <- actualEvents] @?= concatMap (answerBlocks . (.snapshot)) streamAnswers
+          observed <- readIORef callbacks
+          assertBool "atomic judgments emit no partial prose" (all (\case SS.StreamFieldChunk {} -> False; _ -> True) observed)
+          calls <- inspect
+          Map.size calls @?= 2
+          assertBool "both actual calls have acknowledged terminals" (all (\call -> call.terminal /= Nothing) calls)
+          requests <- fixture.requests
+          case requests of
+            [first, second] -> first @?= second
+            _ -> assertFailure "one request per complete/stream invocation expected",
+      testCase "consumer failure after the acknowledged stream cannot return success or redispatch" $
+        withTypeSafeFixture 200 0 fixtureResponse \fixture -> do
+          let catalog = fixtureCatalog fixture.endpoint
+          (hooks, inspect) <- newMemoryCallHooks
+          env <- fixtureRuntime catalog hooks
+          let observe = \case
+                SS.StreamStatus status | status.phase == SS.LmEnd -> ioError (userError "fixture consumer failed")
+                _ -> pure ()
+          result <- try @SomeException (streamDecisionProgramWithAnswers env (fixturePrepared catalog) (programRef judgmentProgram) fixtureTicket observe)
+          assertBool "consumer failure propagates" (isLeft result)
+          fixture.requests >>= (\requests -> length requests @?= 1)
+          calls <- inspect
+          Map.size calls @?= 1
+          assertBool "actual terminal survives consumer failure" (all (\call -> call.terminal /= Nothing) calls),
+      testCase "a missing structured event cannot become a successful typed stream" $
+        withTypeSafeFixture 200 0 fixtureResponse \fixture -> do
+          let catalog = fixtureCatalog fixture.endpoint
+          (hooks, _) <- newMemoryCallHooks
+          env <- fixtureRuntime catalog hooks
+          let omit provider = provider & #stream .~ (\model context options -> Stream.filter (\case DataEnd {} -> False; _ -> True) (provider.stream model context options))
+              broken = env & #providers .~ map omit env.providers
+          (result, _) <- streamDecisionProgramWithAnswers broken (fixturePrepared catalog) (programRef judgmentProgram) fixtureTicket (const (pure ()))
+          assertBool "malformed structured terminal refused" (isLeft result)
+          fixture.requests >>= (\requests -> length requests @?= 1)
     ]

@@ -12,9 +12,10 @@ row and the solver's plan is a bug in one of them.
 
 ## Baikai 0.10 consumer candidate — selected 2026-11-03
 
-Plan 80 selects index `2026-11-03T02:59:02Z`. Exact constraints retain the
+Plan 80 selects index `2026-11-03T12:48:57Z`. Exact constraints retain the
 previous runtime closure while advancing Baikai core to 0.10.0.0, vendors to
-0.7.3.0, agent to 0.2.0.4, Shikumi to 0.5.0.0 and its companion releases, and
+0.7.3.0, agent to 0.2.0.4, Shikumi to 0.5.1.0 with cache 0.2.1.1, tools
+0.4.2.1 and trace 0.3.2.0, and
 Kioku API/core/migrations to 0.12.0.2. TypeSafe 0.1.0.1 is a direct consumer
 dependency. Effectful 2.7.1.0/core 2.7.1.2 and strict-mutable-base 2.0.0.0
 complete the solve; Keiro stays at 0.22 and the Handan source pin stays unchanged.
@@ -22,8 +23,9 @@ No new `allow-newer` exception is added.
 
 The real complete-call and durable queue/restart consumer checks pass; see
 [structured judgments](evidence/baikai-execution/structured-judgments.md).
-Judgment streaming requires
-`mori://shinzui/shikumi/okf/improvement-requests/concepts/IR-5`. The frozen Nix
+Shikumi's released
+`mori://shinzui/shikumi/okf/improvement-requests/concepts/IR-5` implementation
+passes all 15 complete/stream application consumer checks. The frozen Nix
 export now contains 387 runtime packages and seven immutable repositories.
 All five role attributes evaluate in a dry run; this candidate has not yet
 passed immutable role-package qualification. It is a source/build checkpoint,

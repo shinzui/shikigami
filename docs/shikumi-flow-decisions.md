@@ -182,10 +182,15 @@ under changed settings require a new program identity. New judgment steps use
 the `shikigami-structured-judgments-v1` patch; historical generative steps keep
 their original labels and result envelope.
 
-The released Shikumi runner currently refuses judgment streaming before
-transport. `mori://shinzui/shikumi/okf/improvement-requests/concepts/IR-5`
-requests complete/stream typed-result parity and acknowledged atomic structured
-events. The example uses complete calls; streaming acceptance remains open.
+Shikumi 0.5.1.0 implements
+`mori://shinzui/shikumi/okf/improvement-requests/concepts/IR-5`.
+Application consumers can use `streamDecisionProgramWithAnswers` under the
+same pinned admission, private provider registry and terminal-persistence
+boundary as complete execution. Atomic judgments emit status callbacks and
+return their full raw snapshot beside the typed result; they emit no partial
+prose. The supplied Flow continues to use complete calls. Deterministic
+consumer tests prove identical complete/stream request bodies, raw answers and
+pinned rich derivation, including failure and cancellation boundaries.
 
 ## Register a new decision
 

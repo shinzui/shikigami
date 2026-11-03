@@ -1,5 +1,30 @@
 # Structured judgment consumer checkpoint
 
+## IR-5 release follow-up
+
+The current candidate selects Shikumi 0.5.1.0, cache 0.2.1.1, tools 0.4.2.1 and
+trace 0.3.2.0 at `2026-11-03T12:48:57Z`, with the remaining cohort unchanged.
+[The verified release record](shikumi-streaming-release.json) retains Hackage
+descriptor hashes and their equality with the upstream tag bytes. The full
+application solve succeeds without new bounds overrides.
+
+The 15 TypeSafe application checks pass. Complete and streamed execution share
+admission, private provider registration and terminal acknowledgement. Both
+preserve the same weighted/default rich results and neutral snapshots, and
+both pass refusal, persistence-failure and cancellation checks. Additional
+fixtures prove identical wire bodies, exactly one atomic data start/end/terminal
+sequence, acknowledgement before LM completion, no partial prose, no redispatch
+after consumer failure, and refusal of a missing structured event.
+
+A PostgreSQL fixture also executes the public stream entry point, checks its
+committed actual-attempt report before LM completion, journals the complete
+raw/typed outcome, then reopens the workflow with a body that must never run.
+The outcome replays unchanged with one total HTTP request. The existing real
+queue/worker restart fixtures continue to cover the supplied complete-call Flow.
+FRIC-49 is resolved; no router or parser was copied downstream.
+
+## Initial complete-call checkpoint (before the IR-5 release)
+
 The 2026-11-03 candidate uses the released Baikai 0.10.0.0 / Shikumi 0.5.0.0 /
 Kioku 0.12.0.2 cohort at Cabal index `2026-11-03T02:59:02Z`. This is partial
 plan 80 evidence. Streaming, the remaining negative/wire fixtures, Linux CLI
@@ -87,12 +112,11 @@ asset qualification is claimed by this checkpoint.
 
 ## Outstanding acceptance
 
-Released Shikumi rejects decision outputs in both `streamPredict` and the
-router's `Stream` branch. Its streaming parser also omits explicit decision
-settings. FRIC-49 is promoted to
-`mori://shinzui/shikumi/okf/improvement-requests/concepts/IR-5`; no downstream
-router or parser bypass is used. M7/M8 remain open until a qualifying released
-consumer proves complete/stream parity and the remaining plan criteria.
+Shikumi 0.5.0.0 rejected decision outputs in both `streamPredict` and the
+router's `Stream` branch, and omitted explicit decision settings in streaming.
+The released IR-5 follow-up above resolves that blocker. M7/M8 remain open for
+the rest of the error/wire matrix and immutable installed-package criteria;
+complete/stream parity is now proved by the application consumer.
 
 These local synthetic fixtures make no remote TypeSafe request and establish
 no paid-model or production service qualification. The runnable operator

@@ -104,10 +104,13 @@ content in the wrong message role refuses; a data-only assistant cannot succeed
 as empty prose. Cache/replay preserves answer data without minting provider
 evidence. A failed terminal acknowledgement cannot publish a successful answer.
 
-The qualified integration currently uses public complete calls. Released Shikumi
-streaming refuses decision outputs before transport; owning request
-`mori://shinzui/shikumi/okf/improvement-requests/concepts/IR-5` tracks settings-aware
-typed-result parity. No application router/parser bypass is introduced. See the
+Shikumi 0.5.1.0 implements owning request
+`mori://shinzui/shikumi/okf/improvement-requests/concepts/IR-5`. The application
+stream entry point reuses the complete runner's admission, invocation-local
+registry and acknowledged terminal boundary, composing the public Shikumi
+streaming interpreters. Atomic judgments return full structured snapshots and
+the same typed local derivation, with status callbacks rather than partial prose.
+No application router/parser bypass is introduced. See the
 [consumer checkpoint](../evidence/baikai-execution/structured-judgments.md).
 
 ## References

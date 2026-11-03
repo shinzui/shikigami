@@ -4199,12 +4199,12 @@
       ],
       "flags": {},
       "source": {
-        "hash": "sha256-q8Dznt7cwinuqF1HP4Nu+Een25+mux40lqtiCDNjPkM=",
-        "metadata_hash": "sha256-L1E8aNRxZWqiyYMP41PC100+NwdV9JdX+RLkZ3afKjo=",
+        "hash": "sha256-pC0PA2MY5SVWQ5/v9P8b4iIZrHcLZ4L9MQ2lTPt7fDw=",
+        "metadata_hash": "sha256-/XdJY/2jsbL8VaW1dzrI+WRtkuxv/L0ocrWApTtGiOY=",
         "type": "hackage",
-        "url": "https://hackage.haskell.org/package/shikumi-0.5.0.0/shikumi-0.5.0.0.tar.gz"
+        "url": "https://hackage.haskell.org/package/shikumi-0.5.1.0/shikumi-0.5.1.0.tar.gz"
       },
-      "version": "0.5.0.0"
+      "version": "0.5.1.0"
     },
     "shikumi-cache": {
       "components": [
@@ -4212,12 +4212,12 @@
       ],
       "flags": {},
       "source": {
-        "hash": "sha256-H6Xw9U3Urw4NBDkPI+1q37ZLMzD1pSQQGhXN+6OXpbY=",
-        "metadata_hash": "sha256-KuE/SjUBfzeJ+hclgWyKsjEWXp7nBCkOgRPMwHzVEhM=",
+        "hash": "sha256-Hyc3CAHwZKqVnnqm9w13mdj1WEB8w31dzBI4++JdDxQ=",
+        "metadata_hash": "sha256-pPTcHzAHf2Ys+tJsArhvk3g8J9u6fBb4fU8qy8WMsek=",
         "type": "hackage",
-        "url": "https://hackage.haskell.org/package/shikumi-cache-0.2.1.0/shikumi-cache-0.2.1.0.tar.gz"
+        "url": "https://hackage.haskell.org/package/shikumi-cache-0.2.1.1/shikumi-cache-0.2.1.1.tar.gz"
       },
-      "version": "0.2.1.0"
+      "version": "0.2.1.1"
     },
     "shikumi-eval": {
       "components": [
@@ -4238,12 +4238,12 @@
       ],
       "flags": {},
       "source": {
-        "hash": "sha256-ehjFMN6XEdCa4tBBzDg/PjnCTR2Squt42T3ie+Wn4nk=",
-        "metadata_hash": "sha256-6TJ+SSsn1g0EGMUccrHicCAhTBiI6+nN/IunmEAWDl0=",
+        "hash": "sha256-MwpuSev+kt6JhrHDNRsU6zCUSveUgQrGC7AmtS46Yek=",
+        "metadata_hash": "sha256-RhXLc15tNdAvetsi164kB5eXNMNmMi1sFDtoxyQmi0o=",
         "type": "hackage",
-        "url": "https://hackage.haskell.org/package/shikumi-tools-0.4.2.0/shikumi-tools-0.4.2.0.tar.gz"
+        "url": "https://hackage.haskell.org/package/shikumi-tools-0.4.2.1/shikumi-tools-0.4.2.1.tar.gz"
       },
-      "version": "0.4.2.0"
+      "version": "0.4.2.1"
     },
     "shikumi-trace": {
       "components": [
@@ -4251,12 +4251,12 @@
       ],
       "flags": {},
       "source": {
-        "hash": "sha256-ryY+cCVIlp+l/7vs7PGKmkS8oujAgi96WoPjuNiKng4=",
-        "metadata_hash": "sha256-gnuRr8P7KryxlJW9JkanQ0sRTnzIRZgQfoZRInaTat8=",
+        "hash": "sha256-ASgqtkJ6AS1b42hN286W5qVWzJeTY+uD4UNQFPi1UJQ=",
+        "metadata_hash": "sha256-vpLgCFovidkgXf5CIGqzUEpLFFEkpq8//QxltjBBpvQ=",
         "type": "hackage",
-        "url": "https://hackage.haskell.org/package/shikumi-trace-0.3.1.0/shikumi-trace-0.3.1.0.tar.gz"
+        "url": "https://hackage.haskell.org/package/shikumi-trace-0.3.2.0/shikumi-trace-0.3.2.0.tar.gz"
       },
-      "version": "0.3.1.0"
+      "version": "0.3.2.0"
     },
     "shikumi-trace-otel": {
       "components": [

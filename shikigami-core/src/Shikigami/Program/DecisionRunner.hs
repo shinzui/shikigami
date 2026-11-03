@@ -8,6 +8,7 @@ module Shikigami.Program.DecisionRunner
     decisionProviders,
     runDecisionProgram,
     runDecisionProgramWithAnswers,
+    streamDecisionProgramWithAnswers,
   )
 where
 
@@ -39,6 +40,9 @@ import Data.Map.Strict qualified as Map
 import Data.Maybe (catMaybes, isJust)
 import Data.Text (Text)
 import Data.Typeable (Typeable)
+import Effectful (liftIO, runEff)
+import Effectful.Concurrent (runConcurrent)
+import Effectful.Error.Static (runErrorNoCallStack)
 import GHC.Generics (Generic)
 import Handan.Runtime (Runtime (..), runProgramWith)
 import Numeric.Natural (Natural)
@@ -58,6 +62,8 @@ import Shikigami.Log.Correlation (callCorrelationId)
 import Shikigami.Program.Decision
 import Shikumi.Error qualified as Shikumi
 import Shikumi.LLM qualified as LLM
+import Shikumi.Routing (routeLLM, runRouting)
+import Shikumi.Stream qualified as ShikumiStream
 import Streamly.Data.Stream qualified as Stream
 import System.Timeout (timeout)
 
@@ -88,7 +94,18 @@ runDecisionProgram :: (Typeable i, Typeable o, ToJSON i) => DecisionRuntime -> P
 runDecisionProgram env prepared ref input = fmap fst (runDecisionProgramWithAnswers env prepared ref input)
 
 runDecisionProgramWithAnswers :: (Typeable i, Typeable o, ToJSON i) => DecisionRuntime -> PreparedDecision -> DecisionProgramRef i o -> i -> IO (Either DecisionFailure o, [DecisionAnswer])
-runDecisionProgramWithAnswers env prepared ref input = do
+runDecisionProgramWithAnswers = runWith CompleteDecision
+
+-- | Use the released Shikumi streaming interpreter under the same admission,
+-- invocation-local provider registry and acknowledged terminal boundary. Atomic
+-- judgments emit status callbacks; their full raw answers are returned separately.
+streamDecisionProgramWithAnswers :: (Typeable i, Typeable o, ToJSON i) => DecisionRuntime -> PreparedDecision -> DecisionProgramRef i o -> i -> (ShikumiStream.StreamEvent -> IO ()) -> IO (Either DecisionFailure o, [DecisionAnswer])
+streamDecisionProgramWithAnswers env prepared ref input observe = runWith (StreamDecision observe) env prepared ref input
+
+data DecisionExecution = CompleteDecision | StreamDecision (ShikumiStream.StreamEvent -> IO ())
+
+runWith :: (Typeable i, Typeable o, ToJSON i) => DecisionExecution -> DecisionRuntime -> PreparedDecision -> DecisionProgramRef i o -> i -> IO (Either DecisionFailure o, [DecisionAnswer])
+runWith execution env prepared ref input = do
   answers <- newIORef []
   result <- case admission of
     Left refusal -> pure (Left refusal)
@@ -203,7 +220,17 @@ runDecisionProgramWithAnswers env prepared ref input = do
               { runtimeDefaultModel = selected,
                 runtimeConfig = config {LLM.registry = privateRegistry, LLM.retryPolicy = retry {LLM.maxAttempts = max 1 maxAttempts}}
               }
-      result <- timeout (decisionTimeoutMicros env.timeoutMicros) (runProgramWith invocation (executable registered) checked)
+      let run = case execution of
+            CompleteDecision -> runProgramWith invocation (executable registered) checked
+            StreamDecision observe ->
+              runEff
+                . runErrorNoCallStack @Shikumi.ShikumiError
+                . runConcurrent
+                . runRouting selected
+                . LLM.runLLMResilient invocation.runtimeConfig
+                . routeLLM
+                $ ShikumiStream.streamProgram (executable registered) checked (liftIO . observe)
+      result <- timeout (decisionTimeoutMicros env.timeoutMicros) run
       case result of
         Nothing -> throwIO (TransientBehaviorFailure "decision provider attempt timed out")
         Just (Right output) -> pure (validateResult registered output)
