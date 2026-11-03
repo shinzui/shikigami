@@ -76,7 +76,7 @@ Refresh handoff (2026-11-02 UTC): this is a plan update, with no dependency or r
 
 Scope handoff (2026-11-02 UTC): the user authorized adoption of every feature discussed, including structured answers and TypeSafe judgments. M7 and M8 are now required deliverables. The earlier generative-only scope decision is superseded; current dependency prerequisites and October qualification evidence retain their meaning.
 
-Implementation handoff (2026-11-03 UTC): the published-release prerequisite is now reproduced with an isolated Cabal dry-run after refreshing the index, rather than inferred solely from descriptor text. See [release evidence](../evidence/baikai-execution/release-prerequisite.json) and FRIC-46. The target pair `baikai ==0.10.0.0` and `shikumi ==0.4.1.1` cannot resolve at `2026-11-02T23:00:00Z`; application pins remain unchanged. Independent M2/M3 work adds optional decision-binding endpoint/cache settings and forbids program overrides of pinned retention. All 52 focused decision checks pass through the isolated committed-descriptor project, including the real public Anthropic adapter, all retention modes, zero-dispatch HTTPS-only refusal, immutable identity and complete/stream conflicts. Broader regression and final committed-tree gate qualification is in progress. M1 adoption, the latest shared-prefix/reasoning behavior, CLI promotion and M7/M8 still require the released compatible Shikumi consumer; no milestone is marked complete by this partial work.
+Implementation handoff (2026-11-03 UTC): the published-release prerequisite is now reproduced with an isolated Cabal dry-run after refreshing the index, rather than inferred solely from descriptor text. See [release evidence](../evidence/baikai-execution/release-prerequisite.json) and FRIC-46. The target pair `baikai ==0.10.0.0` and `shikumi ==0.4.1.1` cannot resolve at `2026-11-02T23:00:00Z`; application pins remain unchanged. Independent M2/M3 work adds optional decision-binding endpoint/cache settings and forbids program overrides of pinned retention. All 52 focused decision checks pass through the isolated committed-descriptor project, including the real public Anthropic adapter, all retention modes, zero-dispatch HTTPS-only refusal, immutable identity and complete/stream conflicts. Broader regression passes core 666, agent 37, server 105, migration smoke 11, serial PostgreSQL 543 and serial worker 281 checks at source checkpoint `340fd633`. The committed-tree keiro gate passes 177 conformance assertions with a replay-neutral verdict and no generated drift. Migration schema isolation and strict friction validation pass. FRIC-47 accepts the established serial database-backed test profile after reproducing known parallel-fixture failures; the plan commands now specify it. M1 adoption, the latest shared-prefix/reasoning behavior, CLI promotion and M7/M8 still require the released compatible Shikumi consumer; no milestone is marked complete by this partial work.
 
 
 ## Surprises & Discoveries
@@ -134,7 +134,7 @@ The overall plan remains open. The application's pinned adapters are still the a
 
 The subsequent scope expansion adds structured-content persistence and TypeSafe application integration as M7 and M8. These remain unimplemented and unqualified. Neither a TypeSafe credential nor a remote judgment call was used while updating this document.
 
-The 2026-11-03 implementation delivers optional governed endpoint and retention configuration against the retained cohort, protects explicitly pinned retention, and fixes canonical API comparison for real decision terminals and shared compliance evaluation without rewriting recorded facts. The focused 52-case decision suite passes. FRIC-46 remains logged because the owning published Shikumi prerequisite is unresolved; no bound override, package promotion, journal codec change or new provider readiness claim is introduced. Broad regression results will be recorded at the final validation boundary.
+The 2026-11-03 implementation delivers optional governed endpoint and retention configuration against the retained cohort, protects explicitly pinned retention, and fixes canonical API comparison for real decision terminals and shared compliance evaluation without rewriting recorded facts. The focused 52-case decision suite passes. FRIC-46 remains logged because the owning published Shikumi prerequisite is unresolved; no bound override, package promotion, journal codec change or new provider readiness claim is introduced. Final current-cohort qualification at `340fd633` passes all six affected suites: core 666, agent 37, server 105, migration smoke 11, PostgreSQL 543 and workers 281. The committed-tree workflow gate passes with no drift, a replay-neutral verdict and 177 conformance assertions; migration isolation and strict friction validation pass. FRIC-47 is accepted with the documented serial qualification profile; the earlier parallel worker and PostgreSQL failures remain recorded as superseded attempts in [qualification.md](../evidence/baikai-execution/qualification.md). This validates the independent current-cohort changes only; the adopted-cohort, installed-role, Linux, structured-content, TypeSafe and live batch milestones remain open.
 
 
 ## Context and Orientation
@@ -335,17 +335,21 @@ qualification_project=$(python3 tools/qualification/prepare-project.py)
 nix develop --command cabal build all --enable-tests --dry-run --project-file="$qualification_project"
 nix develop --command cabal build all --enable-tests --project-file="$qualification_project"
 nix develop --command cabal test shikigami-core-test shikigami-agent-test \
-  shikigami-workers-test shikigami-server-test --project-file="$qualification_project"
-just keiro-gate
+  shikigami-workers-test shikigami-server-test -j1 \
+  --test-options=--num-threads=1 --project-file="$qualification_project"
+nix develop --command just keiro-gate
 bash tools/check-migration-schema-isolation.sh
 git diff --check
 ```
+
+Run these database-backed suites serially: `-j1` selects one Cabal suite at a time and `--num-threads=1` selects one case inside each suite. FRIC-38 and the repeated occurrence FRIC-47 show that concurrent Git fixtures can overrun their native executor deadlines. Keep those production/fixture deadlines unchanged. The workflow gate compares all source files with the commit, so run it after committing the candidate.
 
 Expected: all selected suites pass, no unapproved workflow change, only the documented historical migration exception, and no whitespace errors. For the 0.10 migration run disposable PostgreSQL suites as well, because pinned selection/digest and accepted-result recovery compatibility are part of upgrade acceptance:
 
 ```bash
 nix develop --command cabal test shikigami-core-postgres-test \
-  shikigami-migrations-smoke --project-file="$qualification_project"
+  shikigami-migrations-smoke -j1 --test-options=--num-threads=1 \
+  --project-file="$qualification_project"
 ```
 
 After exporting the actual solved `plan.json` with the existing exporter, verify all role packages:
@@ -435,9 +439,9 @@ After M7/M8 exist, run their focused deterministic consumer and restart checks f
 
 ```bash
 nix develop --command cabal test shikigami-core-test \
-  --project-file="$qualification_project" --test-options='-p TypeSafe'
+  --project-file="$qualification_project" --test-options='--num-threads=1 -p TypeSafe'
 nix develop --command cabal test shikigami-core-postgres-test \
-  --project-file="$qualification_project" --test-options='-p TypeSafe'
+  --project-file="$qualification_project" --test-options='--num-threads=1 -p TypeSafe'
 ```
 
 Expected: the local HTTP fixture observes the one-state closed-set request, raw provider selection and fractional score are preserved, the pinned rich derivation is correct, and restart replay adds zero HTTP calls. These suites provision their own disposable fixture/database; they require neither `TYPESAFE_API_KEY` nor a vendor account. Historical generative decision and transcript cases must still pass in the full suites.

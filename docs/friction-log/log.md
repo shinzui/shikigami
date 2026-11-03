@@ -1,6 +1,8 @@
 # Bundle Update Log
 
 ## 2026-11-03
+* **Update**: FRIC-47 accepted: Corrected plan 80 regression commands after reproducing the earlier Git-fixture contention and parallel PostgreSQL too-many-clients failures; serial rerun is the accepted qualification path.
+* **Addition**: FRIC-47 records detour tooling friction with mori://shinzui/shikigami: Plan 80 regression command repeats the parallel Git fixture deadline failure
 * **Addition**: FRIC-46 records blocked interface friction with mori://shinzui/shikumi/packages/shikumi: Published Shikumi descriptors exclude the required Baikai release
 
 ## 2026-11-02

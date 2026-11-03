@@ -1,9 +1,54 @@
-# Baikai execution qualification — 2026-10-06
+# Baikai execution qualification
 
-The HTTP and foreground implementation is qualified independently of batch CLI
-promotion. The tested source revision is
+The HTTP and foreground implementation was qualified on 2026-10-06 independently
+of batch CLI promotion. Its tested source revision is
 `9ce65b23daed965e62db61d0145cfd5006bcfd81`; immutable and installed checks pass.
 No live background reporter or service readiness is claimed.
+
+## Independent decision-binding changes — 2026-11-03 UTC
+
+Source checkpoint `340fd633` adds optional operator `base_url` and
+`cache_retention` settings for finite decision bindings. Omitted settings preserve
+the historical digest; endpoint/retention changes cannot replace a pinned binding.
+A node cannot override explicit retention, including `none`. The real Anthropic
+adapter loopback proof also exposed and corrected canonical API-name comparison
+in decision terminal validation and shared compliance evaluation. Stored raw
+evidence and existing profile API names remain unchanged.
+
+The isolated project was prepared with `tools/qualification/prepare-project.py`
+from the committed `cabal.project`, with no adjacent local override. The 52-case
+focused decision group passes, including configuration, retained bindings,
+complete/stream retention conflicts, and eight actual HTTP calls through the
+public Anthropic handler across omitted/none/short/long retention. HTTPS-only
+policy refuses the loopback plaintext endpoint before HTTP or attempt admission.
+Each admitted Predict node retains its own terminal receipt. The current adapter
+emits its existing top-level cache controls; no newer prefix placement or real
+cache hit is claimed.
+
+Broader checks pass: core 666, agent 37, server 105, migration smoke 11 and
+PostgreSQL 543 (187.84 seconds, serial) and workers 281 (183.18 seconds, serial).
+`nix develop --command just keiro-gate` passes against the committed source with
+177 conformance assertions, no generated drift and a replay-neutral verdict.
+Migration schema isolation and strict friction-log validation pass. The earlier
+parallel worker attempt failed 20 of 281 checks under known fixture deadline
+contention. The parallel PostgreSQL
+attempt failed 21 of 543 checks, including explicit `too many clients already`
+connection refusals. These superseded attempts are recorded under FRIC-47
+(accepted serial execution, consistent with FRIC-38); they require the existing
+serial recipe:
+
+```bash
+qualification_project=$(python3 tools/qualification/prepare-project.py)
+nix develop --command cabal test shikigami-workers-test shikigami-core-postgres-test \
+  -j1 --test-options=--num-threads=1 --project-file="$qualification_project"
+```
+
+[Release prerequisite evidence](release-prerequisite.json) separately reproduces
+the Baikai 0.10/Shikumi released-descriptor conflict. FRIC-46 remains unresolved.
+Application dependency pins are unchanged. This checkpoint does not qualify a
+new Baikai cohort, structured answers, TypeSafe, batch confinement, Linux runtime,
+new installed-role outputs or service readiness. October foreground/live evidence
+below remains attributable only to its recorded source and dependencies.
 
 ## Released contracts and deterministic checks
 
