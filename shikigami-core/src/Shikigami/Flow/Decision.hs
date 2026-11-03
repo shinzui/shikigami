@@ -16,13 +16,17 @@ module Shikigami.Flow.Decision
     emptyDecisionServices,
     DecisionEnv (..),
     runDecision,
+    runDecisionAccepted,
+    AcceptedDecisionHost (..),
+    pinnedDecisionPolicy,
     runDecisionDisabled,
   )
 where
 
 import Baikai.Provider.Registry (ApiProvider)
+import Control.Exception qualified as Exception
 import Control.Monad (unless, when)
-import Data.Aeson (FromJSON, Result (..), ToJSON, fromJSON, object, toJSON, (.=))
+import Data.Aeson (FromJSON, Result (..), ToJSON, Value, fromJSON, object, toJSON, (.=))
 import Data.IORef (atomicModifyIORef', newIORef)
 import Data.List (find)
 import Data.Typeable (Typeable)
@@ -33,22 +37,28 @@ import GHC.Generics (Generic)
 import Handan.Runtime (Runtime)
 import Keiro.Workflow (StepName (..), Workflow, WorkflowId (..), currentRunGeneration, currentWorkflow, step)
 import Keiro.Workflow qualified as Workflow
+import Kiroku.Store.Effect (Store)
 import Shikigami.Agent.Decl (AgentDecl)
+import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.Attestation.PolicyValue (mkCeiling)
 import Shikigami.Attestation.Resolve (ResolvedProfile)
 import Shikigami.Decision.Contract
 import Shikigami.Decision.Evidence
 import Shikigami.Decision.ModelCatalog
+import Shikigami.Execution.Driver qualified as Accepted
+import Shikigami.Execution.Executor (ExecutionRuntime)
+import Shikigami.Execution.Start qualified as Accepted
+import Shikigami.Execution.Transcript (ExecutionError)
 import Shikigami.Flow.Routing (RoutingRuntime (..))
 import Shikigami.Log.Correlation (runCorrelationId)
 import Shikigami.Program.Decision
-import Shikigami.Program.Decision.Examples (exampleCodecs, examplePrograms)
+import Shikigami.Program.Decision.Registry (decisionCodecs, decisionPrograms)
 import Shikigami.Program.DecisionRunner
 import Shikigami.Router.Catalog (CandidateCatalog)
 import Shikigami.Router.Decision (RouteDecision, validateRouteDecision)
 import Shikigami.Router.Declaration (RouterDeclarationView (policy), validateRouterDeclaration, validatedRouterDeclaration)
 
-data DecisionLabel = Triage | Investigation | Judgment
+data DecisionLabel = Triage | Investigation | Judgment | Adaptive
   deriving stock (Eq, Ord, Show)
 
 data DecisionStep i o = DecisionStep !DecisionLabel !(DecisionProgramRef i o)
@@ -63,10 +73,12 @@ slotLabel :: DecisionLabel -> DecisionSlotLabel
 slotLabel Triage = triageDecisionSlot
 slotLabel Investigation = investigationDecisionSlot
 slotLabel Judgment = judgmentDecisionSlot
+slotLabel Adaptive = either (error . show) id (parseDecisionSlotLabel "adapt")
 
 decisionStepNames :: DecisionLabel -> (StepName, StepName)
 decisionStepNames Triage = (StepName "decision-prepare-triage", StepName "decision-result-triage")
 decisionStepNames Investigation = (StepName "decision-prepare-investigate", StepName "decision-result-investigate")
+decisionStepNames Adaptive = (StepName "decision-prepare-adapt", StepName "decision-result-adapt")
 decisionStepNames Judgment = (StepName "decision-prepare-judge", StepName "decision-result-judge")
 
 data DecisionServices = DecisionServices
@@ -78,7 +90,7 @@ data DecisionServices = DecisionServices
   deriving stock (Generic)
 
 defaultDecisionServices :: ModelCatalog -> DecisionServices
-defaultDecisionServices catalog = DecisionServices catalog examplePrograms exampleCodecs decisionProviders
+defaultDecisionServices catalog = DecisionServices catalog decisionPrograms decisionCodecs decisionProviders
 
 emptyDecisionServices :: DecisionServices
 emptyDecisionServices = defaultDecisionServices (either (error . show) id (modelCatalog []))
@@ -96,7 +108,15 @@ data DecisionEnv = DecisionEnv
     afterStep :: !(StepName -> IO ())
   }
 
+-- Admission is a trusted process seam; it cannot be supplied by a Flow payload.
+data AcceptedDecisionHost = AcceptedDecisionHost
+  { execution :: !ExecutionRuntime,
+    identity :: !AgentIdentity,
+    admit :: !(PreparedDecision -> IO Value -> IO (Either ExecutionError Accepted.ExecutionStart))
+  }
+
 data Decision :: Effect where
+  PinnedDecisionPolicy :: Decision m DecisionPolicySnapshot
   Decide :: (Typeable i, Typeable o, ToJSON i, FromJSON i) => DecisionStep i o -> ModelAlias -> i -> Decision m o
   RefuseDecision :: DecisionFailure -> Decision m a
   InvestigationCatalog :: Decision m CandidateCatalog
@@ -119,15 +139,29 @@ validateInvestigationRoute catalog decision = send (ValidateInvestigationRoute c
 runDecisionDisabled :: Eff (Decision : es) a -> Eff es a
 runDecisionDisabled = interpret (\_ _ -> throwIO (DecisionAbort (decisionFailure InvalidSlot "decision capability is unavailable for this workflow")))
 
-runDecision :: (Workflow :> es, IOE :> es) => DecisionEnv -> Eff (Decision : es) a -> Eff es a
+pinnedDecisionPolicy :: (Decision :> es) => Eff es DecisionPolicySnapshot
+pinnedDecisionPolicy = send PinnedDecisionPolicy
+
+runDecision :: (Workflow :> es, Store :> es, IOE :> es) => DecisionEnv -> Eff (Decision : es) a -> Eff es a
 runDecision env action = do
   pinned <- journal env (StepName "decision-policy") (pure (resolvePolicy env.services.programs env.inventory env.services.catalog env.agent env.profile))
   policy <- either (throwIO . DecisionAbort) pure pinned
+  runDecisionUsing env Nothing policy action
+
+-- | Only the new adaptive call site uses accepted work. Its caller carries the
+-- original policy through generations; it cannot expand from live declarations.
+runDecisionAccepted :: (Workflow :> es, Store :> es, IOE :> es) => DecisionEnv -> AcceptedDecisionHost -> DecisionPolicySnapshot -> Eff (Decision : es) a -> Eff es a
+runDecisionAccepted env host policy = runDecisionUsing env (Just host) policy
+
+runDecisionUsing :: (Workflow :> es, Store :> es, IOE :> es) => DecisionEnv -> Maybe AcceptedDecisionHost -> DecisionPolicySnapshot -> Eff (Decision : es) a -> Eff es a
+runDecisionUsing env accepted policy action = do
   used <- liftIO (newIORef [])
   interpret
     ( \_ -> \case
+        PinnedDecisionPolicy -> pure policy
         RefuseDecision failure -> throwIO (DecisionAbort failure)
         Decide (DecisionStep label (_currentRef :: DecisionProgramRef i o)) alias input -> do
+          when (maybe False (const (label /= Adaptive)) accepted) (throwIO (DecisionAbort (decisionFailure InvalidSlot "accepted interpreter requires the adaptive slot")))
           when (label == Judgment) requireStructuredPatch
           repeated <- liftIO (atomicModifyIORef' used (\labels -> (label : labels, label `elem` labels)))
           when repeated (throwIO (DecisionAbort (decisionFailure InvalidSlot "decision slot repeated within one generation")))
@@ -165,47 +199,63 @@ runDecision env action = do
               Right (PreparedDecision identity (runCorrelationId workflowId) nativeWorkflowId checkedGeneration (slotLabel label) program (toJSON checked) selected policy.policy)
           prepared <- either (throwIO . DecisionAbort) pure preparedResult
           when (label /= Judgment && prepared.program.outputCapability == ClosedSetJudgment) requireStructuredPatch
-          outcome <- journal env resultName do
-            -- Only the action of an uncommitted result step may consult executables
-            -- or credential bindings. A completed step never enters this branch.
-            let pending :: Either DecisionFailure (DecisionProgramRef i o, i)
-                pending = do
-                  ref <- resolveProgramRef env.services.programs prepared.program
-                  storedInput <- case fromJSON prepared.input of
-                    Success value -> Right value
-                    Error _ -> Left (decisionFailure InvalidInput "pinned decision input codec is unavailable")
-                  pure (ref, storedInput)
-            (result, observations) <- case pending of
-              Left refusal -> pure (Left refusal, [])
-              Right (ref, storedInput) ->
+          outcome <- case accepted of
+            Just host -> do
+              submitted <- journal env (StepName "decision-submit-adapt") do
                 liftIO
-                  ( runDecisionProgramWithAnswers
-                      DecisionRuntime
-                        { runtime = env.runtime,
-                          programs = env.services.programs,
-                          catalog = env.services.catalog,
-                          profile = env.profile,
-                          hooks = decisionCallHooks env.evidence env.profile,
-                          providers = env.services.providers,
-                          timeoutMicros = env.timeoutMicros,
-                          callLimit = either (error . show) id (mkCeiling 64)
-                        }
-                      prepared
-                      ref
-                      storedInput
+                  ( host.admit prepared do
+                      registered <- either (Exception.throwIO . DecisionAbort) pure (lookupProgram env.services.programs =<< (resolveProgramRef env.services.programs prepared.program :: Either DecisionFailure (DecisionProgramRef i o)))
+                      pure (registeredParameterState registered)
                   )
-            reportResult <- liftIO (readDecisionReport env.evidence prepared.runId)
-            report <- either (throwIO . DecisionAbort) pure reportResult
-            let calls = maybe [] (filter (\call -> call.invocationId == prepared.identity) . (\stored -> stored.calls)) report
-            unless
-              (all (\call -> call.terminal /= Nothing) calls)
-              (throwIO (DecisionAbort (decisionFailure EvidenceFailure "decision has an unresolved provider expectation")))
-            committed <- case result of
-              Left refusal -> pure (Left refusal)
-              Right output -> do
-                codec <- either (throwIO . DecisionAbort) pure (lookupResultCodec @o env.services.codecs prepared.program)
-                pure (Right (encodeResult codec output))
-            pure (decisionOutcome prepared.identity prepared.program committed (map (\call -> call.callId) calls) observations)
+              start <- either (const (throwIO (DecisionAbort (decisionFailure EvidenceFailure "typed decision admission refused")))) pure submitted
+              completed <- Accepted.requestExecution host.execution start
+              journal env resultName do
+                loaded <- liftIO (Accepted.readExecutionResult host.execution host.identity completed)
+                value <- either (const (throwIO (DecisionAbort (decisionFailure EvidenceFailure "accepted typed decision result is unavailable")))) pure loaded
+                case fromJSON value of
+                  Success outcome -> pure outcome
+                  Error _ -> throwIO (DecisionAbort (decisionFailure UnsupportedVersion "accepted typed decision outcome codec is unavailable"))
+            Nothing -> journal env resultName do
+              -- Only the action of an uncommitted result step may consult executables
+              -- or credential bindings. A completed step never enters this branch.
+              let pending :: Either DecisionFailure (DecisionProgramRef i o, i)
+                  pending = do
+                    ref <- resolveProgramRef env.services.programs prepared.program
+                    storedInput <- case fromJSON prepared.input of
+                      Success value -> Right value
+                      Error _ -> Left (decisionFailure InvalidInput "pinned decision input codec is unavailable")
+                    pure (ref, storedInput)
+              (result, observations) <- case pending of
+                Left refusal -> pure (Left refusal, [])
+                Right (ref, storedInput) ->
+                  liftIO
+                    ( runDecisionProgramWithAnswers
+                        DecisionRuntime
+                          { runtime = env.runtime,
+                            programs = env.services.programs,
+                            catalog = env.services.catalog,
+                            profile = env.profile,
+                            hooks = decisionCallHooks env.evidence env.profile,
+                            providers = env.services.providers,
+                            timeoutMicros = env.timeoutMicros,
+                            callLimit = either (error . show) id (mkCeiling 64)
+                          }
+                        prepared
+                        ref
+                        storedInput
+                    )
+              reportResult <- liftIO (readDecisionReport env.evidence prepared.runId)
+              report <- either (throwIO . DecisionAbort) pure reportResult
+              let calls = maybe [] (filter (\call -> call.invocationId == prepared.identity) . (\stored -> stored.calls)) report
+              unless
+                (all (\call -> call.terminal /= Nothing) calls)
+                (throwIO (DecisionAbort (decisionFailure EvidenceFailure "decision has an unresolved provider expectation")))
+              committed <- case result of
+                Left refusal -> pure (Left refusal)
+                Right output -> do
+                  codec <- either (throwIO . DecisionAbort) pure (lookupResultCodec @o env.services.codecs prepared.program)
+                  pure (Right (encodeResult codec output))
+              pure (decisionOutcome prepared.identity prepared.program committed (map (\call -> call.callId) calls) observations)
           unless
             (outcome.preparationId == prepared.identity && outcome.program == prepared.program)
             (throwIO (DecisionAbort (decisionFailure ContractMismatch "decision outcome and preparation differ")))

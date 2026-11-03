@@ -255,7 +255,7 @@ dispatchRunJob env job = do
     ConversationRoute addressed -> runConversationAgent env job addressed
     AgentRunRoute -> runOneAgent env job
     ExecutionRoute reference ->
-      Executor.executeAcceptedAttempt (AgentWorkflow.executionRuntime (agentRunDeps env)) job.identity reference >>= \case
+      AgentWorkflow.executeAcceptedOperation (agentRunDeps env) job.identity reference >>= \case
         Right Executor.ExecutorDone -> pure Done
         Right Executor.ExecutorDeferred -> pure Done
         Right (Executor.ExecutorWait seconds) -> pure (Retry (RetryDelay (durationTime seconds)))

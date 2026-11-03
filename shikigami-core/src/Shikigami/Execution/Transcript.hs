@@ -36,7 +36,7 @@ import Shikigami.Attestation.Profile qualified as Profile
 import Shikigami.Attestation.Resolve (ResolvedProfile, ResolvedProfileView (..), resolvedProfileView)
 import Shikigami.Behavior.Provider.Coordinate
 import Shikigami.Capability.Overlay (ResolvedCapabilitySet)
-import Shikigami.Decision.Contract (versionedDigest)
+import Shikigami.Decision.Contract (DecisionOutcome, PreparedDecision, versionedDigest)
 import Shikigami.Execution.AssignmentKey (AssignmentKey)
 import Shikigami.Execution.Coordinate
 import Shikigami.Execution.Identity (OperationId, operationIdWithPrefix)
@@ -357,7 +357,16 @@ instance FromJSON ExecutionState where
     unless (state.format == V1 && revisionNumber state.cursor <= 10000) (fail "unsupported execution state version or cursor")
     pure state
 
-data OperationKind = ModelTurn | ToolOperation | ModelSummary | ModelRepair
+-- A typed program is prepared before admission. Its provider calls retain
+-- separate root receipts; the wrapper itself never bills a synthetic model call.
+data DecisionWork = DecisionWork
+  { prepared :: !PreparedDecision,
+    parameterState :: !Aeson.Value
+  }
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (ToJSON, FromJSON)
+
+data OperationKind = ModelTurn | ToolOperation | ModelSummary | ModelRepair | TypedDecision
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
@@ -450,6 +459,7 @@ data OperationOutcome
   | OperationDenied !Text
   | OperationUnresolved !Text
   | TerminalResult !Aeson.Value
+  | DecisionReturned !DecisionOutcome
   deriving stock (Eq, Generic)
   deriving anyclass (ToJSON, FromJSON)
 

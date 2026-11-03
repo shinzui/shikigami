@@ -60,7 +60,7 @@ import Shikigami.PracticeReview.Capability
   )
 import Shikigami.PracticeReview.Memory (PracticeReviewMemory)
 import Shikigami.Program.Decision qualified as Decision
-import Shikigami.Program.Decision.Examples (examplePrograms)
+import Shikigami.Program.Decision.Registry (decisionPrograms)
 import Shikigami.Router.Decision (RouteDecision (..), RouteOutcome (..), RouteSelection (..))
 import Shikigami.RuntimePolicy
 
@@ -297,4 +297,4 @@ flowDeclarationErrors declaration@AgentDecl {behavior} =
 -- The typed decision registry is finite and validated at construction. The
 -- example integration adds its immutable registrations here.
 decisionProgramRegistry :: Decision.ProgramRegistry
-decisionProgramRegistry = examplePrograms
+decisionProgramRegistry = decisionPrograms

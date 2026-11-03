@@ -8,6 +8,7 @@ module Shikigami.Program.DecisionRunner
     decisionProviders,
     runDecisionProgram,
     runDecisionProgramWithAnswers,
+    runDecisionProgramWithAccounting,
     streamDecisionProgramWithAnswers,
   )
 where
@@ -30,6 +31,7 @@ import Baikai.Response (Response (..), responseError)
 import Baikai.Stream (requireEvidenceOnTerminal)
 import Baikai.Stream.Event (AssistantMessageEvent (..), TerminalPayload (..))
 import Control.Applicative ((<|>))
+import Control.Concurrent.MVar (newMVar, withMVar)
 import Control.Exception (Exception, SomeAsyncException, SomeException, catch, fromException, throwIO, try)
 import Control.Lens ((&), (.~))
 import Control.Monad (unless, when)
@@ -94,18 +96,24 @@ runDecisionProgram :: (Typeable i, Typeable o, ToJSON i) => DecisionRuntime -> P
 runDecisionProgram env prepared ref input = fmap fst (runDecisionProgramWithAnswers env prepared ref input)
 
 runDecisionProgramWithAnswers :: (Typeable i, Typeable o, ToJSON i) => DecisionRuntime -> PreparedDecision -> DecisionProgramRef i o -> i -> IO (Either DecisionFailure o, [DecisionAnswer])
-runDecisionProgramWithAnswers = runWith CompleteDecision
+runDecisionProgramWithAnswers = runWith Nothing CompleteDecision
+
+-- | Accepted work owns one runtime permit. Serialize internal parallel nodes
+-- at the transport boundary so each actual call consumes that same permit.
+-- Root accounting still admits every retry/node independently.
+runDecisionProgramWithAccounting :: (Typeable i, Typeable o, ToJSON i) => (Model.Model -> Context -> Options -> IO DecisionCallHooks) -> DecisionRuntime -> PreparedDecision -> DecisionProgramRef i o -> i -> IO (Either DecisionFailure o, [DecisionAnswer])
+runDecisionProgramWithAccounting accounting = runWith (Just accounting) CompleteDecision
 
 -- | Use the released Shikumi streaming interpreter under the same admission,
 -- invocation-local provider registry and acknowledged terminal boundary. Atomic
 -- judgments emit status callbacks; their full raw answers are returned separately.
 streamDecisionProgramWithAnswers :: (Typeable i, Typeable o, ToJSON i) => DecisionRuntime -> PreparedDecision -> DecisionProgramRef i o -> i -> (ShikumiStream.StreamEvent -> IO ()) -> IO (Either DecisionFailure o, [DecisionAnswer])
-streamDecisionProgramWithAnswers env prepared ref input observe = runWith (StreamDecision observe) env prepared ref input
+streamDecisionProgramWithAnswers env prepared ref input observe = runWith Nothing (StreamDecision observe) env prepared ref input
 
 data DecisionExecution = CompleteDecision | StreamDecision (ShikumiStream.StreamEvent -> IO ())
 
-runWith :: (Typeable i, Typeable o, ToJSON i) => DecisionExecution -> DecisionRuntime -> PreparedDecision -> DecisionProgramRef i o -> i -> IO (Either DecisionFailure o, [DecisionAnswer])
-runWith execution env prepared ref input = do
+runWith :: (Typeable i, Typeable o, ToJSON i) => Maybe (Model.Model -> Context -> Options -> IO DecisionCallHooks) -> DecisionExecution -> DecisionRuntime -> PreparedDecision -> DecisionProgramRef i o -> i -> IO (Either DecisionFailure o, [DecisionAnswer])
+runWith accounting execution env prepared ref input = do
   answers <- newIORef []
   result <- case admission of
     Left refusal -> pure (Left refusal)
@@ -130,13 +138,17 @@ runWith execution env prepared ref input = do
         _ -> abort UnavailableModel "selected decision provider is unavailable or ambiguous"
       realRegistry <- newProviderRegistryFrom [handler]
       count <- newIORef (0 :: Natural)
+      actualHooks <- newIORef Map.empty
+      serial <- newMVar ()
       let begin model context nodeOptions = do
             effective <- finalOptions env binding model context nodeOptions
             unless (null (evidenceRefusals handler model effective)) (abort ForbiddenModel "provider cannot uphold required decision evidence")
             ordinal <- atomicModifyIORef' count (\n -> (n + 1, n + 1))
             let localLimit = maybe (ceilingValue env.callLimit) (min (ceilingValue env.callLimit) . fromIntegral . ceilingValue) (env.profile >>= (\p -> (resolvedProfileView p).profile.limits.maxCalls))
             when (ordinal > localLimit) (abort CallLimitExceeded "decision provider call limit exceeded")
-            token <- callback (env.hooks.beginCall (DecisionCallContext prepared prepared.model))
+            hooks <- maybe (pure env.hooks) (\make -> make model context effective) accounting
+            token <- callback (hooks.beginCall (DecisionCallContext prepared prepared.model))
+            atomicModifyIORef' actualHooks (\stored -> (Map.insert (attemptId token) hooks stored, ()))
             let correlation = callCorrelationId prepared.runId (decisionCallIdText (attemptId token)) 0
                 minimumStrength = maybe Evidence.EvidenceRequestedOnly (\p -> (resolvedProfileView p).profile.minimumEvidenceStrength) env.profile
                 correlated = configureEvidenceCall prepared.runId correlation (decisionCallOrdinalNumber (attemptOrdinal token)) Nothing minimumStrength effective
@@ -152,7 +164,8 @@ runWith execution env prepared ref input = do
             unless (null (evidenceRefusals handler model options)) (abort ForbiddenModel "final decision evidence request was refused")
             pure (token, options)
           finish token status evidence = do
-            _ <- callback (env.hooks.finishCall token status evidence)
+            hooks <- readIORef actualHooks >>= maybe (abort EvidenceFailure "actual decision accounting is unavailable") pure . Map.lookup (attemptId token)
+            _ <- callback (hooks.finishCall token status evidence)
             when (status == CallSucceeded && not (isJust evidence)) (abort EvidenceFailure "decision provider terminal evidence is missing")
             case evidence of
               Just terminal | status == CallSucceeded -> do
@@ -182,7 +195,10 @@ runWith execution env prepared ref input = do
                               else (next, True)
                     )
                 unless accepted (abort OutputDecodeFailure "structured answers exceed retained invocation bounds")
-          complete model context options = do
+          complete model context options = case accounting of
+            Nothing -> completeActual model context options
+            Just _ -> withMVar serial (\_ -> completeActual model context options)
+          completeActual model context options = do
             (token, effective) <- begin model context options
             response <- transportException token (completeRequestWith realRegistry model context effective)
             finish token (if isJust (responseError response) then CallFailed else CallSucceeded) response.evidence

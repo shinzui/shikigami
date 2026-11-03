@@ -9,6 +9,7 @@ module Shikigami.Execution.Executor
     BoundTool (..),
     ExecutorResult (..),
     executeAcceptedAttempt,
+    executeAcceptedAttemptWithDecision,
     runExecutionStore,
     modelContext,
   )
@@ -34,7 +35,7 @@ import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.App (AppEffects, AppEnv, runAppIO)
 import Shikigami.Behavior.Compatibility (validateResponseRequest)
 import Shikigami.Behavior.Run (BehaviorEnv (..), completeBehaviorRequest)
-import Shikigami.Decision.Contract (versionedDigest)
+import Shikigami.Decision.Contract (DecisionOutcome, versionedDigest)
 import Shikigami.Duration
 import Shikigami.Execution.Attempt qualified as Attempt
 import Shikigami.Execution.Claim
@@ -77,7 +78,12 @@ runExecutionStore :: ExecutionRuntime -> Eff AppEffects (Either ExecutionError a
 runExecutionStore env action = runAppIO env.appEnv action <&> either (const (Left ExecutionStorageUnavailable)) id
 
 executeAcceptedAttempt :: ExecutionRuntime -> AgentIdentity -> Attempt.JobReference -> IO (Either ExecutionError ExecutorResult)
-executeAcceptedAttempt env@ExecutionRuntime {withTools} identity reference = do
+executeAcceptedAttempt = executeAcceptedAttemptWithDecision (\_ _ _ -> pure (Left (ExecutionPolicyRefused "typed decision executor is unavailable")))
+
+-- | The typed runner receives the complete pinned work and an exact live claim
+-- check. Long provider work runs outside transactions and workflow advances.
+executeAcceptedAttemptWithDecision :: (ExecutionSnapshot -> DecisionWork -> IO (Either Text ()) -> IO (Either ExecutionError DecisionOutcome)) -> ExecutionRuntime -> AgentIdentity -> Attempt.JobReference -> IO (Either ExecutionError ExecutorResult)
+executeAcceptedAttemptWithDecision runDecision env@ExecutionRuntime {withTools} identity reference = do
   now <- getCurrentTime
   metadata <- runExecutionStore env (Store.inspectExecution reference.executionId)
   attempt <- runExecutionStore env (Store.inspectExecutionAttempt reference.attemptId)
@@ -189,6 +195,17 @@ executeAcceptedAttempt env@ExecutionRuntime {withTools} identity reference = do
         Left err -> pure (Left err)
         Right Nothing -> pure (Left OperationMissing)
         Right (Just operation) -> case operation.specification.kind of
+          TypedDecision -> do
+            loaded <- owned (Store.readReplayPayload @DecisionWork access "operation-input" operation.input)
+            case loaded of
+              Left err -> pure (Left err)
+              Right work ->
+                runDecision snapshot work (dispatchAuthority access snapshot lease) >>= \case
+                  Left _ -> denied access lease "typed decision execution refused"
+                  Right decision -> do
+                    let outcome = DecisionReturned decision
+                    ref <- either (Exception.throwIO . userError . show) pure (Store.outcomeReference outcome)
+                    commit access lease (Attempt.AttemptResult outcome (NeedValidation ref) Nothing)
           ToolOperation -> dispatchTool access snapshot lease operation
           _ -> dispatchModel access snapshot lease operation
     dispatchModel access snapshot lease operation = do

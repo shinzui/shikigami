@@ -5,6 +5,7 @@ module Shikigami.Decision.Evidence
     postgresDecisionEvidenceStore,
     ensureInvocation,
     decisionCallHooks,
+    decisionCallHooksWithAccounting,
     DecisionEvidenceReport (..),
     StoredDecisionCall (..),
     readDecisionReport,
@@ -164,14 +165,25 @@ ensureTx profile prepared = do
             if raw == toJSON binding && actualBinding == binding then Right () else refuse ContractMismatch "decision invocation immutable binding conflicts"
 
 decisionCallHooks :: DecisionEvidenceStore -> Maybe ResolvedProfile -> DecisionCallHooks
-decisionCallHooks store profile = DecisionCallHooks begin finish
+decisionCallHooks store profile = decisionCallHooksWithAccounting store profile (\_ _ -> pure (pure (Right ()))) (\_ _ _ -> pure (Right ()))
+
+-- | Compose actual-call admission/settlement with the evidence owner's writes.
+-- The outer accounting transaction runs first to preserve root-before-run lock
+-- order. Any refusal condemns the entire transaction, including both owners.
+-- Allocation is performed before entering retryable SQL.
+decisionCallHooksWithAccounting :: DecisionEvidenceStore -> Maybe ResolvedProfile -> (AttemptToken -> DecisionCallContext -> IO (Tx.Transaction (Either DecisionFailure ()))) -> (AttemptToken -> CallTerminal -> Maybe Baikai.ModelCallEvidence -> Tx.Transaction (Either DecisionFailure ())) -> DecisionCallHooks
+decisionCallHooksWithAccounting store profile allocate settle = DecisionCallHooks begin finish
   where
     begin context = do
       -- Entity allocation is outside retryable SQL transactions. Run ordinal and
       -- expectation commit together under the database lock.
       token <- newAttemptToken firstDecisionCallOrdinal
+      admission <- allocate token context
       transaction store do
-        ensured <- ensureTx profile context.prepared
+        admitted <- admission
+        ensured <- case admitted of
+          Left err -> pure (Left err)
+          Right () -> ensureTx profile context.prepared
         case ensured of
           Left err -> pure (Left err)
           Right () -> do
@@ -203,6 +215,11 @@ decisionCallHooks store profile = DecisionCallHooks begin finish
                         -- Preserve the allocated ID while assigning the serialized ordinal.
                         pure (Right (withAttemptOrdinal ordinal token))
     finish token terminal evidence = transaction store do
+      settled <- settle token terminal evidence
+      case settled of
+        Left err -> Tx.condemn >> pure (Left err)
+        Right () -> finishEvidence token terminal evidence
+    finishEvidence token terminal evidence = do
       found <- Tx.statement (decisionCallIdText (attemptId token)) findAttemptForUpdate
       case found of
         Nothing -> pure (refuse EvidenceFailure "unknown decision attempt")
@@ -330,7 +347,14 @@ listDecisionCallsTx runId after limit = do
 
 transaction :: DecisionEvidenceStore -> Tx.Transaction (Either DecisionFailure a) -> IO (Either DecisionFailure a)
 transaction (DecisionEvidenceStore pool) tx = do
-  result <- Pool.use pool (Sessions.transaction Sessions.ReadCommitted Sessions.Write tx)
+  result <-
+    Pool.use
+      pool
+      ( Sessions.transaction Sessions.ReadCommitted Sessions.Write do
+          result <- tx
+          case result of Left _ -> Tx.condemn; Right _ -> pure ()
+          pure result
+      )
   pure (either (const (refuse EvidenceFailure "decision evidence persistence is unavailable")) id result)
 
 decode :: (FromJSON a) => Value -> Either DecisionFailure a

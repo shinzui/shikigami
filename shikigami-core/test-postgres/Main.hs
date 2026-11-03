@@ -5,6 +5,7 @@ import Shikigami.AgentRun.LedgerSpec qualified as LedgerSpec
 import Shikigami.AgentWorkflowSpec qualified as AgentWorkflowSpec
 import Shikigami.AppSpec qualified as AppSpec
 import Shikigami.DecisionEvidenceSpec qualified as DecisionEvidenceSpec
+import Shikigami.DecisionExecutionSpec qualified as DecisionExecutionSpec
 import Shikigami.DecisionWorkflowSpec qualified as DecisionWorkflowSpec
 import Shikigami.DelegationBudgetSpec qualified as DelegationBudgetSpec
 import Shikigami.DirectoryStoreSpec qualified as DirectoryStoreSpec
@@ -57,6 +58,7 @@ suite = withShikigamiMigratedSuite \databaseFixture ->
           ObjectiveWorkflowSpec.tests databaseFixture,
           LedgerSpec.tests databaseFixture,
           AgentWorkflowSpec.tests databaseFixture,
+          DecisionExecutionSpec.tests databaseFixture,
           DecisionEvidenceSpec.tests databaseFixture,
           DecisionWorkflowSpec.tests databaseFixture,
           TypeSafeDecisionWorkflowSpec.tests databaseFixture,

@@ -101,9 +101,11 @@ library
     Shikigami.Coordination.Proposal
     Shikigami.Coordination.Sql
     Shikigami.Coordination.Validate
+    Shikigami.Decision.Accounting
     Shikigami.Decision.Answer
     Shikigami.Decision.Contract
     Shikigami.Decision.Evidence
+    Shikigami.Decision.Execution
     Shikigami.Decision.ModelAlias
     Shikigami.Decision.ModelCatalog
     Shikigami.Decision.StubProvider
@@ -237,8 +239,10 @@ library
     Shikigami.PracticeReview.Memory
     Shikigami.Prelude
     Shikigami.Program.Decision
+    Shikigami.Program.Decision.Adaptive
     Shikigami.Program.Decision.Examples
     Shikigami.Program.Decision.JudgmentExample
+    Shikigami.Program.Decision.Registry
     Shikigami.Program.DecisionRunner
     Shikigami.Program.Registry
     Shikigami.Repository
@@ -648,6 +652,7 @@ test-suite shikigami-core-postgres-test
     Shikigami.AgentWorkflowSpec
     Shikigami.AppSpec
     Shikigami.DecisionEvidenceSpec
+    Shikigami.DecisionExecutionSpec
     Shikigami.DecisionWorkflowSpec
     Shikigami.DelegationBudgetSpec
     Shikigami.DirectoryStoreSpec

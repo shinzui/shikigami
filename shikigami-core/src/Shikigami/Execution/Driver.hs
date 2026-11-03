@@ -24,7 +24,7 @@ import Data.Map.Strict qualified as Map
 import Data.Maybe (listToMaybe)
 import Data.Text qualified as Text
 import Data.Time (diffUTCTime)
-import Effectful (Eff, IOE, runEff)
+import Effectful (Eff, IOE, runEff, (:>))
 import Effectful.Error.Static (Error, runErrorNoCallStack, throwError, tryError)
 import Effectful.Exception (throwIO)
 import Keiro.Workflow (StepName (..), Workflow, WorkflowJournalEvent (..), appendJournalEntry, continueAsNew, currentRunGeneration, restoreSeed, step)
@@ -32,6 +32,7 @@ import Keiro.Workflow.Awakeable (cancelAwakeable)
 import Keiro.Workflow.Child (awaitChild, spawnChild)
 import Keiro.Workflow.Resume (WorkflowDef (..), WorkflowRegistry)
 import Kioku.Id (SessionId)
+import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Agent.Approval (ApprovalChannel (ViaDanwa), ApprovalDecision (..), ApprovalRequest (..))
 import Shikigami.Agent.Approval.Workflow qualified as Approval
@@ -87,7 +88,7 @@ data ExecutionAction
 executionRegistry :: ExecutionRuntime -> WorkflowRegistry AppEffects
 executionRegistry runtime = Map.singleton Generated.workflowName (WorkflowDef \_ -> executionWorkflow runtime Nothing)
 
-requestExecution :: ExecutionRuntime -> ExecutionStart -> Eff (Workflow : AppEffects) ExecutionDriverResult
+requestExecution :: (Workflow :> es, Store :> es, IOE :> es) => ExecutionRuntime -> ExecutionStart -> Eff es ExecutionDriverResult
 requestExecution _runtime start = do
   let workflowId = executionWorkflowId start.executionId
   child <- spawnChild Generated.workflowName workflowId (pure (ExecutionDriverResult start.executionId Failed Nothing (Just ExecutionMissing)))
@@ -211,6 +212,7 @@ decide runtime start wake = do
                 NeedValidation ref -> do
                   outcome <- checked (owned (Store.readReplayPayload @OperationOutcome access "operation-outcome" ref))
                   case outcome of
+                    DecisionReturned decision -> checked (owned (Store.finishExecution access fresh.revision (toJSON decision))) >> pure RotateExecution
                     ModelReturned assistant _ -> case validateTerminalOutput snapshot.policy assistant of
                       Right value -> checked (owned (Store.finishExecution access fresh.revision value)) >> pure RotateExecution
                       Left _ | not (repairLimitReached fresh.repairs snapshot.policy.outputRepairs) -> admitModel access snapshot fresh ModelRepair
@@ -287,16 +289,19 @@ decide runtime start wake = do
       | otherwise = do
           attemptId <- liftIO newAttemptId
           (request, prepared) <-
-            if operation.specification.kind == ToolOperation
-              then do
-                input <- checked (owned (Store.readReplayPayload @ToolOperationInput access "operation-input" operation.input))
-                pure (Store.toolAttemptRequest attemptId operation.specification.operationId input.binding, Nothing)
-              else do
-                input <- checked (owned (Store.readReplayPayload @ModelOperationInput access "operation-input" operation.input))
-                context <- either throwError pure (modelContext snapshot operation input)
-                result <- liftIO (preparePinnedExecutionCall (runtime.selectionRuntime snapshot) snapshot.selection operation.specification.operationId attemptId context (policyNumber <$> input.maxOutputTokens))
-                (request, prepared) <- either (throwError . ExecutionPolicyRefused) pure result
-                pure (request, Just prepared)
+            if operation.specification.kind == TypedDecision
+              then pure (Store.decisionAttemptRequest attemptId operation.specification.operationId, Nothing)
+              else
+                if operation.specification.kind == ToolOperation
+                  then do
+                    input <- checked (owned (Store.readReplayPayload @ToolOperationInput access "operation-input" operation.input))
+                    pure (Store.toolAttemptRequest attemptId operation.specification.operationId input.binding, Nothing)
+                  else do
+                    input <- checked (owned (Store.readReplayPayload @ModelOperationInput access "operation-input" operation.input))
+                    context <- either throwError pure (modelContext snapshot operation input)
+                    result <- liftIO (preparePinnedExecutionCall (runtime.selectionRuntime snapshot) snapshot.selection operation.specification.operationId attemptId context (policyNumber <$> input.maxOutputTokens))
+                    (request, prepared) <- either (throwError . ExecutionPolicyRefused) pure result
+                    pure (request, Just prepared)
           now <- liftIO getCurrentTime
           (_, accepted) <- checked (owned ((case retired of Nothing -> Store.submitExecutionAttemptWith; Just old -> \permit revision -> Store.recoverExecutionAttemptWith permit revision old) access state.revision (Attempt.AttemptSubmission request prepared wake) (enqueue now snapshot.identity snapshot.agent)))
           pure (ObserveExecution (Attempt.JobReference V1 start.executionId accepted.operationId accepted.request.attemptId))

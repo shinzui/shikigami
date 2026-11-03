@@ -1,4 +1,5 @@
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE RankNTypes #-}
 
 -- | Immutable typed programs, separate from the unrestricted legacy Task registry.
 module Shikigami.Program.Decision
@@ -22,6 +23,7 @@ module Shikigami.Program.Decision
     ProgramRegistry,
     programRegistry,
     lookupProgram,
+    withPreparedProgram,
     resolveProgramRef,
     programDescriptors,
     SomeResultCodec (..),
@@ -210,7 +212,7 @@ validateResult :: RegisteredProgram i o -> o -> Either DecisionFailure o
 validateResult registered = either (const (Left (decisionFailure OutputValidationFailure "decision result rejected"))) Right . registered.resultValidator
 
 data SomeProgram where
-  SomeProgram :: (Typeable i, Typeable o) => RegisteredProgram i o -> SomeProgram
+  SomeProgram :: (Typeable i, Typeable o, ToJSON i, FromJSON i) => RegisteredProgram i o -> SomeProgram
 
 newtype ProgramRegistry = ProgramRegistry [SomeProgram]
 
@@ -268,3 +270,21 @@ resolveProgramRef registry pinned = do
   let ref = DecisionProgramRef pinned
   _ <- lookupProgram registry ref
   pure ref
+
+-- | Dispatch queued work by its complete immutable descriptor and retained JSON
+-- input. The existential preserves the registered input/output witnesses.
+withPreparedProgram :: ProgramRegistry -> PreparedDecision -> (forall i o. (Typeable i, Typeable o, ToJSON i) => RegisteredProgram i o -> i -> IO (Either DecisionFailure Value)) -> IO (Either DecisionFailure Value)
+withPreparedProgram (ProgramRegistry entries) prepared use = go entries
+  where
+    go [] = pure (Left (decisionFailure UnavailablePinnedImplementation "pinned decision implementation is unavailable"))
+    go (SomeProgram registered : rest)
+      | actual.programId /= prepared.program.programId || actual.version /= prepared.program.version = go rest
+      | actual /= prepared.program = pure (Left (decisionFailure ContractMismatch "queued program differs from immutable registration"))
+      | otherwise = case fromJSON prepared.input of
+          Error _ -> pure (Left (decisionFailure InvalidInput "queued decision input codec is unavailable"))
+          Success input -> case validateInput registered input of
+            Left err -> pure (Left err)
+            Right checked | toJSON checked == prepared.input -> use registered checked
+            Right _ -> pure (Left (decisionFailure ContractMismatch "queued input differs after validation"))
+      where
+        actual = descriptor (programRef registered)

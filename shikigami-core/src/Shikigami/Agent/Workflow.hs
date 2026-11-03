@@ -9,6 +9,7 @@
 module Shikigami.Agent.Workflow
   ( AgentRunDeps (..),
     executionRuntime,
+    executeAcceptedOperation,
     workerSessionRuntime,
     AgentRunFailure (..),
     agentRunFailureDetail,
@@ -107,6 +108,7 @@ import Shikigami.Agent.RunFailure (AgentRunFailure (..), agentRunFailureDetail)
 import Shikigami.Agent.RunJob (RunJob (..), runJobWorkflowId)
 import Shikigami.Agent.Workflow.Name (agentRunWorkflowName, ingestJobStepName)
 import Shikigami.App (AppEffects, AppEnv (..), runAppIO)
+import Shikigami.Attestation.PolicyValue qualified as DecisionLimits
 import Shikigami.Attestation.Profile (ProfileId (..), ProfileVersion (..))
 import Shikigami.Attestation.Resolve (ProfileResolutionError, ResolvedProfile, ResolvedProfileView (..), renderProfileResolutionError, resolvedProfileView)
 import Shikigami.Behavior.Error (RunError, TransientBehaviorFailure (..), boundedBehaviorDetail)
@@ -127,10 +129,12 @@ import Shikigami.Capability.Provider
 import Shikigami.Decision.Contract (renderDecisionFailure)
 import Shikigami.Decision.Contract qualified as DecisionContract
 import Shikigami.Decision.Evidence qualified as DecisionEvidence
+import Shikigami.Decision.Execution qualified as DecisionExecution
 import Shikigami.Decision.ModelCatalog qualified as ModelCatalog
 import Shikigami.Directory (DirectoryHandle)
 import Shikigami.Directory qualified as Directory
 import Shikigami.Duration
+import Shikigami.Execution.Attempt qualified as ExecutionAttempt
 import Shikigami.Execution.Driver qualified as ExecutionDriver
 import Shikigami.Execution.Executor qualified as Executor
 import Shikigami.Execution.Policy.Types qualified as Harness
@@ -167,6 +171,7 @@ import Shikigami.PracticeReview.Capability qualified as PracticeReview
 import Shikigami.PracticeReview.Memory qualified as PracticeReviewMemory
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.Program.DecisionRunner (DecisionAbort (..))
+import Shikigami.Program.DecisionRunner qualified as DecisionRunner
 import Shikigami.RuntimePolicy (defaultModelRequired)
 import Shikigami.Sink (DanwaConfig, DeliveryGuard (..), GrantSource, KanmonConfig, KawaConfig, KizashiConfig, ReiConfig, SinkContext (..), SinkOutcome (..), SinkResult (..), dispatch, sinkKindOf)
 import Shikigami.Sink.Delivery qualified as Delivery
@@ -518,6 +523,29 @@ executionRuntime deps =
     }
   where
     authority (snapshot :: Execution.ExecutionSnapshot) = SelectionRuntime.currentExecutionAuthority (Directory.identityLifecycleAdmission (depsDirectory deps) snapshot.identity) snapshot.sanctionedProfile deps.resolveRunProfile
+
+-- Typed decisions are queue work, never a long workflow step. This compatible
+-- executor entry point keeps the original runtime constructor for other callers.
+executeAcceptedOperation :: AgentRunDeps -> AgentIdentity -> ExecutionAttempt.JobReference -> IO (Either Execution.ExecutionError Executor.ExecutorResult)
+executeAcceptedOperation deps identity reference =
+  Executor.executeAcceptedAttemptWithDecision runTyped (executionRuntime deps) identity reference
+  where
+    runTyped snapshot work authorize = case deps.deliveryPool of
+      Nothing -> pure (Left Execution.ExecutionStorageUnavailable)
+      Just pool -> do
+        let evidence = DecisionEvidence.postgresDecisionEvidenceStore pool
+            runtime =
+              DecisionRunner.DecisionRuntime
+                { runtime = deps.behaviorEnv.runtime,
+                  programs = deps.decisions.programs,
+                  catalog = deps.decisions.catalog,
+                  profile = snapshot.sanctionedProfile,
+                  hooks = DecisionEvidence.decisionCallHooks evidence snapshot.sanctionedProfile,
+                  providers = deps.decisions.providers,
+                  timeoutMicros = either (error . show) id (DecisionContract.parseDecisionTimeout (max 1 (floor (durationTime deps.runTimeout * 1000000)))),
+                  callLimit = either (error . show) id (DecisionLimits.mkCeiling 64)
+                }
+        DecisionExecution.executeDecisionWork evidence (const runtime) snapshot work authorize
 
 executionTools :: AgentRunDeps -> ExecutionTools.NativeToolFactory
 -- Accepted execution bindings determine which coordination scope is reacquired.

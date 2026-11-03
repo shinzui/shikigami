@@ -18,6 +18,7 @@ module Shikigami.Execution.Store
     readReplayPayload,
     acceptOperation,
     submitExecutionAttemptWith,
+    decisionAttemptRequest,
     recoverExecutionAttemptWith,
     toolAttemptRequest,
     inspectExecutionAttempt,
@@ -90,7 +91,7 @@ import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Agent.Approval (ApprovalDecision (..), ReviewRequestId, reviewRequestIdFor)
 import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.App (CommandEffects, commandOptions)
-import Shikigami.Decision.Contract (ModelDescriptor, versionedDigest)
+import Shikigami.Decision.Contract (DecisionOutcome (..), ModelDescriptor, PreparedDecision (..), ProgramDescriptor (..), programParameterDigest, versionedDigest)
 import Shikigami.Execution.AssignmentKey (AssignmentKey)
 import Shikigami.Execution.Attempt qualified as Attempt
 import Shikigami.Execution.Capacity qualified as Capacity
@@ -470,6 +471,9 @@ resolveOperationControlPermission identity execution expected operation review d
 
 checkedOperationInput :: ReplayAccess -> ExecutionBinding -> ExecutionState -> ExecutionSnapshot -> OperationSpec -> Aeson.Value -> ExecutionCheck ()
 checkedOperationInput access binding state snapshot specification input = case specification.kind of
+  TypedDecision -> do
+    work <- checkedDecode @DecisionWork input
+    unless (state.next == NeedModel && state.cursor == initialRevision && programParameterDigest work.parameterState == work.prepared.program.parameterDigest && work.prepared.model == snapshot.selection.descriptor && work.prepared.policy == snapshot.selection.profile && work.prepared.workflowId == snapshot.runId && null snapshot.toolBindings) (throwE OperationConflict)
   ToolOperation -> do
     tool <- checkedDecode @ToolOperationInput input
     unless (state.next == NeedTool tool.response tool.position && specification.responsePosition == Just tool.position && specification.name == tool.invocation.name && specification.name == tool.binding.name && specification.recovery == tool.binding.recovery && specification.scopeDigest == toolScopeDigest tool.binding) (throwE OperationConflict)
@@ -565,6 +569,7 @@ submitAttempt retired access@(ReplayAccess execution _ _) expected submission en
             (_, pending) <- Tx.statement (operationKey operation.specification.operationId) executionAttemptInventory
             when pending (abort AttemptConflict)
           receipt <- case (operation.specification.kind, submission.modelCall) of
+            (TypedDecision, Nothing) -> pure Nothing
             (ToolOperation, Nothing) -> do
               void (readPayload @ToolOperationInput access actualBinding "operation-input" operation.input)
               forM_ actualBinding.rootId \rootId -> do
@@ -900,7 +905,7 @@ abandonExecutionAttempt access@(ReplayAccess execution _ _) expected reference =
               receipt = Attempt.AttemptResult (OperationDenied "attempt refused before dispatch") state.next (terminal <$ current.call)
           case current.call of
             Just call -> Calls.finishSelectionCallTx call terminal >>= either (abort . ResourceAdmissionRefused . Text.pack . show) (const (pure ()))
-            Nothing -> forM_ actualBinding.rootId \root -> Roots.settleAttemptTx root current.request.attemptId (Resources.KnownUsage zeroModelBilling) >>= either (abort . ResourceAdmissionRefused . Text.pack . show) (const (pure ()))
+            Nothing -> settleWrapperAttempt actualBinding current (Resources.KnownUsage zeroModelBilling)
           ref <- writePayload execution (envelope "attempt-result" (toJSON receipt))
           releaseCapacity current
           saveAttempt (current & #phase .~ Attempt.AttemptAbandoned & #outcome .~ Just ref)
@@ -924,7 +929,7 @@ completeExecutionAttempt access@(ReplayAccess execution _ _) expected claim resu
         unless (claimMatches claim current && current.phase == Attempt.DispatchStarted && maybe False (now <) current.expiresAt) (abort AttemptClaimLost)
         case result.outcome of OperationUnresolved {} -> abort AttemptConflict; _ -> pure ()
         (_, binding) <- getExecution execution
-        when (isNothing previous.call) $ forM_ binding.rootId \root -> Roots.settleAttemptTx root previous.request.attemptId (toolSettlement previous.request) >>= either (abort . ResourceAdmissionRefused . Text.pack . show) (const (pure ()))
+        when (isNothing previous.call) (settleWrapperAttempt binding previous (toolSettlement previous.request))
         actual <- writePayload execution body
         unless (actual == ref) (abort CorruptReplay)
         releaseCapacity current
@@ -957,7 +962,7 @@ markExecutionAttemptUncertain access@(ReplayAccess execution _ _) expected claim
         current <- getAttempt claim.reference
         unless (claimMatches claim current && current.phase == Attempt.DispatchStarted) (abort AttemptClaimLost)
         (_, binding) <- getExecution execution
-        when (isNothing current.call) $ forM_ binding.rootId \root -> Roots.settleAttemptTx root current.request.attemptId (Resources.UnknownUsage "executor dispatch outcome is unavailable") >>= either (abort . ResourceAdmissionRefused . Text.pack . show) (const (pure ()))
+        when (isNothing current.call) (settleWrapperAttempt binding current (Resources.UnknownUsage "executor dispatch outcome is unavailable"))
         unknownRef <- require (outcomeReference (OperationUnresolved "executor dispatch outcome is unavailable"))
         saveAttempt (current & #phase .~ Attempt.AttemptUncertain & #uncertainty .~ Just unknownRef)
         pure (Right ())
@@ -1069,6 +1074,7 @@ recordSupersededReceipt access@(ReplayAccess execution _ _) expected claim recei
 checkedAttemptReceipt :: Operation -> Attempt.AttemptResult -> ExecutionCheck ()
 checkedAttemptReceipt operation receipt = do
   case receipt.outcome of
+    DecisionReturned {} -> unless (operation.specification.kind == TypedDecision && isNothing receipt.accounting) (throwE AttemptConflict)
     ModelReturned {} -> unless (operation.specification.kind `elem` [ModelTurn, ModelRepair, ModelSummary] && isJust receipt.accounting) (throwE AttemptConflict)
     RichToolReturned {} -> unless (operation.specification.kind == ToolOperation && isNothing receipt.accounting) (throwE AttemptConflict)
     ToolReturned {} -> unless (operation.specification.kind == ToolOperation && isNothing receipt.accounting) (throwE AttemptConflict)
@@ -1080,7 +1086,9 @@ settleRetainedReceipt :: ExecutionBinding -> Attempt.ExecutionAttempt -> Attempt
 settleRetainedReceipt binding attempt receipt = do
   case (attempt.call, receipt.accounting) of
     (Just call, Just terminal) -> Calls.reconcileSelectionCallTx call terminal >>= either (abort . ResourceAdmissionRefused . Text.pack . show) (const (pure ()))
-    (Nothing, Nothing) -> forM_ binding.rootId \root -> Roots.reconcileSettlementTx root attempt.request.attemptId (toolSettlement attempt.request) >>= either (abort . ResourceAdmissionRefused . Text.pack . show) (const (pure ()))
+    (Nothing, Nothing) -> do
+      operation <- readRows (operationKey attempt.operationId) lockOperation >>= maybe (abort OperationMissing) pure
+      unless (operation.specification.kind == TypedDecision) $ forM_ binding.rootId \root -> Roots.reconcileSettlementTx root attempt.request.attemptId (toolSettlement attempt.request) >>= either (abort . ResourceAdmissionRefused . Text.pack . show) (const (pure ()))
     _ -> abort AttemptConflict
   releaseCapacity attempt
 
@@ -1194,7 +1202,12 @@ recordOutcomeAndAdvanceWith access@(ReplayAccess execution _ _) expected operati
               result <- persistGuarded execution command precondition do
                 -- The precondition retains root/execution/operation row locks.
                 -- Reread transaction-local state rather than retaining callback cells.
-                (state, _) <- getExecution execution
+                (state, actualBinding) <- getExecution execution
+                case outcome of
+                  DecisionReturned decision -> do
+                    work <- readPayload @DecisionWork access actualBinding "operation-input" operation.input
+                    unless (decision.preparationId == work.prepared.identity && decision.program == work.prepared.program && next == NeedValidation ref) (abort OperationConflict)
+                  _ -> pure ()
                 forM_ accounting \(receipt, terminal) ->
                   Calls.finishSelectionCallTx receipt terminal >>= either (abort . ResourceAdmissionRefused . Text.pack . show) (const (pure ()))
                 actual <- writePayload execution body
@@ -1232,6 +1245,7 @@ outcomePrecondition (ReplayAccess execution identity _) expected operation outco
         forM_ accounting \(receipt, _) ->
           unless (receipt.request.operationId == operation.specification.operationId && receipt.rootId == actualBinding.rootId && receipt.assignmentId == actualBinding.assignmentId) (Left OperationConflict)
         case outcome of
+          DecisionReturned {} -> unless (actualOperation.specification.kind == TypedDecision && isNothing accounting) (Left OperationConflict)
           ModelReturned {} -> unless (actualOperation.specification.kind `elem` [ModelTurn, ModelRepair, ModelSummary]) (Left OperationConflict)
           RichToolReturned {} -> toolOutcome actualOperation
           ToolReturned {} -> toolOutcome actualOperation
@@ -1268,6 +1282,7 @@ finishExecution access@(ReplayAccess execution _ _) expected result = catchExecu
                   response <- checkedPayload access actualBinding "operation-outcome" responseRef
                   snapshot <- checkedPayload access actualBinding "snapshot" state.snapshot
                   case response of
+                    DecisionReturned decision -> unless (toJSON decision == result) (throwE ExecutionOutputInvalid)
                     ModelReturned assistant _ -> do
                       validated <- except (validateTerminalOutput (snapshot :: ExecutionSnapshot).policy assistant)
                       unless (validated == result) (throwE ExecutionOutputInvalid)
@@ -1532,6 +1547,7 @@ checkedDispatchPermission now operation snapshot = when (operation.specification
 checkedSubmission :: ReplayAccess -> ExecutionBinding -> ExecutionSnapshot -> Operation -> Attempt.AttemptSubmission -> ExecutionCheck ()
 checkedSubmission access binding snapshot operation submission =
   case (operation.specification.kind, submission.modelCall) of
+    (TypedDecision, Nothing) -> unless (submission.request == decisionAttemptRequest submission.request.attemptId operation.specification.operationId) (throwE AttemptConflict)
     (ToolOperation, Nothing) -> do
       input <- checkedPayload @ToolOperationInput access binding "operation-input" operation.input
       unless (submission.request == toolAttemptRequest submission.request.attemptId operation.specification.operationId input.binding) (throwE AttemptConflict)
@@ -1555,3 +1571,13 @@ readRows parameters statement = Tx.statement parameters statement >>= traverse (
 
 checkedRows :: (Traversable rows) => parameters -> Statement parameters (rows (Either () a)) -> ExecutionCheck (rows a)
 checkedRows parameters statement = lift (readRows parameters statement)
+
+-- Typed program wrappers hold runtime capacity; only actual provider calls
+-- have resource-root attempts. All other no-call attempts are tool work.
+settleWrapperAttempt :: ExecutionBinding -> Attempt.ExecutionAttempt -> Resources.Settlement -> Transaction ()
+settleWrapperAttempt binding attempt outcome = do
+  operation <- readRows (operationKey attempt.operationId) lockOperation >>= maybe (abort OperationMissing) pure
+  unless (operation.specification.kind == TypedDecision) $ forM_ binding.rootId \root -> Roots.settleAttemptTx root attempt.request.attemptId outcome >>= either (abort . ResourceAdmissionRefused . Text.pack . show) (const (pure ()))
+
+decisionAttemptRequest :: AttemptId -> OperationId -> Resources.AttemptRequest
+decisionAttemptRequest identifier operation = Resources.AttemptRequest identifier operation Map.empty Resources.AdmittedUnknownUsage

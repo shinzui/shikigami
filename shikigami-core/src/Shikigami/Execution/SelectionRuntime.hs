@@ -3,7 +3,7 @@
 
 -- | Private per-assignment provider registry. Both blocking and streaming calls
 -- pass the same durable admission boundary below any caller retry loop.
-module Shikigami.Execution.SelectionRuntime (SelectionRuntime (..), buildExecutionEnv, PreparedSelectionCall (..), buildPreparedExecutionEnv, preparePinnedExecutionCall, narrowOutput, assignmentIdFor, conversationAssignmentIdFor, selectionTransaction, currentExecutionAuthority) where
+module Shikigami.Execution.SelectionRuntime (reservation, outcomeFor, requestFingerprint, SelectionRuntime (..), buildExecutionEnv, PreparedSelectionCall (..), buildPreparedExecutionEnv, preparePinnedExecutionCall, narrowOutput, assignmentIdFor, conversationAssignmentIdFor, selectionTransaction, currentExecutionAuthority) where
 
 import Baikai.Api (Api (..))
 import Baikai.Auth (ApiKeySource (ApiKeyLiteral))
