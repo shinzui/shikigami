@@ -20,7 +20,7 @@ import Control.Concurrent (forkIO, threadDelay)
 import Control.Concurrent.MVar (newEmptyMVar, putMVar, takeMVar)
 import Control.Exception (SomeException, throwIO, try)
 import Control.Monad (void)
-import Data.Aeson (FromJSON, ToJSON, Value (Null, String), toJSON)
+import Data.Aeson (FromJSON, ToJSON, Value (Null, String), toJSON, (.:?), (.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Types qualified as AesonTypes
 import Data.ByteString.Lazy qualified as LBS
@@ -101,7 +101,7 @@ decisionFrames =
   "data: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_fixture\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"model\":\"claude-haiku-4-5\",\"usage\":{\"input_tokens\":11,\"output_tokens\":0}}}\n\n"
     <> "data: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\n"
     <> "data: "
-    <> Aeson.encode (Aeson.object ["type" Aeson..= ("content_block_delta" :: Text), "index" Aeson..= (0 :: Int), "delta" Aeson..= Aeson.object ["type" Aeson..= ("text_delta" :: Text), "text" Aeson..= TE.decodeUtf8 (LBS.toStrict (Aeson.encode input))]])
+    <> Aeson.encode (Aeson.object ["type" .= ("content_block_delta" :: Text), "index" .= (0 :: Int), "delta" .= Aeson.object ["type" .= ("text_delta" :: Text), "text" .= TE.decodeUtf8 (LBS.toStrict (Aeson.encode input))]])
     <> "\n\n"
     <> "data: {\"type\":\"content_block_stop\",\"index\":0}\n\n"
     <> "data: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":12}}\n\n"
@@ -222,16 +222,16 @@ tests =
           testWithApplication (pure application) \port -> do
             let endpoint = "http://127.0.0.1:" <> Text.pack (show port) <> "/v1"
                 fields =
-                  [ "alias" Aeson..= ("triage" :: Text),
-                    "version" Aeson..= ("2" :: Text),
-                    "bindingId" Aeson..= ("fixture" :: Text),
-                    "bindingVersion" Aeson..= ("1" :: Text),
-                    "provider" Aeson..= ("anthropic" :: Text),
-                    "model" Aeson..= ("claude-haiku-4-5" :: Text),
-                    "thinking" Aeson..= ("default" :: Text),
-                    "base_url" Aeson..= endpoint
+                  [ "alias" .= ("triage" :: Text),
+                    "version" .= ("2" :: Text),
+                    "bindingId" .= ("fixture" :: Text),
+                    "bindingVersion" .= ("1" :: Text),
+                    "provider" .= ("anthropic" :: Text),
+                    "model" .= ("claude-haiku-4-5" :: Text),
+                    "thinking" .= ("default" :: Text),
+                    "base_url" .= endpoint
                   ]
-                    <> maybe [] (\value -> ["cache_retention" Aeson..= (value :: Text)]) retention
+                    <> maybe [] (\value -> ["cache_retention" .= (value :: Text)]) retention
                 values = [("behavior.decisionModels", TE.decodeUtf8 . LBS.toStrict . Aeson.encode $ [Aeson.object fields]), ("credentials.providers.anthropic.api_key", "public-fixture-key")]
                 configured = appConfigRun RunBehaviorRole ConfigOptions {configPaths = [], namedSources = [], overrides = [cliOverride (mustRight (parseKey key)) value | (key, value) <- values], diagnosticMode = NoDiagnostic} (Right []) (environmentSource environmentBindings (envSnapshot []))
             configured.exitCode @?= 0
@@ -250,13 +250,13 @@ tests =
             length requests @?= 2
             for_ requests \(path, body) -> do
               path @?= ["v1", "messages"]
-              let field name = AesonTypes.parseMaybe (Aeson.withObject "request" (Aeson..:? name)) body :: Maybe (Maybe Aeson.Value)
+              let field name = AesonTypes.parseMaybe (Aeson.withObject "request" (.:? name)) body :: Maybe (Maybe Aeson.Value)
               field "model" @?= Just (Just (String "claude-haiku-4-5"))
               field "cache_control"
                 @?= Just
                   ( case retention of
-                      Just "short" -> Just (Aeson.object ["type" Aeson..= ("ephemeral" :: Text)])
-                      Just "long" -> Just (Aeson.object ["type" Aeson..= ("ephemeral" :: Text), "ttl" Aeson..= ("1h" :: Text)])
+                      Just "short" -> Just (Aeson.object ["type" .= ("ephemeral" :: Text)])
+                      Just "long" -> Just (Aeson.object ["type" .= ("ephemeral" :: Text), "ttl" .= ("1h" :: Text)])
                       _ -> Nothing
                   )
             inspect

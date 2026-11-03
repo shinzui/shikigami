@@ -99,7 +99,7 @@ preparePlan upgrade env authorizer current client binding admission mode = do
       editInput = Aeson.toJSON (if upgrade then Replacement (workspaceCoordinate "src/dependency.txt") (Just (contentDigest "old dependency\n")) "new dependency\n" else Replacement (workspaceCoordinate "src/mode") (Just (contentDigest "complete\n")) (mode <> "\n"))
       validateInput = Aeson.object ["rule" Aeson..= ("validate" :: Text.Text)]
       commitInput = Aeson.toJSON (GitCommitRequest binding.base (workspaceCoordinate "chore(deps): upgrade fixture dependency"))
-      assistant = ReplayAssistant V1 ([ToolBlock (ToolInvocation (ProviderValue.providerCoordinate "edit-mode") edit.name editInput), ToolBlock (ToolInvocation (ProviderValue.providerCoordinate "validate-mode") validate.name validateInput)] <> [ToolBlock (ToolInvocation (ProviderValue.providerCoordinate "commit-upgrade") commit.name commitInput) | upgrade]) ToolUse Nothing Nothing (Aeson.object []) Nothing
+      assistant = ReplayAssistant LegacyAssistant ([ToolBlock (ToolInvocation (ProviderValue.providerCoordinate "edit-mode") edit.name editInput), ToolBlock (ToolInvocation (ProviderValue.providerCoordinate "validate-mode") validate.name validateInput)] <> [ToolBlock (ToolInvocation (ProviderValue.providerCoordinate "commit-upgrade") commit.name commitInput) | upgrade]) ToolUse Nothing Nothing (Aeson.object []) Nothing
       model = OperationSpec (operationIdFor snapshot.executionId (fixtureRevision 0)) ModelTurn RepeatableObservation (ExecutionValue.executionCoordinate "model") (policyDigest snapshot) (ExecutionValue.executionDigest "scope") Nothing
   void (right =<< run env Catalog.registerProjectionCatalog)
   void (right =<< run env (Execution.admitExecution snapshot))
@@ -219,7 +219,7 @@ appendTools env current snapshot calls = do
   (_, state) <- right =<< run env (Execution.loadExecution access)
   unless (state.next == NeedModel) (fail "fixture did not reach model boundary")
   let invocations = [ToolInvocation (ProviderValue.providerCoordinate ("fixture-call-" <> Text.pack (show index))) (executionCoordinate name) input | (index, (name, input)) <- zip [0 :: Int ..] calls]
-      assistant = ReplayAssistant V1 (map ToolBlock invocations) ToolUse Nothing Nothing (Aeson.object []) Nothing
+      assistant = ReplayAssistant LegacyAssistant (map ToolBlock invocations) ToolUse Nothing Nothing (Aeson.object []) Nothing
       model = OperationSpec (operationIdFor snapshot.executionId state.cursor) ModelTurn RepeatableObservation (ExecutionValue.executionCoordinate "model") (policyDigest snapshot) (ExecutionValue.executionDigest "fixture-model") Nothing
   (_, operation) <- right =<< run env (Execution.acceptOperation access state.revision model (Aeson.object []))
   now <- getCurrentTime
