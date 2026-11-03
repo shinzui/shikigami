@@ -503,6 +503,13 @@ LIFECYCLE
 import json,socket,struct,subprocess,sys,time
 from pathlib import Path
 root=Path(sys.argv[1]); intent=json.loads((root/'continuing-intent.json').read_text())
+operator_replies=[json.loads(line) for line in (root/'continuing-successor.log').read_text().splitlines() if line.startswith('{')]
+assert len(operator_replies)==2, 'expected original and duplicate administrative recovery replies'
+expected={'tag':'HandoffEstablished','contents':[intent['newOwner'],intent['newEpoch']]}
+assert all(reply=={'tag':'TransferObserved','contents':expected} for reply in operator_replies), 'the administrative command itself must establish the real handoff'
+successor=json.loads((root/'continuing-successor.json').read_text())
+successor['operatorReplies']=operator_replies
+(root/'continuing-successor.json').write_text(json.dumps(successor))
 def exact(peer,size):
     value=b''
     while len(value)<size:
