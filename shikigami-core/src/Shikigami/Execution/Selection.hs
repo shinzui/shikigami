@@ -12,6 +12,7 @@ where
 
 import Baikai.Auth (ApiKeySource (ApiKeyLiteral))
 import Baikai.Model (Model)
+import Baikai.Model qualified as Model
 import Baikai.Options (Options)
 import Baikai.Options qualified as Options
 import Data.Aeson qualified as Aeson
@@ -114,6 +115,7 @@ resolveExecutionSelection assignmentId catalog fallback declaration requested in
       descriptor = modelDescriptor binding
       selectedAlias = descriptor.alias
   unless (selectedAlias `elem` narrowed) (Left ExecutionRequirementConflict)
+  when (Model.isJudgmentOnly (bindingModel binding)) (Left ExecutionOptionsIncompatible)
   when (maybe False (\wanted -> descriptor.thinking /= Just wanted) request.thinking) (Left ExecutionThinkingConflict)
   forM_ profile \resolved -> case validateProfileCall resolved (providerCallFor (bindingModel binding) (bindingOptions binding)) of
     Left _ -> Left ExecutionProfileConflict
@@ -139,6 +141,7 @@ selectionBinding catalog fallback profile selection = do
     ProcessDefault | modelDescriptor fallback == selection.descriptor -> Right fallback
     ProcessDefault -> Left PinnedBindingUnavailable
     DeclaredAlias -> either (const (Left PinnedBindingUnavailable)) Right (pinnedBinding catalog selection.descriptor)
+  when (Model.isJudgmentOnly (bindingModel binding)) (Left ExecutionOptionsIncompatible)
   unless (publicExecutionOptions (bindingOptions binding)) (Left PinnedBindingUnavailable)
   unless (toJSON (effectiveBindingOptions profile binding) == selection.effectiveOptions) (Left PinnedBindingUnavailable)
   forM_ profile \resolved -> case validateProfileCall resolved (providerCallFor (bindingModel binding) (bindingOptions binding)) of

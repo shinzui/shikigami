@@ -10,6 +10,24 @@ the cohort moves. Before plan 80, the only exact constraint was `keiro-dsl`, whi
 and so no bound ties to the runtime's Keiro release. A drift between a matrix
 row and the solver's plan is a bug in one of them.
 
+## Baikai 0.10 consumer candidate — selected 2026-11-03
+
+Plan 80 selects index `2026-11-03T02:59:02Z`. Exact constraints retain the
+previous runtime closure while advancing Baikai core to 0.10.0.0, vendors to
+0.7.3.0, agent to 0.2.0.4, Shikumi to 0.5.0.0 and its companion releases, and
+Kioku API/core/migrations to 0.12.0.2. TypeSafe 0.1.0.1 is a direct consumer
+dependency. Effectful 2.7.1.0/core 2.7.1.2 and strict-mutable-base 2.0.0.0
+complete the solve; Keiro stays at 0.22 and the Handan source pin stays unchanged.
+No new `allow-newer` exception is added.
+
+The real complete-call and durable queue/restart consumer checks pass; see
+[structured judgments](evidence/baikai-execution/structured-judgments.md).
+Judgment streaming requires
+`mori://shinzui/shikumi/okf/improvement-requests/concepts/IR-5`. The frozen Nix
+export still describes the prior accepted cohort; this candidate has not yet
+passed immutable role-package qualification. It is a source/build checkpoint,
+not completion of plan 80 or a new production qualification.
+
 ## Keiro 0.22 accepted macOS cohort — selected 2026-10-30
 
 Plans 92–95, 106 and 107 accept this cohort on the bounded macOS profile; build,

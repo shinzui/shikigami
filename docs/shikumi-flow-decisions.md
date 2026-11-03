@@ -126,6 +126,67 @@ a null trigger payload, so this request-taking example is exercised through the
 queue or the PostgreSQL acceptance suite. The database-free behavior command
 cannot interpret durable Flow capabilities.
 
+## Run the supplied-ticket judgment example
+
+The compiled `shikumi-judgment-example` Flow accepts
+`{"ticket":"Checkout is unavailable."}` and uses only the `judge` decision alias.
+It returns urgency, category and severity with their probability data. The
+[proof declaration](../agents/proof/shikumi-judgment-example.dhall) grants that
+alias and no delegation or sinks. Configure a matching binding:
+
+```yaml
+behavior:
+  provider: stub
+  decisionModels:
+    - alias: judge
+      version: "1"
+      bindingId: typesafe-judge
+      bindingVersion: "1"
+      provider: typesafe
+      model: jev-latest
+      thinking: default
+      timeout_ms: 30000
+```
+
+Supply `TYPESAFE_API_KEY` privately, or set
+`credentials.providers.typesafe.api_key` in private configuration. A manual
+loopback fixture can additionally set `base_url` and use only its public
+synthetic credential. Configuration checks make no request. TypeSafe rejects
+generation controls, including `max_tokens`, sampling and explicit reasoning
+`none`; an incompatible finite token policy refuses before transport. The
+legacy text/tool model selection cannot select this judgment-only model.
+
+After the normal database bootstrap, save the YAML as `judgment.yaml` and use
+the existing queue/worker entry points:
+
+```bash
+export SHIKIGAMI_AGENTS_DIRECTORY=agents/proof
+cabal run shikigami -- --config judgment.yaml enqueue-run shikumi-judgment-example \
+  --payload '{"ticket":"Checkout is unavailable."}' --key judgment-example-1
+cabal run shikigami-worker -- --config judgment.yaml
+```
+
+This makes a real TypeSafe call when pointed at its public endpoint. The
+deterministic acceptance tests instead use a local HTTP server and synthetic
+answers. The registered program pins an urgency threshold of 0.8, category
+weights of 4 for billing and 1 for technical, and severity cuts of 0.75 and
+1.75. The fixture's category probabilities are billing 0.2 and technical 0.7:
+the raw provider choice remains technical while the local weighted result is
+billing. Neither distribution nor optional confidence/method observations are
+rewritten to match the local answer.
+
+Structured outcomes retain the raw answer separately from the derived result
+and actual call receipt. Committed outcomes replay after credentials and model
+bindings are removed, using retained codecs and the original result. New calls
+under changed settings require a new program identity. New judgment steps use
+the `shikigami-structured-judgments-v1` patch; historical generative steps keep
+their original labels and result envelope.
+
+The released Shikumi runner currently refuses judgment streaming before
+transport. `mori://shinzui/shikumi/okf/improvement-requests/concepts/IR-5`
+requests complete/stream typed-result parity and acknowledged atomic structured
+events. The example uses complete calls; streaming acceptance remains open.
+
 ## Register a new decision
 
 Register a typed `Program i o`, input/domain validators, a durable result codec,
@@ -176,7 +237,8 @@ dispatch. A new alias version or process default never substitutes for it.
 Workflow replay preserves decisions. Deliberately re-deriving an answer from
 upstream evidence under new thresholds is a separate operation with a new
 program/derivation identity. Future probability or Jev adapters require qualified
-versioned integrations. Probability and confidence describe judgment; they do
+versioned integrations beyond the qualified TypeSafe complete path above.
+Probability and confidence describe judgment; they do
 not prove provider identity, usage, or terminal accounting.
 
 ## Evidence and crash windows

@@ -417,7 +417,7 @@ tests fixture =
       testCase "assistant replay retains opaque thinking and exact cut-off tool arguments" do
         let assistant =
               ReplayAssistant
-                V1
+                LegacyAssistant
                 [ThinkingBlock "opaque-redacted" (Just "signature") True (Just (ProviderReplay OpenAIResponses (ProviderValue.providerCoordinate "exact-model") [object ["opaque" .= ("continuation" :: Text)]])), ToolBlock (ToolInvocation (ProviderValue.providerCoordinate "call") (ExecutionValue.executionCoordinate "tool") (Aeson.String "{cut-off"))]
                 Stop
                 (Just (ProviderValue.providerCoordinate "response"))
@@ -428,7 +428,7 @@ tests fixture =
         restored <- expectRight (restoreAssistant assistant)
         length restored.content @?= 2
         toolInvocations assistant @?= [ToolInvocation (ProviderValue.providerCoordinate "call") (ExecutionValue.executionCoordinate "tool") (Aeson.String "{cut-off")]
-        let future = case toJSON assistant of Aeson.Object fields -> Aeson.Object (KeyMap.insert "format" (toJSON (2 :: Int)) fields); value -> value
+        let future = case toJSON assistant of Aeson.Object fields -> Aeson.Object (KeyMap.insert "format" (toJSON (3 :: Int)) fields); value -> value
         assertBool "future assistant version rejected" (case Aeson.fromJSON @ReplayAssistant future of Aeson.Error _ -> True; _ -> False),
       testCase "attempt reservation and real queue acceptance roll back and deduplicate together" $
         withFixture fixture \env snapshot access -> do
@@ -956,7 +956,7 @@ tests fixture =
           access <- expectRight =<< run env (Store.authorizeReplay snapshot.executionId snapshot.identity (pure (Right ())))
           (_, operation) <- expectRight =<< run env (Store.acceptOperation access (fixtureRevision 0) (spec snapshot 0) secretInput)
           receipt <- reserveCall env snapshot operation
-          let empty = ModelReturned (ReplayAssistant V1 [] Stop Nothing Nothing (object []) Nothing) Nothing
+          let empty = ModelReturned (ReplayAssistant LegacyAssistant [] Stop Nothing Nothing (object []) Nothing) Nothing
           ref <- expectRight (Store.outcomeReference empty)
           run env (Store.recordOutcomeAndAdvance access (fixtureRevision 1) operation.specification.operationId empty (NeedValidation ref) (Just (receipt, terminal))) >>= (@?= Right R.Accepted)
           run env (Store.finishExecution access (fixtureRevision 2) (object ["reply" .= ("invented replacement" :: Text)])) >>= (@?= Left ExecutionOutputInvalid)
@@ -967,7 +967,7 @@ tests fixture =
         withConfiguredFixture fixture (\snapshot -> snapshot & #policy . #output .~ NonemptyReply & #policy . #outputRepairs .~ (fixturePolicy 1)) \env snapshot access -> do
           (_, operation) <- expectRight =<< run env (Store.acceptOperation access (fixtureRevision 0) (spec snapshot 0) secretInput)
           receipt <- reserveCall env snapshot operation
-          let invalid = ModelReturned (ReplayAssistant V1 [TextBlock ""] Stop Nothing Nothing (object []) Nothing) Nothing
+          let invalid = ModelReturned (ReplayAssistant LegacyAssistant [TextBlock ""] Stop Nothing Nothing (object []) Nothing) Nothing
           response <- expectRight (Store.outcomeReference invalid)
           run env (Store.recordOutcomeAndAdvance access (fixtureRevision 1) operation.specification.operationId invalid (NeedValidation response) (Just (receipt, terminal))) >>= (@?= Right R.Accepted)
           (_, repair) <- expectRight =<< run env (Store.acceptOperation access (fixtureRevision 2) (spec snapshot 1 & #kind .~ ModelRepair) secretInput)
@@ -1227,7 +1227,7 @@ modelRecoveryCase fixture afterCompletion = testCase (if afterCompletion then "a
     run env (Store.completeExecutionAttempt access (fixtureRevision 8) replacement actual) >>= (@?= Right R.Accepted)
     when afterCompletion (run env (Store.finishExecution access (fixtureRevision 9) (object ["reply" .= ("accepted reply" :: Text)])) >>= (@?= Right R.Accepted))
     (_, before) <- expectRight =<< run env (Store.loadExecution access)
-    let different = actual & #outcome .~ ModelReturned (ReplayAssistant V1 [TextBlock "late former reply"] Stop Nothing Nothing (object []) Nothing) Nothing
+    let different = actual & #outcome .~ ModelReturned (ReplayAssistant LegacyAssistant [TextBlock "late former reply"] Stop Nothing Nothing (object []) Nothing) Nothing
     run env (Store.completeExecutionAttempt access before.revision former different) >>= (@?= Left AttemptClaimLost)
     run env (Store.recordLateExecutionReceipt access before.revision former different) >>= (@?= Right R.Accepted)
     run env (Store.recordLateExecutionReceipt access before.revision former different) >>= (@?= Right R.AlreadyAccepted)
@@ -1385,7 +1385,7 @@ commitToolRequestWith :: Calls.CallOutcome -> AppEnv -> ExecutionSnapshot -> Sto
 commitToolRequestWith callOutcome env snapshot access = do
   (_, operation) <- expectRight =<< run env (Store.acceptOperation access (fixtureRevision 0) (spec snapshot 0) secretInput)
   receipt <- reserveCall env snapshot operation
-  let assistant = ReplayAssistant V1 [ToolBlock (ToolInvocation (ProviderValue.providerCoordinate "first") (ExecutionValue.executionCoordinate "observe") (object [])), ToolBlock (ToolInvocation (ProviderValue.providerCoordinate "second") (ExecutionValue.executionCoordinate "observe") (object []))] ToolUse Nothing Nothing (object []) Nothing
+  let assistant = ReplayAssistant LegacyAssistant [ToolBlock (ToolInvocation (ProviderValue.providerCoordinate "first") (ExecutionValue.executionCoordinate "observe") (object [])), ToolBlock (ToolInvocation (ProviderValue.providerCoordinate "second") (ExecutionValue.executionCoordinate "observe") (object []))] ToolUse Nothing Nothing (object []) Nothing
       outcome = ModelReturned assistant Nothing
   ref <- expectRight (Store.outcomeReference outcome)
   run env (Store.recordOutcomeAndAdvance access (fixtureRevision 1) operation.specification.operationId outcome (NeedTool ref (fixtureToolPosition 0)) (Just (receipt, callOutcome))) >>= (@?= Right R.Accepted)
@@ -1398,7 +1398,7 @@ secretInput :: Value
 secretInput = object ["request" .= ("PRIVATE_REPLAY_MARKER" :: Text)]
 
 modelOutcome :: OperationOutcome
-modelOutcome = ModelReturned (ReplayAssistant V1 [TextBlock "accepted reply"] Stop (Just (ProviderValue.providerCoordinate "response")) Nothing (object []) Nothing) (Just (object ["raw" .= ("provider evidence" :: Text)]))
+modelOutcome = ModelReturned (ReplayAssistant LegacyAssistant [TextBlock "accepted reply"] Stop (Just (ProviderValue.providerCoordinate "response")) Nothing (object []) Nothing) (Just (object ["raw" .= ("provider evidence" :: Text)]))
 
 terminal :: Calls.CallOutcome
 terminal = Calls.CallOutcome Calls.CallTerminal (Map.singleton R.Tokens (fixtureAmount 3)) [R.CostMicroUsd] (Just (ProviderValue.providerCoordinate "served-model")) (Just (ProviderValue.providerCoordinate "provider-call")) Nothing

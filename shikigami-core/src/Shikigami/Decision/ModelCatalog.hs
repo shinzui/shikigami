@@ -70,7 +70,7 @@ modelBinding alias suppliedVersion suppliedBindingId suppliedBindingVersion mode
     capture = either (const (refuse "model descriptor identities must be nonempty")) Right . parseModelRegistration
     admit version bindingId bindingVersion
       | Options.apiKey options /= Nothing = refuse "model options must not carry a credential"
-      | Model.api model `notElem` [AnthropicMessages, OpenAIChatCompletions, OpenAIResponses, Custom "stub"] = refuse "decision model requires an admitted HTTP or stub API"
+      | Model.api model `notElem` [AnthropicMessages, OpenAIChatCompletions, OpenAIResponses, TypeSafeSystemOne, Custom "stub"] = refuse "decision model requires an admitted HTTP or stub API"
       | Model.api model /= Custom "stub", maybe True (Text.null . revealCredential) credential = refuse "decision credential binding is unavailable"
       | Left _ <- validateResponseOptions model options = refuse "decision response options are incompatible"
       | otherwise =
@@ -141,8 +141,12 @@ resolvePolicy programs slots catalog declaration profile = do
   selections <- traverse resolve aliases
   let resolved = [descriptor | Just descriptor <- selections]
       admitted = map (\descriptor -> descriptor.alias) resolved
+      supports slot alias = case find (\binding -> binding.descriptor.alias == alias) entriesForAdmission of
+        Just binding | Model.isJudgmentOnly binding.model -> all (\program -> program.outputCapability == ClosedSetJudgment) slot.programs
+        _ -> True
+      entriesForAdmission = case catalog of ModelCatalog active _ -> active
       narrowed :: [DecisionSlot]
-      narrowed = [(slot & #models .~ (filter (`elem` admitted) slot.models)) | slot <- slots]
+      narrowed = [(slot & #models .~ (filter (\alias -> alias `elem` admitted && supports slot alias) slot.models)) | slot <- slots]
   if any (null . (\slot -> slot.models)) narrowed
     then Left (decisionFailure ForbiddenModel "decision slot has no authorized available model")
     else Right (DecisionPolicySnapshot narrowed resolved ((\p -> (resolvedProfileView p).ref) <$> profile))

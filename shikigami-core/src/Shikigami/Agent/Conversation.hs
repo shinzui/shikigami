@@ -1022,7 +1022,7 @@ runConversationSkillStep env recordedIdentity decl msg sid userTurn profile sele
 historicalTurn :: TurnRow -> Either Execution.ExecutionError Execution.ReplayMessage
 historicalTurn row = case row.role of
   "user" -> Right (Execution.UserTurn [Execution.TextBlock row.content] Nothing)
-  "assistant" -> Right (Execution.AssistantTurn (Execution.ReplayAssistant V1 [Execution.TextBlock row.content] Stop Nothing Nothing (Aeson.object []) Nothing))
+  "assistant" -> Right (Execution.AssistantTurn (Execution.ReplayAssistant Execution.LegacyAssistant [Execution.TextBlock row.content] Stop Nothing Nothing (Aeson.object []) Nothing))
   _ -> Left Execution.UnsupportedReplay
 
 -- Supported conversation tools are exactly the existing base registry; this

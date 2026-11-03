@@ -13,13 +13,14 @@ import Baikai.CacheRetention (CacheRetention (..))
 import Baikai.Compat qualified as Compat
 import Baikai.Context (Context, tools)
 import Baikai.Header (renderHeaderName)
+import Baikai.Judgment qualified as Judgment
 import Baikai.Model (Model)
 import Baikai.Model qualified as Model
 import Baikai.Options (Options)
 import Baikai.Options qualified as Options
 import Baikai.ResponseFormat (JsonSchemaFormat (name, schema), ResponseFormat (..))
 import Baikai.Speed (Speed (..))
-import Baikai.ThinkingLevel (ThinkingLevel (ThinkingMinimal), thinkingTokenBudget)
+import Baikai.ThinkingLevel (ThinkingLevel (ThinkingMinimal, ThinkingNone), thinkingTokenBudget)
 import Baikai.Tool (ToolChoice (..))
 import Baikai.Tool qualified as Tool
 import Data.Aeson (Value (..))
@@ -34,7 +35,7 @@ data ResponseCompatibilityError
   = UnsupportedOption !Text
   | UnsupportedTools
   | UnsupportedFormat
-  | BatchCancellationReleaseRequired
+  | BatchBoundsAndConfinementRequired
   deriving stock (Eq, Show)
 
 renderResponseCompatibilityError :: ResponseCompatibilityError -> Text
@@ -42,13 +43,18 @@ renderResponseCompatibilityError = \case
   UnsupportedOption key -> key <> " is unsupported by the selected provider/model or conflicts with another requirement"
   UnsupportedTools -> "CLI responses cannot execute advertised Shikumi tools"
   UnsupportedFormat -> "CLI responses cannot enforce JsonObject output"
-  BatchCancellationReleaseRequired -> "CLI responses require a released Baikai adapter that cancels the entire child process group"
+  BatchBoundsAndConfinementRequired -> "CLI responses require enforced deadlines, bounded retained output and descendant confinement; released group cancellation alone does not provide these"
 
 validateResponseOptions :: Model -> Options -> Either ResponseCompatibilityError ()
 validateResponseOptions model options = case Model.api model of
   Custom _ -> Right ()
-  AnthropicMessagesCli -> Left BatchCancellationReleaseRequired
-  OpenAICompletionsCli -> Left BatchCancellationReleaseRequired
+  AnthropicMessagesCli -> Left BatchBoundsAndConfinementRequired
+  OpenAICompletionsCli -> Left BatchBoundsAndConfinementRequired
+  TypeSafeSystemOne -> do
+    either (const (Left (UnsupportedOption "judgment generation controls"))) Right (Judgment.refuseGenerationControls options)
+    case [key | (key, invalid) <- common, invalid] of
+      key : _ -> Left (UnsupportedOption ("behavior.options." <> key))
+      [] -> Right ()
   api -> case unsupported api of
     key : _ -> Left (UnsupportedOption ("behavior.options." <> key))
     [] -> Right ()
@@ -64,22 +70,37 @@ validateResponseOptions model options = case Model.api model of
         ("top_p", invalidRange 0 1 (Options.topP options)),
         ("frequency_penalty", invalidRange (-2) 2 (Options.frequencyPenalty options)),
         ("presence_penalty", invalidRange (-2) 2 (Options.presencePenalty options)),
-        ("thinking", set (Options.thinking options) && not (Model.reasoning model))
+        ("thinking", set (Options.thinking options) && Options.thinking options /= Just ThinkingNone && not (Model.reasoning model))
       ]
     sampling allowed =
       [("temperature", set (Options.temperature options) && not allowed), ("top_p", set (Options.topP options) && not allowed)]
-    efforts allowed = [("thinking", maybe False (\requested -> maybe False (not . elem requested) allowed) (Options.thinking options))]
+    efforts allowed = [("thinking", maybe False (\requested -> maybe (requested == ThinkingNone) (not . elem requested) allowed) (Options.thinking options))]
     penalties = [("seed", set (Options.seed options)), ("frequency_penalty", set (Options.frequencyPenalty options)), ("presence_penalty", set (Options.presencePenalty options))]
     retention = Options.cacheRetention options
     wantsCache = retention /= Nothing && retention /= Just CacheRetentionNone
     wantsLong = retention == Just CacheRetentionLong
+    nativeCache format fallback policy =
+      case Compat.validateNativeCachePolicy format policy of
+        Left _ -> True
+        Right () ->
+          let selected = maybe fallback id policy
+              unsupported = case selected of
+                Compat.NativeCacheUnsupported -> True
+                Compat.NativeCacheLegacy short long -> if wantsLong then not long else not short
+                Compat.NativeCacheModern long _ -> wantsLong && not long
+              missingLongRates = case selected of
+                Compat.NativeCacheModern True _ -> case Model.pricingPolicy model of
+                  Just pricing -> not (set pricing.longCacheWriteCost && all (set . (\tier -> tier.longCacheWriteCost)) pricing.inputTiers)
+                  Nothing -> True
+                _ -> False
+           in wantsCache && unsupported || missingLongRates
     unsupported api = [key | (key, invalid) <- common <> specific api, invalid]
     specific AnthropicMessages =
       let compat = Model.anthropicMessagesCompatFor model
-          budget = compat.thinkingStyle == Compat.AnthropicThinkingBudget && set (Options.thinking options)
+          budget = compat.thinkingStyle == Compat.AnthropicThinkingBudget && set (Options.thinking options) && Options.thinking options /= Just ThinkingNone
        in penalties
             <> sampling (compat.supportsSamplingParameters)
-            <> [ ("thinking", compat.thinkingStyle == Compat.AnthropicThinkingAdaptive && Options.thinking options == Just ThinkingMinimal || budget && maybe False (\level -> Model.maxOutputTokens model > 0 && Model.maxOutputTokens model <= thinkingTokenBudget level) (Options.thinking options)),
+            <> [ ("thinking", Options.thinking options == Just ThinkingNone && not compat.supportsThinkingDisabled || compat.thinkingStyle == Compat.AnthropicThinkingAdaptive && Options.thinking options == Just ThinkingMinimal || budget && maybe False (\level -> Model.maxOutputTokens model > 0 && Model.maxOutputTokens model <= thinkingTokenBudget level) (Options.thinking options)),
                  ("metadata", not (Map.null (Options.metadata options))),
                  ("cache_retention", wantsLong && not (compat.supportsLongCacheRetention)),
                  ("speed", Options.speed options == Just SpeedFast && not (compat.supportsFastMode)),
@@ -91,7 +112,7 @@ validateResponseOptions model options = case Model.api model of
             <> efforts (compat.supportedReasoningEfforts)
             <> [ ("speed", set (Options.speed options)),
                  ("metadata", not (Map.null (Options.metadata options))),
-                 ("cache_retention", wantsCache && (not (set (compat.cacheControlFormat)) || wantsLong && not (compat.supportsLongCacheRetention)))
+                 ("cache_retention", nativeCache compat.cacheControlFormat (if set compat.cacheControlFormat then Compat.NativeCacheLegacy True compat.supportsLongCacheRetention else Compat.NativeCacheUnsupported) compat.nativeCachePolicy)
                ]
     specific OpenAIResponses =
       let compat = Model.openaiResponsesCompatFor model
@@ -100,7 +121,7 @@ validateResponseOptions model options = case Model.api model of
             <> efforts (compat.supportedReasoningEfforts)
             <> [ ("speed", set (Options.speed options)),
                  ("stop_sequences", not (null (Options.stopSequences options))),
-                 ("cache_retention", wantsLong && (compat.supportsPromptCacheOptions || not (compat.supportsLongCacheRetention))),
+                 ("cache_retention", nativeCache Nothing (if compat.supportsPromptCacheOptions then Compat.NativeCacheModern False False else Compat.NativeCacheLegacy True compat.supportsLongCacheRetention) compat.nativeCachePolicy),
                  ("metadata", Map.size (Options.metadata options) > 16 || any ((> 64) . Text.length) (Map.keys (Options.metadata options)) || any invalidMetadata (Map.elems (Options.metadata options)))
                ]
     specific _ = []
@@ -122,6 +143,9 @@ validateResponseOptions model options = case Model.api model of
 
 validateResponseRequest :: Model -> Options -> Context -> Either ResponseCompatibilityError ()
 validateResponseRequest model options context
+  | Model.api model == TypeSafeSystemOne = do
+      validateResponseOptions model options
+      either (const (Left (UnsupportedOption "judgment schema or context"))) (const (Right ())) (Judgment.prepareJudgment context options)
   | cli && not (Vector.null context.tools) = Left UnsupportedTools
   | cli && Options.responseFormat options == Just JsonObject = Left UnsupportedFormat
   | otherwise = do

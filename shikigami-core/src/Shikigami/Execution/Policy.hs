@@ -52,7 +52,7 @@ data ToolAdmission = ToolAdmitted !ToolBinding | ToolNeedsPermission !ToolBindin
 -- provide a revision, recovery class, scope or idempotency key.
 validateToolInvocation :: HarnessPolicy -> [ToolBinding] -> [ToolBinding] -> ReplayAssistant -> ToolPosition -> Either ExecutionError ToolAdmission
 validateToolInvocation policy pinned offered assistant position = do
-  unless (assistant.format == V1 && assistant.stopReason == ToolUse && isNothing assistant.failure) (deny "assistant did not finish a tool request")
+  unless (validAssistantHeader assistant && not (any isDataBlock assistant.blocks) && assistant.stopReason == ToolUse && isNothing assistant.failure) (deny "assistant did not finish a tool request")
   let calls = toolInvocations assistant
       ids = map (\(call :: ToolInvocation) -> call.callId) calls
   unless (not (null calls) && length calls <= 128 && length (nub ids) == length ids && all (\value -> not (Text.null (providerCoordinateText value)) && Text.length (providerCoordinateText value) <= 256) ids) (deny "invalid tool call identities")
@@ -75,7 +75,7 @@ validateToolInvocation policy pinned offered assistant position = do
 -- The runner may admit an ordinary bounded repair after a refusal.
 validateTerminalOutput :: HarnessPolicy -> ReplayAssistant -> Either ExecutionError Aeson.Value
 validateTerminalOutput policy assistant = do
-  unless (assistant.format == V1 && isNothing assistant.failure && assistant.stopReason `notElem` [ToolUse, ErrorReason] && null (toolInvocations assistant)) (Left ExecutionOutputInvalid)
+  unless (validAssistantHeader assistant && not (any isDataBlock assistant.blocks) && isNothing assistant.failure && assistant.stopReason `notElem` [ToolUse, ErrorReason] && null (toolInvocations assistant)) (Left ExecutionOutputInvalid)
   let reply = assistantText assistant
   case policy.output of
     AnyReply -> Right ()

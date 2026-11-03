@@ -28,6 +28,7 @@ import Shikigami.AgentValueSpec qualified as AgentValueSpec
 import Shikigami.AppConfigSpec qualified as AppConfigSpec
 import Shikigami.ApprovalNotificationSpec qualified as ApprovalNotificationSpec
 import Shikigami.AttestationContractsSpec qualified as AttestationContractsSpec
+import Shikigami.BaikaiStructuredContentSpec qualified as BaikaiStructuredContentSpec
 import Shikigami.BehaviorInputSpec qualified as BehaviorInputSpec
 import Shikigami.BehaviorProviderSpec qualified as BehaviorProviderSpec
 import Shikigami.BehaviorRetrySpec qualified as BehaviorRetrySpec
@@ -87,6 +88,7 @@ import Shikigami.SinkHonestySpec qualified as SinkHonestySpec
 import Shikigami.SinkIntentSpec qualified as SinkIntentSpec
 import Shikigami.Trigger.Schedule (isDue, nextDue, parseCron)
 import Shikigami.Trigger.Stream (IncludeAgentActors (IncludeAgentActors), matchesStream, matchesStreamWith)
+import Shikigami.TypeSafeDecisionSpec qualified as TypeSafeDecisionSpec
 import Shikigami.WireCompatSpec qualified as WireCompatSpec
 import Shikigami.WorkerSessionPositionSpec qualified as WorkerSessionPositionSpec
 import Shikigami.WorkspaceActionProofSpec qualified as WorkspaceActionProofSpec
@@ -128,6 +130,8 @@ main =
           DecisionContractSpec.tests,
           DecisionModelCatalogSpec.tests,
           DecisionRunnerSpec.tests,
+          TypeSafeDecisionSpec.tests,
+          BaikaiStructuredContentSpec.tests,
           DelegateContextSpec.tests,
           DelegationBatchSpec.tests,
           ExecutionPositionSpec.tests,

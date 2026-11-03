@@ -7,11 +7,17 @@ Anthropic keeps its existing `claude-sonnet-4-6` default. OpenAI selections requ
 an explicit model present in the selected API's released Baikai catalog.
 Unknown ids fail configuration; there is no alias substitution or provider fallback.
 
-Background `claude-cli` and `codex-cli` responses remain unavailable: the selected
-released adapters leave a descendant alive in the cancellation contract probe.
-Configuration names that prerequisite instead of attempting a model call. CLI
+Background `claude-cli` and `codex-cli` responses require enforced deadlines,
+bounded retained output and descendant confinement. The selected release adds
+inherited process-group cancellation; cancellation alone does not supply those
+remaining contracts. Configuration names the requirements before a model call. CLI
 login is not currently an API-key-free background reporter path. See the
 [complete setting/support inventory](../evidence/baikai-execution/contracts.md).
+
+TypeSafe is available only through explicitly judgment-capable
+[typed Flow decisions](../shikumi-flow-decisions.md). It uses its own
+`TYPESAFE_API_KEY` and refuses generative defaults such as token limits and
+reasoning options, including explicit `none`.
 
 ## Response configuration
 

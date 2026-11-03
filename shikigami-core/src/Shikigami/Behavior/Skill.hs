@@ -199,6 +199,7 @@ runToolPath complete model options registry turnLimit = go turnLimit
       case responseError resp of
         Just err -> pure (Left (ProviderFailed (failureClass (isRetryable err)) (renderProviderError err)))
         Nothing
+          | V.any (\case AssistantData {} -> True; _ -> False) (flattenAssistantBlocks resp) -> pure (Left (ProviderFailed Permanent "structured data cannot satisfy a text Skill"))
           | responseStopReason resp == ToolUse,
             not (null (responseToolCalls resp)) ->
               if remaining <= 1
@@ -285,7 +286,9 @@ renderResponse resp =
   -- successful empty answer.
   case responseError resp of
     Just err -> Left (ProviderFailed (failureClass (isRetryable err)) (renderProviderError err))
-    Nothing -> Right (object ["reply" .= renderReply resp])
+    Nothing
+      | V.any (\case AssistantData {} -> True; _ -> False) (flattenAssistantBlocks resp) -> Left (ProviderFailed Permanent "structured data cannot satisfy a text Skill")
+      | otherwise -> Right (object ["reply" .= renderReply resp])
 
 -- | A loggable one-line rendering of an in-band provider failure: its category,
 -- HTTP status when the call was HTTP, and the provider's own detail.

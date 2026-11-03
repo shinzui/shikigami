@@ -182,7 +182,7 @@ tests =
           [ReplayContext LegacyContext Nothing [request], ReplayContext RequestContext Nothing [UserTurn [TextBlock "request"] Nothing], ReplayContext RequestContext Nothing [request, request]]
         let legacy = ReplayContext LegacyContext Nothing [UserTurn [TextBlock "original"] Nothing]
         Aeson.eitherDecode (Aeson.encode legacy) @?= Right legacy
-        let unsupported = Aeson.object ["format" .= (3 :: Int), "systemPrompt" .= Aeson.Null, "messages" .= ([UserTurn [TextBlock "original"] Nothing] :: [ReplayMessage])]
+        let unsupported = Aeson.object ["format" .= (4 :: Int), "systemPrompt" .= Aeson.Null, "messages" .= ([UserTurn [TextBlock "original"] Nothing] :: [ReplayMessage])]
         assertBool "unsupported context version refused at decoding" (isLeft (Aeson.eitherDecode @ReplayContext (Aeson.encode unsupported))),
       testCase "pending calls and signed continuations cannot be compacted away" do
         let opaque = ThinkingBlock "signed" (Just "sig") True (Just (ProviderReplay OpenAIResponses (ProviderValue.providerCoordinate "model") [Aeson.String "opaque"]))
@@ -206,10 +206,10 @@ binding :: ToolBinding
 binding = ToolBinding (ExecutionValue.executionCoordinate "observe") (ExecutionValue.executionCoordinate "1") (ExecutionValue.executionDigest "schema-digest") RepeatableObservation UnreportedInvoiceCost
 
 answer :: Text.Text -> ReplayAssistant
-answer text = ReplayAssistant V1 [TextBlock text] Stop Nothing Nothing (Aeson.object []) Nothing
+answer text = ReplayAssistant LegacyAssistant [TextBlock text] Stop Nothing Nothing (Aeson.object []) Nothing
 
 toolReply :: [(Text.Text, Text.Text, Aeson.Value)] -> ReplayAssistant
-toolReply calls = ReplayAssistant V1 [ToolBlock (ToolInvocation (ProviderValue.providerCoordinate callId) (ExecutionValue.executionCoordinate name) args) | (callId, name, args) <- calls] ToolUse Nothing Nothing (Aeson.object []) Nothing
+toolReply calls = ReplayAssistant LegacyAssistant [ToolBlock (ToolInvocation (ProviderValue.providerCoordinate callId) (ExecutionValue.executionCoordinate name) args) | (callId, name, args) <- calls] ToolUse Nothing Nothing (Aeson.object []) Nothing
 
 expectRight :: (Show e) => Either e a -> IO a
 expectRight = either (\err -> assertFailure (show err) >> fail "expected Right") pure

@@ -113,6 +113,7 @@ callSurface = \case
   OpenAIResponses -> ("responses", "https")
   AnthropicMessagesCli -> ("messages", "cli")
   OpenAICompletionsCli -> ("completions", "cli")
+  TypeSafeSystemOne -> ("typesafe-system-one", "https")
   Custom "stub" -> ("stub", "in-process")
   Custom customApi -> (customApi, "custom")
 

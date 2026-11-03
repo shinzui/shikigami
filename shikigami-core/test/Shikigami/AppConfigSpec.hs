@@ -135,6 +135,7 @@ surfaceTests =
                 "credentials.authorization.actions.shomei.client_secret",
                 "credentials.providers.anthropic.api_key",
                 "credentials.providers.openai.api_key",
+                "credentials.providers.typesafe.api_key",
                 "credentials.sinks.danwa.token",
                 "credentials.sinks.kanmon.token",
                 "credentials.sinks.kawa.token",
@@ -183,6 +184,7 @@ surfaceTests =
           @?= sort
             [ ("ANTHROPIC_API_KEY", "credentials.providers.anthropic.api_key"),
               ("OPENAI_API_KEY", "credentials.providers.openai.api_key"),
+              ("TYPESAFE_API_KEY", "credentials.providers.typesafe.api_key"),
               ("SHIKIGAMI_BEHAVIOR_BASE_URL", "behavior.base_url"),
               ("SHIKIGAMI_BEHAVIOR_OPTIONS_THINKING", "behavior.options.thinking"),
               ("SHIKIGAMI_BEHAVIOR_OPTIONS_MAX_TOKENS", "behavior.options.max_tokens"),
@@ -921,7 +923,7 @@ responseConfigurationTests =
       testCase "CLI promotion refuses without reading a login or requiring an HTTP key" do
         let run = configRun [("behavior.provider", "codex-cli")] CheckConfig
         run.exitCode @?= 4
-        assertBool "release prerequisite named" ("cancellation-safe" `Text.isInfixOf` run.standardError),
+        assertBool "remaining batch requirement named" ("bounded retained output" `Text.isInfixOf` run.standardError),
       testCase "HTTP options arrive typed at the shared builder boundary" do
         let run = configRun [("behavior.provider", "openai"), ("behavior.model", chatModel), ("credentials.providers.openai.api_key", "planted-api-secret"), ("behavior.options.timeout_ms", "1234"), ("behavior.options.seed", "42")] NoDiagnostic
         case run.resolved of

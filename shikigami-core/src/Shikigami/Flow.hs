@@ -50,6 +50,7 @@ import Shikigami.Flow.OpenTelemetryPracticeReview
 import Shikigami.Flow.Routing (Routing)
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Flow.ShikumiDecisionExample (exampleSlots, shikumiDecisionExample)
+import Shikigami.Flow.ShikumiJudgmentExample (judgmentSlots, shikumiJudgmentExample)
 import Shikigami.Flow.Workers (Workers)
 import Shikigami.PracticeReview.Capability
   ( ExecutionContext,
@@ -164,6 +165,13 @@ flowRegistry =
         requiresDefaultModel = DefaultModelOptional,
         lifecycle = LifecycleDiagram "flowchart LR\n Request --> Triage --> Investigation --> Specialist" [],
         run = shikumiDecisionExample
+      },
+    FlowDef
+      { name = declarationCoordinate "shikumi-judgment-example",
+        decisionSlots = judgmentSlots,
+        requiresDefaultModel = DefaultModelOptional,
+        lifecycle = LifecycleDiagram "flowchart LR\n Ticket --> Judgment --> Result" [],
+        run = shikumiJudgmentExample
       },
     FlowDef
       { name = declarationCoordinate "at-risk-customer",

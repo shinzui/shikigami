@@ -28,9 +28,12 @@ Baikai parser, including its `agent` group, and preserve its loader, operator
 ceiling, bounded runner, output discipline and exit codes. They create no durable
 Response, memory session, sink receipt or authorization exception.
 
-A batch adapter must prove descendant cancellation and reporter confinement in
-its owning released package before becoming a background response choice. The
-selected release fails the descendant contract, so CLI responses are unavailable.
+A batch adapter must prove descendant cancellation, enforced deadlines, bounded
+retained output and reporter confinement before becoming a background response
+choice. The 2026-11-03 Baikai 0.10/vendor 0.7.3 candidate passes inherited-group
+cancellation on Darwin. Deadline/output/confinement qualification remains open,
+so CLI responses remain unavailable with that precise refusal. The October
+cancellation failure remains historical evidence for the older selected release.
 Shikigami does not copy the owning process engine or infer confinement from the
 absence of advertised Shikumi tool support. Foreground launch authority does not
 supply background reporter authority.

@@ -15,7 +15,7 @@ import Baikai.Agent.Cli qualified as Agent
 import Baikai.Interactive qualified as Interactive
 import Baikai.Provider.Claude.Interactive qualified as Claude
 import Baikai.Provider.OpenAI.Interactive qualified as Codex
-import Baikai.ThinkingLevel (ThinkingLevel, parseThinkingLevel, renderThinkingLevel)
+import Baikai.ThinkingLevel (ThinkingLevel (ThinkingMinimal, ThinkingNone), parseThinkingLevel, renderThinkingLevel)
 import Control.Exception (IOException, try)
 import Control.Lens ((&), (.~))
 import Data.ByteString qualified as BS
@@ -100,7 +100,7 @@ launchConfig =
         "Reasoning effort"
         ( decoder \k raw -> do
             value <- runDecoder textDecoder k raw
-            maybe (Left (decodeFailure k "minimal, low, medium, high, xhigh or max")) Right (parseThinkingLevel value)
+            maybe (Left (decodeFailure k "none, minimal, low, medium, high, xhigh or max")) Right (parseThinkingLevel value)
         )
         renderThinkingLevel
     sandboxSetting = publicSettingWithRenderer (stableLaunchKey "safety.codex_sandbox") "Explicit Codex sandbox" (enumDecoder [("read-only", Interactive.CodexReadOnly), ("workspace-write", Interactive.CodexWorkspaceWrite), ("danger-full-access", Interactive.CodexDangerFullAccess)]) Interactive.renderCodexSandboxMode
@@ -165,6 +165,9 @@ launchConfigRun options files environment =
 
 launchRequest :: LaunchConfig -> Text -> Maybe Text -> Either Text Interactive.InteractiveLaunchRequest
 launchRequest config prompt system = do
+  if config.provider == Interactive.InteractiveClaude && config.thinking `elem` [Just ThinkingNone, Just ThinkingMinimal]
+    then Left "launch.thinking is unsupported by claude without substituting low"
+    else pure ()
   safety <- case config.provider of
     Interactive.InteractiveCodex
       | isJust config.allowedTools -> Left "launch.safety.claude_allowed_tools is incompatible with codex"

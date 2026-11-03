@@ -341,14 +341,14 @@ tests fixture =
         atRoot <- doesFileExist "domain/shikigami/agent-run.keiro"
         declared <- TextIO.readFile (if atRoot then "domain/shikigami/agent-run.keiro" else "../domain/shikigami/agent-run.keiro")
         let compiled = [slot.label | flow <- Flow.flowRegistry, slot <- flow.decisionSlots]
-        compiled @?= [triageDecisionSlot, investigationDecisionSlot]
+        compiled @?= [triageDecisionSlot, investigationDecisionSlot, judgmentDecisionSlot]
         mapM_
           ( \label -> do
               let (StepName prepare, StepName result) = Decision.decisionStepNames label
               assertBool "prepare declared" (("step " <> prepare) `Text.isInfixOf` declared)
               assertBool "result declared" (("step " <> result) `Text.isInfixOf` declared)
           )
-          [Decision.Triage, Decision.Investigation],
+          [Decision.Triage, Decision.Investigation, Decision.Judgment],
       testCase "local derivation changes neither an old committed result nor a pinned pending state" $
         withRuntime fixture \app store behavior -> do
           (handler, observed) <- scriptedProvider Investigate returned

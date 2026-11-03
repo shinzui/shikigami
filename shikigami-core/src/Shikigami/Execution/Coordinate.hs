@@ -19,6 +19,7 @@ module Shikigami.Execution.Coordinate
     parseContextPosition,
     contextPositionNumber,
     ReplayContextFormat (..),
+    ReplayAssistantFormat (..),
     ToolResultState (..),
     toolResultState,
     toolFailed,
@@ -117,17 +118,31 @@ instance ToJSON ContextPosition where
 instance FromJSON ContextPosition where
   parseJSON value = parseJSON value >>= either (fail . Text.unpack) pure . parseContextPosition
 
-data ReplayContextFormat = LegacyContext | RequestContext deriving stock (Eq, Show)
+data ReplayAssistantFormat = LegacyAssistant | StructuredAssistant deriving stock (Eq, Show)
+
+instance ToJSON ReplayAssistantFormat where
+  toJSON value = toJSON (case value of LegacyAssistant -> 1 :: Int; StructuredAssistant -> 2)
+  toEncoding value = toEncoding (case value of LegacyAssistant -> 1 :: Int; StructuredAssistant -> 2)
+
+instance FromJSON ReplayAssistantFormat where
+  parseJSON value =
+    parseJSON @Int value >>= \case
+      1 -> pure LegacyAssistant
+      2 -> pure StructuredAssistant
+      _ -> fail "unsupported replay assistant version"
+
+data ReplayContextFormat = LegacyContext | RequestContext | StructuredContext deriving stock (Eq, Show)
 
 instance ToJSON ReplayContextFormat where
-  toJSON value = toJSON (case value of LegacyContext -> 1 :: Int; RequestContext -> 2)
-  toEncoding value = toEncoding (case value of LegacyContext -> 1 :: Int; RequestContext -> 2)
+  toJSON value = toJSON (case value of LegacyContext -> 1 :: Int; RequestContext -> 2; StructuredContext -> 3)
+  toEncoding value = toEncoding (case value of LegacyContext -> 1 :: Int; RequestContext -> 2; StructuredContext -> 3)
 
 instance FromJSON ReplayContextFormat where
   parseJSON value =
     parseJSON @Int value >>= \case
       1 -> pure LegacyContext
       2 -> pure RequestContext
+      3 -> pure StructuredContext
       _ -> fail "unsupported replay context version"
 
 data ToolResultState = ToolSucceeded | ToolFailed deriving stock (Eq, Show)

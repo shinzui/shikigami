@@ -98,13 +98,15 @@ data ReplayBlock
   | ThinkingBlock !Text !(Maybe Text) !Bool !(Maybe ProviderReplay)
   | ToolBlock !ToolInvocation
   | ImageBlock !Content.ImageContent
+  | DataBlock !Content.DataContent
+  | UserDataBlock !Aeson.Value
   deriving stock (Eq, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
 instance Show ReplayBlock where show _ = "ReplayBlock <protected>"
 
 data ReplayAssistant = ReplayAssistant
-  { format :: !(FormatVersion "replay-assistant"),
+  { format :: !ReplayAssistantFormat,
     blocks :: ![ReplayBlock],
     stopReason :: !StopReason,
     responseId :: !(Maybe (ProviderCoordinate "provider-response-id")),
@@ -120,11 +122,13 @@ instance Show ReplayAssistant where show assistant = "ReplayAssistant " <> show 
 instance FromJSON ReplayAssistant where
   parseJSON value = do
     assistant <- Aeson.genericParseJSON Aeson.defaultOptions value
-    unless (assistant.format == V1) (fail "unsupported assistant replay version")
+    unless (validAssistantHeader assistant) (fail "unsupported assistant replay version or size")
     unless (length assistant.blocks <= 256 && all assistantBlock assistant.blocks) (fail "unsupported assistant replay blocks")
     pure assistant
     where
       assistantBlock ImageBlock {} = False
+      assistantBlock UserDataBlock {} = False
+      assistantBlock DataBlock {} = True
       assistantBlock _ = True
 
 data ReplayMessage
@@ -162,10 +166,24 @@ contextRequest messages = listToMaybe [message | message@RequestTurn {} <- messa
 validContextHeader :: ReplayContext -> Bool
 validContextHeader context =
   length context.messages <= 10000 && case context.format of
-    LegacyContext -> requests == 0
-    RequestContext -> requests == 1
+    LegacyContext -> requests == 0 && not userData
+    RequestContext -> requests == 1 && not userData
+    StructuredContext -> requests == 1
   where
     requests = length [() | RequestTurn {} <- context.messages]
+    userData = any (\case UserTurn blocks _ -> any isDataBlock blocks; RequestTurn blocks _ -> any isDataBlock blocks; _ -> False) context.messages
+
+isDataBlock :: ReplayBlock -> Bool
+isDataBlock DataBlock {} = True
+isDataBlock UserDataBlock {} = True
+isDataBlock _ = False
+
+validAssistantHeader :: ReplayAssistant -> Bool
+validAssistantHeader assistant =
+  length assistant.blocks <= 256
+    && case assistant.format of
+      LegacyAssistant -> not (any isDataBlock assistant.blocks)
+      StructuredAssistant -> toInteger (Lazy.length (Aeson.encode assistant)) <= 1048576
 
 data SkillInstructions = SkillInstructions
   { name :: !(ExecutionCoordinate "skill-name"),
@@ -464,8 +482,8 @@ data ExecutionError
 captureAssistant :: Response.Response -> ReplayAssistant
 captureAssistant response =
   ReplayAssistant
-    { format = V1,
-      blocks = map assistantBlock (Vector.toList response.message.content),
+    { format = if any isDataBlock blocks then StructuredAssistant else LegacyAssistant,
+      blocks,
       stopReason = response.message.stopReason,
       responseId = providerCoordinate <$> response.responseId,
       timestamp = response.message.timestamp,
@@ -473,15 +491,17 @@ captureAssistant response =
       failure = (\err -> (retryability (Error.isRetryable err), Text.take 512 (Error.message err))) <$> Response.responseError response
     }
   where
+    blocks = map assistantBlock (Vector.toList response.message.content)
     assistantBlock = \case
       Content.AssistantText text -> TextBlock text.text
       Content.AssistantToolCall call -> ToolBlock (ToolInvocation (providerCoordinate call.id_) (executionCoordinate call.name) call.arguments)
       Content.AssistantThinking thinking -> ThinkingBlock thinking.thinking thinking.signature thinking.redacted (replay <$> thinking.replayState)
+      Content.AssistantData dat -> DataBlock dat
     replay value = ProviderReplay value.replayApi (providerCoordinate value.replayModel) (Vector.toList value.replayItems)
 
 restoreAssistant :: ReplayAssistant -> Either ExecutionError Message.AssistantPayload
 restoreAssistant assistant = do
-  unless (assistant.format == V1) (Left UnsupportedReplay)
+  unless (validAssistantHeader assistant) (Left UnsupportedReplay)
   blocks <- traverse restore assistant.blocks
   pure
     Message.AssistantPayload
@@ -498,7 +518,9 @@ restoreAssistant assistant = do
       TextBlock text -> Right (Content.AssistantText (Content.TextContent text))
       ThinkingBlock text signature redacted replay -> Right (Content.AssistantThinking (Content.ThinkingContent text signature redacted ((\value -> Content.ThinkingReplay value.api (providerCoordinateText value.model) (Vector.fromList value.items)) <$> replay)))
       ToolBlock call -> Right (Content.AssistantToolCall (Content.ToolCall (providerCoordinateText call.callId) (executionCoordinateText call.name) call.arguments))
+      DataBlock dat -> Right (Content.AssistantData dat)
       ImageBlock {} -> Left UnsupportedReplay
+      UserDataBlock {} -> Left UnsupportedReplay
 
 restoreContext :: ReplayContext -> Either ExecutionError Context.Context
 restoreContext context = do
@@ -519,6 +541,7 @@ restoreContext context = do
         pure (Message.ToolResultMessage (Message.ToolResultPayload (providerCoordinateText callId) (executionCoordinateText name) (Vector.fromList content) (toolFailed failed) timestamp))
     user (TextBlock text) = Right (Content.UserText (Content.TextContent text))
     user (ImageBlock image) = Right (Content.UserImage image)
+    user (UserDataBlock dat) | context.format == StructuredContext = Right (Content.UserData dat)
     user _ = Left UnsupportedReplay
     tool (TextBlock text) = Right (Content.ToolResultText (Content.TextContent text))
     tool (ImageBlock image) = Right (Content.ToolResultImage image)
@@ -529,3 +552,9 @@ toolInvocations assistant = [call | ToolBlock call <- assistant.blocks]
 
 assistantText :: ReplayAssistant -> Text
 assistantText assistant = Text.concat [text | TextBlock text <- assistant.blocks]
+
+captureUserContent :: Content.UserContent -> ReplayBlock
+captureUserContent = \case
+  Content.UserText text -> TextBlock text.text
+  Content.UserImage image -> ImageBlock image
+  Content.UserData value -> UserDataBlock value

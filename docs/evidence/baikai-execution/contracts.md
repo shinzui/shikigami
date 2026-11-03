@@ -1,5 +1,31 @@
 # Baikai execution contracts
 
+## Released-cohort consumer checkpoint — 2026-11-03 UTC
+
+Kioku API/core/migrations 0.12.0.2 now admits Shikumi 0.5.0.0; tag
+`v0.12.0.2` at `mori://shinzui/kioku` peels to
+`5a62c3ef29cad50543f7bae97126e0431225998d`. FRIC-48 is resolved. The full
+application candidate resolves at index `2026-11-03T02:59:02Z` with Baikai
+0.10.0.0, vendors 0.7.3.0, agent 0.2.0.4, TypeSafe 0.1.0.1, Shikumi 0.5.0.0
+and its published companion packages, Effectful 2.7.1.0/core 2.7.1.2 and
+strict-mutable-base 2.0.0.0. The existing Handan source pin builds unchanged.
+No new bounds override is used. The Cabal candidate is ahead of the frozen Nix
+cohort; immutable role packaging remains a separate acceptance gate.
+
+The real public TypeSafe complete path and durable queue/restart checks are
+recorded in [structured-judgments.md](structured-judgments.md). Public Shikumi
+judgment streaming still refuses before transport; FRIC-49 is promoted to
+`mori://shinzui/shikumi/okf/improvement-requests/concepts/IR-5`.
+
+Both CLI adapters now pass the positive inherited-group cancellation probes in
+`BehaviorProviderSpec`: synchronize on an owned child, cancel the caller, require
+the original `ThreadKilled`, and verify the child is gone. The probes use fake
+executables and no vendor login. These are Darwin consumer results; Linux
+consumer qualification remains open. The application gate is now
+`BatchBoundsAndConfinementRequired`: the batch APIs still need an enforced
+deadline, bounded retained output and descendant confinement. Group
+cancellation does not establish those properties.
+
 ## Shikumi publication follow-up — 2026-11-03 UTC
 
 Shikumi 0.5.0.0, tools 0.4.2.0, cache 0.2.1.0, trace/eval 0.3.1.0 and
@@ -105,7 +131,7 @@ the actual model/options, so repeated registration does not replace per-run
 executable configuration. Baikai's default registry is global. Shikigami uses
 only the immutable shipped HTTP handlers and its immutable stub handler here.
 
-## Batch release prerequisite
+## October batch release prerequisite (historical)
 
 Owning defect report: `mori://shinzui/baikai/okf/bug-reports/concepts/BUG-1`
 (status `reported`), with the exact bounded reproduction and cancellation fix

@@ -28,16 +28,16 @@ with-compiler: ghc-9.12.4
 -- The co-developed cohort is selected by the components' own build-depends
 -- bounds, resolved against this fixed Hackage snapshot. Advance it to move the
 -- cohort; docs/dependency-cohort.md records the release matrix and evidence.
-index-state: 2026-10-30T19:00:00Z
+index-state: 2026-11-03T02:59:02Z
 -- Nothing links keiro-dsl, so no bound ties it to the runtime's Keiro release;
 -- the toolchain and the runtime move in lockstep.
 -- Preserve the qualified runtime closure while adding released Baikai surfaces.
 constraints:
   keiro-dsl ==0.22.0.0,
-  baikai ==0.7.2.0,
-  baikai-claude ==0.7.1.0,
-  baikai-openai ==0.7.1.0,
-  baikai-agent ==0.2.0.1,
+  baikai ==0.10.0.0,
+  baikai-claude ==0.7.3.0,
+  baikai-openai ==0.7.3.0,
+  baikai-agent ==0.2.0.4,
   Diff ==1.0.2,
   HUnit ==1.6.2.0,
   OneTuple ==0.4.3,
@@ -126,8 +126,8 @@ constraints:
   dotgen ==0.4.3,
   easy-file ==0.2.5,
   ech-config ==0.0.1,
-  effectful ==2.6.1.0,
-  effectful-core ==2.6.1.0,
+  effectful ==2.7.1.0,
+  effectful-core ==2.7.1.2,
   either ==5.0.3,
   entropy ==0.4.1.11,
   ephemeral-pg ==0.3.1.0,
@@ -200,9 +200,9 @@ constraints:
   keiro-ops-http ==0.22.0.0,
   keiro-pgmq ==0.22.0.0,
   keiro-test-support ==0.22.0.0,
-  kioku-api ==0.12.0.0,
-  kioku-core ==0.12.0.0,
-  kioku-migrations ==0.12.0.0,
+  kioku-api ==0.12.0.2,
+  kioku-core ==0.12.0.2,
+  kioku-migrations ==0.12.0.2,
   kiroku-store ==0.12.0.0,
   kiroku-metrics ==0.4.0.0,
   kiroku-otel ==0.3.0.0,
@@ -300,12 +300,12 @@ constraints:
   shibuya-kafka-adapter ==0.12.0.0,
   shibuya-kiroku-adapter ==0.7.0.0,
   shibuya-pgmq-adapter ==0.18.0.0,
-  shikumi ==0.4.0.0,
-  shikumi-cache ==0.2.0.0,
-  shikumi-eval ==0.3.0.0,
-  shikumi-tools ==0.4.0.0,
-  shikumi-trace ==0.3.0.0,
-  shikumi-trace-otel ==0.1.2.0,
+  shikumi ==0.5.0.0,
+  shikumi-cache ==0.2.1.0,
+  shikumi-eval ==0.3.1.0,
+  shikumi-tools ==0.4.2.0,
+  shikumi-trace ==0.3.1.0,
+  shikumi-trace-otel ==0.1.3.0,
   simple-sendfile ==0.2.32,
   singleton-bool ==0.1.8,
   some ==1.1,
@@ -316,7 +316,7 @@ constraints:
   streamly ==0.11.1,
   streamly-core ==0.3.1,
   strict ==0.5.1,
-  strict-mutable-base ==1.1.0.0,
+  strict-mutable-base ==2.0.0.0,
   string-conversions ==0.4.0.1,
   syb ==0.7.4,
   tagged ==0.8.10,

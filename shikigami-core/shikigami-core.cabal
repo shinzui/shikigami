@@ -97,6 +97,7 @@ library
     Shikigami.Capability.Overlay
     Shikigami.Capability.Provider
     Shikigami.Capability.Tools
+    Shikigami.Decision.Answer
     Shikigami.Decision.Contract
     Shikigami.Decision.Evidence
     Shikigami.Decision.ModelAlias
@@ -156,6 +157,7 @@ library
     Shikigami.Flow.OpenTelemetryPracticeReview
     Shikigami.Flow.Routing
     Shikigami.Flow.ShikumiDecisionExample
+    Shikigami.Flow.ShikumiJudgmentExample
     Shikigami.Flow.Workers
     Shikigami.FormatVersion
     Shikigami.Generated.Conformance
@@ -231,6 +233,7 @@ library
     Shikigami.Prelude
     Shikigami.Program.Decision
     Shikigami.Program.Decision.Examples
+    Shikigami.Program.Decision.JudgmentExample
     Shikigami.Program.DecisionRunner
     Shikigami.Program.Registry
     Shikigami.Repository
@@ -398,6 +401,7 @@ library
     baikai,
     baikai-claude,
     baikai-openai,
+    baikai-typesafe,
     base >=4.21 && <5,
     bytestring,
     containers >=0.6,
@@ -509,6 +513,7 @@ test-suite shikigami-core-test
     Shikigami.AppConfigSpec
     Shikigami.ApprovalNotificationSpec
     Shikigami.AttestationContractsSpec
+    Shikigami.BaikaiStructuredContentSpec
     Shikigami.BehaviorInputSpec
     Shikigami.BehaviorProviderSpec
     Shikigami.BehaviorRetrySpec
@@ -530,6 +535,7 @@ test-suite shikigami-core-test
     Shikigami.Fixture.ExecutionIdentity
     Shikigami.Fixture.KawaStub
     Shikigami.Fixture.SinkHttp
+    Shikigami.Fixture.TypeSafe
     Shikigami.FormatVersionSpec
     Shikigami.KanmonClientSpec
     Shikigami.KeiroSpecificationSpec
@@ -547,6 +553,7 @@ test-suite shikigami-core-test
     Shikigami.SinkAuthSpec
     Shikigami.SinkHonestySpec
     Shikigami.SinkIntentSpec
+    Shikigami.TypeSafeDecisionSpec
     Shikigami.WireCompatSpec
     Shikigami.WorkerSessionPositionSpec
     Shikigami.WorkspaceActionProofSpec
@@ -608,6 +615,7 @@ test-suite shikigami-core-test
     shibuya-core,
     shikigami-core,
     shikumi,
+    shikumi-cache,
     shikumi-tools,
     streamly-core,
     tasty,
@@ -638,6 +646,7 @@ test-suite shikigami-core-postgres-test
     Shikigami.Fixture.ExecutionIdentity
     Shikigami.Fixture.KawaStub
     Shikigami.Fixture.SinkHttp
+    Shikigami.Fixture.TypeSafe
     Shikigami.FlowLifecycleSpec
     Shikigami.GrantStoreSpec
     Shikigami.ObjectiveCheckpointSpec
@@ -652,6 +661,7 @@ test-suite shikigami-core-postgres-test
     Shikigami.RunEvidenceSpec
     Shikigami.SinkDeliverySpec
     Shikigami.SpikeWorkflowSpec
+    Shikigami.TypeSafeDecisionWorkflowSpec
     Shikigami.WorkerSessionCapabilitySpec
     Shikigami.WorkerSessionHandoffSpec
     Shikigami.WorkerSessionSpec

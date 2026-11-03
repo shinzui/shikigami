@@ -26,6 +26,7 @@ import Data.Text qualified as Text
 import GHC.Generics (Generic)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Program.Decision
+import Shikigami.Program.Decision.JudgmentExample (judgmentProgram)
 import Shikumi.Adapter (ToPrompt)
 import Shikumi.Error (ShikumiError (ValidationFailure))
 import Shikumi.Program (Program (..), emptyParams)
@@ -136,10 +137,10 @@ investigationProgram =
       )
 
 examplePrograms :: ProgramRegistry
-examplePrograms = either (error . show) id (programRegistry [SomeProgram triageProgram, SomeProgram investigationProgram])
+examplePrograms = either (error . show) id (programRegistry [SomeProgram triageProgram, SomeProgram investigationProgram, SomeProgram judgmentProgram])
 
 exampleCodecs :: ResultCodecRegistry
-exampleCodecs = either (error . show) id (resultCodecRegistry [retainedCodec triageProgram, retainedCodec investigationProgram])
+exampleCodecs = either (error . show) id (resultCodecRegistry [retainedCodec triageProgram, retainedCodec investigationProgram, retainedCodec judgmentProgram])
 
 bounded :: Int -> Text -> Either Text ()
 bounded maximum text

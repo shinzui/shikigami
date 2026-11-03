@@ -6,6 +6,7 @@ module Shikigami.Program.Decision
     descriptor,
     RegisteredProgram,
     registerProgram,
+    registerJudgmentProgram,
     programRef,
     executable,
     registeredCodec,
@@ -35,11 +36,14 @@ where
 import Data.Aeson (FromJSON, Result (..), ToJSON, Value, fromJSON, object, toJSON, (.=))
 import Data.Kind (Type)
 import Data.List (find, nub)
+import Data.Map.Strict qualified as Map
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import Data.Typeable (Typeable, cast)
 import Shikigami.Decision.Contract
-import Shikumi.Program (Params (..), Program (..), nodeInstructionsIndexed, programParams)
+import Shikumi.Decision (Judgment (..))
+import Shikumi.Decision.Setting (defaultSetting)
+import Shikumi.Program (Params (..), Program (..), nodeDecisionFieldsIndexed, nodeInstructionsIndexed, programParams)
 import Shikumi.Signature qualified as Signature
 
 type role DecisionProgramRef nominal nominal
@@ -122,7 +126,8 @@ registerProgram rawProgramId rawVersion rawImplementationDigest rawInputSchemaVe
                     validatorVersion,
                     parameterFormat = ParametersV1,
                     parameterDigest = programParameterDigest (effectiveParameterState program localState),
-                    derivationVersion
+                    derivationVersion,
+                    outputCapability = GenerativeDecision
                   },
             program,
             codec,
@@ -140,13 +145,34 @@ effectiveParameterState :: Program i o -> Value -> Value
 effectiveParameterState program localState =
   object
     [ "format" .= (1 :: Int),
-      "nodes" .= zipWith effective (nodeInstructionsIndexed program) (programParams program),
+      "nodes" .= zipWith3 effective (nodeInstructionsIndexed program) (programParams program) (nodeDecisionFieldsIndexed program),
       "localDerivationState" .= localState
     ]
   where
-    effective base Params {instructionOverride, demos} =
-      object
-        ["instruction" .= fromMaybe base instructionOverride, "demos" .= demos]
+    effective base Params {instructionOverride, demos, decisionSettings} judgments =
+      let settings = Map.union decisionSettings (Map.fromList [(judgmentField judgment, defaultSetting judgment) | judgment <- judgments])
+       in object
+            (["instruction" .= fromMaybe base instructionOverride, "demos" .= demos] <> ["decisionSettings" .= settings | not (Map.null settings)])
+
+-- | A distinct immutable registration authorizes only the closed-set route.
+registerJudgmentProgram ::
+  Text ->
+  Text ->
+  Text ->
+  Text ->
+  Text ->
+  Text ->
+  Text ->
+  Value ->
+  Program i o ->
+  ResultCodec o ->
+  (i -> Either Text i) ->
+  (o -> Either Text o) ->
+  Either DecisionFailure (RegisteredProgram i o)
+registerJudgmentProgram rawProgramId rawVersion rawImplementationDigest rawInputSchemaVersion rawResultSchemaVersion rawValidatorVersion rawDerivationVersion localState program codec inputValidator resultValidator = do
+  registered <- registerProgram rawProgramId rawVersion rawImplementationDigest rawInputSchemaVersion rawResultSchemaVersion rawValidatorVersion rawDerivationVersion localState program codec inputValidator resultValidator
+  let DecisionProgramRef metadata = registered.ref
+  pure registered {ref = DecisionProgramRef (metadata {outputCapability = ClosedSetJudgment})}
 
 -- The upstream existential Predict dictionaries do not include ToJSON for
 -- signature demos. Keeping demos in serializable Params closes that blind spot.

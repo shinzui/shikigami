@@ -32,6 +32,7 @@ import Effectful.Exception (throwIO)
 import GHC.Generics (Generic)
 import Handan.Runtime (Runtime)
 import Keiro.Workflow (StepName (..), Workflow, WorkflowId (..), currentRunGeneration, currentWorkflow, step)
+import Keiro.Workflow qualified as Workflow
 import Shikigami.Agent.Decl (AgentDecl)
 import Shikigami.Attestation.PolicyValue (mkCeiling)
 import Shikigami.Attestation.Resolve (ResolvedProfile)
@@ -47,7 +48,7 @@ import Shikigami.Router.Catalog (CandidateCatalog)
 import Shikigami.Router.Decision (RouteDecision, validateRouteDecision)
 import Shikigami.Router.Declaration (RouterDeclarationView (policy), validateRouterDeclaration, validatedRouterDeclaration)
 
-data DecisionLabel = Triage | Investigation
+data DecisionLabel = Triage | Investigation | Judgment
   deriving stock (Eq, Ord, Show)
 
 data DecisionStep i o = DecisionStep !DecisionLabel !(DecisionProgramRef i o)
@@ -61,10 +62,12 @@ decisionSlot (DecisionStep label ref) models = DecisionSlot (slotLabel label) [d
 slotLabel :: DecisionLabel -> DecisionSlotLabel
 slotLabel Triage = triageDecisionSlot
 slotLabel Investigation = investigationDecisionSlot
+slotLabel Judgment = judgmentDecisionSlot
 
 decisionStepNames :: DecisionLabel -> (StepName, StepName)
 decisionStepNames Triage = (StepName "decision-prepare-triage", StepName "decision-result-triage")
 decisionStepNames Investigation = (StepName "decision-prepare-investigate", StepName "decision-result-investigate")
+decisionStepNames Judgment = (StepName "decision-prepare-judge", StepName "decision-result-judge")
 
 data DecisionServices = DecisionServices
   { catalog :: !ModelCatalog,
@@ -125,6 +128,7 @@ runDecision env action = do
     ( \_ -> \case
         RefuseDecision failure -> throwIO (DecisionAbort failure)
         Decide (DecisionStep label (_currentRef :: DecisionProgramRef i o)) alias input -> do
+          when (label == Judgment) requireStructuredPatch
           repeated <- liftIO (atomicModifyIORef' used (\labels -> (label : labels, label `elem` labels)))
           when repeated (throwIO (DecisionAbort (decisionFailure InvalidSlot "decision slot repeated within one generation")))
           let (prepareName, resultName) = decisionStepNames label
@@ -160,6 +164,7 @@ runDecision env action = do
                       )
               Right (PreparedDecision identity (runCorrelationId workflowId) nativeWorkflowId checkedGeneration (slotLabel label) program (toJSON checked) selected policy.policy)
           prepared <- either (throwIO . DecisionAbort) pure preparedResult
+          when (label /= Judgment && prepared.program.outputCapability == ClosedSetJudgment) requireStructuredPatch
           outcome <- journal env resultName do
             -- Only the action of an uncommitted result step may consult executables
             -- or credential bindings. A completed step never enters this branch.
@@ -170,11 +175,11 @@ runDecision env action = do
                     Success value -> Right value
                     Error _ -> Left (decisionFailure InvalidInput "pinned decision input codec is unavailable")
                   pure (ref, storedInput)
-            result <- case pending of
-              Left refusal -> pure (Left refusal)
+            (result, observations) <- case pending of
+              Left refusal -> pure (Left refusal, [])
               Right (ref, storedInput) ->
                 liftIO
-                  ( runDecisionProgram
+                  ( runDecisionProgramWithAnswers
                       DecisionRuntime
                         { runtime = env.runtime,
                           programs = env.services.programs,
@@ -189,17 +194,18 @@ runDecision env action = do
                       ref
                       storedInput
                   )
-            case result of
-              Left refusal -> pure (DecisionOutcome prepared.identity prepared.program (Left refusal) [])
+            reportResult <- liftIO (readDecisionReport env.evidence prepared.runId)
+            report <- either (throwIO . DecisionAbort) pure reportResult
+            let calls = maybe [] (filter (\call -> call.invocationId == prepared.identity) . (\stored -> stored.calls)) report
+            unless
+              (all (\call -> call.terminal /= Nothing) calls)
+              (throwIO (DecisionAbort (decisionFailure EvidenceFailure "decision has an unresolved provider expectation")))
+            committed <- case result of
+              Left refusal -> pure (Left refusal)
               Right output -> do
                 codec <- either (throwIO . DecisionAbort) pure (lookupResultCodec @o env.services.codecs prepared.program)
-                reportResult <- liftIO (readDecisionReport env.evidence prepared.runId)
-                report <- either (throwIO . DecisionAbort) pure reportResult
-                let calls = maybe [] (filter (\call -> call.invocationId == prepared.identity) . (\stored -> stored.calls)) report
-                unless
-                  (all (\call -> call.terminal /= Nothing) calls)
-                  (throwIO (DecisionAbort (decisionFailure EvidenceFailure "decision has an unresolved provider expectation")))
-                pure (DecisionOutcome prepared.identity prepared.program (Right (encodeResult codec output)) (map (\call -> call.callId) calls))
+                pure (Right (encodeResult codec output))
+            pure (decisionOutcome prepared.identity prepared.program committed (map (\call -> call.callId) calls) observations)
           unless
             (outcome.preparationId == prepared.identity && outcome.program == prepared.program)
             (throwIO (DecisionAbort (decisionFailure ContractMismatch "decision outcome and preparation differ")))
@@ -218,6 +224,11 @@ runDecision env action = do
             Right _ -> pure decision
     )
     action
+
+requireStructuredPatch :: (Workflow :> es, IOE :> es) => Eff es ()
+requireStructuredPatch = do
+  enabled <- Workflow.patch (Workflow.PatchId "shikigami-structured-judgments-v1")
+  unless enabled (throwIO (DecisionAbort (decisionFailure ContractMismatch "structured judgments are unavailable to this historical workflow generation")))
 
 journal :: (Workflow :> es, IOE :> es, ToJSON a, FromJSON a) => DecisionEnv -> StepName -> Eff es a -> Eff es a
 journal env name action = step name do

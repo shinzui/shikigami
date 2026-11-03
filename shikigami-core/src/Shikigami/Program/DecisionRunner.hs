@@ -7,6 +7,7 @@ module Shikigami.Program.DecisionRunner
     DecisionAbort (..),
     decisionProviders,
     runDecisionProgram,
+    runDecisionProgramWithAnswers,
   )
 where
 
@@ -15,6 +16,7 @@ import Baikai.Auth (ApiKeySource (ApiKeyLiteral))
 import Baikai.Context (Context)
 import Baikai.Context qualified as Context
 import Baikai.Evidence qualified as Evidence
+import Baikai.Message qualified as Message
 import Baikai.Model qualified as Model
 import Baikai.Options (Options)
 import Baikai.Options qualified as Options
@@ -22,6 +24,7 @@ import Baikai.Provider.Claude.Api (claudeMessagesProvider)
 import Baikai.Provider.OpenAI.Api (openaiChatProvider)
 import Baikai.Provider.OpenAI.Responses (openaiResponsesProvider)
 import Baikai.Provider.Registry
+import Baikai.Provider.TypeSafe.Api (typesafeProvider)
 import Baikai.Response (Response (..), responseError)
 import Baikai.Stream (requireEvidenceOnTerminal)
 import Baikai.Stream.Event (AssistantMessageEvent (..), TerminalPayload (..))
@@ -31,7 +34,7 @@ import Control.Lens ((&), (.~))
 import Control.Monad (unless, when)
 import Data.Aeson (ToJSON, toJSON)
 import Data.Generics.Labels ()
-import Data.IORef (atomicModifyIORef', newIORef)
+import Data.IORef (atomicModifyIORef', newIORef, readIORef)
 import Data.Map.Strict qualified as Map
 import Data.Maybe (catMaybes, isJust)
 import Data.Text (Text)
@@ -47,6 +50,7 @@ import Shikigami.Behavior.Compatibility (validateResponseRequest)
 import Shikigami.Behavior.Error (TransientBehaviorFailure (..))
 import Shikigami.Behavior.Provider.Call (providerCallFor, validateProfileCall)
 import Shikigami.Behavior.Provider.Coordinate (providerCoordinateText)
+import Shikigami.Decision.Answer qualified as Answer
 import Shikigami.Decision.Contract
 import Shikigami.Decision.ModelCatalog
 import Shikigami.Decision.StubProvider (decisionStubProvider)
@@ -78,24 +82,31 @@ instance Exception DecisionAbort
 -- | First-class released provider values; constructing an invocation never
 -- mutates Baikai's process-global registry.
 decisionProviders :: [ApiProvider]
-decisionProviders = [decisionStubProvider, claudeMessagesProvider, openaiChatProvider, openaiResponsesProvider]
+decisionProviders = [decisionStubProvider, claudeMessagesProvider, openaiChatProvider, openaiResponsesProvider, typesafeProvider]
 
 runDecisionProgram :: (Typeable i, Typeable o, ToJSON i) => DecisionRuntime -> PreparedDecision -> DecisionProgramRef i o -> i -> IO (Either DecisionFailure o)
-runDecisionProgram env prepared ref input =
-  case admission of
+runDecisionProgram env prepared ref input = fmap fst (runDecisionProgramWithAnswers env prepared ref input)
+
+runDecisionProgramWithAnswers :: (Typeable i, Typeable o, ToJSON i) => DecisionRuntime -> PreparedDecision -> DecisionProgramRef i o -> i -> IO (Either DecisionFailure o, [DecisionAnswer])
+runDecisionProgramWithAnswers env prepared ref input = do
+  answers <- newIORef []
+  result <- case admission of
     Left refusal -> pure (Left refusal)
     Right (registered, binding, checkedInput) ->
-      execute registered binding checkedInput `catch` \(DecisionAbort refusal) -> pure (Left refusal)
+      execute answers registered binding checkedInput `catch` \(DecisionAbort refusal) -> pure (Left refusal)
+  observations <- readIORef answers
+  pure (result, observations)
   where
     admission = do
       unlessEither (prepared.program == descriptor ref) ContractMismatch "prepared decision program identity differs"
       unlessEither (prepared.policy == ((\p -> (resolvedProfileView p).ref) <$> env.profile)) ContractMismatch "prepared decision policy differs"
       registered <- lookupProgram env.programs ref
       binding <- pinnedBinding env.catalog prepared.model
+      unlessEither (not (Model.isJudgmentOnly (bindingModel binding)) || prepared.program.outputCapability == ClosedSetJudgment) ForbiddenModel "program does not declare closed-set judgment output"
       checked <- validateInput registered input
       unlessEither (toJSON checked == prepared.input) ContractMismatch "prepared decision input differs"
       pure (registered, binding, checked)
-    execute registered binding checked = do
+    execute answers registered binding checked = do
       let selected = bindingModel binding
       handler <- case [p | p <- env.providers, p.apiTag == Model.api selected] of
         [p] -> pure p
@@ -138,10 +149,27 @@ runDecisionProgram env prepared ref input =
                   )
                   (abort EvidenceFailure "decision provider terminal does not uphold its admitted contract")
               _ -> pure ()
+          observeAnswer token content = do
+            snapshot <- either (abort OutputDecodeFailure) pure (Answer.captureAnswer content)
+            case snapshot of
+              Nothing -> pure ()
+              Just snapshot -> do
+                unless (prepared.program.outputCapability == ClosedSetJudgment) (abort OutputDecodeFailure "program received undeclared structured answer content")
+                accepted <-
+                  atomicModifyIORef'
+                    answers
+                    ( \previous ->
+                        let next = previous <> [DecisionAnswer (attemptId token) snapshot]
+                         in if any (\answer -> answer.callId == attemptId token) previous || sum (map (Answer.answerBytes . (\answer -> answer.snapshot)) next) > Answer.maxAnswerBytes
+                              then (previous, False)
+                              else (next, True)
+                    )
+                unless accepted (abort OutputDecodeFailure "structured answers exceed retained invocation bounds")
           complete model context options = do
             (token, effective) <- begin model context options
             response <- transportException token (completeRequestWith realRegistry model context effective)
             finish token (if isJust (responseError response) then CallFailed else CallSucceeded) response.evidence
+            unless (isJust (responseError response)) (observeAnswer token response.message.content)
             pure response
           stream model context options = Stream.concatEffect do
             (token, effective) <- begin model context options
@@ -152,7 +180,11 @@ runDecisionProgram env prepared ref input =
           terminal token effective event = do
             let checkedEvent = requireEvidenceOnTerminal effective event
             case checkedEvent of
-              EventDone payload -> finish token CallSucceeded payload.evidence
+              EventDone payload -> do
+                finish token CallSucceeded payload.evidence
+                case payload.message of
+                  Message.AssistantMessage message -> observeAnswer token message.content
+                  _ -> abort OutputDecodeFailure "successful terminal is not an assistant message"
               EventError payload -> finish token CallFailed payload.evidence
               _ -> pure ()
             pure checkedEvent

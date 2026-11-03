@@ -30,6 +30,10 @@ workflow AgentRun
     step decision-catalog-investigate -> CandidateCatalog
     step decision-prepare-investigate -> PreparedDecisionResolution
     step decision-result-investigate -> DecisionOutcome
+    patch shikigami-structured-judgments-v1 {
+      step decision-prepare-judge -> PreparedDecisionResolution
+      step decision-result-judge -> DecisionOutcome
+    }
     step route-catalog-architecture-practice -> CandidateCatalog
     step worker-coordination-policy -> CoordinationPolicyResolution
     patch shikigami-objective-tracking-v1 {

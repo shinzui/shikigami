@@ -123,6 +123,7 @@ module Shikigami.App.Config
     workspaceSupervisorKey,
     anthropicApiKeyKey,
     openaiApiKeyKey,
+    typesafeApiKeyKey,
     actionAuthorizationModeKey,
     actionKikanBaseUrlKey,
     actionShomeiBaseUrlKey,
@@ -647,6 +648,7 @@ instance Aeson.FromJSON DecisionModelSpec where
           "anthropic" -> Just (AnthropicMessages, "anthropic")
           "openai" -> Just (OpenAIChatCompletions, "openai")
           "openai-responses" -> Just (OpenAIResponses, "openai")
+          "typesafe" -> Just (TypeSafeSystemOne, "typesafe")
           _ -> Nothing
         candidates = case surface of
           Just (apiTag, providerName) -> [m | m <- allModels, api m == apiTag, provider m == providerName]
@@ -683,6 +685,7 @@ decisionModelsConfig =
     <*> whenConfig (needs AnthropicMessages <$> specs) (required anthropicApiKeySetting)
     <*> whenConfig (needs OpenAIChatCompletions <$> specs) (required openaiApiKeySetting)
     <*> whenConfig (needs OpenAIResponses <$> specs) (required openaiApiKeySetting)
+    <*> whenConfig (needs TypeSafeSystemOne <$> specs) (required typesafeApiKeySetting)
   where
     -- Redact raw source candidates too: malformed nested input must not expose
     -- a mistakenly embedded credential in an explain-config failure.
@@ -692,14 +695,15 @@ decisionModelsConfig =
         (secretSetting behaviorDecisionModelsKey "Finite decision model aliases; credentials use credentials.providers settings" jsonDecoder)
         (constant "no-decision-models" "No decision authority by default" [])
     needs apiTag = any (\spec -> Model.api spec.model == apiTag)
-    assemble entries anthropic openai responses = do
-      bindings <- traverse (bind anthropic openai responses) entries
+    assemble entries anthropic openai responses typesafe = do
+      bindings <- traverse (bind anthropic openai responses typesafe) entries
       Decision.modelCatalog bindings
-    bind anthropic openai responses spec =
+    bind anthropic openai responses typesafe spec =
       let key = case Model.api spec.model of
             AnthropicMessages -> anthropic
             OpenAIChatCompletions -> openai
             OpenAIResponses -> responses
+            TypeSafeSystemOne -> typesafe
             _ -> Nothing
        in Decision.modelBinding
             spec.alias
@@ -761,7 +765,7 @@ cacheRetentions = [("none", CacheRetentionNone), ("short", CacheRetentionShort),
 thinkingDecoder :: Decoder ThinkingLevel
 thinkingDecoder = decoder \key raw -> do
   value <- runDecoder textDecoder key raw
-  maybe (Left (decodeFailure key "minimal, low, medium, high, xhigh or max")) Right (parseThinkingLevel value)
+  maybe (Left (decodeFailure key "none, minimal, low, medium, high, xhigh or max")) Right (parseThinkingLevel value)
 
 positiveIntDecoder :: Decoder Int
 positiveIntDecoder = decoder \key raw -> do
@@ -1235,11 +1239,11 @@ behaviorProviderSetting :: Setting ProviderChoice
 behaviorProviderSetting =
   publicSettingWithRenderer
     behaviorProviderKey
-    "Response provider: stub, anthropic, openai or openai-responses; batch CLI awaits a cancellation-safe Baikai release"
+    "Response provider: stub, anthropic, openai or openai-responses; batch CLI requires enforced deadlines, bounded output and descendant confinement"
     ( decoder \key raw -> do
         choice <- runDecoder textDecoder key raw
         if choice `elem` ["claude-cli", "codex-cli"]
-          then Left (decodeFailure key "a cancellation-safe released Baikai batch adapter; CLI response promotion is blocked")
+          then Left (decodeFailure key "a batch adapter with enforced deadlines, bounded retained output and descendant confinement; CLI response promotion is blocked")
           else runDecoder (enumDecoder [("stub", ChooseStub), ("anthropic", ChooseAnthropic), ("openai", ChooseOpenAI), ("openai-responses", ChooseResponses)]) key raw
     )
     renderProviderChoice
@@ -1260,6 +1264,9 @@ httpModelSetting apiTag vendor =
 
 openaiApiKeySetting :: Setting SecretText
 openaiApiKeySetting = secretSetting openaiApiKeyKey "OpenAI API key, required only for OpenAI HTTP" (SecretText <$> textDecoder)
+
+typesafeApiKeySetting :: Setting SecretText
+typesafeApiKeySetting = secretSetting typesafeApiKeyKey "TypeSafe API key, required only for configured judgment bindings" (SecretText <$> textDecoder)
 
 anthropicApiKeySetting :: Setting SecretText
 anthropicApiKeySetting =
@@ -1445,6 +1452,9 @@ anthropicApiKeyKey = stableKey "credentials.providers.anthropic.api_key"
 openaiApiKeyKey :: Key
 openaiApiKeyKey = stableKey "credentials.providers.openai.api_key"
 
+typesafeApiKeyKey :: Key
+typesafeApiKeyKey = stableKey "credentials.providers.typesafe.api_key"
+
 kawaTokenKey :: Key
 kawaTokenKey = stableKey "credentials.sinks.kawa.token"
 
@@ -1560,6 +1570,7 @@ environmentBindings =
           binding (EnvName "SHIKIGAMI_BEHAVIOR_MODEL") behaviorModelKey,
           binding (EnvName "ANTHROPIC_API_KEY") anthropicApiKeyKey,
           binding (EnvName "OPENAI_API_KEY") openaiApiKeyKey,
+          binding (EnvName "TYPESAFE_API_KEY") typesafeApiKeyKey,
           binding (EnvName "SHIKIGAMI_BEHAVIOR_BASE_URL") (stableKey "behavior.base_url"),
           binding (EnvName "SHIKIGAMI_BEHAVIOR_OPTIONS_THINKING") (optionKey "thinking"),
           binding (EnvName "SHIKIGAMI_BEHAVIOR_OPTIONS_MAX_TOKENS") (optionKey "max_tokens"),

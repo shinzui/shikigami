@@ -60,8 +60,8 @@ tests databaseFixture =
       testCase "an old agent journal replays without objective policy or tools" (Objectives.oldAgentReplay databaseFixture),
       testCase "an old conversation journal replays without objective policy or tools" (Objectives.oldConversationReplay databaseFixture),
       testCase "approval review identity has a frozen public vector" approvalReviewIdentityIsStable,
-      testCase "only the declared objective workflow patches are active" do
-        assertEqual "active application patches" (Set.fromList [PatchId "shikigami-objective-tracking-v1", PatchId "shikigami-conversation-objective-tracking-v1"]) shikigamiActivePatches
+      testCase "only the declared application workflow patches are active" do
+        assertEqual "active application patches" (Set.fromList [PatchId "shikigami-objective-tracking-v1", PatchId "shikigami-conversation-objective-tracking-v1", PatchId "shikigami-structured-judgments-v1"]) shikigamiActivePatches
     ]
 
 -- ── Test A: the patch primitive, end to end ─────────────────────────────────

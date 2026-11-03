@@ -56,7 +56,7 @@ import Baikai.ThinkingLevel (ThinkingLevel (ThinkingMinimal))
 import Baikai.Tool (ToolChoice (ToolChoiceNone), mkTool)
 import Control.Concurrent (forkIO, killThread, threadDelay)
 import Control.Concurrent.MVar
-import Control.Exception (SomeException, bracket, finally, try)
+import Control.Exception (AsyncException (ThreadKilled), SomeException, bracket, finally, fromException, try)
 import Control.Lens ((&), (.~))
 import Control.Monad (unless, void)
 import Data.Aeson (Value, (.=))
@@ -443,8 +443,8 @@ contractTests =
       testCase "nonzero Codex exit remains a classified failure" $ withFake "exit 7\n" \_ exe -> do
         resp <- (CodexCli.codexCliProvider ((CodexCli.defaultCodexCliConfig & #executable .~ (exe)))).complete (cliModel OpenAICompletionsCli) emptyContext emptyOptions
         assertBool "failed response refused" (responseError resp /= Nothing),
-      testCase "released Codex cancellation gap keeps background CLI disabled" $ cancellationGap OpenAICompletionsCli,
-      testCase "released Claude cancellation gap keeps background CLI disabled" $ cancellationGap AnthropicMessagesCli,
+      testCase "released Codex cancellation settles inherited descendants" $ cancellationSettles OpenAICompletionsCli,
+      testCase "released Claude cancellation settles inherited descendants" $ cancellationSettles AnthropicMessagesCli,
       testCase "CLI JsonObject refuses before calling a completion" do
         validateResponseRequest (cliModel OpenAICompletionsCli) ((emptyOptions & #responseFormat .~ (Just JsonObject))) emptyContext @?= Left UnsupportedFormat,
       testCase "Anthropic none cannot silently advertise tools" do
@@ -483,17 +483,17 @@ withFake body run = bracket acquire removeDirectoryRecursive \dir -> do
       createDirectory path
       pure path
 
--- A bounded negative proof of the upstream contract. The fixture owns every
--- PID, cleans up both processes, and times out naturally after five seconds.
--- Change the assertion and remove the gate only after a released fix passes.
-cancellationGap :: Api -> IO ()
-cancellationGap apiTag = withFake "sleep 5 &\necho $! > child\necho $$ > parent\nwait\n" \dir exe -> do
+-- Synchronize on the owned child before cancellation, then require the original
+-- asynchronous exception and complete descendant settlement. This qualifies
+-- inherited group cancellation; batch deadlines/output/confinement stay gated.
+cancellationSettles :: Api -> IO ()
+cancellationSettles apiTag = withFake "sleep 5 &\necho $! > child\necho $$ > parent\nwait\n" \dir exe -> do
   finished <- newEmptyMVar
   let provider =
         if apiTag == AnthropicMessagesCli
           then ClaudeCli.claudeCliProvider ((ClaudeCli.defaultClaudeCliConfig & #executable .~ (exe) & #workingDir .~ (Just dir)))
           else CodexCli.codexCliProvider ((CodexCli.defaultCodexCliConfig & #executable .~ (exe) & #workingDir .~ (Just dir)))
-  worker <- forkIO (void (try @SomeException (provider.complete (cliModel apiTag) emptyContext emptyOptions)) `finally` putMVar finished ())
+  worker <- forkIO (try @SomeException (provider.complete (cliModel apiTag) emptyContext emptyOptions) >>= putMVar finished)
   let cleanup = do
         mapM_
           ( \file -> do
@@ -506,15 +506,21 @@ cancellationGap apiTag = withFake "sleep 5 &\necho $! > child\necho $$ > parent\
     ready <- timeout 2_000_000 (waitFor (dir </> "child"))
     unless (ready == Just ()) (assertFailure "fake process did not start")
     void (forkIO (killThread worker))
-    threadDelay 200_000
+    result <- timeout 2_000_000 (readMVar finished)
+    case result of
+      Just (Left failure) -> fromException @AsyncException failure @?= Just ThreadKilled
+      _ -> assertFailure "cancellation did not settle and propagate ThreadKilled"
     pid <- takeWhile (/= '\n') <$> readFile (dir </> "child")
-    (status, _, _) <- readProcessWithExitCode "/bin/kill" ["-0", pid] ""
-    status @?= ExitSuccess
-    validateResponseOptions (cliModel apiTag) emptyOptions @?= Left BatchCancellationReleaseRequired
+    gone <- timeout 2_000_000 (waitForStopped pid)
+    gone @?= Just ()
+    validateResponseOptions (cliModel apiTag) emptyOptions @?= Left BatchBoundsAndConfinementRequired
   where
     waitFor path = do
       exists <- doesFileExist path
       if exists then pure () else threadDelay 10_000 >> waitFor path
+    waitForStopped pid = do
+      (status, _, _) <- readProcessWithExitCode "/bin/kill" ["-0", pid] ""
+      if status /= ExitSuccess then pure () else threadDelay 10_000 >> waitForStopped pid
 
 httpDispatchTests :: TestTree
 httpDispatchTests =

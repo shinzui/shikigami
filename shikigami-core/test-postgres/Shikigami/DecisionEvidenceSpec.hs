@@ -41,7 +41,7 @@ import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
 
 program :: ProgramDescriptor
-program = ProgramDescriptor (identity "fixture") (identity "1") (identity "sha256:implementation") (identity "input/1") (identity "result/1") (identity "validator/1") ParametersV1 (programParameterDigest (String "fixture")) (identity "derive/1")
+program = ProgramDescriptor (identity "fixture") (identity "1") (identity "sha256:implementation") (identity "input/1") (identity "result/1") (identity "validator/1") ParametersV1 (programParameterDigest (String "fixture")) (identity "derive/1") GenerativeDecision
   where
     identity = mustRight . parseProgramIdentity
 

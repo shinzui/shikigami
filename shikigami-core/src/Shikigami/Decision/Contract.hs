@@ -13,6 +13,7 @@ module Shikigami.Decision.Contract
     modelAliasFromNonEmpty,
     modelAliasText,
     ProgramDescriptor (..),
+    DecisionOutput (..),
     ProgramIdentity,
     parseProgramIdentity,
     programIdentityText,
@@ -34,6 +35,7 @@ module Shikigami.Decision.Contract
     decisionSlotLabelText,
     triageDecisionSlot,
     investigationDecisionSlot,
+    judgmentDecisionSlot,
     DecisionPreparationId,
     parseDecisionPreparationId,
     decisionPreparationId,
@@ -46,6 +48,9 @@ module Shikigami.Decision.Contract
     DecisionPolicySnapshot (..),
     PreparedDecision (..),
     DecisionOutcome (..),
+    DecisionAnswer (..),
+    outcomeAnswers,
+    decisionOutcome,
     FailureCode (..),
     DecisionFailure,
     decisionFailure,
@@ -76,13 +81,15 @@ import Baikai.Evidence (ModelCallEvidence, commitmentDigest)
 import Baikai.ThinkingLevel (ThinkingLevel)
 import Control.Concurrent.MVar (modifyMVar, newMVar, readMVar)
 import Control.Lens ((&), (.~))
-import Data.Aeson (FromJSON (..), ToJSON (..), Value, object, withObject, withText, (.:), (.:?), (.=))
+import Data.Aeson (FromJSON (..), ToJSON (..), Value (Object), defaultOptions, genericToJSON, object, withObject, withText, (.!=), (.:), (.:?), (.=))
 import Data.Aeson.KeyMap (KeyMap)
+import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Aeson.Types (Parser)
 import Data.Bifunctor (first)
 import Data.Generics.Labels ()
 import Data.Int (Int64)
 import Data.KindID.V7 qualified as KindID
+import Data.List (nub)
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as Text
@@ -92,6 +99,7 @@ import Keiro.Workflow.Types (WorkflowId (..))
 import Numeric.Natural (Natural)
 import Shikigami.Attestation.Profile (SanctionedExecutionProfileRef)
 import Shikigami.Behavior.Provider.Coordinate
+import Shikigami.Decision.Answer (AnswerSnapshot, answerBytes, maxAnswerBytes)
 import Shikigami.Decision.ModelAlias
 import Shikigami.Log.Correlation (RunCorrelationId)
 
@@ -168,6 +176,10 @@ instance FromJSON ProgramParameterDigest where
 
 -- | An immutable registration includes opaque code identity as well as all
 -- serializable state. Equal request hashes cannot stand in for this identity.
+data DecisionOutput = GenerativeDecision | ClosedSetJudgment
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (ToJSON, FromJSON)
+
 data ProgramDescriptor = ProgramDescriptor
   { programId :: !(ProgramIdentity "program-id"),
     version :: !(ProgramIdentity "program-version"),
@@ -177,10 +189,15 @@ data ProgramDescriptor = ProgramDescriptor
     validatorVersion :: !(ProgramIdentity "validator-version"),
     parameterFormat :: !ProgramParameterFormat,
     parameterDigest :: !ProgramParameterDigest,
-    derivationVersion :: !(ProgramIdentity "derivation-version")
+    derivationVersion :: !(ProgramIdentity "derivation-version"),
+    outputCapability :: !DecisionOutput
   }
   deriving stock (Eq, Show, Generic)
-  deriving anyclass (ToJSON)
+
+instance ToJSON ProgramDescriptor where
+  toJSON descriptor = case genericToJSON defaultOptions descriptor of
+    Object fields | descriptor.outputCapability == GenerativeDecision -> Object (KeyMap.delete "outputCapability" fields)
+    value -> value
 
 instance FromJSON ProgramDescriptor where
   parseJSON = withObject "ProgramDescriptor" \o -> do
@@ -195,6 +212,7 @@ instance FromJSON ProgramDescriptor where
       <*> pure parameterFormat
       <*> o .: "parameterDigest"
       <*> o .: "derivationVersion"
+      <*> o .:? "outputCapability" .!= GenerativeDecision
 
 -- | Supplied immutable registration coordinates, distinct from program
 -- registration and model aliases. Opaque versions do not imply SemVer or hashes.
@@ -274,9 +292,10 @@ parseDecisionSlotLabel value = case Text.uncons value of
 decisionSlotLabelText :: DecisionSlotLabel -> Text
 decisionSlotLabelText (DecisionSlotLabel value) = value
 
-triageDecisionSlot, investigationDecisionSlot :: DecisionSlotLabel
+triageDecisionSlot, investigationDecisionSlot, judgmentDecisionSlot :: DecisionSlotLabel
 triageDecisionSlot = DecisionSlotLabel "triage"
 investigationDecisionSlot = DecisionSlotLabel "investigate"
+judgmentDecisionSlot = DecisionSlotLabel "judge"
 
 instance ToJSON DecisionSlotLabel where
   toJSON = toJSON . decisionSlotLabelText
@@ -376,28 +395,63 @@ instance FromJSON PreparedDecision where
 
 -- | A committed result is decoded by a retained pure codec, without executing
 -- the program or reapplying a deployment's current domain validator.
-data DecisionOutcome = DecisionOutcome
-  { preparationId :: !DecisionPreparationId,
-    program :: !ProgramDescriptor,
-    result :: !(Either DecisionFailure Value),
-    attempts :: ![DecisionCallId]
-  }
+data DecisionOutcome
+  = DecisionOutcome
+      { preparationId :: !DecisionPreparationId,
+        program :: !ProgramDescriptor,
+        result :: !(Either DecisionFailure Value),
+        attempts :: ![DecisionCallId]
+      }
+  | ObservedDecisionOutcome
+      { preparationId :: !DecisionPreparationId,
+        program :: !ProgramDescriptor,
+        result :: !(Either DecisionFailure Value),
+        attempts :: ![DecisionCallId],
+        observations :: ![DecisionAnswer]
+      }
   deriving stock (Eq, Show, Generic)
 
+data DecisionAnswer = DecisionAnswer
+  { callId :: !DecisionCallId,
+    snapshot :: !AnswerSnapshot
+  }
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (ToJSON, FromJSON)
+
+outcomeAnswers :: DecisionOutcome -> [DecisionAnswer]
+outcomeAnswers DecisionOutcome {} = []
+outcomeAnswers ObservedDecisionOutcome {observations} = observations
+
+decisionOutcome :: DecisionPreparationId -> ProgramDescriptor -> Either DecisionFailure Value -> [DecisionCallId] -> [DecisionAnswer] -> DecisionOutcome
+decisionOutcome preparation program result calls [] = DecisionOutcome preparation program result calls
+decisionOutcome preparation program result calls answers = ObservedDecisionOutcome preparation program result calls answers
+
 instance ToJSON DecisionOutcome where
-  toJSON DecisionOutcome {preparationId, program, result, attempts} =
+  toJSON outcome =
     object
-      [ "format" .= (1 :: Int),
-        "preparationId" .= preparationId,
-        "program" .= program,
-        "result" .= result,
-        "attempts" .= attempts
-      ]
+      ( [ "format" .= (if null answers then 1 :: Int else 2),
+          "preparationId" .= outcome.preparationId,
+          "program" .= outcome.program,
+          "result" .= outcome.result,
+          "attempts" .= outcome.attempts
+        ]
+          <> ["answers" .= answers | not (null answers)]
+      )
+    where
+      answers = outcomeAnswers outcome
 
 instance FromJSON DecisionOutcome where
   parseJSON = withObject "DecisionOutcome" \o -> do
-    requireV1 o
-    DecisionOutcome <$> o .: "preparationId" <*> o .: "program" <*> o .: "result" <*> o .: "attempts"
+    version <- o .: "format"
+    preparation <- o .: "preparationId"
+    program <- o .: "program"
+    result <- o .: "result"
+    calls <- o .: "attempts"
+    answers <- if version == (1 :: Int) then pure [] else if version == 2 then o .: "answers" else fail "unsupported decision outcome version"
+    let ids = map (\answer -> answer.callId) answers
+    if length answers <= 10000 && length ids == length (nub ids) && all (`elem` calls) ids && sum (map (answerBytes . (\answer -> answer.snapshot)) answers) <= maxAnswerBytes
+      then pure (decisionOutcome preparation program result calls answers)
+      else fail "decision answer observations exceed retained bounds or call inventory"
 
 requireV1 :: KeyMap Value -> Parser ()
 requireV1 o = do

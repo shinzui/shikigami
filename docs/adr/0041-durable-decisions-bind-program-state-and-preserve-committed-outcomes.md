@@ -82,6 +82,34 @@ It must preserve the distinction between deliberate evidence re-derivation and
 workflow replay.
 
 
+## Structured judgment extension (2026-11-03)
+
+Registered programs explicitly declare generative or closed-set judgment
+output. Missing capability fields decode as generative, whose historical JSON
+remains unchanged. Judgment-only models enter only declared judgment slots;
+they cannot become legacy text/tool model selections.
+
+Raw Baikai structured answers are protected, bounded application snapshots,
+separate from Shikumi's locally derived typed result and the transport receipt.
+Effective decision settings, including defaults, join immutable program state.
+Changing a threshold, cut or weight requires another registration; replay reads
+the original committed result through its retained codec instead of deriving
+again. Version-two outcomes correlate snapshots to actual acknowledged calls;
+outcomes without snapshots retain the version-one envelope. New finite judge
+steps are declared under `shikigami-structured-judgments-v1`.
+
+Assistant replay adds scoped format two and user structured context adds format
+three. Historical text formats retain their wire numbers and readers. Structured
+content in the wrong message role refuses; a data-only assistant cannot succeed
+as empty prose. Cache/replay preserves answer data without minting provider
+evidence. A failed terminal acknowledgement cannot publish a successful answer.
+
+The qualified integration currently uses public complete calls. Released Shikumi
+streaming refuses decision outputs before transport; owning request
+`mori://shinzui/shikumi/okf/improvement-requests/concepts/IR-5` tracks settings-aware
+typed-result parity. No application router/parser bypass is introduced. See the
+[consumer checkpoint](../evidence/baikai-execution/structured-judgments.md).
+
 ## References
 
 - [MasterPlan 13](../masterplans/13-compose-shikumi-decisions-in-durable-flows.md)
