@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-11-03
+* **Addition**: FRIC-50 records detour environment friction with mori://shinzui/shikigami: Native operator qualification omitted its manifest directory
 * **Update**: FRIC-49 resolved: Resolve the pre-transport judgment-streaming blocker after verifying tagged Hackage descriptors and the real public provider through the application wrapper; broader plan acceptance remains separate.
 * **Update**: FRIC-49 promoted: Filed Shikumi IR-5 for public judgment streaming, settings-aware typed derivation, atomic structured events and acknowledged attempt evidence; complete/stream acceptance remains blocked on a qualifying release.
 * **Addition**: FRIC-49 records blocked interface friction with mori://shinzui/shikumi/packages/shikumi: Released Shikumi rejects streaming decision outputs before transport

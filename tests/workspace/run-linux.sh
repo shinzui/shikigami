@@ -138,13 +138,14 @@ with socket.socket() as listener:
 PORT
 )
 systemd-run --quiet --unit="$oauth" -p Type=exec -p Restart=no -p UMask=0077 -p StandardOutput=null -p "StandardError=file:$prefix/oauth.log" -- /usr/bin/python3 "$repo/tests/workspace/fixture-oauth.py" "$oauth_port" "$authority_port" "$prefix/http-status.log"
-python3 - "$prefix" "$connection" "$authority_port" "$runtime" "$guard" "$image_digest" "$oauth_port" <<'PY'
+python3 - "$prefix" "$connection" "$authority_port" "$runtime" "$guard" "$image_digest" "$oauth_port" "$repo" <<'PY'
 import json,sys
 from pathlib import Path
-prefix,connection,port,runtime,guard,digest,oauth_port=sys.argv[1:]
+prefix,connection,port,runtime,guard,digest,oauth_port,repo=sys.argv[1:]
 p=Path(prefix)
 (p/'directory.json').write_text(json.dumps([{'principal_id':'agent_01h000000000000000'+name,'handle':name,'lifecycle':'active','display_name':'Workspace fixture'} for name in ['triage','coordinator','successor']]))
 config={'database':{'connection_string':connection},'directory':{'mode':'file','file':{'path':str(p/'directory.json')},'refresh_interval_seconds':1},'workspace':{'supervisor':{'socketPath':str(p/'rpc/supervisor.sock'),'users':[0],'workers':4,'timeoutSeconds':5}},'authorization':{'actions':{'mode':'kikan','kikan_en':{'base_url':f'http://127.0.0.1:{oauth_port}'},'shomei':{'base_url':f'http://127.0.0.1:{oauth_port}','client_id':'fixture'},'en':{'issuer_public_keys':(p/'issuer-public.txt').read_text(),'schema_hashes':'workspace-fixture-schema'},'caller_id':'workspace-fixture'}},'credentials':{'authorization':{'actions':{'shomei':{'client_secret':'fixture-secret'}}}}}
+config['agents']={'directory':str(Path(repo)/'agents')}
 (p/'config.json').write_text(json.dumps(config))
 (p/'native-spec.json').write_text(json.dumps({'format':1,'directory':prefix,'image':{'rootDirectory':str(p/'root'),'rootIdentity':'sha256:'+digest,'environmentExecutable':'/bin/env','deadlineExecutable':guard+'/bin/shikigami-workspace-deadline','collectorExecutable':runtime+'/bin/shikigami-workspace-collector'}}))
 PY
