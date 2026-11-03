@@ -13,6 +13,9 @@ to the Kioku, Baikai, Effectful or Handan selections.
 All 15 real TypeSafe consumer checks pass through complete and streamed public
 execution, including exact request/raw/typed parity, atomic event ordering,
 acknowledged terminals and failure/cancellation boundaries. FRIC-49 is resolved.
+The PostgreSQL streamed-outcome replay fixture and full released-cohort regression
+also pass, together with the committed 177-assertion native gate. See
+[the streaming consumer checkpoint](streaming-consumer-checkpoint.json).
 The following 0.5.0 and October records retain their historical meaning; they
 do not describe the current streaming capability.
 

@@ -1,0 +1,50 @@
+{
+  "cohortSha256": "1bece6e1ccdbdddc982193284a41943d568b6c4de5815acc4a9b7210570b98b0",
+  "compiler": "ghc-9.12.4",
+  "immutableRepositories": 7,
+  "indexState": "2026-11-03T12:48:57Z",
+  "judgmentStreamingQualified": true,
+  "linuxRuntimeQualified": false,
+  "nativeDiffBase": "936c2f8544fb8a85ce963c3b0db4e76f7390a204",
+  "nativeGate": "just keiro-gate 936c2f85 with Cabal commands selecting the verified isolated committed descriptor",
+  "nativeReplayVerdict": "replay-neutral",
+  "nativeWorkflowShapeChanged": false,
+  "nix": {
+    "dryRunPassed": true,
+    "evaluatedRoleAttributes": [
+      "shikigami",
+      "shikigami-server",
+      "shikigami-worker",
+      "shikigami-migrate",
+      "shikigami-agent-launch"
+    ],
+    "immutableBuildsQualified": false
+  },
+  "owningRequest": "mori://shinzui/shikumi/okf/improvement-requests/concepts/IR-5",
+  "passedChecks": {
+    "agent": 37,
+    "core": 689,
+    "migrationSmoke": 11,
+    "nativeConformance": 177,
+    "postgresSerial": 546,
+    "server": 105,
+    "typeSafeCompleteAndStream": 15,
+    "typeSafePostgres": 3,
+    "workerSerial": 281
+  },
+  "recordedOn": "2026-11-03",
+  "releaseCommit": "7b96ecf06364b37de44b15c4f58b2528b5a3e0f5",
+  "remoteTypeSafeQualified": false,
+  "runtimePackages": 387,
+  "selected": {
+    "baikai": "0.10.0.0",
+    "effectful": "2.7.1.0",
+    "kioku-core": "0.12.0.2",
+    "shikumi": "0.5.1.0",
+    "shikumi-cache": "0.2.1.1",
+    "shikumi-tools": "0.4.2.1",
+    "shikumi-trace": "0.3.2.0"
+  },
+  "sourceRevision": "d9f34aa78ce7ec9f9d642b0e673fca1e45458c0e",
+  "status": "IR-5 consumer accepted; broader plan 80 criteria remain open"
+}

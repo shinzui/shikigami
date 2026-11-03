@@ -23,6 +23,23 @@ The outcome replays unchanged with one total HTTP request. The existing real
 queue/worker restart fixtures continue to cover the supplied complete-call Flow.
 FRIC-49 is resolved; no router or parser was copied downstream.
 
+At source `d9f34aa7`, the full released-cohort regression passes core 689,
+agent 37, serial PostgreSQL 546, serial worker 281, server 105 and migration
+smoke 11 checks. All three TypeSafe PostgreSQL cases also pass after aligning
+the stream fixture's journal with its prepared workflow identity. The committed
+native gate passes 177 conformance assertions with no generated drift, no
+workflow-shape findings and a replay-neutral stored-data verdict. Cabal commands
+in that gate select the isolated descriptor verified against committed
+`cabal.project`; no ignored overrides or sibling dependency sources participate.
+
+[The streaming checkpoint](streaming-consumer-checkpoint.json),
+[native diff](streaming-keiro-diff.json) and
+[replay verdict](streaming-keiro-replay-impact.json) retain this evidence beside
+the initial checkpoint below. The refreshed frozen export contains 387 runtime
+packages and seven immutable repositories. All five Nix role attributes evaluate
+in a dry run; fresh immutable builds, installed assets outside the checkout,
+Linux runtime and paid TypeSafe qualification remain unclaimed.
+
 ## Initial complete-call checkpoint (before the IR-5 release)
 
 The 2026-11-03 candidate uses the released Baikai 0.10.0.0 / Shikumi 0.5.0.0 /
