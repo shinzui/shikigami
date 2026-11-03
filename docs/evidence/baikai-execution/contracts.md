@@ -1,5 +1,25 @@
 # Baikai execution contracts
 
+## Shikumi publication follow-up — 2026-11-03 UTC
+
+Shikumi 0.5.0.0, tools 0.4.2.0, cache 0.2.1.0, trace/eval 0.3.1.0 and
+trace-otel 0.1.3.0 now admit Baikai 0.10. Their release tags peel to
+`b9b7a73f276ec022a72d00a447d320eade1cb741` in `mori://shinzui/shikumi`.
+FRIC-46 is resolved. [The follow-up evidence](shikumi-release-followup.json)
+retains descriptor hashes and complete paired probe projects at fixed index
+`2026-11-03T02:09:47Z`: the Baikai 0.10 / Shikumi 0.5 dry-run succeeds, while
+adding Kioku core 0.12.0.1 fails:
+
+```text
+rejecting: kioku-core-0.12.0.1 (conflict: shikumi==0.5.0.0, kioku-core => shikumi^>=0.4.1.1)
+```
+
+The next prerequisite is a validated compatibility revision or release from
+`mori://shinzui/kioku/packages/kioku-core`, recorded as FRIC-48. Application pins
+are unchanged. This checks solver contracts only; it proves no upgraded build,
+TypeSafe application path, cache roundtrip or runtime lifecycle. Earlier evidence
+below retains the versions and failure observed at its own checkpoint.
+
 ## Release prerequisite recheck — 2026-11-03 UTC
 
 [The machine-readable check](release-prerequisite.json) records current normal

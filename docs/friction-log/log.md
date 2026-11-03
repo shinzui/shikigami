@@ -1,6 +1,8 @@
 # Bundle Update Log
 
 ## 2026-11-03
+* **Addition**: FRIC-48 records blocked interface friction with mori://shinzui/kioku/packages/kioku-core: Published Kioku excludes the new Shikumi compatibility release
+* **Update**: FRIC-46 resolved: Verified Hackage descriptors and upstream release tags, then reproduced a successful Shikumi 0.5/Baikai 0.10 solve at index-state 2026-11-03T02:09:47Z.
 * **Update**: FRIC-47 accepted: Corrected plan 80 regression commands after reproducing the earlier Git-fixture contention and parallel PostgreSQL too-many-clients failures; serial rerun is the accepted qualification path.
 * **Addition**: FRIC-47 records detour tooling friction with mori://shinzui/shikigami: Plan 80 regression command repeats the parallel Git fixture deadline failure
 * **Addition**: FRIC-46 records blocked interface friction with mori://shinzui/shikumi/packages/shikumi: Published Shikumi descriptors exclude the required Baikai release

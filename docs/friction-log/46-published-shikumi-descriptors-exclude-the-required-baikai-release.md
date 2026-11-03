@@ -6,13 +6,18 @@ generated:
   by: "codex-cli/gpt-6.1-sol"
   at: "2026-11-03T00:26:14Z"
 frictionId: FRIC-46
-status: logged
+status: "resolved"
 impact: blocked
 kind: interface
 origin: "mori://shinzui/shikigami"
 affects: "mori://shinzui/shikumi/packages/shikumi"
 affectedVersion: "0.4.1.1"
 plan: "docs/plans/80-configure-model-providers-and-agent-launches-through-baikai.md"
+resolution: "Published Shikumi 0.5.0.0 and its companion releases admit Baikai 0.10; the isolated latest-pair dry-run now succeeds. The application closure still needs a Kioku compatibility revision or release."
+amended:
+  - by: "codex-cli/gpt-6.1-sol"
+    at: "2026-11-03T02:17:47Z"
+    change: "Verified Hackage descriptors and upstream release tags, then reproduced a successful Shikumi 0.5/Baikai 0.10 solve at index-state 2026-11-03T02:09:47Z."
 ---
 # Published Shikumi descriptors exclude the required Baikai release
 

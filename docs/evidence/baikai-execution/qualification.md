@@ -43,8 +43,11 @@ nix develop --command cabal test shikigami-workers-test shikigami-core-postgres-
   -j1 --test-options=--num-threads=1 --project-file="$qualification_project"
 ```
 
-[Release prerequisite evidence](release-prerequisite.json) separately reproduces
-the Baikai 0.10/Shikumi released-descriptor conflict. FRIC-46 remains unresolved.
+[Historical release prerequisite evidence](release-prerequisite.json) reproduces
+the earlier Baikai 0.10/Shikumi released-descriptor conflict. The subsequent
+Shikumi 0.5 publication resolves FRIC-46: [follow-up probes](shikumi-release-followup.json)
+admit that pair but refuse adding Kioku core 0.12.0.1, whose Shikumi bound excludes
+0.5. FRIC-48 records the remaining Kioku compatibility prerequisite.
 Application dependency pins are unchanged. This checkpoint does not qualify a
 new Baikai cohort, structured answers, TypeSafe, batch confinement, Linux runtime,
 new installed-role outputs or service readiness. October foreground/live evidence

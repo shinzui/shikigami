@@ -1,0 +1,150 @@
+{
+  "checkedAt": "2026-11-03T02:18:36.119027+00:00",
+  "purpose": "Resume prerequisite check after the Shikumi compatibility publication; no application dependency change",
+  "publishedDescriptors": [
+    {
+      "uri": "mori://shinzui/shikumi/packages/shikumi",
+      "package": "shikumi",
+      "version": "0.5.0.0",
+      "descriptorUrl": "https://hackage.haskell.org/package/shikumi-0.5.0.0/shikumi.cabal",
+      "descriptorSha256": "2f513c68d471656aa2c9830fe353c2d74d3e370755f49757f912e467769f2a3a",
+      "relevantBounds": [
+        "baikai >=0.10.0.0 && <0.11",
+        "baikai-claude >=0.7.3.0 && <0.8",
+        "baikai-effectful >=0.4.0.5 && <0.5",
+        "baikai-openai >=0.7.3.0 && <0.8",
+        "effectful >=2.6 && <2.8",
+        "shikumi ^>=0.5.0.0",
+        "shikumi error type, and resilience (retries, rate limiting, budget control)."
+      ]
+    },
+    {
+      "uri": "mori://shinzui/shikumi/packages/shikumi-tools",
+      "package": "shikumi-tools",
+      "version": "0.4.2.0",
+      "descriptorUrl": "https://hackage.haskell.org/package/shikumi-tools-0.4.2.0/shikumi-tools.cabal",
+      "descriptorSha256": "e9327e492b27d60d0418c51c72b1e27020214c1888ebe9cdfc8ba79840160e5d",
+      "relevantBounds": [
+        "baikai >=0.10.0.0 && <0.11",
+        "effectful >=2.6 && <2.8",
+        "shikumi ^>=0.5.0.0",
+        "shikumi-cache ^>=0.2.1.0",
+        "shikumi-testing ^>=0.1.0.0",
+        "shikumi-tools ^>=0.4.2.0"
+      ]
+    },
+    {
+      "uri": "mori://shinzui/shikumi/packages/shikumi-cache",
+      "package": "shikumi-cache",
+      "version": "0.2.1.0",
+      "descriptorUrl": "https://hackage.haskell.org/package/shikumi-cache-0.2.1.0/shikumi-cache.cabal",
+      "descriptorSha256": "2ae13f4a35017f3789fa1725816c8ab231165e9ee704290e8113ccc07cd51213",
+      "relevantBounds": [
+        "baikai >=0.10.0.0 && <0.11",
+        "effectful >=2.6 && <2.8",
+        "shikumi ^>=0.5.0.0",
+        "shikumi-cache ^>=0.2.1.0",
+        "shikumi-testing"
+      ]
+    },
+    {
+      "uri": "mori://shinzui/shikumi/packages/shikumi-trace",
+      "package": "shikumi-trace",
+      "version": "0.3.1.0",
+      "descriptorUrl": "https://hackage.haskell.org/package/shikumi-trace-0.3.1.0/shikumi-trace.cabal",
+      "descriptorSha256": "827b91afc3fb2abcb19495bd2646a7434b114e7cc84598107e86512276936adf",
+      "relevantBounds": [
+        "baikai >=0.10.0.0 && <0.11",
+        "effectful >=2.6 && <2.8",
+        "shikumi ^>=0.5.0.0",
+        "shikumi-cache ^>=0.2.1.0",
+        "shikumi-testing",
+        "shikumi-trace ^>=0.3.1.0"
+      ]
+    },
+    {
+      "uri": "mori://shinzui/shikumi/packages/shikumi-trace-otel",
+      "package": "shikumi-trace-otel",
+      "version": "0.1.3.0",
+      "descriptorUrl": "https://hackage.haskell.org/package/shikumi-trace-otel-0.1.3.0/shikumi-trace-otel.cabal",
+      "descriptorSha256": "328c9f7e85980e3900eabdc2464b6d1bba8e409b1d319af2560d8cff5ba25be7",
+      "relevantBounds": [
+        "baikai >=0.10.0.0 && <0.11",
+        "shikumi ^>=0.5.0.0",
+        "shikumi-cache ^>=0.2.1.0",
+        "shikumi-eval ^>=0.3.1.0",
+        "shikumi-testing ^>=0.1.0.0",
+        "shikumi-trace ^>=0.3.1.0",
+        "shikumi-trace-otel ^>=0.1.3.0"
+      ]
+    },
+    {
+      "uri": "mori://shinzui/shikumi/packages/shikumi-eval",
+      "package": "shikumi-eval",
+      "version": "0.3.1.0",
+      "descriptorUrl": "https://hackage.haskell.org/package/shikumi-eval-0.3.1.0/shikumi-eval.cabal",
+      "descriptorSha256": "b2ca25cd4dbb20da6381b33cccb19544758665f79c63857d637cb01eeecef106",
+      "relevantBounds": [
+        "baikai >=0.10.0.0 && <0.11",
+        "effectful >=2.6 && <2.8",
+        "shikumi ^>=0.5.0.0",
+        "shikumi-eval ^>=0.3.1.0"
+      ]
+    },
+    {
+      "uri": "mori://shinzui/baikai/packages/baikai",
+      "package": "baikai",
+      "version": "0.10.0.0",
+      "descriptorUrl": "https://hackage.haskell.org/package/baikai-0.10.0.0/baikai.cabal",
+      "descriptorSha256": "88e24930ec8654a5a29abff12d65dd88e00ea6c3a61cd8dc1496c1851f11866d",
+      "relevantBounds": [
+        "baikai provides a unified, provider-agnostic Haskell interface for working"
+      ]
+    },
+    {
+      "uri": "mori://shinzui/kioku/packages/kioku-core",
+      "package": "kioku-core",
+      "version": "0.12.0.1",
+      "descriptorUrl": "https://hackage.haskell.org/package/kioku-core-0.12.0.1/kioku-core.cabal",
+      "descriptorSha256": "1da53f191c7856d540853b03eb1cb3164313e35e0eedb6fab3782ba5e7fc88e2",
+      "relevantBounds": [
+        "baikai ^>=0.10.0.0",
+        "baikai-claude ^>=0.7.3.0",
+        "baikai-effectful ^>=0.4.0.5",
+        "baikai-openai ^>=0.7.3.0",
+        "effectful >=2.5 && <2.8",
+        "effectful-core >=2.5 && <2.7 || >=2.7.1.1 && <2.8",
+        "shikumi ^>=0.4.1.1",
+        "shikumi-trace ^>=0.3.0.2"
+      ]
+    }
+  ],
+  "verifiedUpstreamCommits": {
+    "mori://shinzui/shikumi": "b9b7a73f276ec022a72d00a447d320eade1cb741",
+    "mori://shinzui/kioku": "78c9d0eeeb6f4c4b138122fe6c6a3e0deda80343"
+  },
+  "probes": [
+    {
+      "name": "pair",
+      "project": "packages: .\nwith-compiler: ghc-9.12.4\nindex-state: 2026-11-03T02:09:47Z\n",
+      "descriptor": "cabal-version: 3.0\nname: ep80-resume-probe\nversion: 0.1.0.0\nbuild-type: Simple\nlibrary\n  exposed-modules: Probe\n  build-depends: base, baikai ==0.10.0.0, shikumi ==0.5.0.0\n  default-language: Haskell2010\n",
+      "source": "module Probe where\n",
+      "command": "cabal build all --dry-run",
+      "result": "solved",
+      "diagnostic": null
+    },
+    {
+      "name": "kioku",
+      "project": "packages: .\nwith-compiler: ghc-9.12.4\nindex-state: 2026-11-03T02:09:47Z\n",
+      "descriptor": "cabal-version: 3.0\nname: ep80-resume-probe\nversion: 0.1.0.0\nbuild-type: Simple\nlibrary\n  exposed-modules: Probe\n  build-depends: base, baikai ==0.10.0.0, shikumi ==0.5.0.0, kioku-core ==0.12.0.1\n  default-language: Haskell2010\n",
+      "source": "module Probe where\n",
+      "command": "cabal build all --dry-run",
+      "result": "refused",
+      "diagnostic": "Cabal-7107: rejecting kioku-core-0.12.0.1 (conflict: shikumi==0.5.0.0, kioku-core => shikumi^>=0.4.1.1)"
+    }
+  ],
+  "allowNewer": false,
+  "siblingSources": false,
+  "applicationPinsChanged": false,
+  "runtimeQualification": false
+}
