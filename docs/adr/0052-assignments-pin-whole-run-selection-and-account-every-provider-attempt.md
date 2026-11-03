@@ -2,6 +2,8 @@
 
 Date: 2026-10-27
 
+Updated: 2026-11-03
+
 Status: accepted
 
 ## Context
@@ -30,6 +32,13 @@ or retained bindings. It never resolves the mutable alias again. A missing bindi
 produces `PinnedBindingUnavailable`. New assignments also pin the process default;
 a changed default refuses rather than replacing pending work. Credentials remain
 process-local and may rotate without changing binding authority.
+
+Optional operator endpoint overrides and cache retention join that binding's
+existing model/options commitment. Omitted fields keep the historical descriptor
+identity. A program may inherit explicitly pinned retention or request the same
+value; a conflicting request refuses before attempt admission and transport.
+The configured endpoint's actual scheme controls profile admission. These are
+request settings, not claims that the remote provider served a model or a cache hit.
 
 A private provider registry handles complete and streamed calls without changing
 the process default. The shared HTTP builder and profile tuple predicate remain

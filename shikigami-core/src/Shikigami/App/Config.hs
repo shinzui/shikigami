@@ -630,7 +630,7 @@ data DecisionModelSpec = DecisionModelSpec
 
 instance Aeson.FromJSON DecisionModelSpec where
   parseJSON = Aeson.withObject "decision model" \o -> do
-    let accepted = ["alias", "version", "bindingId", "bindingVersion", "provider", "model", "thinking", "max_tokens", "timeout_ms"]
+    let accepted = ["alias", "version", "bindingId", "bindingVersion", "provider", "model", "thinking", "max_tokens", "timeout_ms", "cache_retention", "base_url"]
     if any (`notElem` accepted) (KeyMap.keys o) then fail "unknown decision model setting" else pure ()
     alias <- o .: "alias"
     version <- o .: "version"
@@ -652,10 +652,18 @@ instance Aeson.FromJSON DecisionModelSpec where
           Just (apiTag, providerName) -> [m | m <- allModels, api m == apiTag, provider m == providerName]
           Nothing | vendor == "stub" -> [(stubModel & #modelId .~ ("stub-triage")), (stubModel & #modelId .~ ("stub-investigate"))]
           _ -> []
-    model <- maybe (fail "unknown exact catalog model") pure (lookup exact [(modelId m, m) | m <- candidates])
+    catalogModel <- maybe (fail "unknown exact catalog model") pure (lookup exact [(modelId m, m) | m <- candidates])
+    endpoint <- o .:? "base_url"
+    model <- case endpoint of
+      Nothing -> pure catalogModel
+      Just value
+        | vendor /= "stub", validHttpEndpoint value -> pure (catalogModel & #baseUrl .~ value)
+        | otherwise -> fail "base_url requires an HTTP binding and an HTTP(S) URL without credentials, query or fragment"
+    retention <- o .:? "cache_retention"
+    cacheRetention <- traverse (maybe (fail "unsupported cache_retention") pure . (`lookup` cacheRetentions)) retention
     maxTokens <- o .:? "max_tokens"
     timeoutMs <- o .:? "timeout_ms"
-    let options = (Options.emptyOptions & #thinking .~ (thinking) & #maxTokens .~ (maxTokens) & #timeoutMs .~ (timeoutMs))
+    let options = (Options.emptyOptions & #thinking .~ (thinking) & #maxTokens .~ (maxTokens) & #timeoutMs .~ (timeoutMs) & #cacheRetention .~ cacheRetention)
         validWord text = not (Text.null text) && Text.length text <= 128 && Text.all (\c -> isAlphaNum c || c `elem` ("-_." :: String)) text
     if all validWord [modelAliasText alias, version, bindingId, bindingVersion]
       then pure DecisionModelSpec {alias, version, bindingId, bindingVersion, model, options}
@@ -716,7 +724,7 @@ responseOptionsConfig =
     <*> optional (option "seed" "OpenAI Chat Completions seed" (boundedIntegralDecoder @Int) (Text.pack . show))
     <*> optional (option "frequency_penalty" "Frequency penalty (-2 to 2)" (rangeDecoder (-2) 2) (Text.pack . show))
     <*> optional (option "presence_penalty" "Presence penalty (-2 to 2)" (rangeDecoder (-2) 2) (Text.pack . show))
-    <*> optional (option "cache_retention" "Prompt cache retention" (enumDecoder [("none", CacheRetentionNone), ("short", CacheRetentionShort), ("long", CacheRetentionLong)]) (Text.pack . show))
+    <*> optional (option "cache_retention" "Prompt cache retention" (enumDecoder cacheRetentions) (Text.pack . show))
     <*> optional (option "speed" "Anthropic inference speed" (enumDecoder [("standard", SpeedStandard), ("fast", SpeedFast)]) (Text.pack . show))
     <*> optional (option "response_format" "Baikai JSON output format object" jsonDecoder renderJson)
     <*> optional (option "tool_choice" "auto, none, required, or a named function" toolChoiceDecoder renderJson)
@@ -735,13 +743,20 @@ baseUrlSetting = publicSettingWithRenderer (stableKey "behavior.base_url") "Expl
   where
     endpointDecoder = decoder \key raw -> do
       value <- runDecoder textDecoder key raw
-      let authority = Text.takeWhile (/= '/') (Text.drop 3 (snd (Text.breakOn "://" value)))
-      if not (Text.null authority)
+      if validHttpEndpoint value
+        then Right value
+        else Left (decodeFailure key "an HTTP(S) base URL without credentials, query or fragment")
+
+validHttpEndpoint :: Text -> Bool
+validHttpEndpoint value =
+  let authority = Text.takeWhile (/= '/') (Text.drop 3 (snd (Text.breakOn "://" value)))
+   in not (Text.null authority)
         && not (Text.any isSpace value)
         && ("https://" `Text.isPrefixOf` value || "http://" `Text.isPrefixOf` value)
         && not (Text.any (`elem` ("@?#\r\n" :: String)) value)
-        then Right value
-        else Left (decodeFailure key "an HTTP(S) base URL without credentials, query or fragment")
+
+cacheRetentions :: [(Text, CacheRetention)]
+cacheRetentions = [("none", CacheRetentionNone), ("short", CacheRetentionShort), ("long", CacheRetentionLong)]
 
 thinkingDecoder :: Decoder ThinkingLevel
 thinkingDecoder = decoder \key raw -> do

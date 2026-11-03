@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-11-03
+* **Addition**: FRIC-46 records blocked interface friction with mori://shinzui/shikumi/packages/shikumi: Published Shikumi descriptors exclude the required Baikai release
+
 ## 2026-11-02
 * **Update**: FRIC-45 accepted: Accept the repeated cohort rebuild cost while preserving final native acceptance.
 * **Addition**: FRIC-45 records slowdown tooling friction with mori://shinzui/shikigami: Corrected successor fixture recompiles the complete runtime cohort

@@ -6,13 +6,15 @@ module Shikigami.Behavior.Provider.Call
   ( ProviderCall (..),
     ProfileViolation (..),
     providerCallFor,
+    evidenceApiCoordinate,
     matchesCall,
     validateProfileCall,
     renderProfileViolation,
   )
 where
 
-import Baikai.Api (Api (..))
+import Baikai.Api (Api (..), parseApi)
+import Baikai.Evidence qualified as Evidence
 import Baikai.Model qualified as Model
 import Baikai.Options (Options)
 import Baikai.Options qualified as Options
@@ -90,6 +92,19 @@ providerCallFor model options =
           modelId = providerCoordinate (Model.modelId model),
           thinking = Options.thinking options
         }
+
+-- | Compare canonical Baikai wire names with the historical profile vocabulary.
+-- Retain the raw evidence; normalize only a matching transport for admission.
+-- Unknown names and historical short names keep their existing meaning.
+evidenceApiCoordinate :: Evidence.EndpointIdentity -> ProviderCoordinate "provider-api"
+evidenceApiCoordinate endpoint =
+  let (api, surface) = callSurface (parseApi endpoint.api)
+      matching = case surface of
+        "https" -> endpoint.transport == Evidence.TransportHttpApi
+        "cli" -> endpoint.transport == Evidence.TransportSubprocess
+        "in-process" -> endpoint.transport == Evidence.TransportAgentRun
+        _ -> False
+   in providerCoordinate (if matching then api else endpoint.api)
 
 callSurface :: Api -> (Text, Text)
 callSurface = \case

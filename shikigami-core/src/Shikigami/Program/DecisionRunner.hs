@@ -10,7 +10,7 @@ module Shikigami.Program.DecisionRunner
   )
 where
 
-import Baikai.Api (Api (..))
+import Baikai.Api (Api (..), renderApi)
 import Baikai.Auth (ApiKeySource (ApiKeyLiteral))
 import Baikai.Context (Context)
 import Baikai.Context qualified as Context
@@ -133,7 +133,7 @@ runDecisionProgram env prepared ref input =
                   ( terminal.strength >= minimumStrength
                       && terminal.requestedModel == providerCoordinateText prepared.model.modelId
                       && terminal.endpoint.provider == providerCoordinateText prepared.model.provider
-                      && terminal.endpoint.api == providerCoordinateText prepared.model.api
+                      && terminal.endpoint.api `elem` [renderApi (Model.api selected), providerCoordinateText prepared.model.api]
                       && terminal.status == Evidence.CallSucceeded
                   )
                   (abort EvidenceFailure "decision provider terminal does not uphold its admitted contract")
@@ -226,7 +226,7 @@ finalOptions env binding actual context node = do
             & #seed .~ (node.seed <|> base.seed)
             & #frequencyPenalty .~ (node.frequencyPenalty <|> base.frequencyPenalty)
             & #presencePenalty .~ (node.presencePenalty <|> base.presencePenalty)
-            & #cacheRetention .~ (node.cacheRetention <|> base.cacheRetention)
+            & #cacheRetention .~ (base.cacheRetention <|> node.cacheRetention)
             & #speed .~ (node.speed <|> base.speed)
             & #headers .~ (base.headers)
             & #evidence
@@ -239,6 +239,7 @@ finalOptions env binding actual context node = do
   unless (actual == selected) (abort ForbiddenModel "program attempted to change the selected model or endpoint")
   when (isJust node.apiKey || not (Map.null node.headers)) (abort ForbiddenModel "program attempted a credential override")
   when (isJust node.thinking && node.thinking /= base.thinking) (abort ForbiddenModel "program attempted a thinking override")
+  when (isJust base.cacheRetention && isJust node.cacheRetention && node.cacheRetention /= base.cacheRetention) (abort ForbiddenModel "program attempted a cache retention override")
   unless (null (Context.tools context) && not (isJust node.toolChoice)) (abort ForbiddenModel "decision programs may not call tools")
   case env.profile of
     Nothing -> pure ()

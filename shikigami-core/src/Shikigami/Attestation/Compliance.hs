@@ -29,6 +29,7 @@ import Shikigami.Attestation.Reviewed
     ResultDigest (..),
     ReviewedArtifact (..),
   )
+import Shikigami.Behavior.Provider.Call (evidenceApiCoordinate)
 import Shikigami.Behavior.Provider.Coordinate
 import Shikigami.Decision.ModelAlias (modelAliasText)
 import Shikigami.Log.Correlation
@@ -138,9 +139,9 @@ callReasons
         endpoint = recorded.endpoint
         thinking = recorded.thinking
         strength = recorded.strength
-        Baikai.EndpointIdentity {Baikai.provider = rawProvider, Baikai.api = rawApi, Baikai.transport} = endpoint
+        Baikai.EndpointIdentity {Baikai.provider = rawProvider, Baikai.transport} = endpoint
         provider = providerCoordinate rawProvider
-        api = providerCoordinate rawApi
+        api = evidenceApiCoordinate endpoint
         endpointClass = providerCoordinate (endpointClassOf endpoint)
         resolvedCoordinate = resolvedModelId
         permitted = toList allowedCalls

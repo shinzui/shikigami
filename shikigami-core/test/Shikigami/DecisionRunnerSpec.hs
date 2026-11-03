@@ -2,6 +2,7 @@ module Shikigami.DecisionRunnerSpec (tests) where
 
 import Baikai.Api (Api (..))
 import Baikai.Auth (ApiKeySource (ApiKeyLiteral))
+import Baikai.CacheRetention (CacheRetention (..))
 import Baikai.Content (AssistantContent (AssistantText), TextContent (..))
 import Baikai.Context qualified as Context
 import Baikai.Error qualified as Error
@@ -9,6 +10,7 @@ import Baikai.Evidence qualified as Evidence
 import Baikai.Model qualified as Model
 import Baikai.Models.Generated (anthropic_claude_haiku_4_5, anthropic_claude_sonnet_4_6)
 import Baikai.Options qualified as Options
+import Baikai.Provider.Claude.Api (claudeMessagesProvider)
 import Baikai.Provider.Registry (ApiProvider (..), apiProviderWith, newProviderRegistryFrom)
 import Baikai.Response (Response (..), emptyResponse, errorResponse)
 import Baikai.ResponseFormat (StructuredOutputSupport (NativeJsonSchema))
@@ -17,8 +19,10 @@ import Baikai.ThinkingLevel (ThinkingLevel (ThinkingHigh))
 import Control.Concurrent (forkIO, threadDelay)
 import Control.Concurrent.MVar (newEmptyMVar, putMVar, takeMVar)
 import Control.Exception (SomeException, throwIO, try)
+import Control.Monad (void)
 import Data.Aeson (FromJSON, ToJSON, Value (Null, String), toJSON)
 import Data.Aeson qualified as Aeson
+import Data.Aeson.Types qualified as AesonTypes
 import Data.ByteString.Lazy qualified as LBS
 import Data.Either (isLeft)
 import Data.Foldable (for_)
@@ -29,12 +33,24 @@ import Data.Map.Strict qualified as Map
 import Data.Proxy (Proxy (..))
 import Data.Text (Text)
 import Data.Text qualified as AliasText
+import Data.Text qualified as Text
 import Data.Text.Encoding qualified as TE
 import Data.Time (UTCTime (..), fromGregorian, getCurrentTime)
 import Data.Vector qualified as V
 import GHC.Generics (Generic)
 import Handan.Runtime (Runtime (..))
 import Keiro.Workflow.Types (WorkflowId (..))
+import Network.HTTP.Types (status200)
+import Network.Wai qualified as Wai
+import Network.Wai.Handler.Warp (testWithApplication)
+import Settei.Env (envSnapshot, environmentSource)
+import Settei.Key (parseKey)
+import Settei.Optparse (DiagnosticMode (NoDiagnostic), cliOverride)
+import Shikigami.App.Config (AppConfig (..), Role (RunBehaviorRole), environmentBindings)
+import Shikigami.App.Config.Load (ConfigOptions (..), ConfigRun (..), appConfigRun)
+import Shikigami.Attestation.CallFacts (CallComplianceFacts (..), factsFromTerminal)
+import Shikigami.Attestation.Compliance qualified as Compliance
+import Shikigami.Attestation.Evidence (CallRelationship (RootCall))
 import Shikigami.Attestation.PolicyValue qualified as PV
 import Shikigami.Attestation.Profile qualified as Profile
 import Shikigami.Attestation.Resolve (ResolvedProfile, ResolvedProfileView (..), resolvedProfileFor, resolvedProfileView)
@@ -43,7 +59,7 @@ import Shikigami.Behavior.Provider.Coordinate qualified as Coordinate
 import Shikigami.Decision.Contract
 import Shikigami.Decision.ModelAlias qualified as Alias
 import Shikigami.Decision.ModelCatalog
-import Shikigami.Log.Correlation (runCorrelationId)
+import Shikigami.Log.Correlation (callCorrelationId, runCorrelationId)
 import Shikigami.Prelude ((&), (.~))
 import Shikigami.Program.Decision
 import Shikigami.Program.Decision.Examples qualified as Examples
@@ -79,6 +95,17 @@ binding alias model secret = mustRight (modelBinding (fixtureModelAlias alias) "
 
 input :: Answer
 input = Answer "investigate" 0.81
+
+decisionFrames :: LBS.ByteString
+decisionFrames =
+  "data: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_fixture\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"model\":\"claude-haiku-4-5\",\"usage\":{\"input_tokens\":11,\"output_tokens\":0}}}\n\n"
+    <> "data: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\n"
+    <> "data: "
+    <> Aeson.encode (Aeson.object ["type" Aeson..= ("content_block_delta" :: Text), "index" Aeson..= (0 :: Int), "delta" Aeson..= Aeson.object ["type" Aeson..= ("text_delta" :: Text), "text" Aeson..= TE.decodeUtf8 (LBS.toStrict (Aeson.encode input))]])
+    <> "\n\n"
+    <> "data: {\"type\":\"content_block_stop\",\"index\":0}\n\n"
+    <> "data: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":12}}\n\n"
+    <> "data: {\"type\":\"message_stop\"}\n\n"
 
 preparedFor registered binding = PreparedDecision (decisionPreparationId (String "preparation")) (runCorrelationId "run-1") (WorkflowId "workflow-1") initialDecisionGeneration triageDecisionSlot (descriptor (programRef registered)) (toJSON input) (modelDescriptor binding) Nothing
 
@@ -185,6 +212,74 @@ tests =
         requests <- observed
         length (filter (== Seen (Model.modelId (bindingModel bindingA)) (Just "credential-a") True) requests) @?= 2
         length (filter (== Seen (Model.modelId (bindingModel bindingB)) (Just "credential-b") True) requests) @?= 2,
+      testCase "configured decision endpoint and retention reach the public HTTP adapter" do
+        for_ [Nothing, Just "none", Just "short", Just "long"] \retention -> do
+          seen <- newIORef []
+          let application request respond = do
+                body <- Wai.strictRequestBody request
+                atomicModifyIORef' seen (\xs -> (xs <> [(Wai.pathInfo request, mustRight (Aeson.eitherDecode @Aeson.Value body))], ()))
+                respond (Wai.responseLBS status200 [("Content-Type", "text/event-stream")] decisionFrames)
+          testWithApplication (pure application) \port -> do
+            let endpoint = "http://127.0.0.1:" <> Text.pack (show port) <> "/v1"
+                fields =
+                  [ "alias" Aeson..= ("triage" :: Text),
+                    "version" Aeson..= ("2" :: Text),
+                    "bindingId" Aeson..= ("fixture" :: Text),
+                    "bindingVersion" Aeson..= ("1" :: Text),
+                    "provider" Aeson..= ("anthropic" :: Text),
+                    "model" Aeson..= ("claude-haiku-4-5" :: Text),
+                    "thinking" Aeson..= ("default" :: Text),
+                    "base_url" Aeson..= endpoint
+                  ]
+                    <> maybe [] (\value -> ["cache_retention" Aeson..= (value :: Text)]) retention
+                values = [("behavior.decisionModels", TE.decodeUtf8 . LBS.toStrict . Aeson.encode $ [Aeson.object fields]), ("credentials.providers.anthropic.api_key", "public-fixture-key")]
+                configured = appConfigRun RunBehaviorRole ConfigOptions {configPaths = [], namedSources = [], overrides = [cliOverride (mustRight (parseKey key)) value | (key, value) <- values], diagnosticMode = NoDiagnostic} (Right []) (environmentSource environmentBindings (envSnapshot []))
+            configured.exitCode @?= 0
+            config <- maybe (assertFailure (Text.unpack configured.standardError)) pure configured.resolved
+            let catalog = mustRight config.decisionModelCatalog
+                selected = mustRight (pinnedBinding catalog (head (catalogDescriptors catalog)))
+            (hooks, inspect) <- newMemoryCallHooks
+            env <- environment twoNodes claudeMessagesProvider hooks
+            let httpsOnly = resolvedProfileFor ((resolvedProfileView forbiddenProfile).profile & #allowedCalls .~ (Profile.AllowedCall (Coordinate.providerCoordinate "anthropic") (Coordinate.providerCoordinate "messages") (Coordinate.providerCoordinate "https") (Coordinate.providerCoordinate "claude-haiku-4-5") Profile.ThinkingHigh :| []))
+                guarded = (preparedFor twoNodes selected) {policy = Just (resolvedProfileView httpsOnly).ref} :: PreparedDecision
+            runDecisionProgram (env & #catalog .~ catalog & #profile .~ Just httpsOnly) guarded (programRef twoNodes) input >>= (assertBool "plaintext override cannot inherit HTTPS authority" . isLeft)
+            readIORef seen >>= (@?= [])
+            inspect >>= (\calls -> Map.size calls @?= 0)
+            runDecisionProgram (env & #catalog .~ catalog) (preparedFor twoNodes selected) (programRef twoNodes) input >>= (@?= Right input)
+            requests <- readIORef seen
+            length requests @?= 2
+            for_ requests \(path, body) -> do
+              path @?= ["v1", "messages"]
+              let field name = AesonTypes.parseMaybe (Aeson.withObject "request" (Aeson..:? name)) body :: Maybe (Maybe Aeson.Value)
+              field "model" @?= Just (Just (String "claude-haiku-4-5"))
+              field "cache_control"
+                @?= Just
+                  ( case retention of
+                      Just "short" -> Just (Aeson.object ["type" Aeson..= ("ephemeral" :: Text)])
+                      Just "long" -> Just (Aeson.object ["type" Aeson..= ("ephemeral" :: Text), "ttl" Aeson..= ("1h" :: Text)])
+                      _ -> Nothing
+                  )
+            inspect
+              >>= ( \calls -> do
+                      Map.size calls @?= 2
+                      assertBool "each actual HTTP terminal persisted" (all (\call -> call.terminal /= Nothing) (Map.elems calls))
+                  ),
+      testCase "canonical and historical API evidence compare without rewriting raw facts" do
+        for_ [("anthropic-messages", True), ("messages", True), ("openai-chat-completions", False), ("anthropic-messages-cli", False)] \(rawApi, admitted) -> do
+          let policy = (resolvedProfileView forbiddenProfile).profile & #allowedCalls .~ (Profile.AllowedCall (Coordinate.providerCoordinate "anthropic") (Coordinate.providerCoordinate "messages") (Coordinate.providerCoordinate "https") (Coordinate.providerCoordinate "claude-haiku-4-5") Profile.ThinkingHigh :| [])
+              respond model options = do
+                response <- success model options input
+                pure (response & #evidence .~ fmap (\terminal -> terminal & #endpoint . #api .~ rawApi) response.evidence)
+          (hooks, _) <- newMemoryCallHooks
+          (handler, _) <- fixture 0 (\_ -> respond)
+          env <- environment twoNodes handler hooks
+          result <- runDecisionProgram env (preparedFor twoNodes bindingA) (programRef twoNodes) input
+          if admitted then result @?= Right input else assertBool "different API cannot fulfill the selected contract" (isLeft result)
+          response <- respond (bindingModel bindingA) (Options.emptyOptions & #evidence .~ Just (Evidence.evidenceRequest "api-fixture"))
+          terminal <- maybe (assertFailure "missing fixture evidence") pure response.evidence
+          let facts = factsFromTerminal (callCorrelationId (runCorrelationId "api-fixture") "call" 0) RootCall (modelDescriptor bindingA).modelId Nothing terminal
+          facts.endpoint.api @?= rawApi
+          (Compliance.evaluateCallFacts policy [] [facts]).sanctioned @?= if admitted then Compliance.ComplianceSanctioned else Compliance.ComplianceNonConforming,
       testCase "transient retry crosses hooks again before the second node" do
         (hooks, inspect) <- newMemoryCallHooks
         (handler, observed) <-
@@ -299,6 +394,42 @@ tests =
         result <- runDecisionProgram env (preparedFor overridden bindingA) (programRef overridden) input
         assertBool "thinking refused" (isLeft result)
         observed >>= (@?= []),
+      testCase "pinned cache retention survives complete and stream merging; conflicts never dispatch" do
+        for_ [False, True] \streaming ->
+          for_ [Nothing, Just CacheRetentionNone, Just CacheRetentionShort, Just CacheRetentionLong] \pinned ->
+            for_ [Nothing, Just CacheRetentionShort, Just CacheRetentionNone, Just CacheRetentionLong] \requested -> do
+              let registered =
+                    register
+                      "cache"
+                      ( Embed
+                          ( \value -> do
+                              let options = Options.emptyOptions & #cacheRetention .~ requested
+                              if streaming then void (LLM.stream Model.emptyModel Context.emptyContext options) else void (LLM.complete Model.emptyModel Context.emptyContext options)
+                              pure value
+                          )
+                      )
+                      Right
+                  selected = mustRight (modelBinding (fixtureModelAlias "triage") "2" "cached" "1" anthropic_claude_haiku_4_5 (Options.emptyOptions & #cacheRetention .~ pinned) (Just (opaqueCredential "credential-a")))
+              (hooks, inspect) <- newMemoryCallHooks
+              retained <- newIORef []
+              (handler, observed) <-
+                fixture
+                  0
+                  ( \_ model options -> do
+                      atomicModifyIORef' retained (\xs -> (xs <> [options.cacheRetention], ()))
+                      success model options input
+                  )
+              env <- environment registered handler hooks
+              result <- runDecisionProgram (env & #catalog .~ mustRight (modelCatalog [selected])) (preparedFor registered selected) (programRef registered) input
+              if pinned == Nothing || requested == Nothing || requested == pinned
+                then do
+                  result @?= Right input
+                  readIORef retained >>= (@?= [case pinned of Nothing -> requested; Just value -> Just value])
+                  inspect >>= (\calls -> Map.size calls @?= 1)
+                else do
+                  assertBool "cache override refused" (isLeft result)
+                  observed >>= (@?= [])
+                  inspect >>= (\calls -> Map.size calls @?= 0),
       testCase "domain-invalid output remains failure with bounded diagnostics" do
         let registered = register "reject" predict (const (Left "private model body"))
         (hooks, _) <- newMemoryCallHooks

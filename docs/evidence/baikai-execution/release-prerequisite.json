@@ -1,0 +1,244 @@
+{
+  "checkedAt": "2026-11-03T00:27:27.467657+00:00",
+  "purpose": "Release prerequisite check only; no application upgrade or Linux/runtime qualification",
+  "publishedDescriptors": [
+    {
+      "package": "baikai",
+      "latestNormalVersion": "0.10.0.0",
+      "uri": "mori://shinzui/baikai/packages/baikai",
+      "preferredUrl": "https://hackage.haskell.org/package/baikai/preferred.json",
+      "descriptorUrl": "https://hackage.haskell.org/package/baikai-0.10.0.0/baikai.cabal",
+      "descriptorSha256": "88e24930ec8654a5a29abff12d65dd88e00ea6c3a61cd8dc1496c1851f11866d",
+      "relevantDescriptorLines": [
+        "baikai provides a unified, provider-agnostic Haskell interface for working"
+      ]
+    },
+    {
+      "package": "baikai-claude",
+      "latestNormalVersion": "0.7.3.0",
+      "uri": "mori://shinzui/baikai/packages/baikai-claude",
+      "preferredUrl": "https://hackage.haskell.org/package/baikai-claude/preferred.json",
+      "descriptorUrl": "https://hackage.haskell.org/package/baikai-claude-0.7.3.0/baikai-claude.cabal",
+      "descriptorSha256": "889d4fe382abaa72754343e293ba468cf69a1f1ec34430ee7802535c93abc101",
+      "relevantDescriptorLines": [
+        "baikai ^>=0.10.0",
+        "baikai-claude"
+      ]
+    },
+    {
+      "package": "baikai-openai",
+      "latestNormalVersion": "0.7.3.0",
+      "uri": "mori://shinzui/baikai/packages/baikai-openai",
+      "preferredUrl": "https://hackage.haskell.org/package/baikai-openai/preferred.json",
+      "descriptorUrl": "https://hackage.haskell.org/package/baikai-openai-0.7.3.0/baikai-openai.cabal",
+      "descriptorSha256": "0b210481876376e76a0ef55ca791384d0d0c30b8a3fd6898398b4df3726b2f35",
+      "relevantDescriptorLines": [
+        "baikai ^>=0.10.0",
+        "baikai-openai"
+      ]
+    },
+    {
+      "package": "baikai-agent",
+      "latestNormalVersion": "0.2.0.4",
+      "uri": "mori://shinzui/baikai/packages/baikai-agent",
+      "preferredUrl": "https://hackage.haskell.org/package/baikai-agent/preferred.json",
+      "descriptorUrl": "https://hackage.haskell.org/package/baikai-agent-0.2.0.4/baikai-agent.cabal",
+      "descriptorSha256": "403a9f98340437b25532242a83af668c7211a866a0af84145e5c1d0f4c7413ed",
+      "relevantDescriptorLines": [
+        "baikai ^>=0.10.0",
+        "baikai-claude ^>=0.7.3",
+        "baikai-openai ^>=0.7.3",
+        "baikai-agent"
+      ]
+    },
+    {
+      "package": "baikai-effectful",
+      "latestNormalVersion": "0.4.0.5",
+      "uri": "mori://shinzui/baikai/packages/baikai-effectful",
+      "preferredUrl": "https://hackage.haskell.org/package/baikai-effectful/preferred.json",
+      "descriptorUrl": "https://hackage.haskell.org/package/baikai-effectful-0.4.0.5/baikai-effectful.cabal",
+      "descriptorSha256": "c59e142c137464a22a46ee80035e32a103be466f1fbd7003eca4fba3546ef633",
+      "relevantDescriptorLines": [
+        "baikai ^>=0.10.0",
+        "effectful-core ^>=2.7",
+        "baikai-effectful",
+        "baikai-openai"
+      ]
+    },
+    {
+      "package": "baikai-trace-otel",
+      "latestNormalVersion": "0.4.1.1",
+      "uri": "mori://shinzui/baikai/packages/baikai-trace-otel",
+      "preferredUrl": "https://hackage.haskell.org/package/baikai-trace-otel/preferred.json",
+      "descriptorUrl": "https://hackage.haskell.org/package/baikai-trace-otel-0.4.1.1/baikai-trace-otel.cabal",
+      "descriptorSha256": "8d191f85e280246ac1d61ca3d5e2351ca40b1b27d12e66f8e1a7d1e77aa886ad",
+      "relevantDescriptorLines": [
+        "baikai ^>=0.10.0",
+        "baikai-trace-otel"
+      ]
+    },
+    {
+      "package": "baikai-typesafe",
+      "latestNormalVersion": "0.1.0.1",
+      "uri": "mori://shinzui/baikai/packages/baikai-typesafe",
+      "preferredUrl": "https://hackage.haskell.org/package/baikai-typesafe/preferred.json",
+      "descriptorUrl": "https://hackage.haskell.org/package/baikai-typesafe-0.1.0.1/baikai-typesafe.cabal",
+      "descriptorSha256": "907f4d98cfa8ee5c35126e9fd0fd1ba9fc870a02f1ae8a5628b7acf468aa08df",
+      "relevantDescriptorLines": [
+        "baikai ^>=0.10.0",
+        "baikai-typesafe"
+      ]
+    },
+    {
+      "package": "shikumi",
+      "latestNormalVersion": "0.4.1.1",
+      "uri": "mori://shinzui/shikumi/packages/shikumi",
+      "preferredUrl": "https://hackage.haskell.org/package/shikumi/preferred.json",
+      "descriptorUrl": "https://hackage.haskell.org/package/shikumi-0.4.1.1/shikumi.cabal",
+      "descriptorSha256": "b6b1da93b05015b9d75aaec23c561cb6e4a27fa38408cfaa31b430bdacc632cb",
+      "relevantDescriptorLines": [
+        "shikumi error type, and resilience (retries, rate limiting, budget control).",
+        "baikai >=0.8.0.0 && <0.9",
+        "baikai-claude >=0.7.1.1 && <0.8",
+        "baikai-effectful >=0.4.0.3 && <0.5",
+        "baikai-openai >=0.7.1.1 && <0.8",
+        "effectful >=2.6 && <2.8",
+        "shikumi ^>=0.4.1.1"
+      ]
+    },
+    {
+      "package": "shikumi-tools",
+      "latestNormalVersion": "0.4.1.1",
+      "uri": "mori://shinzui/shikumi/packages/shikumi-tools",
+      "preferredUrl": "https://hackage.haskell.org/package/shikumi-tools/preferred.json",
+      "descriptorUrl": "https://hackage.haskell.org/package/shikumi-tools-0.4.1.1/shikumi-tools.cabal",
+      "descriptorSha256": "b8660a4e3eb220ed785cd8a8bfd00c740fa90e833694d8d2bb4e303d7f426494",
+      "relevantDescriptorLines": [
+        "baikai >=0.8.0.0 && <0.9",
+        "effectful >=2.6 && <2.8",
+        "shikumi ^>=0.4.1.1",
+        "shikumi-cache ^>=0.2.0.2",
+        "shikumi-testing ^>=0.1.0.0",
+        "shikumi-tools ^>=0.4.1.1"
+      ]
+    },
+    {
+      "package": "shikumi-cache",
+      "latestNormalVersion": "0.2.0.2",
+      "uri": "mori://shinzui/shikumi/packages/shikumi-cache",
+      "preferredUrl": "https://hackage.haskell.org/package/shikumi-cache/preferred.json",
+      "descriptorUrl": "https://hackage.haskell.org/package/shikumi-cache-0.2.0.2/shikumi-cache.cabal",
+      "descriptorSha256": "95029750b71f07a0c3dec9d0a82654d5ca3812bf8c7e5e2971212aeb9c02c59c",
+      "relevantDescriptorLines": [
+        "baikai >=0.8.0.0 && <0.9",
+        "effectful >=2.6 && <2.8",
+        "shikumi ^>=0.4.1.1",
+        "shikumi-cache ^>=0.2.0.2"
+      ]
+    },
+    {
+      "package": "shikumi-trace",
+      "latestNormalVersion": "0.3.0.2",
+      "uri": "mori://shinzui/shikumi/packages/shikumi-trace",
+      "preferredUrl": "https://hackage.haskell.org/package/shikumi-trace/preferred.json",
+      "descriptorUrl": "https://hackage.haskell.org/package/shikumi-trace-0.3.0.2/shikumi-trace.cabal",
+      "descriptorSha256": "0c5b8cfbd8d9926ab618a64055b30c506d72d2b02103ea88eef2950a2630c328",
+      "relevantDescriptorLines": [
+        "baikai >=0.8.0.0 && <0.9",
+        "effectful >=2.6 && <2.8",
+        "shikumi ^>=0.4.1.1",
+        "shikumi-cache ^>=0.2.0.2",
+        "shikumi-trace ^>=0.3.0.2"
+      ]
+    },
+    {
+      "package": "shikumi-trace-otel",
+      "latestNormalVersion": "0.1.2.2",
+      "uri": "mori://shinzui/shikumi/packages/shikumi-trace-otel",
+      "preferredUrl": "https://hackage.haskell.org/package/shikumi-trace-otel/preferred.json",
+      "descriptorUrl": "https://hackage.haskell.org/package/shikumi-trace-otel-0.1.2.2/shikumi-trace-otel.cabal",
+      "descriptorSha256": "728ea6b19a0c9ace8395342fd6a51de16dd120fb4efa0a819615b1398ca5ac6e",
+      "relevantDescriptorLines": [
+        "baikai >=0.8.0.0 && <0.9",
+        "shikumi ^>=0.4.1.1",
+        "shikumi-trace ^>=0.3.0.2",
+        "shikumi-cache ^>=0.2.0.2",
+        "shikumi-eval ^>=0.3.0.2",
+        "shikumi-testing ^>=0.1.0.0",
+        "shikumi-trace-otel ^>=0.1.2.2"
+      ]
+    },
+    {
+      "package": "shikumi-eval",
+      "latestNormalVersion": "0.3.0.2",
+      "uri": "mori://shinzui/shikumi/packages/shikumi-eval",
+      "preferredUrl": "https://hackage.haskell.org/package/shikumi-eval/preferred.json",
+      "descriptorUrl": "https://hackage.haskell.org/package/shikumi-eval-0.3.0.2/shikumi-eval.cabal",
+      "descriptorSha256": "90206efadeb1a9a115132f5f988a927de16509debf5e9ad537f912660a6dd600",
+      "relevantDescriptorLines": [
+        "baikai >=0.8.0.0 && <0.9",
+        "effectful >=2.6 && <2.8",
+        "shikumi ^>=0.4.1.1",
+        "shikumi-eval ^>=0.3.0.2"
+      ]
+    },
+    {
+      "package": "kioku-core",
+      "latestNormalVersion": "0.12.0.1",
+      "uri": "mori://shinzui/kioku/packages/kioku-core",
+      "preferredUrl": "https://hackage.haskell.org/package/kioku-core/preferred.json",
+      "descriptorUrl": "https://hackage.haskell.org/package/kioku-core-0.12.0.1/kioku-core.cabal",
+      "descriptorSha256": "1da53f191c7856d540853b03eb1cb3164313e35e0eedb6fab3782ba5e7fc88e2",
+      "relevantDescriptorLines": [
+        "baikai ^>=0.10.0.0",
+        "baikai-claude ^>=0.7.3.0",
+        "baikai-effectful ^>=0.4.0.5",
+        "baikai-openai ^>=0.7.3.0",
+        "effectful >=2.5 && <2.8",
+        "effectful-core >=2.5 && <2.7 || >=2.7.1.1 && <2.8",
+        "shikumi ^>=0.4.1.1",
+        "shikumi-trace ^>=0.3.0.2"
+      ]
+    },
+    {
+      "package": "effectful",
+      "latestNormalVersion": "2.7.1.0",
+      "preferredUrl": "https://hackage.haskell.org/package/effectful/preferred.json",
+      "descriptorUrl": "https://hackage.haskell.org/package/effectful-2.7.1.0/effectful.cabal",
+      "descriptorSha256": "35847b4359df36d3f2ca16ff888f6426ce35373d9d80aedbdd4c27b4a72d8a7f",
+      "relevantDescriptorLines": []
+    },
+    {
+      "package": "effectful-core",
+      "latestNormalVersion": "2.7.1.2",
+      "preferredUrl": "https://hackage.haskell.org/package/effectful-core/preferred.json",
+      "descriptorUrl": "https://hackage.haskell.org/package/effectful-core-2.7.1.2/effectful-core.cabal",
+      "descriptorSha256": "9bea7fbf7ba34ae7664404b876f20acb5d87e1b3c4e19cca7a85d6981b1ff8e7",
+      "relevantDescriptorLines": []
+    }
+  ],
+  "verifiedRemoteTags": {
+    "mori://shinzui/baikai": {
+      "baikai-0.10.0.0": "03140cf60381ac154ebfa86d3bb2208d7df8626c",
+      "baikai-typesafe-0.1.0.1": "03140cf60381ac154ebfa86d3bb2208d7df8626c",
+      "baikai-agent-0.2.0.4": "4eba8c8f780da1b6a82b7232f5833db6608237dd"
+    },
+    "mori://shinzui/shikumi": {
+      "shikumi-0.4.1.1": "db4eb373803552762edc9e86a231dfb529f8105b"
+    }
+  },
+  "isolatedSolve": {
+    "indexState": "2026-11-02T23:00:00Z",
+    "dependencies": [
+      "base",
+      "baikai ==0.10.0.0",
+      "shikumi ==0.4.1.1"
+    ],
+    "command": "cabal build all --dry-run",
+    "result": "refused",
+    "diagnostic": "Cabal-7107: rejecting baikai-0.10.0.0 (conflict: shikumi => baikai>=0.8.0.0 && <0.9)",
+    "allowNewer": false,
+    "siblingSources": false
+  },
+  "applicationPinsChanged": false
+}

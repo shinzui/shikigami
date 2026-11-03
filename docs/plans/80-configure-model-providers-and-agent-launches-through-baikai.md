@@ -26,6 +26,11 @@ provenance:
       at: 2026-11-02T23:45:26Z
       mode: "update"
       note: "Refresh released Baikai lifecycle status, 0.10 model/reasoning/cache migration, dependency prerequisites and current governed execution owners"
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-11-03T00:23:44Z
+      mode: "implement"
+      note: "Implement independent governed endpoint and cache binding settings; verify released-cohort prerequisite"
 ---
 
 # Configure model providers and agent launches through Baikai
@@ -71,6 +76,8 @@ Refresh handoff (2026-11-02 UTC): this is a plan update, with no dependency or r
 
 Scope handoff (2026-11-02 UTC): the user authorized adoption of every feature discussed, including structured answers and TypeSafe judgments. M7 and M8 are now required deliverables. The earlier generative-only scope decision is superseded; current dependency prerequisites and October qualification evidence retain their meaning.
 
+Implementation handoff (2026-11-03 UTC): the published-release prerequisite is now reproduced with an isolated Cabal dry-run after refreshing the index, rather than inferred solely from descriptor text. See [release evidence](../evidence/baikai-execution/release-prerequisite.json) and FRIC-46. The target pair `baikai ==0.10.0.0` and `shikumi ==0.4.1.1` cannot resolve at `2026-11-02T23:00:00Z`; application pins remain unchanged. Independent M2/M3 work adds optional decision-binding endpoint/cache settings and forbids program overrides of pinned retention. All 52 focused decision checks pass through the isolated committed-descriptor project, including the real public Anthropic adapter, all retention modes, zero-dispatch HTTPS-only refusal, immutable identity and complete/stream conflicts. Broader regression and final committed-tree gate qualification is in progress. M1 adoption, the latest shared-prefix/reasoning behavior, CLI promotion and M7/M8 still require the released compatible Shikumi consumer; no milestone is marked complete by this partial work.
+
 
 ## Surprises & Discoveries
 
@@ -78,6 +85,10 @@ Scope handoff (2026-11-02 UTC): the user authorized adoption of every feature di
 The October probes established live descendants after cancellation for the versions still selected by Shikigami. Keep [that contract inventory](../evidence/baikai-execution/contracts.md) as historical evidence. The owning report `mori://shinzui/baikai/okf/bug-reports/concepts/BUG-1` now records a released fix in core 0.8.0.0 and Claude/OpenAI 0.7.1.1. `mori://shinzui/baikai/okf/capabilities/concepts/CAP-25` documents positive Darwin/Linux regressions: inherited process-group members stop, readers join and direct children are reaped before the original asynchronous exception propagates. This removes the wait for publication, not the application's promotion gate. Deliberately detached process groups can escape; CLI `Options.timeoutMs` is still ignored and batch output is still accumulated to EOF. Cancellation ownership is neither confinement nor a hard deadline or retained-output limit.
 
 The latest source checkout and published metadata differ materially. The local Shikumi 0.4.1.1 descriptor admits Baikai `>=0.9 && <0.10`, but its authoritative Hackage descriptor admits `>=0.8 && <0.9`. Both exclude 0.10. The other released Shikumi packages in the configured closure have the same published 0.8 range. Never infer a released solve from the newer local files or relax those bounds in Shikigami.
+
+On 2026-11-03 UTC an isolated two-dependency consumer independently reproduces `Cabal-7107`: `rejecting: baikai-0.10.0.0 (conflict: shikumi => baikai>=0.8.0.0 && <0.9)`. Hackage descriptor hashes and upstream tags are retained in [release-prerequisite.json](../evidence/baikai-execution/release-prerequisite.json); [contracts.md](../evidence/baikai-execution/contracts.md) contains the complete minimal fixture. FRIC-46 in `docs/friction-log/` records this blocking occurrence. A widened local descriptor is insufficient: adoption needs the published judgment routing/derivation and structured cache consumer too.
+
+The independent configured-endpoint loopback proof exposed an existing consumer mismatch: Baikai records canonical API name `anthropic-messages`, but the decision runner and compliance evaluator compared it directly with the profile vocabulary `messages`. Mock handlers had emitted the shorter name and hidden that failure. Normalize canonical evidence names for matching transports during comparison, retaining raw evidence and the historical profile/digest vocabulary. The real-adapter regression and wrong-API/transport cases cover this correction; ADR 0044 records the durable rule.
 
 Plans 73–76 and 82–83 have since implemented operator model catalogs, per-attempt governed calls, pinned assignments and accepted model/tool transcript recovery. The original plan's process-global-registry uncertainty and coarse-step-only recovery description no longer describe the whole runtime. A Baikai upgrade must preserve those existing consumers and their retained JSON/digest contracts.
 
@@ -112,6 +123,8 @@ Decision (2026-11-02 UTC, expanded scope): The user now requests adoption of bat
 
 Decision (2026-11-02 UTC): Reuse public `Baikai.Judgment`, `Baikai.Response.JSON`, `Baikai.Provider.TypeSafe.Api` and qualified Shikumi decision/routing APIs. Baikai retains neutral provider answer data; Shikumi applies declared local derivation settings. Version and retain both the raw answer snapshot and the committed rich result. Replay reads committed outcomes without fresh derivation or fresh provider evidence. Automatic calibration fitting is not required to adopt these features; explicit thresholds, cuts and weights are supported and pinned.
 
+Decision (2026-11-03 UTC): Deliver the independent decision-binding endpoint/cache configuration against the retained qualified cohort while the released solve is blocked. Reuse existing endpoint and retention validation and the model/options digest preimage, preserving omitted-field identity. An explicitly pinned retention, including `none`, cannot be changed by a program node; conflicts refuse before actual-attempt admission. This does not qualify the newer adapter's shared-prefix caching or TypeSafe and does not change workflow bodies, step shapes or journal codecs. ADR 0052 records the durable binding rule.
+
 ## Outcomes & Retrospective
 
 
@@ -120,6 +133,8 @@ The independent HTTP and foreground integration is implemented and qualified at 
 The overall plan remains open. The application's pinned adapters are still the affected versions, so background CLI selection remains a typed refusal. Upstream has now released the fix; the remaining M1 adoption and positive lifecycle/confinement proof, M2 CLI resolver, M3 CLI response dispatch and M6 authenticated reporter are application work subject to the dependency prerequisites below. The 2026-11-02 refresh verified release metadata and source contracts only; it ran no upgraded build, no positive consumer cancellation test and no new live trial. Live HTTP alternatives remain untested; no background reporter, memory/delivery or service qualification is claimed.
 
 The subsequent scope expansion adds structured-content persistence and TypeSafe application integration as M7 and M8. These remain unimplemented and unqualified. Neither a TypeSafe credential nor a remote judgment call was used while updating this document.
+
+The 2026-11-03 implementation delivers optional governed endpoint and retention configuration against the retained cohort, protects explicitly pinned retention, and fixes canonical API comparison for real decision terminals and shared compliance evaluation without rewriting recorded facts. The focused 52-case decision suite passes. FRIC-46 remains logged because the owning published Shikumi prerequisite is unresolved; no bound override, package promotion, journal codec change or new provider readiness claim is introduced. Broad regression results will be recorded at the final validation boundary.
 
 
 ## Context and Orientation

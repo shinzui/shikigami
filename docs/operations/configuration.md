@@ -527,6 +527,12 @@ for defaults, ranges, recovery and human permission semantics. The shared
 bindings selected by a declaration's `execution.defaultAlias` and
 `execution.permittedAliases`; see [agent declarations](../user/writing-agents.md).
 These are distinct from per-slot Flow `decisionModels` permissions.
+HTTP catalog entries may set optional `base_url` and `cache_retention`
+(`none`, `short`, `long`). These join the pinned model/options digest; omission
+preserves existing bindings. Programs cannot override explicitly pinned retention.
+Endpoint overrides still use the matching opaque provider credential and the
+actual URL scheme for profile admission. See [decision model configuration](../shikumi-flow-decisions.md#configure-the-operator-catalog)
+for validation, retention compatibility and retained-binding rules.
 
 Root resource envelopes and continuing-worker scopes are supplied by trusted
 admission APIs, rather than arbitrary process settings. The default operator host

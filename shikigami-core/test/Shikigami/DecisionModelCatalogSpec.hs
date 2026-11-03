@@ -1,12 +1,16 @@
 module Shikigami.DecisionModelCatalogSpec (tests) where
 
+import Baikai.CacheRetention (CacheRetention (..))
 import Baikai.Model qualified as Model
 import Baikai.Options (emptyOptions)
+import Baikai.Options qualified as Options
 import Control.Lens ((&), (.~))
 import Data.Aeson (Value (Null, Object), eitherDecode, encode, object, toJSON, (.=))
 import Data.Aeson.KeyMap qualified as KeyMap
+import Data.Aeson.Types (Pair)
 import Data.ByteString.Lazy qualified as LBS
 import Data.Either (isLeft)
+import Data.Foldable (for_)
 import Data.Generics.Labels ()
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Text (Text)
@@ -108,6 +112,36 @@ tests =
           Just config -> map (\model -> Coordinate.providerCoordinateText model.modelId) (catalogDescriptors (mustRight config.decisionModelCatalog)) @?= ["stub-triage", "stub-investigate"]
           Nothing -> assertFailure (Text.unpack run.standardError)
         (configRun [("behavior.decisionModels", specList ["invented-model"])] CheckConfig).exitCode @?= 4,
+      testCase "HTTP endpoints and retention are immutable binding settings with legacy defaults" do
+        let legacy = configuredHttpBinding []
+            disabled = configuredHttpBinding ["cache_retention" .= ("none" :: Text)]
+            short = configuredHttpBinding ["cache_retention" .= ("short" :: Text)]
+            long = configuredHttpBinding ["cache_retention" .= ("long" :: Text)]
+            gateway = configuredHttpBinding ["base_url" .= ("http://127.0.0.1:8791/v1" :: Text)]
+            unchanged = configuredHttpBinding ["base_url" .= Model.baseUrl (bindingModel legacy)]
+        Options.cacheRetention (bindingOptions legacy) @?= Nothing
+        Options.cacheRetention (bindingOptions disabled) @?= Just CacheRetentionNone
+        Options.cacheRetention (bindingOptions short) @?= Just CacheRetentionShort
+        Options.cacheRetention (bindingOptions long) @?= Just CacheRetentionLong
+        modelDescriptor unchanged @?= modelDescriptor legacy
+        Model.baseUrl (bindingModel gateway) @?= "http://127.0.0.1:8791/v1"
+        Coordinate.providerCoordinateText (modelDescriptor gateway).endpointClass @?= "http"
+        for_ [disabled, short, long, gateway] \changed -> do
+          assertBool "changed authority joins the digest" ((modelDescriptor changed).digest /= (modelDescriptor legacy).digest)
+          assertBool "old version cannot rebind" (isLeft (retainModelBindings (mustRight (modelCatalog [changed])) [legacy]))
+        let retained = mustRight (retainModelBindings (mustRight (modelCatalog [])) [legacy])
+        assertBool "legacy binding remains available" (not (isLeft (pinnedBinding retained (modelDescriptor legacy)))),
+      testCase "invalid nested HTTP/cache settings refuse offline and redact rejected values" do
+        for_ ["", "file:///tmp/model", "https:///v1", "https://user:PLANTED_ENDPOINT_SECRET@example.test", "https://example.test/?key=PLANTED_ENDPOINT_SECRET", "https://example.test/#PLANTED_ENDPOINT_SECRET", "http://example.test/ private"] \endpoint -> do
+          let run = httpConfigRun ["base_url" .= (endpoint :: Text)] ExplainJson
+          run.exitCode @?= 4
+          assertBool "endpoint secret redacted" (not ("PLANTED_ENDPOINT_SECRET" `Text.isInfixOf` (run.standardOutput <> run.standardError)))
+        (httpConfigRun ["cache_retention" .= ("forever" :: Text)] CheckConfig).exitCode @?= 4
+        -- The selected Chat binding cannot honor long retention; validation
+        -- must fail before constructing a provider, even for a custom endpoint.
+        (httpConfigRun ["provider" .= ("openai" :: Text), "model" .= ("gpt-4o" :: Text), "cache_retention" .= ("long" :: Text)] CheckConfig).exitCode @?= 4
+        let stub = TE.decodeUtf8 . LBS.toStrict . encode $ [object ["alias" .= ("triage" :: Text), "version" .= ("1" :: Text), "bindingId" .= ("stub" :: Text), "bindingVersion" .= ("1" :: Text), "provider" .= ("stub" :: Text), "model" .= ("stub-triage" :: Text), "thinking" .= ("default" :: Text), "base_url" .= ("https://example.test" :: Text)]]
+        (configRun [("behavior.decisionModels", stub)] CheckConfig).exitCode @?= 4,
       testCase "malformed nested credentials are redacted in diagnostic output" do
         let marker = "PLANTED_DECISION_CREDENTIAL"
             invalid = "[{\"alias\":\"triage\",\"credential\":\"" <> marker <> "\"}]"
@@ -115,6 +149,23 @@ tests =
         run.exitCode @?= 4
         assertBool "no secret in diagnostics" (not (marker `Text.isInfixOf` (run.standardOutput <> run.standardError)))
     ]
+
+httpConfigRun :: [Pair] -> DiagnosticMode -> ConfigRun
+httpConfigRun fields =
+  configRun
+    [ ("credentials.providers.anthropic.api_key", "public-fixture-key"),
+      ("credentials.providers.openai.api_key", "public-fixture-key"),
+      ("behavior.decisionModels", TE.decodeUtf8 . LBS.toStrict . encode $ [Object (KeyMap.fromList (defaults <> fields))])
+    ]
+  where
+    defaults = ["alias" .= ("triage" :: Text), "version" .= ("1" :: Text), "bindingId" .= ("http" :: Text), "bindingVersion" .= ("1" :: Text), "provider" .= ("anthropic" :: Text), "model" .= ("claude-sonnet-4-6" :: Text), "thinking" .= ("default" :: Text)]
+
+configuredHttpBinding :: [Pair] -> ModelBinding
+configuredHttpBinding fields = case (httpConfigRun fields NoDiagnostic).resolved of
+  Just config ->
+    let resolved = mustRight config.decisionModelCatalog
+     in mustRight (pinnedBinding resolved (head (catalogDescriptors resolved)))
+  Nothing -> error (Text.unpack (httpConfigRun fields NoDiagnostic).standardError)
 
 allowedDeclaration :: IO AgentDecl
 allowedDeclaration = do

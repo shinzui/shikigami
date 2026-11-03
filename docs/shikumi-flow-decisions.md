@@ -89,6 +89,24 @@ the pinned profile must permit defaulted thinking. Catalog JSON can also be
 supplied through `SHIKIGAMI_BEHAVIOR_DECISION_MODELS`. This setting is redacted
 in configuration diagnostics, including malformed nested input.
 
+HTTP bindings also accept optional `base_url` and `cache_retention` fields.
+`base_url` uses the same HTTP(S) endpoint policy as `behavior.base_url`: it cannot
+contain credentials, a query or a fragment. The credential still comes from the
+selected provider's explicit credential setting. A plaintext override requires a
+profile permitting the actual `http` tuple. Stub bindings refuse endpoint overrides.
+`cache_retention` accepts `none`, `short` or `long`; unsupported model/API pairs
+fail configuration. Both settings join the immutable binding digest. Omission
+preserves the existing endpoint and options, including historical descriptor
+identity. Change the binding version when changing these settings and retain old
+bindings needed by pending work. A program cannot override an explicitly pinned
+retention, including `none`. A marker requests caching; it does not prove a hit.
+
+For example, an Anthropic binding can add `cache_retention: short`, or use an
+intentional gateway with `base_url: https://gateway.example/v1`. Configuration
+checks contact neither endpoint. The catalog remains redacted as one setting in
+effective configuration reports; admitted descriptors expose its binding identity
+and endpoint class through the existing inspection paths.
+
 Save the chosen YAML as `decision-models.yaml`. Use the normal migration/bootstrap
 setup and the same database for both commands. The proof directory contains the
 declaration and its declared specialists; agent loading reads one directory rather

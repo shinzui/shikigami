@@ -2,6 +2,8 @@
 
 Date: 2026-10-25
 
+Updated: 2026-11-03
+
 Status: accepted
 
 ## Context
@@ -40,6 +42,14 @@ reliable node/retry lineage to the provider wrapper; the ledger records grouping
 and order without inventing relationships. A constrained retry assessment with
 unknown lineage remains an explicit uncertainty, never a clean compliance claim.
 
+Baikai's canonical API wire names and the existing profile API names are distinct
+vocabularies: for example, `anthropic-messages` corresponds to `messages`. Compare
+them at admission and compliance evaluation without rewriting stored raw facts or
+historical profile tuples. Canonical names normalize only for their matching
+transport; HTTP, subprocess and unknown API surfaces remain separate. Decision
+terminals must match the selected API's canonical name or its historical profile
+name, along with the existing model, provider, strength and status requirements.
+
 Ordinary runs expose an unsigned decision report with an optional policy
 assessment. They acquire no reviewed-artifact binding. When a caller supplies a
 real existing binding, facts-based finalization uses the same artifact, result,
@@ -67,6 +77,7 @@ payload bytes.
 ## References
 
 - [Plan 75](../plans/75-persist-decision-call-evidence-across-retries-and-restarts.md)
+- [Plan 80](../plans/80-configure-model-providers-and-agent-launches-through-baikai.md)
 - [ADR 0010](0010-run-evidence-lifecycle-and-payloads-have-one-atomic-boundary.md)
 - [ADR 0041](0041-durable-decisions-bind-program-state-and-preserve-committed-outcomes.md)
 - [ADR 0043](0043-decision-provider-wrappers-own-actual-attempt-boundaries.md)

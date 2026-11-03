@@ -1,5 +1,65 @@
 # Baikai execution contracts
 
+## Release prerequisite recheck — 2026-11-03 UTC
+
+[The machine-readable check](release-prerequisite.json) records current normal
+Hackage versions, downloaded descriptor hashes, relevant bounds and verified
+upstream tags. Baikai core 0.10.0.0, Claude/OpenAI 0.7.3.0, agent 0.2.0.4 and
+TypeSafe 0.1.0.1 are published. All six imported Shikumi packages still exclude
+core 0.9 and 0.10 in their published descriptors. Kioku core 0.12.0.1 admits 0.10,
+but does not remove that Shikumi conflict. The application pins remain unchanged.
+
+After `cabal update`, an isolated library with only `base`, `baikai ==0.10.0.0`
+and `shikumi ==0.4.1.1`, compiler GHC 9.12.4 and index state
+`2026-11-02T23:00:00Z` fails `cabal build all --dry-run` with:
+
+```text
+Error: [Cabal-7107]
+rejecting: baikai-0.10.0.0 (conflict: shikumi => baikai>=0.8.0.0 && <0.9)
+```
+
+The probe uses no sibling source, bounds override or application pins, so it
+isolates the owning release prerequisite. Recreate it in a temporary directory
+with this library descriptor and a `Probe.hs` containing `module Probe where`:
+
+```cabal
+cabal-version: 3.0
+name: ep80-release-probe
+version: 0.1.0.0
+build-type: Simple
+library
+  exposed-modules: Probe
+  build-depends: base, baikai ==0.10.0.0, shikumi ==0.4.1.1
+  default-language: Haskell2010
+```
+
+Its `cabal.project` is:
+
+```cabal
+packages: .
+with-compiler: ghc-9.12.4
+index-state: 2026-11-02T23:00:00Z
+```
+
+Run from the Shikigami checkout with
+`nix develop --command cabal build all --dry-run --project-file=ABSOLUTE_PROBE_DIRECTORY/cabal.project`.
+The prerequisite is a published compatible Shikumi consumer, including the public
+judgment router/derivation APIs and structured cache codec, from
+`mori://shinzui/shikumi`. FRIC-46 records this occurrence. No upgraded cancellation,
+deadline, confinement, Linux runtime or TypeSafe application qualification is
+claimed. The cancellation fix is published; the negative probes below apply to
+the application's retained October Baikai pins.
+
+Independent application work exposes optional decision-binding `base_url` and
+`cache_retention`, using existing endpoint and retention validation. Changed
+selections get different descriptor digests; omitted settings preserve legacy
+identity. A conflicting program retention refuses before attempt admission.
+Focused complete/stream tests and a public Anthropic adapter loopback fixture
+exercise that path. The fixture checks the retained adapter's existing top-level
+cache controls; it does not qualify the newer shared-prefix implementation.
+
+## October qualified inventory
+
 Inspected on 2026-10-06 UTC using Mori discovery, Hackage `preferred.json`, and
 upstream annotated release tags. The selected released packages are
 `mori://shinzui/baikai/packages/baikai` 0.7.2.0,
