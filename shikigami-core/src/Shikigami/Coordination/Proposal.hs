@@ -6,6 +6,7 @@
 module Shikigami.Coordination.Proposal where
 
 import Data.Aeson qualified as Aeson
+import Data.Aeson.KeyMap qualified as KeyMap
 import Shikigami.Agent.Name (AgentName)
 import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.Decision.ModelAlias (ModelAlias)
@@ -33,12 +34,25 @@ data Policy = Policy
     rootId :: !ExecutionRootId,
     cutoff :: !UTCTime,
     targets :: ![Target],
+    workspaces :: ![(ObjectiveAssignmentId, WorkspaceRef)],
     maximumDepth :: !Int,
     maximumAssignments :: !Int,
     maximumConcurrency :: !Int
   }
   deriving stock (Eq, Show, Generic)
-  deriving anyclass (ToJSON, FromJSON)
+
+-- Old manifests predate the pinned workspace catalog. Preserve their exact
+-- empty-catalog encoding while reading the added field with an empty default.
+instance ToJSON Policy where
+  toJSON policy = case Aeson.genericToJSON Aeson.defaultOptions policy of
+    Aeson.Object fields | null policy.workspaces -> Aeson.Object (KeyMap.delete "workspaces" fields)
+    value -> value
+
+instance FromJSON Policy where
+  parseJSON = Aeson.withObject "adaptive policy" \fields ->
+    Aeson.genericParseJSON
+      Aeson.defaultOptions
+      (Aeson.Object (if KeyMap.member "workspaces" fields then fields else KeyMap.insert "workspaces" (toJSON ([] :: [(ObjectiveAssignmentId, WorkspaceRef)])) fields))
 
 data Placement = Placement
   { assignment :: !AssignmentDraft,

@@ -14,6 +14,8 @@ import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Objective.Types
 import Shikigami.Prelude
 import Shikigami.WorkerSession.Types qualified
+import Shikigami.Workspace.Reference (WorkspaceRef (..))
+import Shikigami.Workspace.Value (workspaceCoordinate)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit
 
@@ -23,7 +25,7 @@ tests =
     "AdaptiveProposal"
     [ testCase "small and large cases select distinct bounded organizations" do
         small <- right (validate (proposal [CreateAssignment (placement "small" Nothing [])]))
-        large <- right (validate (proposal [CreateAssignment (placement "local" Nothing []), CreateAssignment (placement "child" (Just (key "local")) [])]))
+        large <- right (validate (proposal [CreateAssignment localPlacement, CreateAssignment (placement "child" (Just (key "local")) [])]))
         length small.arrangement @?= 1
         length large.arrangement @?= 2
         assertBool "independent immutable operation keys" (small.operations /= large.operations),
@@ -43,9 +45,18 @@ tests =
           \graph ->
             assertBool "cycle refused" (isLeft (validate (proposal (map CreateAssignment graph)))),
       testCase "depth and assignment bounds refuse" do
-        let input = proposal [CreateAssignment (placement "a" Nothing []), CreateAssignment (placement "b" (Just (key "a")) [])]
+        let input = proposal [CreateAssignment localPlacement, CreateAssignment (placement "b" (Just (key "local")) [])]
         assertBool "depth" (isLeft (validateProposal now (policy & #maximumDepth .~ 1) [] objective input))
         assertBool "count" (isLeft (validateProposal now (policy & #maximumAssignments .~ 1) [] objective input)),
+      testCase "split and consolidate preserve old identities as withdrawn and admit bounded replacement work" do
+        let a = placement "a" Nothing []
+            b = placement "b" Nothing []
+            asAssignment node = Assignment node.assignment initialRevision initialRevision initialRevision []
+            existing = objective & #assignments .~ map asAssignment [a, b]
+        consolidated <- right (validateProposal now policy [a, b] existing (proposal [ConsolidateAssignments [key "a", key "b"] (placement "combined" Nothing [])]))
+        map (.assignment.state) consolidated.arrangement @?= [Withdrawn, Withdrawn, Pending]
+        split <- right (validateProposal now policy [a] (objective & #assignments .~ [asAssignment a]) (proposal [SplitAssignment (key "a") [placement "one" Nothing [], placement "two" Nothing []]]))
+        map (.assignment.state) split.arrangement @?= [Withdrawn, Pending, Pending],
       testCase "stale checkpoint, instructions and criteria refuse" do
         forM_ [input & #checkpointRevision %~ advanceRevision, input & #instructionsRevision %~ advanceRevision, input & #criteriaRevision %~ advanceRevision] \value -> validate value @?= Left ObjectiveConflict,
       testCase "missing evidence, forbidden concurrency and completion without combined checks refuse" do
@@ -60,7 +71,23 @@ tests =
         assertBool "model" (isLeft (validateProposal now policy [node] existing escalation))
         let session = Shikigami.WorkerSession.Types.workerSessionId "bound-session"
             bound = existing & #assignments .~ [assignment & #definition . #sessionId .~ Just session]
-        assertBool "ownership fence" (isLeft (validateProposal now policy [node] bound (proposal [NarrowAssignment (key "existing") (checked (parseInstructions "narrow"))]))),
+        assertBool "ownership fence" (isLeft (validateProposal now policy [node] bound (proposal [NarrowAssignment (key "existing") (checked (parseInstructions "narrow"))])))
+        let workspace = WorkspaceRef (workspaceCoordinate "shikigami.workspace/1") (workspaceCoordinate "retained-workspace")
+            transfer = proposal [TransferAssignment (key "existing") (name "local") workspace]
+        assertBool "unlisted workspace refused" (isLeft (validateProposal now policy [node] bound transfer))
+        _ <- right (validateProposal now (policy & #workspaces .~ [(key "existing", workspace)]) [node] bound transfer)
+        pure (),
+      testCase "repeating an ancestor role is a hierarchy cycle even with distinct assignment ids" do
+        let input = proposal [CreateAssignment (placement "a" Nothing []), CreateAssignment (placement "b" (Just (key "a")) [])]
+            selfDelegating = policy & #targets .~ [target & #parents .~ [name "coordinator", name "worker"]]
+        assertBool "role cycle refused" (isLeft (validateProposal now selfDelegating [] objective input)),
+      testCase "a model permission cannot be borrowed from a sibling role sharing its principal" do
+        let node = placement "existing" Nothing []
+            assignment = Assignment node.assignment initialRevision initialRevision initialRevision []
+            expensive = checked (parseModelAlias "specialist-model")
+            roles = policy & #targets .~ [target, target & #name .~ name "specialist" & #models .~ [expensive]]
+            existing = objective & #assignments .~ [assignment]
+        assertBool "role-scoped model refused" (isLeft (validateProposal now roles [node] existing (proposal [EscalateModel (key "existing") expensive]))),
       testCase "catalog parent allow-list and cutoff constrain proposals" do
         assertBool "parent" (isLeft (validateProposal now (policy & #targets .~ [target & #parents .~ []]) [] objective input))
         assertBool "cutoff" (isLeft (validateProposal cutoff policy [] objective input)),
@@ -74,6 +101,7 @@ tests =
         let unknown = Aeson.object ["tag" Aeson..= ("RunCode" :: Text), "contents" Aeson..= ("curl secret" :: Text)]
         assertBool "closed sum" (case Aeson.fromJSON unknown :: Aeson.Result Change of Aeson.Error _ -> True; _ -> False)
         Aeson.fromJSON (toJSON input) @?= Aeson.Success input
+        Aeson.fromJSON (toJSON policy) @?= Aeson.Success policy
     ]
   where
     input = proposal [CreateAssignment (placement "a" Nothing [])]
@@ -105,16 +133,19 @@ right :: (Show e) => Either e a -> IO a
 right = either (assertFailure . show) pure
 
 target :: Target
-target = Target (name "worker") (identity "worker") [name "coordinator", name "worker"] [checked (parseModelAlias "allowed")]
+target = Target (name "worker") (identity "worker") [name "coordinator", name "local"] [checked (parseModelAlias "allowed")]
 
 policy :: Policy
-policy = Policy V1 (name "coordinator") (identity "coordinator") (fixtureRootId "root") cutoff [target] 4 16 2
+policy = Policy V1 (name "coordinator") (identity "coordinator") (fixtureRootId "root") cutoff [target, Target (name "local") (identity "local") [name "coordinator"] []] [] 4 16 2
 
 placement :: Text -> Maybe ObjectiveAssignmentId -> [ObjectiveAssignmentId] -> Placement
 placement label parent dependencies = Placement (AssignmentDraft (key label) (checked (parseInstructions "bounded work")) dependencies (identity "worker") Pending Nothing (Just policy.rootId) (Just cutoff)) (name "worker") parent
 
+localPlacement :: Placement
+localPlacement = placement "local" Nothing [] & #target .~ name "local" & #assignment . #owner .~ identity "local"
+
 objective :: Objective
-objective = Objective (checked (parseObjectiveId "shikigami_objective_01h455vb4pex5vsknk084sn02q")) actor [Member actor [Owner], Member (RecordedAgent (identity "worker")) [Worker]] (checked (parseTitle "deliver")) (checked (parseGoal "deliver")) (checked (parseInstructions "instructions")) initialRevision initialRevision initialRevision [Criterion (checked (parseCriterionKey "combined")) (checked (parseCriterionDescription "combined check")) Automatic JourneyRequired] Open [] [] [] [] [] [] [] [] Nothing Nothing
+objective = Objective (checked (parseObjectiveId "shikigami_objective_01h455vb4pex5vsknk084sn02q")) actor [Member actor [Owner], Member (RecordedAgent (identity "worker")) [Worker], Member (RecordedAgent (identity "local")) [Coordinator]] (checked (parseTitle "deliver")) (checked (parseGoal "deliver")) (checked (parseInstructions "instructions")) initialRevision initialRevision initialRevision [Criterion (checked (parseCriterionKey "combined")) (checked (parseCriterionDescription "combined check")) Automatic JourneyRequired] Open [] [] [] [] [] [] [] [] Nothing Nothing
   where
     actor = RecordedAgent policy.identity
 

@@ -675,7 +675,7 @@ validateTransition _now access expected mutation current = do
         BindConversation conversation -> editable >> (if validKey (conversationRefText conversation) then Right current else Left (ObjectiveInvalid "invalid conversation"))
         LinkExternal reference -> editable >> pure (current & #external %~ (\refs -> nub (refs <> [reference])))
       Internal (ApplyAdaptiveDecision decision) -> do
-        unless (decision.format == V1 && decision.validatorVersion == "shikigami.adaptive-validator/1" && decision.proposal.checkpointRevision == expected && decision.checkpointDigest == Adaptive.checkpointDigest current && access.actor == RecordedAgent decision.policy.identity) (Left ObjectiveConflict)
+        unless (decision.format == V1 && decision.validatorVersion == "shikigami.adaptive-validator/2" && decision.proposal.checkpointRevision == expected && decision.checkpointDigest == Adaptive.checkpointDigest current && access.actor == RecordedAgent decision.policy.identity) (Left ObjectiveConflict)
         changed <- validateTransition _now access expected (Public (SetAssignments (map (.assignment) decision.arrangement))) current
         foldM
           ( \value operation -> case operation.change of
@@ -746,9 +746,10 @@ prepareTransition now access expected mutation current = do
       unless (decision.policy.cutoff <= root.envelope.cutoff) (abort ObjectiveDenied)
       -- Admission checks capacity without reserving or copying counters. Each
       -- actual operation still reserves at its dispatch owner's boundary.
-      let spending = any (\operation -> case operation.change of Adaptive.AwaitAssignments {} -> False; Adaptive.ProposeCompletion {} -> False; _ -> True) decision.operations
-      when spending do
-        request <- either (const (abort ObjectiveDenied)) pure (Resources.refineAmounts (Map.fromList [(Resources.ActiveWork, 1), (Resources.ModelAttempts, 1)]))
+      let modelMinimum = sum [case operation.change of Adaptive.CreateAssignment {} -> 1; Adaptive.DirectWork {} -> 1; Adaptive.FollowUpContext {} -> 1; Adaptive.SplitAssignment _ replacements -> toInteger (length replacements); Adaptive.ConsolidateAssignments {} -> 1; Adaptive.EscalateModel {} -> 1; _ -> 0 | operation <- decision.operations]
+          toolMinimum = toInteger (length [() | operation <- decision.operations, Adaptive.TransferAssignment {} <- [operation.change]])
+      when (modelMinimum + toolMinimum > 0) do
+        request <- either (const (abort ObjectiveDenied)) pure (Resources.refineAmounts (Map.fromList [(Resources.ActiveWork, 1), (Resources.ModelAttempts, modelMinimum), (Resources.LifetimeDescendants, modelMinimum), (Resources.ToolAttempts, toolMinimum)]))
         either (const (abort ObjectiveDenied)) (const (pure ())) (Resources.admit (Resources.effectiveLimits root) root.usage request)
       retained <- AdaptiveSql.readArrangement current.objectiveId >>= require
       previous <- require (Adaptive.currentArrangement decision.policy retained current)
@@ -875,6 +876,17 @@ validateSources objective mutation = do
       pure $ case actual of
         Just (state, binding) | state.owner == draft.owner && state.epoch == epoch && Just binding.rootId == draft.rootId && binding.objective == referenceFor objective.objectiveId draft.assignmentId -> Right ()
         _ -> Left ObjectiveConflict
+  restructuring <- case mutation of
+    Internal (ApplyAdaptiveDecision decision) -> do
+      let keys = nub (concatMap (\operation -> case operation.change of Adaptive.NarrowAssignment key _ -> [key]; Adaptive.SplitAssignment key _ -> [key]; Adaptive.ConsolidateAssignments keys _ -> keys; _ -> []) decision.operations)
+      matches <- forM keys \key -> do
+        -- A session can exist before its first checkpoint publishes the ref.
+        -- Its absence from the objective projection is not a fencing proof.
+        rows <- Tx.statement (toJSON (referenceFor objective.objectiveId key)) selectSessionsForObjectiveAssignment
+        known <- traverse requireDecoded rows
+        pure (unless (null known) (Left (ObjectiveInvalid "settle and fence a continuing session before restructuring its assignment")))
+      pure (sequence_ matches)
+    _ -> pure (Right ())
   checkpoint <- case mutation of
     Internal (TransferSessionOwnership key intent proof) -> do
       -- Session mutations lock their resource root before the session row.
@@ -919,7 +931,7 @@ validateSources objective mutation = do
             unless (root.cancelled == Resources.ContinueWork && root.overage == Resources.NoOverage && intent.expected.cutoff == min cutoff root.envelope.cutoff && now < intent.expected.cutoff) (Left ObjectiveConflict)
         _ -> pure (Left ObjectiveConflict)
     _ -> pure (Right ())
-  pure (sequence_ evidence >> conversation >> sequence_ bindings >> checkpoint)
+  pure (sequence_ evidence >> conversation >> sequence_ bindings >> restructuring >> checkpoint)
   where
     matchesActor actor obj = not (null (rolesFor obj (RecordedAgent actor)))
 
@@ -1133,6 +1145,9 @@ selectReference = preparable "SELECT objective_id,assignment_id FROM shikigami.o
 
 selectWorkerBinding :: Statement Text (Maybe (Either () (WS.SessionState, WS.SessionBinding)))
 selectWorkerBinding = preparable "SELECT state,binding FROM shikigami.worker_sessions WHERE session_id=$1" textParam (D.rowMaybe ((\state binding -> (,) <$> state <*> binding) <$> jsonRow <*> jsonRow))
+
+selectSessionsForObjectiveAssignment :: Statement Aeson.Value [Either () (WS.SessionState, WS.SessionBinding)]
+selectSessionsForObjectiveAssignment = preparable "SELECT state,binding FROM shikigami.worker_sessions WHERE binding->'objective'=$1 LIMIT 1" jsonParam (D.rowList ((\state binding -> (,) <$> state <*> binding) <$> jsonRow <*> jsonRow))
 
 -- Compare both physical cursors and typed bodies. A substituted well-typed
 -- event must not become new evidence merely because an intent row still exists.

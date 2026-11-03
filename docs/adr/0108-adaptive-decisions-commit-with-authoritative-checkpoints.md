@@ -63,3 +63,21 @@ execution and shared runtime capacity are separate acceptance gates in plan 85.
 - [ADR 0029](0029-model-routing-output-is-a-proposal-until-validated-against-journaled-authority.md)
 - [ADR 0041](0041-durable-decisions-bind-program-state-and-preserve-committed-outcomes.md)
 - [ADR 0062](0062-session-generations-await-governed-children-and-retain-checkpoint-intents.md)
+
+## Admission and retained-read qualification
+
+Validator version 2 keeps permissions scoped to the assignment's named role,
+including when another role shares its principal. Repeated ancestor roles are
+hierarchy cycles, and transfer proposals must name a pinned workspace reference.
+Version 1 manifests retain their decoder and their empty-workspace wire encoding;
+a committed decision is never run through the newer validator.
+
+The manifest projection is checked against its original objective receipt and
+payload commitment before it supplies executable operations. Substitution or
+corruption refuses without invoking live policy or dispatching replacement work.
+Admission also consults the session owner for graph restructuring: a session can
+exist before its first checkpoint publishes its reference into the objective.
+An absent projected reference is not proof that the assignment is unfenced.
+Metadata-only progress and exact evidence recording do not reserve fresh model
+work; proposed execution checks its minimum model, tool and descendant costs
+without copying or mutating the root's counters.

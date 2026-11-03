@@ -52,6 +52,7 @@ currentArrangement policy retained objective = forM objective.assignments \assig
 validateProposal :: UTCTime -> Policy -> [Placement] -> Objective -> Proposal -> Either ObjectiveError AcceptedDecision
 validateProposal now policy prior objective proposal = do
   unless (policy.format == V1 && proposal.format == V1 && policy.maximumDepth >= 1 && policy.maximumDepth <= 16 && policy.maximumAssignments >= 1 && policy.maximumAssignments <= 128 && policy.maximumConcurrency >= 1 && policy.maximumConcurrency <= 128 && length policy.targets <= 128 && length (nub (map (.name) policy.targets)) == length policy.targets && all ((/= policy.coordinator) . (.name)) policy.targets) invalid
+  unless (length policy.workspaces <= 128 && length (nub (map fst policy.workspaces)) == length policy.workspaces) invalid
   unless (objective.status == Open && now < policy.cutoff) (Left ObjectiveDenied)
   unless (proposal.objectiveId == objective.objectiveId && proposal.checkpointRevision == objective.revision && proposal.instructionsRevision == objective.instructionsRevision && proposal.criteriaRevision == objective.criteriaRevision) (Left ObjectiveConflict)
   unless (not (null proposal.changes) && length proposal.changes <= 32 && length proposal.evidence <= 128 && length (nub proposal.evidence) == length proposal.evidence && Lazy.length (encode proposal) <= 262144) invalid
@@ -65,22 +66,21 @@ validateProposal now policy prior objective proposal = do
   arrangement <- foldM apply current proposal.changes
   validateGraph (map (.assignment) arrangement)
   unless (length arrangement <= policy.maximumAssignments) invalid
-  forM_ arrangement \placement -> do
+  forM_ arrangement \placement -> when (placement.assignment.state `notElem` [Done, Withdrawn]) do
     let draft = placement.assignment
     unless (draft.rootId == Just policy.rootId && maybe False (\cutoff -> now < cutoff && cutoff <= policy.cutoff) draft.cutoff) (Left ObjectiveDenied)
     target <- targetFor placement.target draft.owner
     unless (any (\member -> member.principal == RecordedAgent draft.owner && any (`elem` member.roles) [Owner, Coordinator, Worker]) objective.members) (Left ObjectiveDenied)
-    when (draft.state `notElem` [Done, Withdrawn]) do
-      parentName <- case placement.parent of
-        Nothing -> Right policy.coordinator
-        Just key -> do
-          parent <- maybe (Left ObjectiveMissing) Right (find ((== key) . (.assignment.assignmentId)) arrangement)
-          unless (parent.assignment.state `notElem` [Done, Withdrawn]) invalid
-          pure parent.target
-      unless (placement.target == policy.coordinator && isNothing placement.parent || parentName `elem` target.parents) (Left ObjectiveDenied)
-    depth arrangement [] placement >>= \value -> unless (value <= policy.maximumDepth) invalid
+    parentName <- case placement.parent of
+      Nothing -> Right policy.coordinator
+      Just key -> do
+        parent <- maybe (Left ObjectiveMissing) Right (find ((== key) . (.assignment.assignmentId)) arrangement)
+        unless (parent.assignment.state `notElem` [Done, Withdrawn]) invalid
+        pure parent.target
+    unless (placement.target == policy.coordinator && isNothing placement.parent || parentName `elem` target.parents) (Left ObjectiveDenied)
+    depth arrangement [] [] placement >>= \value -> unless (value <= policy.maximumDepth) invalid
   let operations = zipWith (\ordinal change -> ExecutableOperation (operationIdWithPrefix ('a' :| "daptive:") (versionedDigest "shikigami.adaptive-operation/1" (toJSON (proposal.operationId, ordinal :: Int)))) change) [0 ..] proposal.changes
-  pure (AcceptedDecision V1 "shikigami.adaptive-validator/1" policy proposal (checkpointDigest objective) arrangement operations)
+  pure (AcceptedDecision V1 "shikigami.adaptive-validator/2" policy proposal (checkpointDigest objective) arrangement operations)
   where
     invalid = Left (ObjectiveInvalid "invalid adaptive proposal")
     lookupAssignment key = maybe (Left ObjectiveMissing) Right (find ((== key) . (.definition.assignmentId)) objective.assignments)
@@ -101,13 +101,17 @@ validateProposal now policy prior objective proposal = do
       unless (not (null keys) && length (nub keys) == length keys) invalid
       traverse_ unfenced keys
       pure [if entry.assignment.assignmentId `elem` keys then entry {assignment = entry.assignment {state = Withdrawn}} else entry | entry <- graph]
+    assignmentTarget key = do
+      assignment <- active key
+      placement <- maybe (Left ObjectiveMissing) Right (find ((== key) . (.assignment.assignmentId)) prior)
+      targetFor placement.target assignment.definition.owner
     instruction key input = do
       assignment <- active key
       unless (input.objectiveRevision == objective.revision && input.assignmentRevision == assignment.revision && input.criteriaRevision == objective.criteriaRevision) (Left ObjectiveConflict)
       case input.selection of
         Nothing -> pure ()
         Just selection -> do
-          target <- maybe (Left ObjectiveDenied) Right (find ((== assignment.definition.owner) . (.identity)) policy.targets)
+          target <- assignmentTarget key
           let aliases = maybe [] pure selection.alias <> fromMaybe [] selection.permittedAliases
           unless (not (null aliases) && all (`elem` target.models) aliases && selection.thinking == Nothing) (Left ObjectiveDenied)
     apply graph = \case
@@ -129,13 +133,17 @@ validateProposal now policy prior objective proposal = do
         instruction key input
         pure graph
       FollowUpContext key input -> instruction key input >> pure graph
-      TransferAssignment key name _ -> do
+      TransferAssignment key name workspace -> do
         assignment <- active key
-        unless (isJust assignment.definition.sessionId && any (\target -> target.name == name && target.identity /= assignment.definition.owner && any (\member -> member.principal == RecordedAgent target.identity && any (`elem` member.roles) [Owner, Coordinator, Worker]) objective.members) policy.targets) (Left ObjectiveDenied)
+        unless (lookup key policy.workspaces == Just workspace) (Left ObjectiveDenied)
+        placement <- maybe (Left ObjectiveMissing) Right (find ((== key) . (.assignment.assignmentId)) prior)
+        ancestors <- ancestorNames [] placement
+        let permits target = target.name == name && name `notElem` ancestors && any (`elem` target.parents) (take 1 ancestors) && target.identity /= assignment.definition.owner && any (\member -> member.principal == RecordedAgent target.identity && any (`elem` member.roles) [Owner, Coordinator, Worker]) objective.members
+        unless (isJust assignment.definition.sessionId && any permits policy.targets) (Left ObjectiveDenied)
         pure graph
       EscalateModel key model -> do
-        assignment <- active key
-        unless (any (\target -> target.identity == assignment.definition.owner && model `elem` target.models) policy.targets) (Left ObjectiveDenied)
+        target <- assignmentTarget key
+        unless (model `elem` target.models) (Left ObjectiveDenied)
         pure graph
       ChangeConcurrency bound -> unless (bound >= 1 && bound <= policy.maximumConcurrency) invalid >> pure graph
       IntegrateResult key evidence -> do
@@ -153,10 +161,17 @@ validateProposal now policy prior objective proposal = do
         -- the one atomic proposal write. We check the same exact evidence now.
         validateAcceptance (objective & #revision .~ advanceRevision objective.revision) completion
         pure graph
-    depth graph seen placement
+    ancestorNames seen placement
       | placement.assignment.assignmentId `elem` seen = invalid
+      | otherwise = case placement.parent of
+          Nothing -> Right [policy.coordinator]
+          Just key -> do
+            parent <- maybe (Left ObjectiveMissing) Right (find ((== key) . (.assignment.assignmentId)) prior)
+            (parent.target :) <$> ancestorNames (placement.assignment.assignmentId : seen) parent
+    depth graph seen names placement
+      | placement.assignment.assignmentId `elem` seen || placement.target `elem` names = invalid
       | otherwise = case placement.parent of
           Nothing -> Right 1
           Just key -> do
             parent <- maybe (Left ObjectiveMissing) Right (find ((== key) . (.assignment.assignmentId)) graph)
-            (1 +) <$> depth graph (placement.assignment.assignmentId : seen) parent
+            (1 +) <$> depth graph (placement.assignment.assignmentId : seen) (placement.target : names) parent
