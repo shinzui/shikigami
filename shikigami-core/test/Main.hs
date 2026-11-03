@@ -18,6 +18,7 @@ import Network.Wai (Application, Request, Response, ResponseReceived, pathInfo, 
 import Network.Wai.Handler.Warp (testWithApplication)
 import Shikigami.Activity (ActivityEnvelope (..), Actor (..), ContextRef (..), Subject (..))
 import Shikigami.Activity.Coordinate
+import Shikigami.AdaptiveProposalSpec qualified as AdaptiveProposalSpec
 import Shikigami.Agent.Decl (Priority (Normal), RecipientFrom (SubjectOwner), SignalType (Reminder), Sink (..), StreamMatch (..))
 import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Name (AgentName, mkAgentName)
@@ -117,6 +118,7 @@ main =
           AgentLoaderSpec.tests,
           ApprovalNotificationSpec.tests,
           ObjectiveSpec.tests,
+          AdaptiveProposalSpec.tests,
           ObjectiveTrackerSpec.tests,
           ObjectiveToolsSpec.tests,
           AppConfigSpec.tests,

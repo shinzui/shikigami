@@ -97,6 +97,10 @@ library
     Shikigami.Capability.Overlay
     Shikigami.Capability.Provider
     Shikigami.Capability.Tools
+    Shikigami.Coordination.Checkpoint
+    Shikigami.Coordination.Proposal
+    Shikigami.Coordination.Sql
+    Shikigami.Coordination.Validate
     Shikigami.Decision.Answer
     Shikigami.Decision.Contract
     Shikigami.Decision.Evidence
@@ -511,6 +515,7 @@ test-suite shikigami-core-test
   type: exitcode-stdio-1.0
   main-is: Main.hs
   other-modules:
+    Shikigami.AdaptiveProposalSpec
     Shikigami.AgentLoaderSpec
     Shikigami.AgentRunValueSpec
     Shikigami.AgentValueSpec
@@ -637,6 +642,7 @@ test-suite shikigami-core-postgres-test
   type: exitcode-stdio-1.0
   main-is: Main.hs
   other-modules:
+    Shikigami.AdaptiveDeliverySpec
     Shikigami.AgentRun.LedgerSpec
     Shikigami.AgentWorkflowSpec
     Shikigami.AppSpec

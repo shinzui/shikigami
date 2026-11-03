@@ -4,6 +4,7 @@ module Shikigami.Objective.Command where
 
 import Data.Aeson qualified as Aeson
 import Shikigami.Agent.Principal (AgentIdentity)
+import Shikigami.Coordination.Proposal (AcceptedDecision (..), Change (IntegrateResult), ExecutableOperation (..))
 import Shikigami.Objective.Types
 import Shikigami.Prelude
 import Shikigami.WorkerSession.Capability (CoordinationScope)
@@ -36,7 +37,8 @@ instance FromJSON Command where
 -- | Constructed only by provider adapters with verified source/fence context.
 -- No FromJSON instance: these are absent from HTTP and model vocabularies.
 data InternalCommand
-  = IngestCheckpoint !ObjectiveAssignmentId !CheckpointIntent ![EvidenceInput] ![UnresolvedOperation]
+  = ApplyAdaptiveDecision !AcceptedDecision
+  | IngestCheckpoint !ObjectiveAssignmentId !CheckpointIntent ![EvidenceInput] ![UnresolvedOperation]
   | ProjectCheckpoint !ObjectiveAssignmentId !CheckpointIntent
   | RetainCoordination !ObjectiveAssignmentId !CoordinationScope
   | TransferSessionOwnership !ObjectiveAssignmentId !TransferIntent !FenceProof
@@ -65,6 +67,7 @@ commandTag = \case
     RevokeMember {} -> "revoke-member"
     BindConversation {} -> "bind-conversation"
     LinkExternal {} -> "link-external"
+  Internal ApplyAdaptiveDecision {} -> "adaptive-decision"
   Internal IngestCheckpoint {} -> "ingest-checkpoint"
   Internal ProjectCheckpoint {} -> "project-checkpoint"
   Internal RetainCoordination {} -> "retain-coordination"
@@ -75,4 +78,5 @@ evidenceInputs :: Mutation -> [EvidenceInput]
 evidenceInputs = \case
   Public (RecordEvidence _ input) -> [input]
   Internal (IngestCheckpoint _ _ inputs _) -> inputs
+  Internal (ApplyAdaptiveDecision decision) -> [input | operation <- decision.operations, IntegrateResult _ input <- [operation.change]]
   _ -> []

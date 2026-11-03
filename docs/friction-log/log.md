@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-11-03
+* **Addition**: FRIC-51 records detour tooling friction with mori://shinzui/shikigami: Default parallel test execution exhausts PostgreSQL clients and fixture deadlines
 * **Update**: FRIC-50 resolved: Status set to resolved.
 * **Addition**: FRIC-50 records detour environment friction with mori://shinzui/shikigami: Native operator qualification omitted its manifest directory
 * **Update**: FRIC-49 resolved: Resolve the pre-transport judgment-streaming blocker after verifying tagged Hackage descriptors and the real public provider through the application wrapper; broader plan acceptance remains separate.

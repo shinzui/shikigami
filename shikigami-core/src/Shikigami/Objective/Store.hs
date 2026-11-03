@@ -25,6 +25,7 @@ module Shikigami.Objective.Store
     executeWithTrackerCommit,
     trackerTransaction,
     trackerQuery,
+    coordinationQuery,
     trackerRoutingKeys,
     trackerServiceQuery,
     trackerServiceTransaction,
@@ -45,6 +46,7 @@ where
 
 import Contravariant.Extras (contrazip2, contrazip3, contrazip4, contrazip6)
 import Control.Exception (Exception, fromException, throw)
+import Control.Monad (foldM)
 import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.ByteString.Lazy qualified as Lazy
@@ -53,6 +55,7 @@ import Data.Generics.Labels ()
 import Data.Int (Int64)
 import Data.KindID qualified as KindID
 import Data.List (find, nub)
+import Data.Map.Strict qualified as Map
 import Data.Text qualified as Text
 import Data.Vector qualified as Vector
 import Effectful (Eff, IOE, (:>))
@@ -74,6 +77,9 @@ import Kiroku.Store.Error (StoreError)
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..), DelegationBudgetId)
 import Shikigami.Agent.Principal (AgentIdentity, identityText, principalText)
 import Shikigami.App (CommandEffects, commandOptions)
+import Shikigami.Coordination.Proposal qualified as Adaptive
+import Shikigami.Coordination.Sql qualified as AdaptiveSql
+import Shikigami.Coordination.Validate qualified as Adaptive
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Delegation.BudgetStore qualified as Budgets
 import Shikigami.Execution.AssignmentKey (assignmentIdFor, conversationAssignmentIdFor)
@@ -176,6 +182,7 @@ authorized access objective mutation = canRead access objective && (administrate
       Internal (IngestCheckpoint _ _ _ _) -> manage
       Internal ProjectCheckpoint {} -> manage
       Internal RetainCoordination {} -> manage
+      Internal ApplyAdaptiveDecision {} -> manage
       Internal TransferSessionOwnership {} -> manage
       Internal TransferOwnership {} -> manage
 
@@ -482,6 +489,9 @@ execute access identifier expected operation mutation = executeWithTrackerCommit
 -- checked append transaction. This callback is never decoded from a request.
 executeWithTrackerCommit :: (ObjectiveEffects es) => Access -> ObjectiveId -> StateRevision "objective" -> OperationId -> Mutation -> (Objective -> Receipt -> Transaction ()) -> Eff es (Either ObjectiveError Receipt)
 executeWithTrackerCommit access identifier expected operation mutation trackerCommit = guarded do
+  case mutation of
+    Internal (ApplyAdaptiveDecision decision) -> unless (decision.proposal.operationId == operation && decision.proposal.objectiveId == identifier) (throwIO (Abort ObjectiveConflict))
+    _ -> pure ()
   unless (validKey (operationKey operation)) (throwIO (Abort (ObjectiveInvalid "invalid operation key")))
   loop (32 :: Int)
   where
@@ -546,6 +556,7 @@ executeWithTrackerCommit access identifier expected operation mutation trackerCo
                   saveSnapshot next
                   writePayload identifier (objectivePayloadDigestText digest) payload
                   case mutation of
+                    Internal (ApplyAdaptiveDecision decision) -> AdaptiveSql.saveDecision decision receipt
                     Internal (IngestCheckpoint assignment intent _ _) -> Tx.statement ((objectiveIdText identifier), (objectiveAssignmentIdText assignment), intent.sessionId.value, fromInteger (revisionNumber intent.throughCursor)) saveCursor
                     Internal (ProjectCheckpoint assignment intent) -> Tx.statement ((objectiveIdText identifier), (objectiveAssignmentIdText assignment), intent.sessionId.value, fromInteger (revisionNumber intent.throughCursor)) saveCursor
                     Internal (RetainCoordination _ scope) -> do
@@ -663,6 +674,19 @@ validateTransition _now access expected mutation current = do
           pure (current & #members %~ filter ((/= principal) . (.principal)))
         BindConversation conversation -> editable >> (if validKey (conversationRefText conversation) then Right current else Left (ObjectiveInvalid "invalid conversation"))
         LinkExternal reference -> editable >> pure (current & #external %~ (\refs -> nub (refs <> [reference])))
+      Internal (ApplyAdaptiveDecision decision) -> do
+        unless (decision.format == V1 && decision.validatorVersion == "shikigami.adaptive-validator/1" && decision.proposal.checkpointRevision == expected && decision.checkpointDigest == Adaptive.checkpointDigest current && access.actor == RecordedAgent decision.policy.identity) (Left ObjectiveConflict)
+        changed <- validateTransition _now access expected (Public (SetAssignments (map (.assignment) decision.arrangement))) current
+        foldM
+          ( \value operation -> case operation.change of
+              Adaptive.IntegrateResult key input -> reset <$> validateTransition _now access expected (Public (RecordEvidence key input)) value
+              Adaptive.ProposeCompletion completion -> reset <$> validateTransition _now access expected (Public (ProposeCompletion (Adaptive.completionProposal completion))) value
+              _ -> Right value
+          )
+          (reset changed)
+          decision.operations
+        where
+          reset value = value & #revision .~ current.revision
       Internal (RetainCoordination key scope) -> do
         unless (scope.parentScope == coordinatorParentScope current.objectiveId scope.run.identity) (Left ObjectiveDenied)
         unless (access.actor == RecordedAgent scope.run.identity && scope.format == V1 && scope.context.identity == scope.run.identity && scope.context.sessionId == Just scope.run.sessionId && scope.context.executionRootId == scope.run.rootId && scope.context.executionPermissions == scope.run.permittedAliases && isJust scope.context.delegationBudgetId) (Left ObjectiveDenied)
@@ -714,6 +738,22 @@ prepareTransition now access expected mutation current = do
   -- immutable negative receipt, and the same acceptance can retry after settle.
   case (mutation, validateTransition now access expected mutation current) of
     (Public AcceptCompletion, Right _) -> validateSettledSources current
+    _ -> pure ()
+  case mutation of
+    Internal (ApplyAdaptiveDecision decision) -> do
+      root <- Roots.inspectRootTx decision.policy.rootId >>= either (const (abort ObjectiveUnavailable)) pure
+      either (const (abort ObjectiveDenied)) pure (Resources.checkRoot now root.revision root)
+      unless (decision.policy.cutoff <= root.envelope.cutoff) (abort ObjectiveDenied)
+      -- Admission checks capacity without reserving or copying counters. Each
+      -- actual operation still reserves at its dispatch owner's boundary.
+      let spending = any (\operation -> case operation.change of Adaptive.AwaitAssignments {} -> False; Adaptive.ProposeCompletion {} -> False; _ -> True) decision.operations
+      when spending do
+        request <- either (const (abort ObjectiveDenied)) pure (Resources.refineAmounts (Map.fromList [(Resources.ActiveWork, 1), (Resources.ModelAttempts, 1)]))
+        either (const (abort ObjectiveDenied)) (const (pure ())) (Resources.admit (Resources.effectiveLimits root) root.usage request)
+      retained <- AdaptiveSql.readArrangement current.objectiveId >>= require
+      previous <- require (Adaptive.currentArrangement decision.policy retained current)
+      actual <- require (Adaptive.validateProposal now decision.policy previous current decision.proposal)
+      unless (actual == decision) (abort ObjectiveConflict)
     _ -> pure ()
   bounded <- case mutation of
     Internal (RetainCoordination key scope) -> do
@@ -809,8 +849,8 @@ selectAcceptedTurnSources = preparable "SELECT run_id,turn_id,principal_key,admi
 validateSources :: Objective -> Mutation -> Transaction (Either ObjectiveError ())
 validateSources objective mutation = do
   evidence <- forM (evidenceInputs mutation) \case
-    ResultEvidence {result = WorkerResult receipt artifact} -> do
-      let addressed = case mutation of Public (RecordEvidence key _) -> Just key; Internal (IngestCheckpoint key _ _ _) -> Just key; _ -> Nothing
+    input@ResultEvidence {result = WorkerResult receipt artifact} -> do
+      let addressed = case mutation of Public (RecordEvidence key _) -> Just key; Internal (IngestCheckpoint key _ _ _) -> Just key; Internal (ApplyAdaptiveDecision decision) -> lookup input [(value, key) | operation <- decision.operations, Adaptive.IntegrateResult key value <- [operation.change]]; _ -> Nothing
           bound = any (\a -> Just a.definition.assignmentId == addressed && a.definition.sessionId == Just receipt.sessionId) objective.assignments
       stored <- Sessions.readResultSourceTx receipt.sessionId receipt.assignmentId >>= either (const (abort ObjectiveConflict)) pure
       case stored of
@@ -823,16 +863,18 @@ validateSources objective mutation = do
   conversation <- case mutation of
     Public (BindConversation reference) -> fmap (const ()) <$> Conversation.participantFor objective reference
     _ -> pure (Right ())
-  bindings <- case mutation of
-    Public (SetAssignments graph) -> forM graph \draft -> case draft.sessionId of
-      Nothing -> pure (Right ())
-      Just session -> do
-        actual <- readRow session.value selectWorkerBinding
-        let epoch = maybe initialRevision (.ownerEpoch) (find ((== draft.assignmentId) . (.definition.assignmentId)) objective.assignments)
-        pure $ case actual of
-          Just (state, binding) | state.owner == draft.owner && state.epoch == epoch && Just binding.rootId == draft.rootId && binding.objective == referenceFor objective.objectiveId draft.assignmentId -> Right ()
-          _ -> Left ObjectiveConflict
-    _ -> pure []
+  let graphBindings = case mutation of
+        Public (SetAssignments graph) -> graph
+        Internal (ApplyAdaptiveDecision decision) -> map (.assignment) decision.arrangement
+        _ -> []
+  bindings <- forM graphBindings \draft -> case draft.sessionId of
+    Nothing -> pure (Right ())
+    Just session -> do
+      actual <- readRow session.value selectWorkerBinding
+      let epoch = maybe initialRevision (.ownerEpoch) (find ((== draft.assignmentId) . (.definition.assignmentId)) objective.assignments)
+      pure $ case actual of
+        Just (state, binding) | state.owner == draft.owner && state.epoch == epoch && Just binding.rootId == draft.rootId && binding.objective == referenceFor objective.objectiveId draft.assignmentId -> Right ()
+        _ -> Left ObjectiveConflict
   checkpoint <- case mutation of
     Internal (TransferSessionOwnership key intent proof) -> do
       -- Session mutations lock their resource root before the session row.
@@ -934,6 +976,12 @@ protected = protectedUsing objectiveLookupReadModel
 
 -- Tracker reads validate the fresh objective under its row lock and keep the
 -- tracker catalog read fence around the entire protected transaction.
+coordinationQuery :: (ObjectiveEffects es, ToJSON a, FromJSON a) => Access -> ObjectiveId -> (Objective -> Transaction a) -> Eff es (Either ObjectiveError a)
+coordinationQuery access objective action = protectedUsing objectiveLookupReadModel do
+  current <- locked objective
+  checkAccess access current
+  action current
+
 trackerQuery :: (ObjectiveEffects es, ToJSON a, FromJSON a) => Access -> ObjectiveId -> (Objective -> Transaction a) -> Eff es (Either ObjectiveError a)
 trackerQuery access objective action = protectedUsing objectiveTrackerLookupReadModel do
   current <- locked objective

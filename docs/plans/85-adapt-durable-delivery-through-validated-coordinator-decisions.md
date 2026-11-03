@@ -28,6 +28,11 @@ provenance:
       at: 2026-11-03T19:13:47Z
       mode: "update"
       note: "Refresh delivered decision and objective prerequisites without claiming adaptive coordinator implementation."
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-11-03T20:19:48Z
+      mode: "implement"
+      note: "Implement validated adaptive proposals, durable decisions and shared executor admission."
 ---
 
 # Adapt durable delivery through validated coordinator decisions
@@ -46,17 +51,26 @@ Let a coordinator change its organization when new evidence warrants it: work di
 ## Progress
 
 
-Implementation has not started. Plan 84 completed on 2026-11-03; plans 73–76 and the real objective/checkpoint provider are also complete. All hard start prerequisites are satisfied. Seed unchecked milestone entries when implementation begins.
+- [x] (2026-11-03) Milestone 1: Versioned bounded proposals, whole-proposal validation and the production checkpoint adapter atomically retain graph changes and executable manifests. `AdaptiveProposalSpec` has ten passing cases and PostgreSQL `AdaptiveDeliverySpec` has five. The latter proves protected restart reads before live policy, revision races, revocation, exhausted root refusal and rejection of completion with a failing combined check.
+- [ ] Milestone 2: Execute adaptive cycles with durable typed decisions and continuing-worker commands.
+- [ ] Milestone 3: Qualify shared execution capacity, useful overlap, draining and root fairness.
+- [ ] Milestone 4: Publish decision inspection, exact completion proposals and compatible workflow declarations.
+
+Implementation started 2026-11-03 from baseline `1a7d5ebd2b4a7eca058fe61726807b38076fe6e8` on the existing branch. Hard prerequisites are complete. `nix develop --no-write-lock-file -c cabal build all` passes; the required baseline tests are running. Use the Nix environment because plain Cabal cannot locate the configured GHC.
 
 
 ## Surprises & Discoveries
 
 
-None recorded during implementation.
+The real objective owner already supplies expected-revision command deduplication and atomic projection callbacks. Adaptive manifests now commit in that same boundary; a second mutable assignment or budget owner is unnecessary.
+
+The prescribed baseline test command exhausted disposable PostgreSQL clients and pushed bounded Git fixtures past their deadlines at default Tasty concurrency. FRIC-51 records the occurrence. With `TASTY_NUM_THREADS=2`, core unit tests (698), core PostgreSQL tests (551 before the additional combined-check case), worker tests (281) and server tests (105) all pass. The expanded adaptive PostgreSQL group separately passes all five cases. Schema isolation passes.
 
 
 ## Decision Log
 
+
+2026-11-03: Accept organization changes through an internal objective command, retaining the complete accepted manifest with its objective receipt. Keep current definitions/owners authoritative and retain only hierarchy edges from prior adaptive manifests. [ADR 0108](../adr/0108-adaptive-decisions-commit-with-authoritative-checkpoints.md) records the durable contract.
 
 2026-10-10: Use a compiled Flow with governed typed decisions for the first coordinator. Keep fixed supervisors compatible and model-generated instructions as proposals. Separate runtime capacity from per-objective reservations and measure useful overlap before changing defaults.
 
@@ -64,7 +78,7 @@ None recorded during implementation.
 ## Outcomes & Retrospective
 
 
-To be filled during implementation. Do not claim request completion until every acceptance case below, including stated external integration gates, has evidence.
+Milestone 1 is implemented and validated. The adaptive Flow, accepted typed-decision executor, shared-capacity integration and operator inspection remain unfinished; this plan is not complete. No durable workflow body or existing supervisor branch has changed at this checkpoint. FRIC-51 remains logged until final triage.
 
 
 ## Context and Orientation

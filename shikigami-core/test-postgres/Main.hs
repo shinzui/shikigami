@@ -1,5 +1,6 @@
 module Main (main) where
 
+import Shikigami.AdaptiveDeliverySpec qualified as AdaptiveDeliverySpec
 import Shikigami.AgentRun.LedgerSpec qualified as LedgerSpec
 import Shikigami.AgentWorkflowSpec qualified as AgentWorkflowSpec
 import Shikigami.AppSpec qualified as AppSpec
@@ -49,6 +50,7 @@ suite = withShikigamiMigratedSuite \databaseFixture ->
     ( testGroup
         "shikigami postgres"
         [ AppSpec.tests databaseFixture,
+          AdaptiveDeliverySpec.tests databaseFixture,
           ObjectiveStoreSpec.tests databaseFixture,
           ObjectiveTrackerStoreSpec.tests databaseFixture,
           ObjectiveCheckpointSpec.tests databaseFixture,
