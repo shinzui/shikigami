@@ -1,6 +1,9 @@
 # Bundle Update Log
 
 ## 2026-11-03
+* **Update**: FRIC-49 promoted: Filed Shikumi IR-5 for public judgment streaming, settings-aware typed derivation, atomic structured events and acknowledged attempt evidence; complete/stream acceptance remains blocked on a qualifying release.
+* **Addition**: FRIC-49 records blocked interface friction with mori://shinzui/shikumi/packages/shikumi: Released Shikumi rejects streaming decision outputs before transport
+* **Update**: FRIC-48 resolved: Verified Hackage descriptors and v0.12.0.2 tag at 5a62c3ef29cad50543f7bae97126e0431225998d, then solved the application against the fixed 2026-11-03T02:59:02Z index without new bounds overrides.
 * **Addition**: FRIC-48 records blocked interface friction with mori://shinzui/kioku/packages/kioku-core: Published Kioku excludes the new Shikumi compatibility release
 * **Update**: FRIC-46 resolved: Verified Hackage descriptors and upstream release tags, then reproduced a successful Shikumi 0.5/Baikai 0.10 solve at index-state 2026-11-03T02:09:47Z.
 * **Update**: FRIC-47 accepted: Corrected plan 80 regression commands after reproducing the earlier Git-fixture contention and parallel PostgreSQL too-many-clients failures; serial rerun is the accepted qualification path.
