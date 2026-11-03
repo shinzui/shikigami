@@ -24,7 +24,8 @@ The real complete-call and durable queue/restart consumer checks pass; see
 [structured judgments](evidence/baikai-execution/structured-judgments.md).
 Judgment streaming requires
 `mori://shinzui/shikumi/okf/improvement-requests/concepts/IR-5`. The frozen Nix
-export still describes the prior accepted cohort; this candidate has not yet
+export now contains 387 runtime packages and seven immutable repositories.
+All five role attributes evaluate in a dry run; this candidate has not yet
 passed immutable role-package qualification. It is a source/build checkpoint,
 not completion of plan 80 or a new production qualification.
 

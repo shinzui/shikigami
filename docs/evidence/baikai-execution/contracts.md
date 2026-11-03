@@ -9,8 +9,10 @@ application candidate resolves at index `2026-11-03T02:59:02Z` with Baikai
 0.10.0.0, vendors 0.7.3.0, agent 0.2.0.4, TypeSafe 0.1.0.1, Shikumi 0.5.0.0
 and its published companion packages, Effectful 2.7.1.0/core 2.7.1.2 and
 strict-mutable-base 2.0.0.0. The existing Handan source pin builds unchanged.
-No new bounds override is used. The Cabal candidate is ahead of the frozen Nix
-cohort; immutable role packaging remains a separate acceptance gate.
+No new bounds override is used. The successful solve is exported to the frozen
+Nix cohort: 387 runtime packages and seven immutable repositories. All five
+role attributes evaluate in a dry run; immutable builds and installed-asset
+qualification remain separate acceptance gates.
 
 The real public TypeSafe complete path and durable queue/restart checks are
 recorded in [structured-judgments.md](structured-judgments.md). Public Shikumi

@@ -3,7 +3,9 @@
 The 2026-11-03 candidate uses the released Baikai 0.10.0.0 / Shikumi 0.5.0.0 /
 Kioku 0.12.0.2 cohort at Cabal index `2026-11-03T02:59:02Z`. This is partial
 plan 80 evidence. Streaming, the remaining negative/wire fixtures, Linux CLI
-consumer checks and immutable package qualification remain open.
+consumer checks and immutable package qualification remain open. The
+[machine-readable checkpoint](structured-consumer-checkpoint.json) records source
+revision, exact selected versions, cohort hash and check counts.
 
 ## Actual TypeSafe complete calls
 
@@ -11,7 +13,7 @@ consumer checks and immutable package qualification remain open.
 uses normal configuration, a finite immutable decision binding, the application
 runner, the public TypeSafe HTTP provider and the public Handan/Shikumi typed
 interpreter. Its loopback server accepts public synthetic credentials only.
-The six checks pass in the full 679-check core suite:
+The six checks pass in the full 680-check core suite:
 
 - One `POST /v1/systemone` uses exact model `jev-latest` without forbidden
   generation defaults. Urgency 0.83 derives true at threshold 0.8. The provider's
@@ -33,7 +35,7 @@ The six checks pass in the full 679-check core suite:
 
 ## Structured content and cache
 
-All seven checks in
+All eight checks in
 [BaikaiStructuredContentSpec](../../../shikigami-core/test/Shikigami/BaikaiStructuredContentSpec.hs)
 pass. They cover the public full-response codec, Shikumi cache serialization and
 a real memoizer hit (one underlying dispatch), optional probabilities,
@@ -42,6 +44,8 @@ snapshot format/count/byte bounds, version-two assistant capture/restore,
 unchanged version-one text encoding, and version-three structured user input.
 Misplaced user/assistant data refuses replay; data-only output cannot become
 successful empty prose. Cache/replay does not mint provider evidence.
+The new byte bound applies only to the new assistant format; a large historical
+text snapshot still decodes and restores through its original reader.
 
 ## Durable queue and worker restart
 
@@ -63,6 +67,23 @@ The new finite judge steps are guarded by
 capability field and keep the old outcome envelope when no answer is present.
 The pure conversation constructor rename retains assistant format number one
 and adds no durable step.
+
+## Regression and build boundary
+
+Core 680, agent 37, serial PostgreSQL 545, server 105, migration smoke 11 and
+serial worker 281 checks pass. The full committed native gate passes all 177
+conformance assertions with no generated drift. Its
+[native diff](structured-keiro-diff.json) classifies the judgment patch as
+additive, and the [stored-data replay verdict](structured-keiro-replay-impact.json)
+is neutral. These declaration-level verdicts supplement the consumer fixtures;
+they do not certify arbitrary opaque retained data. Haskell conventions and
+their 13 regression/mutation tests pass. The optional workspace fixture compiles
+on Darwin; its Linux runtime is not requalified by compilation.
+
+The successful solve exports 387 runtime packages and seven immutable
+repositories to `nix/qualification`. All five role attributes evaluate through
+`nix build --dry-run`. No fresh immutable build or outside-checkout installed
+asset qualification is claimed by this checkpoint.
 
 ## Outstanding acceptance
 

@@ -1,0 +1,57 @@
+{
+  "cohortSha256": "3c3994effad2daf493f6c643768ebb54cb63915ba33da044d5214f327c94ba86",
+  "compiler": "ghc-9.12.4",
+  "immutableRepositories": 7,
+  "indexState": "2026-11-03T02:59:02Z",
+  "judgmentStreamingQualified": false,
+  "nativeDiffBase": "8624709ee5fdf81373b522a4354589a480c66dba",
+  "nativeReplayVerdict": "replay-neutral",
+  "nix": {
+    "dryRunPassed": true,
+    "evaluatedRoleAttributes": [
+      "shikigami",
+      "shikigami-server",
+      "shikigami-worker",
+      "shikigami-migrate",
+      "shikigami-agent-launch"
+    ],
+    "immutableBuildsQualified": false
+  },
+  "owningRequest": "mori://shinzui/shikumi/okf/improvement-requests/concepts/IR-5",
+  "passedChecks": {
+    "agent": 37,
+    "core": 680,
+    "migrationSmoke": 11,
+    "nativeConformance": 177,
+    "postgresSerial": 545,
+    "server": 105,
+    "styleMutations": 13,
+    "workerSerial": 281
+  },
+  "prototype": "compiled on Darwin; Linux runtime not requalified",
+  "recordedOn": "2026-11-03",
+  "remoteTypeSafeQualified": false,
+  "runtimePackages": 387,
+  "selected": {
+    "baikai": "0.10.0.0",
+    "baikai-agent": "0.2.0.4",
+    "baikai-claude": "0.7.3.0",
+    "baikai-effectful": "0.4.0.5",
+    "baikai-openai": "0.7.3.0",
+    "baikai-typesafe": "0.1.0.1",
+    "effectful": "2.7.1.0",
+    "effectful-core": "2.7.1.2",
+    "kioku-api": "0.12.0.2",
+    "kioku-core": "0.12.0.2",
+    "kioku-migrations": "0.12.0.2",
+    "shikumi": "0.5.0.0",
+    "shikumi-cache": "0.2.1.0",
+    "shikumi-eval": "0.3.1.0",
+    "shikumi-tools": "0.4.2.0",
+    "shikumi-trace": "0.3.1.0",
+    "shikumi-trace-otel": "0.1.3.0",
+    "strict-mutable-base": "2.0.0.0"
+  },
+  "sourceRevision": "d5c7a8fc2c843b42fffe216780154155c63f04b3",
+  "status": "partial implementation checkpoint; plan 80 remains open"
+}
