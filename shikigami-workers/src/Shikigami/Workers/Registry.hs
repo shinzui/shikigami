@@ -32,10 +32,13 @@ import Data.Text qualified as Text
 import Data.Time (NominalDiffTime)
 import Keiro.PGMQ (Job (..), JobPolling (PollEvery), JobRuntime (..), JobTuning, ensureJobQueueWith, jobProcessorWithContext, mkJobTuning, runJobEff, runJobWorkers)
 import Shibuya.App (ProcessorId (ProcessorId), SupervisionStrategy (StopAllOnFailure), getAppMaster, getAppMetrics, waitApp)
+import Shibuya.App qualified as Processor
+import Shibuya.Policy (Concurrency (Async, Serial))
 import Shikigami.Agent.RunJob.Worker (handleRunJob, runJob)
 import Shikigami.Agent.Workflow.Resume (runResumeWorker, runWorkflowGc)
 import Shikigami.App (AppEnv (..))
 import Shikigami.Duration
+import Shikigami.Execution.Capacity qualified as Capacity
 import Shikigami.Flow.SinkOutbox.Publisher (runOutboxPublisher)
 import Shikigami.Health.Supervision (LoopExited (LoopExited), superviseLoops)
 import Shikigami.Health.Worker (LoopName (DirectoryLoop, ObjectiveTrackerLoop, OutboxLoop, QueueLoop, ResumeLoop, TelemetryLoop, TimerLoop, WorkflowGcLoop), loopStaleness, registerReport, supervisedLoopVerdictWithStaleness)
@@ -108,7 +111,7 @@ runQueueWorker env = do
         ( runJobWorkers
             StopAllOnFailure
             1
-            [jobProcessorWithContext tuning runJob (handleRunJob env)]
+            [fmap (\(key, processor) -> (key, processor {Processor.concurrency = if Capacity.capacityLimit env.capacity.execution == 1 then Serial else Async (Capacity.capacityLimit env.capacity.execution)})) (jobProcessorWithContext tuning runJob (handleRunJob env))]
         )
         \app -> withConsumerInspection env.inspection (getAppMaster app) do
           -- This loop reports its liveness through shibuya rather than beating,

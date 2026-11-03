@@ -119,3 +119,48 @@ Observation timers use the serving process's existing bounded timer pass. Keiro
 requeues an ordinary timer left `Firing` for five minutes, and the generation-bound
 handler repairs the original wake idempotently. A stale generation is cancelled
 without appending to a successor journal. No second timer loop is required.
+
+## Shared execution capacity
+
+`worker.capacity` configures independent positive `execution` and `advances`
+bounds (each 1..128). Both default to one. The worker validates database pool
+headroom before intake and uses `advances` through the central workflow options
+owner. All runtime replicas share the persisted execution limit; each executor
+claim checks it together with its root reservation and attempt fence.
+
+For example, an initially qualified two-call worker can use:
+
+```bash
+export SHIKIGAMI_WORKER_CAPACITY='{"execution":2,"advances":2}'
+```
+
+Initial configuration may bootstrap the shared limit once. Later changes supply
+the observed revision as `expectedRevision`; mismatched replica configuration
+refuses startup. An operator can read the small control record using the same
+administrative database connection used for migration:
+
+```sql
+SELECT maximum, revision FROM shikigami.execution_capacity;
+```
+
+If the returned revision is 1, a configuration lowering execution to one is:
+
+```bash
+export SHIKIGAMI_WORKER_CAPACITY='{"execution":1,"advances":2,"expectedRevision":1}'
+```
+
+Existing permits drain without cancellation or duplicate work. A trusted executor releases its runtime permit after its local dispatch has
+returned or unwound. Dispatched attempts without that stop acknowledgement
+retain occupancy until factual reconciliation; lease expiry alone cannot free
+them. Unknown root usage remains authoritative even after local execution stops
+or runtime capacity is increased. Capacity
+pressure acknowledges only the current queue delivery; the accepted driver's
+bounded timer repairs delivery of the same reference, without spending a provider
+retry or allocating a replacement operation.
+
+The `ExecutionCapacity` worker tests qualify shared last-slot admission, bounded
+rounds between ready roots, lowering and stale-replica refusal. The PostgreSQL
+`ExecutionTranscript` barrier test holds two fixture provider calls open through the production executor,
+records overlapping execution intervals, advances an unrelated workflow and
+checks that both permits settle. Typed coordinator decision execution is a
+separate acceptance gate in plan 85.

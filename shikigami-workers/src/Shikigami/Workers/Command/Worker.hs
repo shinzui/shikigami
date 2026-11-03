@@ -13,6 +13,7 @@ import Data.Set qualified as Set
 import Data.Text qualified as Text
 import Data.Time (nominalDiffTimeToSeconds)
 import Kiroku.Store.Connection qualified as StoreConnection
+import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Action.Authorization (ActionAuthorizer)
 import Shikigami.Action.Authorization.Config (buildConfiguredActionAuthorizer)
 import Shikigami.Agent.Approval (ApprovalPolicySnapshot (..), renderApprovalChannel)
@@ -20,13 +21,14 @@ import Shikigami.Agent.Approval.Notification qualified as ApprovalNotification
 import Shikigami.Agent.Decl (AgentDecl (..))
 import Shikigami.Agent.Loader (enabledAgentsFromReport, loadAgentsLoud)
 import Shikigami.Agent.Workflow.Resume (runBoundedResumeWorker)
-import Shikigami.App (AppEnv (..))
+import Shikigami.App (AppEnv (..), runAppIO)
 import Shikigami.App.Config (AppConfig, Role (WorkerRole))
 import Shikigami.App.Config qualified as Config
 import Shikigami.App.Config.Load (requireDatabaseUrl)
 import Shikigami.Behavior.Provider (newBehaviorEnvFor)
 import Shikigami.Directory (DirectoryRuntime (..))
 import Shikigami.Duration
+import Shikigami.Execution.Capacity qualified as Capacity
 import Shikigami.Flow (flowDeclarationErrors)
 import Shikigami.Flow.Decision qualified as FlowDecision
 import Shikigami.Health.Worker (LoopName (OutboxLoop, QueueLoop, TelemetryLoop, TimerLoop), loopStaleAfter, loopStaleness, newHeartbeatsWithStaleness, serveProbesWith)
@@ -179,6 +181,11 @@ runWorkerCmdWith resumeBudget config = do
             else do
               objective <- either (const (Exit.die "shikigami-worker: objective tracker operator is required")) pure (TrackerRuntime.operatorHost config.objectiveSettings actionAuthorizer)
               pure (Just (Tracker.TrackerHost objective config.trackerSettings (TrackerRuntime.providerFor providers config.trackerSettings)))
+        either (Exit.die . Text.unpack) pure (Capacity.validateHeadroom settings.poolSize config.capacity)
+        configured <- runAppIO appEnv (runTransaction (Capacity.configureTx config.capacity))
+        case configured of
+          Right (Right ()) -> pure ()
+          _ -> Exit.die "shikigami-worker: shared execution capacity is unavailable"
         let env =
               WorkerEnv
                 { pool = storePool,
@@ -193,6 +200,7 @@ runWorkerCmdWith resumeBudget config = do
                   workspaceTransfers = config.workspaceSettings >>= configuredWorkspaceTransfers,
                   runTimeout = (.runTimeout) config,
                   harness = (.harness) config,
+                  capacity = config.capacity,
                   delegationBudget = (.delegationBudget) config,
                   approvalDeadline = (.approvalDeadline) config,
                   approvalPolicy = policy,

@@ -257,6 +257,7 @@ dispatchRunJob env job = do
     ExecutionRoute reference ->
       Executor.executeAcceptedAttempt (AgentWorkflow.executionRuntime (agentRunDeps env)) job.identity reference >>= \case
         Right Executor.ExecutorDone -> pure Done
+        Right Executor.ExecutorDeferred -> pure Done
         Right (Executor.ExecutorWait seconds) -> pure (Retry (RetryDelay (durationTime seconds)))
         Right Executor.ExecutorInvalidReference -> pure (routeErrorJobOutcome "execution job reference is unavailable")
         _ -> pure RetryDefault

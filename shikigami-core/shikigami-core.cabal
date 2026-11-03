@@ -115,6 +115,7 @@ library
     Shikigami.Execution.Admission
     Shikigami.Execution.AssignmentKey
     Shikigami.Execution.Attempt
+    Shikigami.Execution.Capacity
     Shikigami.Execution.Catalog
     Shikigami.Execution.Claim
     Shikigami.Execution.Coordinate

@@ -1,7 +1,9 @@
 module Main (main) where
 
+import Data.Text qualified as Text
 import Shikigami.Agent.RunJob.WorkerSpec qualified as RunJobWorkerSpec
 import Shikigami.AgentRun.StatusSpec qualified as StatusSpec
+import Shikigami.ExecutionCapacitySpec qualified as ExecutionCapacitySpec
 import Shikigami.Health.SupervisionSpec qualified as SupervisionSpec
 import Shikigami.Health.WorkerSpec qualified as HealthWorkerSpec
 import Shikigami.Inspection.ConsumerSpec qualified as InspectionSpec
@@ -27,11 +29,18 @@ import Shikigami.WorkspaceSupervisorSpec qualified as WorkspaceSupervisorSpec
 import Shikigami.WorkspaceSystemdSpec qualified as WorkspaceSystemdSpec
 import Shikigami.WorkspaceTransferSpec qualified as WorkspaceTransferSpec
 import Shikigami.WorkspaceWorkflowSpec qualified as WorkspaceWorkflowSpec
-import System.Environment (lookupEnv)
+import System.Environment (getArgs, lookupEnv)
 import Test.Tasty (defaultMain, testGroup)
 
 main :: IO ()
 main = do
+  arguments <- getArgs
+  case arguments of
+    ["--capacity-claim", ticket] -> ExecutionCapacitySpec.capacityClaimProcess (Text.pack ticket)
+    _ -> suite
+
+suite :: IO ()
+suite = do
   fixture <- lookupEnv "SHIKIGAMI_GRACEFUL_SHUTDOWN_FIXTURE"
   case fixture of
     Just "1" -> SupervisionSpec.gracefulShutdownFixture
@@ -39,7 +48,8 @@ main = do
       defaultMain
         ( testGroup
             "shikigami-workers"
-            [ WorkspaceGitProviderSpec.tests databaseFixture,
+            [ ExecutionCapacitySpec.tests databaseFixture,
+              WorkspaceGitProviderSpec.tests databaseFixture,
               WorkspaceTransferSpec.tests databaseFixture,
               WorkspaceGitStoreSpec.tests databaseFixture,
               WorkspaceGitObjectsSpec.tests,

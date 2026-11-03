@@ -60,6 +60,7 @@ import Shikigami.Capability.Provider (emptyCapabilityRuntime)
 import Shikigami.Directory (DirectoryHandle, DirectoryRuntime (..), DirectorySettings (..), startDirectoryWithHeartbeat)
 import Shikigami.Directory.Store (recordLoadStates)
 import Shikigami.Duration
+import Shikigami.Execution.Capacity (RuntimeLimits)
 import Shikigami.Execution.Policy.Types (HarnessPolicy)
 import Shikigami.Flow.Decision qualified as FlowDecision
 import Shikigami.Flow.Routing qualified as Routing
@@ -116,6 +117,7 @@ data WorkerEnv = WorkerEnv
     workspaceTransfers :: !(Maybe WorkspaceProvider),
     runTimeout :: !(Duration "agent-run"),
     harness :: !HarnessPolicy,
+    capacity :: !RuntimeLimits,
     delegationBudget :: !DelegationBudget,
     approvalDeadline :: !(Duration "approval"),
     approvalPolicy :: !Approval.ApprovalPolicySnapshot,

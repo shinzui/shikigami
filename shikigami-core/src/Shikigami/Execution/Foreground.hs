@@ -43,6 +43,7 @@ driveExecutionForeground runtime start allowance = drive (max 0 (min 10000 allow
                       result <- executeAcceptedAttempt runtime binding.identity (Attempt.JobReference V1 start.executionId operation attempt.request.attemptId)
                       case result of
                         Right ExecutorDone -> drive (remaining - 1)
+                        Right ExecutorDeferred -> pure (Right Nothing)
                         Right ExecutorRetry -> pure (Right Nothing)
                         Right ExecutorWait {} -> pure (Right Nothing)
                         Right ExecutorInvalidReference -> pure (Left AttemptConflict)

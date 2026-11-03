@@ -30,6 +30,7 @@ module Shikigami.Workflow.Versioning
   ( shikigamiActivePatches,
     shikigamiWorkflowRunOptions,
     shikigamiWorkflowResumeOptions,
+    shikigamiWorkflowResumeOptionsWith,
     terminalWorkflowRetention,
   )
 where
@@ -46,6 +47,7 @@ import Shikigami.App (AppEnv (..))
 import Shikigami.Approval.Generated.WorkflowRuntime qualified as Approval
 import Shikigami.ContinuingWorker.Generated.WorkflowRuntime qualified as ContinuingWorker
 import Shikigami.DanwaConversation.Generated.WorkflowRuntime qualified as DanwaConversation
+import Shikigami.Execution.Capacity (RuntimeLimits (..), capacityLimit, defaultRuntimeLimits)
 import Shikigami.ExecutionDriver.Generated.WorkflowRuntime qualified as Execution
 
 -- | Every patch id this deployment has active, read from the checked
@@ -84,11 +86,14 @@ shikigamiWorkflowRunOptions AppEnv {tracer = appTracer, metrics = appMetrics} =
 -- | The options the resume worker uses, carrying 'shikigamiWorkflowRunOptions'
 -- so a resumed run is configured exactly as its first run was.
 shikigamiWorkflowResumeOptions :: AppEnv -> NominalDiffTime -> WorkflowResumeOptions
-shikigamiWorkflowResumeOptions appEnv timeout =
+shikigamiWorkflowResumeOptions = shikigamiWorkflowResumeOptionsWith defaultRuntimeLimits
+
+shikigamiWorkflowResumeOptionsWith :: RuntimeLimits -> AppEnv -> NominalDiffTime -> WorkflowResumeOptions
+shikigamiWorkflowResumeOptionsWith limits appEnv timeout =
   defaultWorkflowResumeOptions
     & #runOptions .~ shikigamiWorkflowRunOptions appEnv
     & #leaseTtl .~ (timeout + 30)
-    & #maxConcurrentAdvances .~ 1
+    & #maxConcurrentAdvances .~ capacityLimit limits.advances
 
 -- | Keep terminal workflow journals for ninety days. This bounds the workflow
 -- idempotency window; redelivery older than that requires operator review.

@@ -51,10 +51,12 @@ Let a coordinator change its organization when new evidence warrants it: work di
 ## Progress
 
 
-- [x] (2026-11-03) Milestone 1: Versioned bounded proposals, whole-proposal validation and the production checkpoint adapter atomically retain graph changes and executable manifests. `AdaptiveProposalSpec` has ten passing cases and PostgreSQL `AdaptiveDeliverySpec` has five. The latter proves protected restart reads before live policy, revision races, revocation, exhausted root refusal and rejection of completion with a failing combined check.
+- [x] (2026-11-03) Milestone 1: Versioned bounded proposals, whole-proposal validation and the production checkpoint adapter atomically retain graph changes and executable manifests. `AdaptiveProposalSpec` has thirteen passing cases and PostgreSQL `AdaptiveDeliverySpec` has seven. The latter proves protected restart reads before live policy, revision races, revocation, exhausted root refusal and rejection of completion with a failing combined check.
 - [ ] Milestone 2: Execute adaptive cycles with durable typed decisions and continuing-worker commands.
-- [ ] Milestone 3: Qualify shared execution capacity, useful overlap, draining and root fairness.
+- [ ] Milestone 3: Shared database capacity, existing executor admission, positive worker configuration and real executor overlap are implemented. Complete the held typed-decision, timer, two-process and integrated root fairness cases after milestone 2.
 - [ ] Milestone 4: Publish decision inspection, exact completion proposals and compatible workflow declarations.
+
+The first implementation checkpoint is commit `8f4d40a0`. The capacity foundation adds `Execution.Capacity`, migration 0039, accepted-attempt ticket admission and configuration through the single workflow options owner. The broad checkpoint checks pass: 703 core unit tests, 554 core PostgreSQL tests, 288 worker tests and 105 server tests, plus schema isolation. Subsequent focused checks pass 13 proposal cases, seven adaptive PostgreSQL cases (including unprojected session authority) and eight capacity cases (including two runtime processes). The actual executor fixture records two overlapping provider intervals while an unrelated workflow advances. This is not yet the required typed coordinator decision fixture.
 
 Implementation started 2026-11-03 from baseline `1a7d5ebd2b4a7eca058fe61726807b38076fe6e8` on the existing branch. Hard prerequisites are complete. `nix develop --no-write-lock-file -c cabal build all` passes; the required baseline tests are running. Use the Nix environment because plain Cabal cannot locate the configured GHC.
 
@@ -64,11 +66,19 @@ Implementation started 2026-11-03 from baseline `1a7d5ebd2b4a7eca058fe61726807b3
 
 The real objective owner already supplies expected-revision command deduplication and atomic projection callbacks. Adaptive manifests now commit in that same boundary; a second mutable assignment or budget owner is unnecessary.
 
-The prescribed baseline test command exhausted disposable PostgreSQL clients and pushed bounded Git fixtures past their deadlines at default Tasty concurrency. FRIC-51 records the occurrence. With `TASTY_NUM_THREADS=2`, core unit tests (698), core PostgreSQL tests (551 before the additional combined-check case), worker tests (281) and server tests (105) all pass. The expanded adaptive PostgreSQL group separately passes all five cases. Schema isolation passes.
+The prescribed baseline test command exhausted disposable PostgreSQL clients and pushed bounded Git fixtures past their deadlines at default Tasty concurrency. FRIC-51 records the occurrence. Run the suites sequentially with `TASTY_NUM_THREADS=2`; this passes the broad checkpoint checks reported in Progress.
+
+Runtime occupancy differs from uncertain root usage. A local executor that has returned or unwound can acknowledge its exact runtime permit as stopped while its unknown root spending remains held. Lease expiry from another process cannot make that acknowledgement. The real lost-acknowledgement and safe-recovery regressions distinguish these cases.
+
+A session may exist before its first checkpoint publishes a session reference into the objective. The proposal adapter therefore checks the authoritative session binding for graph restructuring instead of treating an absent projected reference as proof of fencing. The dedicated PostgreSQL case leaves both the graph and root unchanged on refusal.
 
 
 ## Decision Log
 
+
+2026-11-03: Qualify the existing executor capacity boundary before extending it with typed decision work. Admission is atomic with the existing attempt claim/fence. Unknown dispatch without a confirmed local stop retains its permit; the exact local executor finalizer may release runtime occupancy while leaving unknown root usage charged. Tests deliberately allowing recovery alongside unknown work configure both root and runtime capacity separately. A capacity deferral acknowledges only its queue delivery and leaves repair to the accepted driver's existing timer, avoiding exhaustion of provider-delivery retries. [ADR 0109](../adr/0109-runtime-capacity-admission-shares-accepted-attempt-fences.md) records the storage, fairness and configuration contract.
+
+2026-11-03: Validator version 2 binds model permissions to the assignment's named role, refuses repeated ancestor roles and requires a pinned workspace reference for transfer. Version 1 manifests retain their decoder and empty-workspace wire representation; committed decisions are not revalidated. Manifest reads also verify their original objective receipt and payload commitment before revealing executable operations.
 
 2026-11-03: Accept organization changes through an internal objective command, retaining the complete accepted manifest with its objective receipt. Keep current definitions/owners authoritative and retain only hierarchy edges from prior adaptive manifests. [ADR 0108](../adr/0108-adaptive-decisions-commit-with-authoritative-checkpoints.md) records the durable contract.
 
@@ -78,7 +88,7 @@ The prescribed baseline test command exhausted disposable PostgreSQL clients and
 ## Outcomes & Retrospective
 
 
-Milestone 1 is implemented and validated. The adaptive Flow, accepted typed-decision executor, shared-capacity integration and operator inspection remain unfinished; this plan is not complete. No durable workflow body or existing supervisor branch has changed at this checkpoint. FRIC-51 remains logged until final triage.
+Milestone 1 is implemented and validated. Shared capacity now gates the existing accepted executor and configured worker/resume paths. The adaptive Flow, accepted typed-decision adapter, its joint resource/capacity qualification and operator inspection remain unfinished; this plan is not complete. No durable workflow body or existing supervisor branch has changed at these checkpoints. FRIC-51 remains logged until final triage.
 
 
 ## Context and Orientation
@@ -131,7 +141,9 @@ Run from the repository root in the existing development environment; if native 
 ```bash
 MP14_BASE=$(git rev-parse HEAD)
 cabal build all
-cabal test shikigami-core-test shikigami-core-postgres-test shikigami-workers-test shikigami-server-test --test-show-details=direct
+TASTY_NUM_THREADS=2 cabal test shikigami-core-test shikigami-server-test --test-show-details=direct
+TASTY_NUM_THREADS=2 cabal test shikigami-core-postgres-test --test-show-details=direct
+TASTY_NUM_THREADS=2 cabal test shikigami-workers-test --test-show-details=direct
 just migration-schema-isolation
 ```
 

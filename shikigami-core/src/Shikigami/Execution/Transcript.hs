@@ -464,6 +464,7 @@ data ExecutionError
   | AttemptMissing
   | AttemptConflict
   | AttemptClaimLost
+  | ExecutionCapacityUnavailable
   | OperationConflict
   | UnresolvedOperation
   | UnsupportedReplay

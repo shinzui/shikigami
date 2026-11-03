@@ -52,7 +52,7 @@ import Shikigami.Health.Worker (LoopName (ResumeLoop, WorkflowGcLoop))
 import Shikigami.Log qualified as Log
 import Shikigami.Workers.Config (WorkerEnv (..), agentRunDeps, conversationEnv, envLogger)
 import Shikigami.Workflow.Registry qualified as Registry
-import Shikigami.Workflow.Versioning (shikigamiWorkflowResumeOptions, terminalWorkflowRetention)
+import Shikigami.Workflow.Versioning (shikigamiWorkflowResumeOptionsWith, terminalWorkflowRetention)
 
 -- | Every workflow this process knows how to resume.
 workflowRegistry :: WorkerEnv -> WorkflowRegistry AppEffects
@@ -143,7 +143,7 @@ defaultResumeRetry = either (error . Text.unpack) id (mkResumeRetry 1_000_000 30
 runResumeWorker :: WorkerEnv -> IO ()
 runResumeWorker env@WorkerEnv {runTimeout} =
   runResumeLoop defaultResumeRetry (envLogger env) do
-    result <- runAppIO ((.appEnv) env) (runWorkflowResumeWorkerWith (shikigamiWorkflowResumeOptions ((.appEnv) env) (durationTime runTimeout) & #logEvent .~ logResumeEvent (envLogger env)) (workflowRegistry env))
+    result <- runAppIO ((.appEnv) env) (runWorkflowResumeWorkerWith (shikigamiWorkflowResumeOptionsWith env.capacity ((.appEnv) env) (durationTime runTimeout) & #logEvent .~ logResumeEvent (envLogger env)) (workflowRegistry env))
     pure case result of
       Left err -> Text.pack (show err)
       Right () -> "the resume runner returned without an error, which a forever loop should never do"
@@ -205,8 +205,7 @@ runBoundedResumeWorker :: Int -> Int -> WorkerEnv -> IO [ResumeSummary]
 runBoundedResumeWorker passLimit candidateLimit env =
   drainResumePasses passLimit do
     let options =
-          shikigamiWorkflowResumeOptions env.appEnv (durationTime env.runTimeout)
-            & #maxConcurrentAdvances .~ 1
+          shikigamiWorkflowResumeOptionsWith env.capacity env.appEnv (durationTime env.runTimeout)
             & #logEvent .~ logResumeEvent (envLogger env)
     result <- runAppIO env.appEnv (resumeWorkflowsOnceUpTo candidateLimit options (workflowRegistry env))
     summary <- either throwIO pure result

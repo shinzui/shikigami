@@ -203,6 +203,7 @@ import Shikigami.Decision.Contract (DecisionFailure, ModelAlias, modelAliasText)
 import Shikigami.Decision.ModelCatalog qualified as Decision
 import Shikigami.Directory (DirectorySettings (..))
 import Shikigami.Duration
+import Shikigami.Execution.Capacity qualified as Capacity
 import Shikigami.Execution.Policy.Types qualified as Harness
 import Shikigami.Inspection.Settings (InspectionSettings (..))
 import Shikigami.Objective.Tracker.Config (TrackerSettings, defaultTrackerSettings)
@@ -511,6 +512,7 @@ data AppConfig = AppConfig
     behaviorProvider :: !ProviderSelection,
     decisionModelCatalog :: !(Either DecisionFailure Decision.ModelCatalog),
     harness :: !Harness.HarnessPolicy,
+    capacity :: !Capacity.RuntimeLimits,
     actionAuthorization :: !ActionAuthorizationConfig,
     workspaceSettings :: !(Maybe WorkspaceSettings),
     workspaceSupervisorSettings :: !(Maybe WorkspaceSupervisorSettings),
@@ -572,6 +574,7 @@ appConfig =
     <*> behaviorProviderConfig
     <*> decisionModelsConfig
     <*> withDefault harnessSetting (constant "default-harness" "Bound Skill execution policy" Harness.defaultHarnessPolicy)
+    <*> withDefault (publicSettingWithRenderer (stableKey "worker.capacity") "Shared execution capacity and bounded workflow advances" jsonDecoder renderJson) (constant "serial-capacity" "Keep one execution and one workflow advance until qualified" Capacity.defaultRuntimeLimits)
     <*> actionAuthorizationConfig
     <*> optional (secretSetting workspacesKey "Approved workspace repositories, reviewed instruction digests, path restrictions and exact agent/principal grants" jsonDecoder)
     <*> optional (secretSetting workspaceSupervisorKey "Private systemd socket and bounded peer-checked workspace supervisor intake" jsonDecoder)
@@ -1543,6 +1546,7 @@ environmentBindings =
           binding (EnvName "SHIKIGAMI_HTTP_RESPONSE_MAX_BYTES") httpResponseMaxBytesKey,
           binding (EnvName "SHIKIGAMI_HEALTH_PORT") healthPortKey,
           binding (EnvName "SHIKIGAMI_RUN_TIMEOUT_SECONDS") workerRunTimeoutSecondsKey,
+          binding (EnvName "SHIKIGAMI_WORKER_CAPACITY") (stableKey "worker.capacity"),
           binding (EnvName "SHIKIGAMI_APPROVAL_REQUIRE") approvalRequireKey,
           binding (EnvName "SHIKIGAMI_APPROVAL_CHANNEL") approvalChannelKey,
           binding (EnvName "SHIKIGAMI_APPROVAL_DEADLINE_SECONDS") approvalDeadlineSecondsKey,

@@ -29,6 +29,7 @@ module Shikigami.Execution.Store
     loadModelReplayWindow,
     refuseUndispatchedExecutionAttempt,
     claimExecutionAttempt,
+    releaseStoppedExecutionAttempt,
     startExecutionAttempt,
     checkStartedExecutionAttempt,
     abandonExecutionAttempt,
@@ -92,10 +93,11 @@ import Shikigami.App (CommandEffects, commandOptions)
 import Shikigami.Decision.Contract (ModelDescriptor, versionedDigest)
 import Shikigami.Execution.AssignmentKey (AssignmentKey)
 import Shikigami.Execution.Attempt qualified as Attempt
+import Shikigami.Execution.Capacity qualified as Capacity
 import Shikigami.Execution.Catalog (withLiveExecution)
 import Shikigami.Execution.Claim
 import Shikigami.Execution.Coordinate
-import Shikigami.Execution.Identity (AttemptId, ExecutionRootId, OperationId, attemptIdText, operationIdText)
+import Shikigami.Execution.Identity (AttemptId, ExecutionRootId, OperationId, attemptIdText, executionRootIdText, operationIdText)
 import Shikigami.Execution.Payload
 import Shikigami.Execution.Policy (ContextView (..), ModelOperationInput (..), validateTerminalOutput, validateToolInvocation)
 import Shikigami.Execution.Policy.Limits (policyNumber)
@@ -579,6 +581,7 @@ submitAttempt retired access@(ReplayAccess execution _ _) expected submission en
           unless (actualWake == wakeRef) (abort CorruptReplay)
           let attempt = Attempt.ExecutionAttempt V1 execution operation.specification.operationId submission.request fingerprint receipt wakeRef Attempt.AwaitingDispatch Nothing initialRevision Nothing Nothing Nothing Nothing
           Tx.statement (attemptKey submission.request.attemptId, execution.value, operationKey operation.specification.operationId, attempt) insertExecutionAttempt
+          Capacity.registerTx (capacityRoot actualBinding execution) (capacityTicket reference.attemptId) >>= either (abort . capacityFailure) pure
           enqueue reference
           saveExecution (current & #revision .~ (advanceRevision expected) & #phase .~ Active & #next .~ resumeNext & #pendingReceipts .~ pendingReceipts)
       case result of
@@ -787,6 +790,13 @@ claimExecutionAttempt access@(ReplayAccess execution _ _) expected reference own
             current <- checkedAttempt reference
             instant <- checkedStatement () currentTime
             unless (current == previous && (current.phase == Attempt.AwaitingDispatch || (current.phase == Attempt.Claimed && maybe False (instant >=) current.expiresAt))) (throwE AttemptClaimLost)
+            -- Old accepted attempts are enrolled on first claim. The same
+            -- transaction replaces only a verified expired undispatched claim.
+            registered <- lift (Capacity.registerTx (capacityRoot actualBinding execution) (capacityTicket reference.attemptId))
+            either (throwE . capacityFailure) pure registered
+            admitted <- lift (Capacity.admitTx (capacityTicket reference.attemptId) owner current.owner)
+            permit <- either (throwE . capacityFailure) pure admitted
+            unless permit (throwE ExecutionCapacityUnavailable)
             pure (state, current, instant)
         )
         \(state, current, instant) -> do
@@ -797,6 +807,22 @@ claimExecutionAttempt access@(ReplayAccess execution _ _) expected reference own
         Right () -> Right (Attempt.ClaimGranted (Attempt.AttemptClaim reference owner (advanceRevision previous.generation)))
         Left (CheckFailed err) -> Left err
         Left EventRejected -> Left ExecutionRevisionConflict
+
+-- | Trusted executor cleanup, only after its local dispatch has returned or
+-- unwound. Lease expiry alone never calls this. Root uncertainty remains held;
+-- this releases only the now-stopped local executor's exact runtime permit.
+releaseStoppedExecutionAttempt :: (ExecutionEffects es) => Attempt.AttemptClaim -> Eff es (Either ExecutionError ())
+releaseStoppedExecutionAttempt claim = catchExecutionWith id do
+  let execution = claim.reference.executionId
+  (_, binding) <- readMetadata (getExecution execution)
+  runTransaction do
+    lockRoot binding.rootId
+    (_, actual) <- getExecution execution
+    unless (actual == binding) (abort AttemptClaimLost)
+    current <- getAttempt claim.reference
+    unless (claimMatches claim current && current.phase `elem` [Attempt.DispatchStarted, Attempt.AttemptCommitted, Attempt.AttemptUncertain, Attempt.AttemptSuperseded, Attempt.AttemptAbandoned]) (abort AttemptClaimLost)
+    releaseCapacity current
+  pure (Right ())
 
 -- Only a successful transition from Claimed may run IO. Repeated start calls
 -- return AlreadyAccepted, which is observation and never dispatch permission.
@@ -876,6 +902,7 @@ abandonExecutionAttempt access@(ReplayAccess execution _ _) expected reference =
             Just call -> Calls.finishSelectionCallTx call terminal >>= either (abort . ResourceAdmissionRefused . Text.pack . show) (const (pure ()))
             Nothing -> forM_ actualBinding.rootId \root -> Roots.settleAttemptTx root current.request.attemptId (Resources.KnownUsage zeroModelBilling) >>= either (abort . ResourceAdmissionRefused . Text.pack . show) (const (pure ()))
           ref <- writePayload execution (envelope "attempt-result" (toJSON receipt))
+          releaseCapacity current
           saveAttempt (current & #phase .~ Attempt.AttemptAbandoned & #outcome .~ Just ref)
           saveExecution (state & #revision .~ (advanceRevision expected))
       pure (case result of Right () -> Right Accepted; Left (CheckFailed err) -> Left err; Left EventRejected -> Left ExecutionRevisionConflict)
@@ -900,6 +927,7 @@ completeExecutionAttempt access@(ReplayAccess execution _ _) expected claim resu
         when (isNothing previous.call) $ forM_ binding.rootId \root -> Roots.settleAttemptTx root previous.request.attemptId (toolSettlement previous.request) >>= either (abort . ResourceAdmissionRefused . Text.pack . show) (const (pure ()))
         actual <- writePayload execution body
         unless (actual == ref) (abort CorruptReplay)
+        releaseCapacity current
         saveAttempt (current & #phase .~ Attempt.AttemptCommitted & #outcome .~ Just ref)
         pure (Right ())
   where
@@ -1049,10 +1077,12 @@ checkedAttemptReceipt operation receipt = do
   when (maybe False (\accounting -> accounting.phase == Calls.CallTransportUnknown) receipt.accounting) (throwE AttemptConflict)
 
 settleRetainedReceipt :: ExecutionBinding -> Attempt.ExecutionAttempt -> Attempt.AttemptResult -> Transaction ()
-settleRetainedReceipt binding attempt receipt = case (attempt.call, receipt.accounting) of
-  (Just call, Just terminal) -> Calls.reconcileSelectionCallTx call terminal >>= either (abort . ResourceAdmissionRefused . Text.pack . show) (const (pure ()))
-  (Nothing, Nothing) -> forM_ binding.rootId \root -> Roots.reconcileSettlementTx root attempt.request.attemptId (toolSettlement attempt.request) >>= either (abort . ResourceAdmissionRefused . Text.pack . show) (const (pure ()))
-  _ -> abort AttemptConflict
+settleRetainedReceipt binding attempt receipt = do
+  case (attempt.call, receipt.accounting) of
+    (Just call, Just terminal) -> Calls.reconcileSelectionCallTx call terminal >>= either (abort . ResourceAdmissionRefused . Text.pack . show) (const (pure ()))
+    (Nothing, Nothing) -> forM_ binding.rootId \root -> Roots.reconcileSettlementTx root attempt.request.attemptId (toolSettlement attempt.request) >>= either (abort . ResourceAdmissionRefused . Text.pack . show) (const (pure ()))
+    _ -> abort AttemptConflict
+  releaseCapacity attempt
 
 -- Reconciliation consumes the retained former owner's actual receipt. It
 -- never samples another result, dispatches IO or invents zero measurements.
@@ -1115,6 +1145,24 @@ getAttempt reference = do
 
 saveAttempt :: Attempt.ExecutionAttempt -> Transaction ()
 saveAttempt attempt = Tx.statement (attemptKey attempt.request.attemptId, operationKey attempt.operationId, attempt) updateExecutionAttempt
+
+capacityTicket :: AttemptId -> Text
+capacityTicket identifier = "attempt:" <> attemptKey identifier
+
+capacityRoot :: ExecutionBinding -> ExecutionId -> Text
+capacityRoot binding execution = maybe ("execution:" <> execution.value) executionRootIdText binding.rootId
+
+capacityFailure :: Capacity.CapacityError -> ExecutionError
+capacityFailure = \case
+  Capacity.CapacityCorrupt -> CorruptReplay
+  Capacity.CapacityConflict -> AttemptClaimLost
+  Capacity.CapacityUnavailable -> ExecutionCapacityUnavailable
+
+releaseCapacity :: Attempt.ExecutionAttempt -> Transaction ()
+releaseCapacity attempt = do
+  (_, binding) <- getExecution attempt.executionId
+  Capacity.registerTx (capacityRoot binding attempt.executionId) (capacityTicket attempt.request.attemptId) >>= either (abort . capacityFailure) pure
+  Capacity.releaseTx (capacityTicket attempt.request.attemptId) attempt.owner >>= either (abort . capacityFailure) pure
 
 attemptKey :: AttemptId -> Text
 attemptKey = attemptIdText

@@ -13,9 +13,10 @@ import Baikai.StopReason (StopReason (Stop, ToolUse))
 import Baikai.Stream (liftCompleteToStream)
 import Baikai.Tool qualified as BaikaiTool
 import Control.Concurrent (threadDelay)
-import Control.Concurrent.Async (concurrently)
+import Control.Concurrent.Async (concurrently, wait, withAsync)
+import Control.Concurrent.MVar (newEmptyMVar, putMVar, readMVar, takeMVar)
 import Control.Exception qualified as Exception
-import Control.Monad (void, when)
+import Control.Monad (forM_, void, when)
 import Data.Aeson (Value, object, toJSON, (.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
@@ -90,6 +91,7 @@ import Shikigami.Decision.ModelCatalog (modelCatalog)
 import Shikigami.Duration
 import Shikigami.Execution.AssignmentKey (AssignmentKey, conversationAssignmentIdFor, parseAssignmentKey)
 import Shikigami.Execution.Attempt qualified as Attempt
+import Shikigami.Execution.Capacity qualified as Capacity
 import Shikigami.Execution.Catalog qualified as ExecutionCatalog
 import Shikigami.Execution.Claim qualified as Claim
 import Shikigami.Execution.Coordinate qualified as ExecutionValue
@@ -141,6 +143,7 @@ import Shikigami.Workspace.Reference (WorkspaceRef (..))
 import Shikigami.Workspace.Value
 import Shikumi.Tool (mkDynTool)
 import Shikumi.Tool.Output qualified as ToolOutput
+import System.Timeout qualified as Timeout
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit
 
@@ -148,7 +151,8 @@ tests :: DatabaseFixture -> TestTree
 tests fixture =
   testGroup
     "ExecutionTranscript"
-    [ testCase "objective conversation origin requires its already admitted owning turn" (objectiveConversationOriginCase fixture),
+    [ testCase "shared runtime capacity overlaps accepted provider execution while unrelated workflows advance" (capacityOverlapCase fixture),
+      testCase "objective conversation origin requires its already admitted owning turn" (objectiveConversationOriginCase fixture),
       testCase "objective Flow origin uses native workflow generation and static label" (objectiveFlowOriginCase fixture),
       testCase "objective creation verifies an accepted operation and recovers its atomic origin" (objectiveOriginCase fixture),
       testCase "assignment admission freezes Skill and native menu once before starting its driver" $
@@ -269,6 +273,7 @@ tests fixture =
           pure (),
       testCase "driver generations repair lost queue delivery without another actual attempt" $
         withConfiguredResourceFixture fixture id (Map.insert R.Tokens R.ExplicitlyUnbounded) \env snapshot access -> do
+          configureTestCapacity env 2
           (executor, calls, _) <- driverRuntime env False
           withStore env.connectionSettings (\store -> ensureRunQueue store.pool >>= expectRight)
           let workflow = executionWorkflowId snapshot.executionId
@@ -329,6 +334,7 @@ tests fixture =
           Map.lookup R.ToolAttempts root.usage.settled @?= Just (fixtureAmount 2),
       testCase "recorded context summary survives restart and consumes an ordinary model attempt" $
         withConfiguredResourceFixture fixture summaryConfiguration (Map.insert R.Tokens R.ExplicitlyUnbounded) \env snapshot access -> do
+          configureTestCapacity env 2
           (executor, calls, _) <- driverRuntime env False
           withStore env.connectionSettings (\store -> ensureRunQueue store.pool >>= expectRight)
           let drive = run env (runWorkflow DriverGenerated.workflowName (executionWorkflowId snapshot.executionId) (Driver.executionWorkflow executor (Just (Driver.ExecutionStart snapshot.executionId))))
@@ -372,6 +378,7 @@ tests fixture =
           map (\operation -> operation.specification.kind) operations @?= [ModelSummary],
       testCase "driver cancellation settles an undispatched reservation and never calls its provider" $
         withConfiguredResourceFixture fixture id (Map.insert R.Tokens R.ExplicitlyUnbounded) \env snapshot _ -> do
+          configureTestCapacity env 2
           (executor, calls, _) <- driverRuntime env False
           withStore env.connectionSettings (\store -> ensureRunQueue store.pool >>= expectRight)
           let drive = run env (runWorkflow DriverGenerated.workflowName (executionWorkflowId snapshot.executionId) (Driver.executionWorkflow executor (Just (Driver.ExecutionStart snapshot.executionId))))
@@ -594,6 +601,7 @@ tests fixture =
           Map.lookup R.Tokens afterBilling.usage.settled @?= Just (fixtureAmount 3),
       testCase "the driver safely replaces an expired model transport with a newly accounted attempt" $
         withConfiguredResourceFixture fixture id (Map.insert R.ActiveWork (R.Limited (fixtureAmount 2)) . Map.insert R.Tokens R.ExplicitlyUnbounded) \env snapshot access -> do
+          configureTestCapacity env 2
           (executor, calls, _) <- driverRuntime env False
           withStore env.connectionSettings (\store -> ensureRunQueue store.pool >>= expectRight)
           let drive = run env (runWorkflow DriverGenerated.workflowName (executionWorkflowId snapshot.executionId) (Driver.executionWorkflow executor (Just (Driver.ExecutionStart snapshot.executionId))))
@@ -1197,6 +1205,7 @@ nativeExecutorCase fixture billing = testCase (show billing <> " preserves rich 
 modelRecoveryCase :: DatabaseFixture -> Bool -> TestTree
 modelRecoveryCase fixture afterCompletion = testCase (if afterCompletion then "a late superseded model receipt settles after success without replacing output" else "a late superseded model receipt settles during active progress") $
   withConfiguredResourceFixture fixture id (Map.insert R.ActiveWork (R.Limited (fixtureAmount 2))) \env snapshot access -> do
+    configureTestCapacity env 2
     (_, operation) <- expectRight =<< run env (Store.acceptOperation access (fixtureRevision 0) (spec snapshot 0) secretInput)
     let first = concurrentModelSubmission operation
         old = Attempt.JobReference V1 snapshot.executionId operation.specification.operationId first.request.attemptId
@@ -1272,6 +1281,7 @@ recoveryCapacityCase fixture = testCase "a refused recovery preserves the unknow
 toolRecoveryCase :: DatabaseFixture -> RecoveryClass -> TestTree
 toolRecoveryCase fixture recovery = testCase (show recovery <> " retains its logical key through a lost native receipt") $
   withConfiguredResourceFixture fixture (\snapshot -> toolConfiguration snapshot & #toolBindings .~ [observationBinding & #recovery .~ recovery]) (Map.insert R.ActiveWork (R.Limited (fixtureAmount 2))) \env snapshot access -> do
+    configureTestCapacity env 2
     (response, assistant) <- commitToolRequest env snapshot access
     let binding = observationBinding & #recovery .~ recovery
         input = ToolOperationInput response (fixtureToolPosition 0) (head (toolInvocations assistant)) binding
@@ -1355,6 +1365,66 @@ modelSubmission operation =
 
 terminalAttempt :: Attempt.AttemptResult
 terminalAttempt = Attempt.AttemptResult modelOutcome (NeedValidation (mustRight (Store.outcomeReference modelOutcome))) (Just terminal)
+
+configureTestCapacity :: AppEnv -> Int -> IO ()
+configureTestCapacity env maximum = do
+  current <- expectRight =<< run env (runTransaction Capacity.inspectTx)
+  run env (runTransaction (Capacity.reconfigureTx current.revision (mustRight (Capacity.parseCapacityLimit maximum)))) >>= (@?= Right ())
+
+capacityOverlapCase :: DatabaseFixture -> IO ()
+capacityOverlapCase fixture = withConfiguredResourceFixture fixture id (Map.insert R.Tokens R.ExplicitlyUnbounded) \env first _ -> do
+  let second = anotherSnapshot first "capacity-second"
+  withStore env.connectionSettings (\store -> ensureRunQueue store.pool >>= expectRight)
+  run env (Store.admitExecution second) >>= (@?= Right R.Accepted)
+  bound <- expectRight =<< run env (runTransaction Capacity.inspectTx)
+  run env (runTransaction (Capacity.reconfigureTx bound.revision (mustRight (Capacity.parseCapacityLimit 2)))) >>= (@?= Right ())
+  (baseExecutor, _, _) <- driverRuntime env False
+  entered <- newEmptyMVar
+  release <- newEmptyMVar
+  intervals <- newIORef []
+  let selected = baseExecutor.selectionRuntime first
+      hold provider =
+        provider
+          & #complete
+          .~ ( \model context options -> do
+                 start <- getCurrentTime
+                 putMVar entered ()
+                 readMVar release
+                 answer <- Provider.complete provider model context options
+                 end <- getCurrentTime
+                 atomicModifyIORef' intervals (\previous -> ((start, end) : previous, ()))
+                 pure answer
+             )
+      providers = map hold selected.providers
+  registry <- Provider.newProviderRegistryFrom providers
+  let executor = baseExecutor {Executor.selectionRuntime = const (selected {providers = providers, baseEnv = selected.baseEnv & #providerRegistry .~ Just registry})}
+  forM_ [first, second] \snapshot -> do
+    let prepare remaining
+          | remaining <= (0 :: Int) = assertFailure "accepted driver did not suspend"
+          | otherwise = do
+              outcome <- run env (runWorkflow DriverGenerated.workflowName (executionWorkflowId snapshot.executionId) (Driver.executionWorkflow executor (Just (Driver.ExecutionStart snapshot.executionId))))
+              case outcome of ContinuedAsNew -> prepare (remaining - 1); Suspended -> pure (); _ -> assertFailure (show outcome)
+    prepare 4
+  a <- pendingReference env first
+  b <- pendingReference env second
+  withAsync (Executor.executeAcceptedAttempt executor first.identity a) \left -> do
+    Timeout.timeout 2000000 (takeMVar entered) >>= maybe (assertFailure "first provider did not enter within its barrier deadline") pure
+    withAsync (Executor.executeAcceptedAttempt executor second.identity b) \right -> do
+      Timeout.timeout 2000000 (takeMVar entered) >>= maybe (assertFailure "second provider did not enter within its barrier deadline") pure
+      current <- expectRight =<< run env (runTransaction Capacity.inspectTx)
+      current.active @?= 2
+      -- Both accepted providers are held outside transactions and workflow
+      -- leases. An unrelated workflow can commit while neither has completed.
+      run env (runWorkflow (WorkflowName "capacity-unrelated") (WorkflowId "ready-root") (step (StepName "progress") (pure True))) >>= (@?= Completed True)
+      putMVar release ()
+      wait left >>= (@?= Right Executor.ExecutorDone)
+      wait right >>= (@?= Right Executor.ExecutorDone)
+  observed <- readIORef intervals
+  case observed of
+    [(aStart, aEnd), (bStart, bEnd)] -> assertBool "provider intervals overlap" (max aStart bStart < min aEnd bEnd)
+    _ -> assertFailure "expected two actual provider intervals"
+  final <- expectRight =<< run env (runTransaction Capacity.inspectTx)
+  final.active @?= 0
 
 withPreparedModel :: DatabaseFixture -> (AppEnv -> ExecutionSnapshot -> Store.ReplayAccess -> Operation -> Attempt.JobReference -> IO a) -> IO a
 withPreparedModel fixture use = withFixture fixture \env snapshot access -> do

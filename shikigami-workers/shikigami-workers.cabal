@@ -222,6 +222,7 @@ test-suite shikigami-workers-test
   other-modules:
     Shikigami.Agent.RunJob.WorkerSpec
     Shikigami.AgentRun.StatusSpec
+    Shikigami.ExecutionCapacitySpec
     Shikigami.Fixture.ExecutionIdentity
     Shikigami.Health.SupervisionSpec
     Shikigami.Health.WorkerSpec

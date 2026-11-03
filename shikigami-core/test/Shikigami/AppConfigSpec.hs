@@ -61,6 +61,7 @@ import Shikigami.Agent.Principal (principalText)
 import Shikigami.App.Config
 import Shikigami.App.Config.Load
 import Shikigami.Duration (parseDuration)
+import Shikigami.Execution.Capacity qualified as Capacity
 import Shikigami.Execution.Policy.Limits (PolicyNumber (..))
 import Shikigami.Execution.Policy.Types qualified as Harness
 import Shikigami.Inspection.Settings qualified as Inspection
@@ -173,6 +174,7 @@ surfaceTests =
                 "sinks.kizashi.base_url",
                 "sinks.kizashi.default_recipient",
                 "sinks.rei.base_url",
+                "worker.capacity",
                 "worker.run_timeout_seconds",
                 "workspace.supervisor",
                 "workspaces"
@@ -258,6 +260,7 @@ surfaceTests =
               ("SHIKIGAMI_SINKS_KIZASHI_DEFAULT_RECIPIENT", "sinks.kizashi.default_recipient"),
               ("SHIKIGAMI_SCHEDULER_CATCH_UP", "scheduler.catch_up"),
               ("SHIKIGAMI_SINKS_REI_BASE_URL", "sinks.rei.base_url"),
+              ("SHIKIGAMI_WORKER_CAPACITY", "worker.capacity"),
               ("SHIKIGAMI_RUN_TIMEOUT_SECONDS", "worker.run_timeout_seconds")
             ],
       testCase "every declared key can be set from the environment" $
@@ -363,6 +366,13 @@ precedenceTests =
         report.exitCode @?= 0
         assertBool "source paths are operator-private diagnostics" (not ("approved-source" `Text.isInfixOf` (report.standardOutput <> report.standardError)))
         (runWith (diagnosticOptions CheckConfig) [] [("SHIKIGAMI_WORKSPACES", "{\"storageRoot\":\"/private/approved-source\",\"repositories\":[],\"grants\":[],\"unexpected\":true}")]).exitCode @?= 4,
+      testCase "worker capacity has serial defaults and checked independent execution and advance limits" do
+        defaultAppConfig.capacity @?= Capacity.defaultRuntimeLimits
+        config <- resolveOrFail (optionsWith [] []) [] [("SHIKIGAMI_WORKER_CAPACITY", "{\"execution\":2,\"advances\":3}")]
+        Capacity.capacityLimit config.capacity.execution @?= 2
+        Capacity.capacityLimit config.capacity.advances @?= 3
+        forM_ ["{\"execution\":0,\"advances\":1}", "{\"execution\":1,\"advances\":-1}", "{\"execution\":2,\"advances\":2,\"unexpected\":true}"] \invalid ->
+          assertBool "invalid capacity refused" ((runWith (optionsWith [] []) [] [("SHIKIGAMI_WORKER_CAPACITY", invalid)]).exitCode /= 0),
       testCase "harness options resolve through file environment and CLI with bounded validation" do
         config <-
           resolveOrFail

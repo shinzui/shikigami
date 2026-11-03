@@ -70,7 +70,7 @@ data ExecutionRuntime = ExecutionRuntime
     timeoutSeconds :: !(Duration "agent-run")
   }
 
-data ExecutorResult = ExecutorDone | ExecutorRetry | ExecutorWait !(Duration "executor-wait") | ExecutorInvalidReference
+data ExecutorResult = ExecutorDone | ExecutorDeferred | ExecutorRetry | ExecutorWait !(Duration "executor-wait") | ExecutorInvalidReference
   deriving stock (Eq, Show)
 
 runExecutionStore :: ExecutionRuntime -> Eff AppEffects (Either ExecutionError a) -> IO (Either ExecutionError a)
@@ -113,6 +113,9 @@ executeAcceptedAttempt env@ExecutionRuntime {withTools} identity reference = do
                         let oldClaim = Attempt.AttemptClaim reference formerOwner current.generation
                         result <- runExecutionStore env (Store.markExecutionAttemptUncertain permit freshState.revision oldClaim)
                         case result of Right _ -> publish; Left err -> pure (Left err)
+                    -- The accepted driver owns the retained ticket and bounded timer
+                    -- repair. Capacity pressure is not a failed provider delivery.
+                    Left ExecutionCapacityUnavailable -> pure (Right ExecutorDeferred)
                     Left ResourceAdmissionRefused {} -> owned (Store.refuseUndispatchedExecutionAttempt identity freshState.revision reference) >>= \case Right _ -> publish; Left err -> pure (Left err)
                     Left err -> pure (Left err)
                     Right (Attempt.ClaimGranted lease) -> runClaim permit snapshot lease
@@ -141,14 +144,22 @@ executeAcceptedAttempt env@ExecutionRuntime {withTools} identity reference = do
             Left ResourceAdmissionRefused {} -> owned (Store.abandonExecutionAttempt access state.revision reference) >>= \case Right _ -> publish; Left err -> pure (Left err)
             Left ExecutionPolicyRefused {} -> owned (Store.abandonExecutionAttempt access state.revision reference) >>= \case Right _ -> publish; Left err -> pure (Left err)
             Left err -> pure (Left err)
-            Right Accepted -> Exception.mask \restore -> do
+            Right Accepted -> runStarted access snapshot lease
+    runStarted access snapshot lease = do
+      result <-
+        Exception.finally
+          ( Exception.mask \restore -> do
               dispatched <- Exception.try @Exception.SomeException (restore (timeout (max 1 (min 3500 (floor (durationTime env.timeoutSeconds))) * 1000000) (dispatch access snapshot lease)))
               result <- case dispatched of
                 Right (Just value) -> pure value
                 _ -> markUnknown access lease
               case dispatched of
                 Left exception | Just (_ :: Exception.SomeAsyncException) <- Exception.fromException exception -> Exception.throwIO exception
-                _ -> case result of Right () -> publish; Left err -> pure (Left err)
+                _ -> pure result
+          )
+          (void (owned (Store.releaseStoppedExecutionAttempt lease)))
+      case result of Right () -> publish; Left err -> pure (Left err)
+
     markUnknown access lease =
       currentState access >>= \case
         Right (_, state) -> do
