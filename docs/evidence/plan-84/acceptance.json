@@ -1,0 +1,229 @@
+{
+  "date": "2026-11-03",
+  "plan": "docs/plans/84-coordinate-continuing-worker-sessions-and-fenced-handoffs.md",
+  "baseline": "0e38c0a8",
+  "status": "passed",
+  "host": {
+    "environment": "aarch64-darwin, GHC 9.12.4; PostgreSQL cases use isolated disposable databases; serial fixture profile",
+    "build": "cabal build all -j2",
+    "suites": {
+      "shikigami-agent-test": {
+        "cases": 37,
+        "result": "passed",
+        "seconds": "0.78s"
+      },
+      "shikigami-api-test": {
+        "cases": 35,
+        "result": "passed",
+        "seconds": "0.02s"
+      },
+      "shikigami-client-test": {
+        "cases": 9,
+        "result": "passed",
+        "seconds": "0.00s"
+      },
+      "shikigami-core-postgres-test": {
+        "cases": 547,
+        "result": "passed",
+        "seconds": "189.77s"
+      },
+      "shikigami-core-test": {
+        "cases": 689,
+        "result": "passed",
+        "seconds": "6.64s"
+      },
+      "shikigami-workers-test": {
+        "cases": 281,
+        "result": "passed",
+        "seconds": "199.56s"
+      },
+      "shikigami-server-test": {
+        "cases": 105,
+        "result": "passed",
+        "seconds": "22.64s"
+      }
+    },
+    "totalPackageCases": 1703,
+    "domainSuite": "passed; generated behavior expectations and aggregate conformance",
+    "fullTestCommand": "nix develop --no-write-lock-file -c cabal test shikigami-core-test shikigami-core-postgres-test shikigami-agent-test shikigami-server-test shikigami-workers-test shikigami-api-test shikigami-client-test shikigami-core-domain-test -j1 --test-show-details=direct --test-option=--num-threads=1",
+    "fullTestLogSha256": "b5d599cd55e9ad1a0a4de42d7014e7d9151e7c7262a5de8668c52ab8a3b0cb5e",
+    "recoveryCase": "continuing followup compacts and resumes with retained findings queued messages and deduplicated native control",
+    "rpcCases": 11,
+    "haskellConventions": "passed",
+    "haskellConventionToolCases": 13,
+    "migrationSchemaIsolation": "passed"
+  },
+  "workflowGate": {
+    "status": "passed",
+    "baseline": "0e38c0a8",
+    "breaking": false,
+    "findings": 0,
+    "replayImpact": {
+      "verdict": "replay-neutral"
+    },
+    "generatedConformanceChecks": 177,
+    "logSha256": "76f2ba8f8cc74ca69575a679132f36f6d10b2f702da1e3e254fbc5d45d14ffed"
+  },
+  "nativeOperatorRecovery": {
+    "status": "passed",
+    "caseCount": 9,
+    "runnerCommit": "f9cba01e",
+    "command": "bash tests/workspace/run-apple.sh --ownership-only /nix/store/wjw14hq8742mwg1lal3wfsrvivi4m9a4-shikigami-workspace-prototype-0.1.0.0-dirty",
+    "runtime": "/nix/store/wjw14hq8742mwg1lal3wfsrvivi4m9a4-shikigami-workspace-prototype-0.1.0.0-dirty",
+    "runtimeSource": "Immutable output built from the implementation working tree before b8611d2b; subsequent compiled-source changes were formatting only. The streamed runner at f9cba01e additionally requires both operator replies to establish the exact handoff.",
+    "environment": "Disposable Apple arm64 Linux guest; x86_64 Haskell controller outside the payload namespace; native arm64 payloads and deadline guards; loopback-only task SSH with generated credentials, no host mounts.",
+    "operatorReplies": [
+      {
+        "contents": {
+          "contents": [
+            {
+              "kind": "verified",
+              "principalId": "agent_01h000000000000000successor"
+            },
+            1
+          ],
+          "tag": "HandoffEstablished"
+        },
+        "tag": "TransferObserved"
+      },
+      {
+        "contents": {
+          "contents": [
+            {
+              "kind": "verified",
+              "principalId": "agent_01h000000000000000successor"
+            },
+            1
+          ],
+          "tag": "HandoffEstablished"
+        },
+        "tag": "TransferObserved"
+      }
+    ],
+    "ownership": {
+      "objective": "shikigami_objective_01m6hf5zpfejhr4c7g1c6pm7gw",
+      "revision": 4,
+      "sessionOwner": {
+        "kind": "verified",
+        "principalId": "agent_01h000000000000000triage"
+      },
+      "sessionEpoch": 0,
+      "commandReceipt": {
+        "outcome": {
+          "Right": {
+            "revision": 4,
+            "fingerprint": "sha256:948575b0e92fe854f0c7d34e9979b31001a1a56522569943f2b373c4bbdef839",
+            "objectiveId": "shikigami_objective_01m6hf5zpfejhr4c7g1c6pm7gw",
+            "operationId": "objective-handoff:sha256:fbc70fa6ca0755545e3240463e5ff45dd64960026babcd8df8b9a17e62c76374",
+            "payloadDigest": "sha256:ce88ace34c4ef64722f5ac5c139222cf5779bebf49d8b56c51f9bc2559ab2eba"
+          }
+        },
+        "fingerprint": "sha256:948575b0e92fe854f0c7d34e9979b31001a1a56522569943f2b373c4bbdef839",
+        "objectiveId": "shikigami_objective_01m6hf5zpfejhr4c7g1c6pm7gw",
+        "operationId": "objective-handoff:sha256:fbc70fa6ca0755545e3240463e5ff45dd64960026babcd8df8b9a17e62c76374"
+      },
+      "establishedFence": {
+        "oldOwnerAdmitted": false,
+        "successorAdmitted": true,
+        "oldEpoch": 0,
+        "successorEpoch": 1
+      }
+    },
+    "successor": {
+      "admission": {
+        "workspace": {
+          "provider": "shikigami.workspace/1",
+          "resource": "541b238d679bbbf1076f0f634ff3fbad4061f17cd3296a9761862fed5d5cf58f"
+        },
+        "runId": "865a3ae9-9b58-55b8-ae2e-2dba72115ff3",
+        "assignmentId": "assignment:sha256:497bb63b971fc70273a80338eb659d21b56c82f17a854e37b4b2951bf787987a",
+        "owner": {
+          "kind": "verified",
+          "principalId": "agent_01h000000000000000successor"
+        },
+        "epoch": 1,
+        "rootId": "shikigami_execution_root_01j0000000fjp8xw9aeaz802w0",
+        "bindingDigest": "sha256:4d580a64cf0278b047aa342cc85ead5e8458203f38a818438182e2643f6c8b6b"
+      },
+      "process": {
+        "operationId": "operation:sha256:000f43e2f3752f940d242976afc1acb7b1932e2774f107d72ef529be248b33a8",
+        "attemptId": "shikigami_execution_attempt_01j0000000fhj8gxe19cg24pk9",
+        "generation": 1,
+        "bindingDigest": "sha256:4d580a64cf0278b047aa342cc85ead5e8458203f38a818438182e2643f6c8b6b",
+        "bootId": "02106bc7-9de7-44ba-9d4e-d6dabc7a2ce6",
+        "invocationId": "a406a3aecdb445b482ffc975ba9e30c7",
+        "unit": "shikigami-workspace-6a7b9a7ecc5cf65d6767a9884f245a0fcafd7a1248de853cbb62523701854368.service",
+        "termination": "ProcessExited",
+        "exitCode": 0,
+        "descendantsEmpty": true,
+        "outputComplete": true
+      }
+    },
+    "fence": {
+      "oldOwnerAdmitted": false,
+      "successorAdmitted": true,
+      "oldEpoch": 0,
+      "successorEpoch": 1
+    },
+    "cases": [
+      "native provisioning retains its original identity after ready acknowledgement loss",
+      "native duplicate provisioning recovers the exact ready profile",
+      "a real in-flight descendant and held collector keep the transfer fence unresolved",
+      "provider restart recovers the original actual and exact settled fence after authority denial",
+      "a real accepted late old-owner edit and unestablished successor admission both refuse under fresh authority",
+      "real objective ownership commits once while acknowledgement loss leaves the local session frozen",
+      "restarted real ownership recovery admits an accepted successor write and native validation in the original workspace",
+      "established successor authority refuses the former owner at the live workspace write boundary",
+      "retained workflow/operation metadata and public logs exclude fixture contents, credentials and bearer authority"
+    ],
+    "runnerSha256": {
+      "tests/workspace/run-apple.sh": "30406b771a242c699aec88d4976ff44f6306a093da7bb30f338bca7a97077e2d",
+      "tests/workspace/run-linux.sh": "ac29d42c45e3a0fdd580fed2ec6404daaaae259098cb27f544bc0e06a55dd51e"
+    },
+    "logSha256": "254dfad729ea6807356d134ab7534bea5c9579e9ac843163e3a119f232a890b2",
+    "limits": "Short commands admitted around guest realtime clock steps; no translated payload, long-running clock-step, external model, adaptive coordinator or live coding qualification.",
+    "previousAttempt": {
+      "status": "failed",
+      "cause": "The guest fixture used the relative default agents directory, which was absent before the operator could return a reply.",
+      "friction": "FRIC-50",
+      "fixedInRunner": "f9cba01e"
+    }
+  },
+  "priorRealProviderEvidence": [
+    "docs/evidence/plan-99/provider-completion-qualification.json",
+    "docs/evidence/plan-96/joint-native-qualification.json"
+  ],
+  "acceptanceMatrix": "docs/evidence/plan-84/acceptance.md",
+  "limits": [
+    "Deterministic model responses; no external model invocation or live coding trial.",
+    "Adaptive proposal validation and shared runtime-capacity acceptance remain in plan 85.",
+    "Integrated UC-1/live coding acceptance remains in plan 86; recurring mandates remain in plan 87."
+  ],
+  "linuxBuild": {
+    "status": "passed",
+    "command": "nix build .#packages.x86_64-linux.shikigami-workspace-prototype --max-jobs 0 --cores 2 --no-link --no-write-lock-file --print-build-logs --json",
+    "derivation": "/nix/store/mmybfnfaycyrkwjy8l41xk5609v1j226-shikigami-workspace-prototype-0.1.0.0-dirty.drv",
+    "runtime": "/nix/store/wjw14hq8742mwg1lal3wfsrvivi4m9a4-shikigami-workspace-prototype-0.1.0.0-dirty",
+    "logSha256": "32281d1779ceb53ff0aa173c101565105a1d2345fe759f7797a8d0a3ce1dff1a"
+  },
+  "implementationCommit": "b8611d2b",
+  "friction": [
+    {
+      "id": "FRIC-13",
+      "status": "accepted",
+      "resolution": "Retain the existing tested module-local compiler optimization workaround; no upstream compiler fix is claimed."
+    },
+    {
+      "id": "FRIC-50",
+      "status": "resolved",
+      "resolution": "The generated guest configuration names the copied manifest directory explicitly; all nine native ownership/restart cases pass on retry."
+    }
+  ],
+  "documentationChecks": {
+    "improvementRequests": "18 concepts pass profile and log enforcement",
+    "capabilities": "30 concepts, 96 evidence links and 30 mirrored requirements pass",
+    "userDocumentation": "17 concepts pass strict profile and log enforcement",
+    "localLinks": "all changed Markdown/HTML local file links resolve",
+    "mina": "default incomplete view excludes plan 84; complete view lists plan 84; plan 85 remains not_started"
+  }
+}

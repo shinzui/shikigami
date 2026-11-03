@@ -30,7 +30,7 @@ evidence:
     resource: "shikigami-api/test/Shikigami/Api/OpenApiSpec.hs"
     proves: "Generated OpenAPI contract behavior."
   - kind: example
-    resource: "tests/hurl/health.hurl"
+    resource: "shikigami-api/test/hurl/health.hurl"
     proves: "Executable HTTP probe assertions."
 ---
 
@@ -51,7 +51,7 @@ Start `shikigami-server` with its resolved configuration, call the probe routes,
 - [Api.hs](../../shikigami-api/src/Shikigami/Api.hs): Health is mounted separately from the authenticated agents vertical.
 - [DispatchSpec.hs](../../shikigami-server/test/Shikigami/Server/DispatchSpec.hs): Documented paths equal served paths and the two probes use their intended checks.
 - [OpenApiSpec.hs](../../shikigami-api/test/Shikigami/Api/OpenApiSpec.hs): Generated OpenAPI contract behavior.
-- [health.hurl](../../tests/hurl/health.hurl): Executable HTTP probe assertions.
+- [health.hurl](../../shikigami-api/test/hurl/health.hurl): Executable HTTP probe assertions.
 
 ## Limits
 

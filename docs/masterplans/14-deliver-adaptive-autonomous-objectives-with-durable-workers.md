@@ -47,6 +47,11 @@ provenance:
       at: 2026-11-02T18:39:36Z
       mode: "update"
       note: "Track plan 96 real workspace/objective qualification while retaining child completion and integrated acceptance gates."
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-11-03T19:11:01Z
+      mode: "update"
+      note: "Reconcile EP-4 consumer acceptance and the EP-5 start gate with plan 84 closeout evidence."
 ---
 
 # Deliver adaptive autonomous objectives with durable workers
@@ -92,7 +97,7 @@ Relevant local decisions consulted include [ADR 0007](../adr/0007-a-resolved-pro
 | EP-1 | Enforce root resource reservations across durable work | [docs/plans/81-enforce-root-resource-reservations-across-durable-work.md](../plans/81-enforce-root-resource-reservations-across-durable-work.md) | None | None | Complete |
 | EP-2 | Pin governed execution settings for agent assignments | [docs/plans/82-pin-governed-execution-settings-for-agent-assignments.md](../plans/82-pin-governed-execution-settings-for-agent-assignments.md) | EP-1; external plan 73 | None | Complete |
 | EP-3 | Recover durable model and tool turns with composed policies | [docs/plans/83-recover-durable-model-and-tool-turns-with-composed-policies.md](../plans/83-recover-durable-model-and-tool-turns-with-composed-policies.md) | EP-1, EP-2 | None | Complete |
-| EP-4 | Coordinate continuing worker sessions and fenced handoffs | [docs/plans/84-coordinate-continuing-worker-sessions-and-fenced-handoffs.md](../plans/84-coordinate-continuing-worker-sessions-and-fenced-handoffs.md) | EP-1, EP-2, EP-3; IR-11/joint provider boundary qualified by plan 96; IR-13 provider qualified by plan 99; full consumer acceptance retained | None | In Progress |
+| EP-4 | Coordinate continuing worker sessions and fenced handoffs | [docs/plans/84-coordinate-continuing-worker-sessions-and-fenced-handoffs.md](../plans/84-coordinate-continuing-worker-sessions-and-fenced-handoffs.md) | EP-1, EP-2, EP-3; IR-11/joint provider boundary qualified by plan 96; IR-13 provider qualified by plan 99; full consumer acceptance qualified by plan 84 | None | Complete |
 | EP-5 | Adapt durable delivery through validated coordinator decisions | [docs/plans/85-adapt-durable-delivery-through-validated-coordinator-decisions.md](../plans/85-adapt-durable-delivery-through-validated-coordinator-decisions.md) | EP-4; external plan 76; completion gate IR-13 provider | None | Not Started |
 | EP-6 | Qualify integrated adaptive autonomous delivery | [docs/plans/86-qualify-integrated-adaptive-autonomous-delivery.md](../plans/86-qualify-integrated-adaptive-autonomous-delivery.md) | EP-5; IR-11 and IR-13 providers before milestones 2–3 | None | Not Started |
 | EP-7 | Supervise recurring objectives from current durable checkpoints | [docs/plans/87-supervise-recurring-objectives-from-current-durable-checkpoints.md](../plans/87-supervise-recurring-objectives-from-current-durable-checkpoints.md) | EP-5; completion gate IR-13 provider | EP-6 fixture reuse | Not Started |
@@ -150,6 +155,17 @@ Coordinate those prerequisite deliverables with their separate owning plans when
 ## Progress
 
 
+2026-11-03 current state: EP-1 through EP-4 are Complete. Plan 84 closes the
+continuing-worker consumer boundary and IR-15, including the combined
+follow-up/compaction/replay case and actual operator recovery against the real
+workspace/objective providers. See its [acceptance matrix](../evidence/plan-84/acceptance.md)
+and [results](../evidence/plan-84/acceptance.json). IR-14 acceptance 8 is established
+for this consumer and retains its integrated UC-1 recheck in EP-6. EP-5's hard
+start prerequisites are satisfied; its adaptive implementation has not started.
+EP-6 and EP-7 continue to wait for EP-5. The initiative remains in progress.
+
+Historical checkpoints below describe their named revisions and earlier gates.
+
 2026-10-28: EP-1 through EP-3 are Complete. The execution harness now includes
 both patched parent lifecycles, configured policies, ephemeral/durable one-off
 paths, safe uncertainty recovery, protected replay and bounded inspection. Final
@@ -162,7 +178,7 @@ qualification includes a forced-GC deployment regression; plan 84 records the
 accepted module-local GHC optimization workaround and throughput qualification
 limit in FRIC-13.
 
-EP-4 remains In Progress solely at its real-provider qualification boundary:
+At the 2026-10-28 checkpoint, EP-4 remained In Progress solely at its real-provider qualification boundary:
 IR-11 workspace/process fences and IR-13 authoritative objective/checkpoint
 ownership and retained coordination associations were unselected at that check,
 which found both requests proposed with no complete providers. EP-5 requires
@@ -191,14 +207,14 @@ status or dependency edge changes. EP-5 remains gated by EP-4 and EP-6's live
 milestones remain gated by both real providers. Plan 96's workspace-only
 fixtures cannot complete this MasterPlan's integrated acceptance.
 
-2026-11-02 UTC prerequisite update: plan 99 completes the real IR-13 objective/checkpoint, ownership and retained coordination source gate. [Provider completion evidence](../evidence/plan-99/provider-completion-qualification.json) records eleven provider cases, 632 core, 490 PostgreSQL, 280 worker, 96 server and 37 agent cases, with a neutral native gate and 169 conformance checks. Worker/operator composition now uses those adapters. Plan 84's IR-11 and joint real successor/late-writer/restart qualification remains open; its status stays In Progress and EP-5 still waits for the whole child. No dependency edge or other child status changes, and no workspace fencing is inferred from the deterministic objective-side fixture.
+2026-11-02 UTC prerequisite update: plan 99 completes the real IR-13 objective/checkpoint, ownership and retained coordination source gate. [Provider completion evidence](../evidence/plan-99/provider-completion-qualification.json) records eleven provider cases, 632 core, 490 PostgreSQL, 280 worker, 96 server and 37 agent cases, with a neutral native gate and 169 conformance checks. Worker/operator composition now uses those adapters. Plan 84's IR-11 and joint real successor/late-writer/restart qualification remains open; at that checkpoint its status remained In Progress and EP-5 waited for the whole child. No dependency edge or other child status changes, and no workspace fencing is inferred from the deterministic objective-side fixture.
 
 2026-11-02 workspace prerequisite accepted: plan 96 completes IR-11 on runtime
 `d38d2793` with 25 native cases and all host checks. Its
 [joint provider evidence](../evidence/plan-96/joint-native-qualification.json) uses plan 99's real objective
 owner and proves lost acknowledgement/restart, accepted successor effects and
 post-establishment old-owner fencing. Both real provider boundaries are now
-available to EP-4 and EP-6. EP-4 stays In Progress for its full IR-15 consumer
+available to EP-4 and EP-6. At that checkpoint, EP-4 stayed In Progress for its full IR-15 consumer
 acceptance review; EP-5 still requires the whole EP-4. No child status or hard
 dependency edge changes. EP-6 retains adaptive and live coding acceptance.
 
@@ -278,4 +294,4 @@ recurring child gates. See [objective operations](../operations/objective-tracki
 ## Outcomes & Retrospective
 
 
-To be filled during implementation. Completion requires all seven children, the external integration gates, the acceptance ownership matrix above, workflow evolution/conformance evidence and ADR distillation. Finite delivery may be qualified before recurrence; report that narrower milestone honestly without marking the entire initiative complete.
+EP-1 through EP-4 are complete. EP-5 may begin; EP-6 and EP-7 still wait for its adaptive coordinator and capacity acceptance. Overall completion requires all seven children, the acceptance ownership matrix above, workflow evolution/conformance evidence and ADR distillation. Finite delivery may be qualified before recurrence; report that narrower milestone honestly without marking the entire initiative complete.

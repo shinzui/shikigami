@@ -24,7 +24,7 @@ evidence:
     resource: "shikigami-core/test/Shikigami/AppConfigSpec.hs"
     proves: "Configuration resolution, validation, secret redaction, and diagnostics without live resource acquisition."
   - kind: test
-    resource: "shikigami-workers/test/Shikigami/Workers/SupervisionSpec.hs"
+    resource: "shikigami-workers/test/Shikigami/Health/SupervisionSpec.hs"
     proves: "Signal shutdown, sibling cancellation, resume retry limits, and bounded drain behavior."
   - kind: test
     resource: "shikigami-workers/test/Shikigami/TimerRecoverySpec.hs"
@@ -55,7 +55,7 @@ Resolve each role's configuration and use `--describe-config`, `--describe-confi
 - [Runs.hs](../../shikigami-server/src/Shikigami/Server/Command/Runs.hs): joined run/session inspection.
 - [RequestLogSpec.hs](../../shikigami-server/test/Shikigami/Server/RequestLogSpec.hs): request logging contract.
 - [AppConfigSpec.hs](../../shikigami-core/test/Shikigami/AppConfigSpec.hs): shared configuration contract.
-- [SupervisionSpec.hs](../../shikigami-workers/test/Shikigami/Workers/SupervisionSpec.hs): Signal shutdown, sibling cancellation, resume retry limits, and bounded drain behavior.
+- [SupervisionSpec.hs](../../shikigami-workers/test/Shikigami/Health/SupervisionSpec.hs): Signal shutdown, sibling cancellation, resume retry limits, and bounded drain behavior.
 - [TimerRecoverySpec.hs](../../shikigami-workers/test/Shikigami/TimerRecoverySpec.hs): Expired guarded timer claim recovery fences stale claim tokens.
 - [TelemetrySpec.hs](../../shikigami-workers/test/Shikigami/TelemetrySpec.hs): Force-flush exports all run/queue/consumer metrics and independent sampling survives a failed target.
 - [configuration.md](../../docs/operations/configuration.md): Per-binary settings, sources, redacted explanation, and check-only diagnostics.

@@ -23,6 +23,11 @@ provenance:
       at: 2026-10-22T01:19:09Z
       mode: "update"
       note: "Cite ADR 0041 and ADR 0004; IR-13 provider is a completion gate, not a start gate"
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-11-03T19:13:47Z
+      mode: "update"
+      note: "Refresh delivered decision and objective prerequisites without claiming adaptive coordinator implementation."
 ---
 
 # Adapt durable delivery through validated coordinator decisions
@@ -41,7 +46,7 @@ Let a coordinator change its organization when new evidence warrants it: work di
 ## Progress
 
 
-Implementation has not started. Seed unchecked milestone entries when implementation begins.
+Implementation has not started. Plan 84 completed on 2026-11-03; plans 73–76 and the real objective/checkpoint provider are also complete. All hard start prerequisites are satisfied. Seed unchecked milestone entries when implementation begins.
 
 
 ## Surprises & Discoveries
@@ -65,11 +70,11 @@ To be filled during implementation. Do not claim request completion until every 
 ## Context and Orientation
 
 
-`shikigami-core/src/Shikigami/Agent/Workflow.hs` currently substitutes a fixed supervisor for a non-Flow agent declaring delegates, and refuses delegating-Skill overlays. `shikigami-core/src/Shikigami/Flow.hs` registers compiled behaviors. Select a new compiled `adaptive-delivery` Flow that consumes governed typed decisions and continuing-worker capabilities; the coordinator instructions become pinned decision inputs. Do not silently change the old supervisor branch or add raw provider IO to a Flow.
+`shikigami-core/src/Shikigami/Agent/Workflow.hs` retains a fixed supervisor for an ordinary Skill declaring delegates. Its explicit CoordinatingSkill arm consumes admitted continuing-worker scopes; declaration text supplies no authority. `shikigami-core/src/Shikigami/Flow.hs` registers compiled behaviors. Select a new compiled `adaptive-delivery` Flow that consumes governed typed decisions and continuing-worker capabilities; the coordinator instructions become pinned decision inputs. Do not silently change the old supervisor branch or add raw provider IO to a Flow.
 
 `shikigami-core/src/Shikigami/Workflow/Versioning.hs` currently fixes `maxConcurrentAdvances` to one. Child count therefore does not demonstrate useful simultaneous progress. Plan 83's submit/observe execution driver separates long external work from short workflow advancement. A runtime capacity limit bounds executor occupancy; a root resource limit bounds one objective across all processes. Both must hold.
 
-[ADR 0028](../adr/0028-a-router-catalog-is-a-bounded-snapshot-of-declared-authority.md) pins the permitted target universe; [ADR 0029](../adr/0029-model-routing-output-is-a-proposal-until-validated-against-journaled-authority.md) validates model output before action. [ADR 0013](../adr/0013-flow-bodies-reach-the-world-only-through-capabilities.md) preserves capability-only IO, and [ADR 0038](../adr/0038-runtime-startup-and-maintenance-share-validated-owners.md) requires measured pool headroom. [ADR 0041](../adr/0041-durable-decisions-bind-program-state-and-preserve-committed-outcomes.md) binds every typed decision to an immutable program registration, a versioned digest of its complete parameter state and its derivation version, and requires a committed outcome to be read through its retained codec before any live registration is consulted; milestone 2's submit/observe call site must persist those identities with the prepared work and never recompute a committed result. [ADR 0004](../adr/0004-one-options-value-and-a-checked-patch-set.md) is why milestone 3 changes `maxConcurrentAdvances` only through the single `WorkflowRunOptions` owner in `Workflow/Versioning.hs`. The existing IR-12 plans are not implemented yet and must not be treated as a working decision engine.
+[ADR 0028](../adr/0028-a-router-catalog-is-a-bounded-snapshot-of-declared-authority.md) pins the permitted target universe; [ADR 0029](../adr/0029-model-routing-output-is-a-proposal-until-validated-against-journaled-authority.md) validates model output before action. [ADR 0013](../adr/0013-flow-bodies-reach-the-world-only-through-capabilities.md) preserves capability-only IO, and [ADR 0038](../adr/0038-runtime-startup-and-maintenance-share-validated-owners.md) requires measured pool headroom. [ADR 0041](../adr/0041-durable-decisions-bind-program-state-and-preserve-committed-outcomes.md) binds every typed decision to an immutable program registration, a versioned digest of its complete parameter state and its derivation version, and requires a committed outcome to be read through its retained codec before any live registration is consulted; milestone 2's submit/observe call site must persist those identities with the prepared work and never recompute a committed result. [ADR 0004](../adr/0004-one-options-value-and-a-checked-patch-set.md) is why milestone 3 changes `maxConcurrentAdvances` only through the single `WorkflowRunOptions` owner in `Workflow/Versioning.hs`. The existing IR-12 plans 73–76 are complete and supply the typed decision engine. Plan 99 supplies the real objective/checkpoint provider. This child still owns adapting its new decision call site to the durable submit/observe executor and proving shared accounting and capacity; completion of those providers does not implement the adaptive coordinator.
 
 The repository is a Cabal multi-package Haskell service. `shikigami-core` owns domain behavior and store adapters; `shikigami-workers` owns queue, resume and timer processes; `shikigami-server` owns operator commands. `shikigami-migrations/sql-migrations/manifest` owns append-only SQL ordering. `shikigami-core/test-postgres/Main.hs` registers tests using `Shikigami.Migrations.TestSupport.withShikigamiMigratedSuite`, which supplies isolated disposable PostgreSQL databases. Register new modules and tests in the owning Cabal file and test entry point; generated files under `Generated/` are regenerated, never hand-edited.
 

@@ -20,7 +20,7 @@ evidence:
     proves: "One admitted scope and fresh authorization boundary for Flow, model and operator callers."
   - kind: test
     resource: "shikigami-core/test-postgres/Shikigami/WorkerSessionCapabilitySpec.hs"
-    proves: "Governed control, retained events and replay using explicit deterministic providers."
+    proves: "Governed control, retained events and combined follow-up/compaction/replay acceptance."
 ---
 
 # Continuing worker session primitives
@@ -38,10 +38,10 @@ Builds on [CAP-1: Typed agent declarations](typed-agent-declarations.md).
 ## Evidence
 
 - [Capability.hs](../../shikigami-core/src/Shikigami/WorkerSession/Capability.hs): One admitted scope and fresh authorization boundary for Flow, model and operator callers.
-- [WorkerSessionCapabilitySpec.hs](../../shikigami-core/test-postgres/Shikigami/WorkerSessionCapabilitySpec.hs): Governed control, retained events and replay using explicit deterministic providers.
+- [WorkerSessionCapabilitySpec.hs](../../shikigami-core/test-postgres/Shikigami/WorkerSessionCapabilitySpec.hs): Governed control, retained events and combined follow-up/compaction/replay acceptance.
 
 ## Limits
 
-Plan 84 remains in progress. Deterministic checkpoint/ownership adapters prove mechanics; real objective/checkpoint and workspace fences remain completion gates. Default CLI send/interrupt/integrate/transfer refuses work requiring these absent providers. This is not full adaptive delivery.
+Plan 84 is complete. The [consumer acceptance matrix](../evidence/plan-84/acceptance.md) combines retained mechanics with qualified real objective/checkpoint and workspace providers and native administrative recovery. Protected commands still require enabled tracking, admitted associations and, for repository transfer, the process-backed supervisor. File-only configuration supplies no process fence. Adaptive coordination, integrated live coding and recurrence remain in plans 85–87.
 
 This implementation is experimental and unreleased; no released compatibility promise is asserted.

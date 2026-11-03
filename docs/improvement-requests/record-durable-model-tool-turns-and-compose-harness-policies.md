@@ -2,10 +2,10 @@
 type: Improvement Request
 title: Record durable model and tool turns and compose harness policies
 description: Resume Skill execution from recorded model and tool outcomes and compose context, permission, budget, and termination policies over durable execution state.
-timestamp: "2026-10-29T13:33:46Z"
+timestamp: "2026-11-03T19:49:11Z"
 generated:
   by: process:codex
-  at: "2026-10-29T13:33:46Z"
+  at: "2026-11-03T19:49:11Z"
 requestId: IR-14
 status: in-progress
 targetPlan: docs/plans/83-recover-durable-model-and-tool-turns-with-composed-policies.md
@@ -23,11 +23,14 @@ recorded completion evidence is dated 2026-10-28; this audit does not rerun thos
 [plan 81](../plans/81-enforce-root-resource-reservations-across-durable-work.md) root accounting, [plan 82](../plans/82-pin-governed-execution-settings-for-agent-assignments.md) assignment selection and [plan 75](../plans/75-persist-decision-call-evidence-across-retries-and-restarts.md) typed-decision
 attempt evidence are also complete; decision evidence remains distinct from Skill replay.
 
-The request stays open for acceptance 8: continuing-assignment recovery in [plan 84](../plans/84-coordinate-continuing-worker-sessions-and-fenced-handoffs.md)
-and integrated [UC-1](../use-cases/adaptive-autonomous-delivery.md) qualification in
-[plan 86](../plans/86-qualify-integrated-adaptive-autonomous-delivery.md). Plan 84 has implemented mechanics against deterministic adapters but remains
-in progress at the real workspace/checkpoint provider boundary. Plan 86 is not started.
-Completion of plan 83 alone does not close this request.
+[Plan 84](../plans/84-coordinate-continuing-worker-sessions-and-fenced-handoffs.md)
+completed on 2026-11-03 and establishes acceptance 8's continuing-assignment,
+compaction, crash/replay, pinned-selection and shared-accounting behavior. Its
+[consumer acceptance matrix](../evidence/plan-84/acceptance.md) retains the proof.
+This request remains in progress for the integrated
+[UC-1](../use-cases/adaptive-autonomous-delivery.md) recheck owned by
+[plan 86](../plans/86-qualify-integrated-adaptive-autonomous-delivery.md), which has
+not started. Component completion does not close that integrated gate.
 
 ## Original problem
 

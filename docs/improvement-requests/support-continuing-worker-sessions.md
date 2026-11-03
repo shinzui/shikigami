@@ -2,12 +2,13 @@
 type: Improvement Request
 title: Support continuing worker sessions with durable coordination
 description: Let a coordinator address continuing workers, deliver follow-up assignments, observe progress and completion, and transfer ownership without losing accepted work or duplicating writers.
-timestamp: "2026-10-29T13:33:46Z"
+timestamp: "2026-11-03T19:51:00Z"
 generated:
   by: process:codex
-  at: "2026-10-29T13:33:46Z"
+  at: "2026-11-03T19:49:11Z"
 requestId: IR-15
-status: in-progress
+status: completed
+completedAt: "2026-11-03T19:51:00Z"
 targetPlan: docs/plans/84-coordinate-continuing-worker-sessions-and-fenced-handoffs.md
 origin: mori://shinzui/shikigami
 ---
@@ -16,19 +17,21 @@ origin: mori://shinzui/shikigami
 
 ## Status
 
-**In progress under [plan 84](../plans/84-coordinate-continuing-worker-sessions-and-fenced-handoffs.md) and [MasterPlan 14](../masterplans/14-deliver-adaptive-autonomous-objectives-with-durable-workers.md).** Ordered mailboxes, stable assignment
-identities, retained results/events, recoverable assignment workflows, checkpoint intents,
-fenced-handoff mechanics and governed Flow/Skill/operator commands are implemented against
-deterministic adapters. The plan's real-provider runtime qualification remains open.
+**Completed on 2026-11-03 under [plan 84](../plans/84-coordinate-continuing-worker-sessions-and-fenced-handoffs.md).**
+Ordered assignments, retained findings/results/events, replay-safe governed
+commands and real fenced ownership transfer satisfy all six acceptance cases.
+The [acceptance matrix](../evidence/plan-84/acceptance.md) names each consumer and
+provider proof; [retained results](../evidence/plan-84/acceptance.json) include
+1,703 passing package cases, compatible workflow conformance and nine native
+Linux ownership/restart cases exercising actual administrative recovery.
 
-Full completion requires actual workspace/process fences from [plan 96](../plans/96-provide-governed-mutable-repository-workspaces-for-durable-agents.md)
-([IR-11](provide-governed-mutable-repository-workspaces.md)) and trusted objective,
-checkpoint, ownership and scope providers from [MasterPlan 17](../masterplans/17-track-durable-objectives-and-authoritative-assignment-checkpoints-without-rei.md), especially [plan 99](../plans/99-supply-trusted-objective-associations-and-the-real-checkpoint-ownership-and-scope-providers.md)
-([IR-13](support-optional-major-task-tracking.md)). Neither provider is complete.
-[plan 86](../plans/86-qualify-integrated-adaptive-autonomous-delivery.md) supplies the integrated delivery trial after the required providers and
-coordinator are ready. Fixtures do not close the real handoff acceptance case.
-See [worker operations](../operations/operator-cli.md) for the implemented surface
-and its default-host refusals.
+[Plan 99](../plans/99-supply-trusted-objective-associations-and-the-real-checkpoint-ownership-and-scope-providers.md)
+supplies the qualified objective/checkpoint, ownership and scope providers.
+[Plan 96](../plans/96-provide-governed-mutable-repository-workspaces-for-durable-agents.md)
+supplies workspace/process fences and its full 25-case real-owner matrix.
+Plan 85 owns adaptive coordination, plan 86 integrated live coding qualification
+and plan 87 recurrence; those separate outcomes remain open. See
+[worker operations](../operations/operator-cli.md) for configuration and refusals.
 
 ## Problem and current coverage
 
@@ -40,8 +43,9 @@ Kioku memory and addressed Danwa conversations remain separate lifecycle concern
 The [public run-start API](expose-addressed-agent-runs-over-http.md) and
 [run-status API](expose-agent-run-status-over-http.md) are completed individual-run
 surfaces under [MasterPlan 15](../masterplans/15-expose-declared-agents-and-agent-runs-over-the-public-http-api.md); they do not provide general worker control. The default
-operator host still lacks the real checkpoint and workspace providers needed for new
-follow-ups, integration and transfer. [A2A interoperability](support-a2a-cross-runtime-agent-interoperability.md)
+operator host uses the real objective provider when tracking is enabled and
+selects the shared peer-checked workspace client from process-backed settings.
+Missing configuration still refuses protected work or leaves handoff unresolved. [A2A interoperability](support-a2a-cross-runtime-agent-interoperability.md)
 remains proposed and is not required for same-deployment session mechanics.
 
 ## Requested change

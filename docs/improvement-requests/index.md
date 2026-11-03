@@ -8,33 +8,6 @@ okf_version: "0.2"
 
 # Improvement Request
 
-Lifecycle and selected plans audited 2026-10-29 against child Progress/Outcomes
-and the parent acceptance matrices. Completed foundation plans do not close a
-request whose integrated acceptance is still open. Proposed requests have no
-selected plan for their full contract; related work is identified separately.
-Historical review/completion records retain their original dates.
-
-| Request | Lifecycle | Selected implementation owner | Coverage and remaining gates |
-| --- | --- | --- | --- |
-| [IR-1](consult-meibo-agent-lifecycle.md) | Completed | [Plan 23](../plans/23-agent-lifecycle-control-with-meibo-principals.md) | Lifecycle admission delivered |
-| [IR-2](authorized-cross-cluster-diagnostic-tools.md) | Proposed | None selected | Plan 77 is related same-cluster work only |
-| [IR-3](add-declarative-router-agents.md) | Completed | [MasterPlan 8](../masterplans/8-declarative-router-agents.md) | Plans 40–42 complete |
-| [IR-4](add-architecture-practice-review-flow.md) | In progress | [MasterPlan 9](../masterplans/9-architecture-practice-review-flow.md) | Plans 43–45 complete; 46 and 60–63 remain |
-| [IR-5](governed-agent-evolution.md) | Proposed | None selected | Plan 33 is related schema work only |
-| [IR-6](support-a2a-cross-runtime-agent-interoperability.md) | Proposed | None selected | Existing local delegation is not cross-runtime A2A |
-| [IR-7](attest-sanctioned-agent-execution.md) | In progress | [MasterPlan 10](../masterplans/10-sanctioned-execution-attestation-for-agent-runs.md) | Plans 49–51 complete; 52 remains |
-| [IR-8](expose-addressed-agent-runs-over-http.md) | Completed | [MasterPlan 15](../masterplans/15-expose-declared-agents-and-agent-runs-over-the-public-http-api.md) | Plan 90 complete |
-| [IR-9](key-agent-continuity-by-meibo-principal.md) | Completed | [Plan 54](../plans/54-key-durable-agent-state-by-meibo-principal.md) | Plan 54 complete |
-| [IR-10](expose-agent-run-status-over-http.md) | Completed | [MasterPlan 15](../masterplans/15-expose-declared-agents-and-agent-runs-over-the-public-http-api.md) | Plan 91 complete |
-| [IR-11](provide-governed-mutable-repository-workspaces.md) | In progress | [Plan 96](../plans/96-provide-governed-mutable-repository-workspaces-for-durable-agents.md) | Native upgrade/integration/follow-up/fencing pass; real ownership/successor gate remains |
-| [IR-12](compose-shikumi-decisions-in-durable-flows.md) | Completed | [MasterPlan 13](../masterplans/13-compose-shikumi-decisions-in-durable-flows.md) | Plans 73–76 complete |
-| [IR-13](support-optional-major-task-tracking.md) | Completed | [MasterPlan 17](../masterplans/17-track-durable-objectives-and-authoritative-assignment-checkpoints-without-rei.md) | Plans 98–102 qualified: authoritative providers, API/CLI, durable capabilities and real no-Rei restart/continuity; workspace/adaptive/recurring gates remain separate; 97 superseded |
-| [IR-14](record-durable-model-tool-turns-and-compose-harness-policies.md) | In progress | [Plan 83](../plans/83-recover-durable-model-and-tool-turns-with-composed-policies.md) | 83 complete; continuing/integrated acceptance in 84/86 remains |
-| [IR-15](support-continuing-worker-sessions.md) | In progress | [Plan 84](../plans/84-coordinate-continuing-worker-sessions-and-fenced-handoffs.md) | 84 partial; real IR-11/13 providers remain gates |
-| [IR-16](support-adaptive-durable-orchestration.md) | In progress | [MasterPlan 14](../masterplans/14-deliver-adaptive-autonomous-objectives-with-durable-workers.md) | 81 complete; 85/86 not started |
-| [IR-17](select-governed-models-for-agent-runs.md) | In progress | [Plan 82](../plans/82-pin-governed-execution-settings-for-agent-assignments.md) | 82/83 complete; continued assignments, escalation and Flow regression remain |
-| [IR-18](support-recurring-objective-supervision.md) | Accepted | [Plan 87](../plans/87-supervise-recurring-objectives-from-current-durable-checkpoints.md) | 87 not started; finite foundations do not enable recurrence |
-
 - [Add the architecture-practice review flow](add-architecture-practice-review-flow.md) - Orchestrate advisory architecture review against revision-pinned practice evidence.
 - [Add declarative router agents](add-declarative-router-agents.md) - Declare specialist expertise and route work through durable, typed delegation.
 - [Attest sanctioned model execution for agent runs](attest-sanctioned-agent-execution.md) - Resolve a versioned execution profile before a run, collect every correlated model call, bind the result to the exact reviewed artifact and agent version, and issue a signed tamper-evident run attestation.

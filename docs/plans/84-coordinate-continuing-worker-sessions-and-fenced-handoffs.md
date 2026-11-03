@@ -72,48 +72,26 @@ A coordinator can send a second assignment to the same worker, recover accepted 
 
 
 - [x] Milestone 1: Ordered mailbox, stable assignment identities, retained results/events and transactional cursors (2026-10-28).
-- [x] Milestone 2: Recoverable assignment workflow and checkpoint-intent integration against deterministic adapters (2026-10-28); real IR-13 integration remains a completion gate.
-- [x] Milestone 3: Durable fenced-transfer mechanics against deterministic owners (2026-10-28); real IR-11/IR-13 qualification remains a completion gate.
-- [ ] Milestone 4: Governed Flow/Skill/operator command mechanics qualified against deterministic adapters (2026-10-28); real-provider runtime qualification remains open.
+- [x] Milestone 2: Recoverable assignment workflow, retained findings and checkpoint intents; real objective/checkpoint, ownership and scope providers qualified by plan 99 (2026-11-02).
+- [x] Milestone 3: Fenced transfers and exact owner receipts; plan 96's 25-case real-owner native matrix qualifies the joint restart/successor/late-writer boundary (2026-11-02).
+- [x] Milestone 4: Governed Flow, Skill and operator consumers accepted, including follow-up compaction/recovery and actual native administrative handoff recovery (2026-11-03).
 
-2026-11-03 closeout in progress: operator commands now select the same peer-checked
-workspace client as workers from validated process settings. Shared wire types
-and the client live in core; listener adoption and supervisor dispatch stay in
-workers, preserving the server/worker package boundary. The combined continuing
-assignment, recorded compaction, reconstructed driver and duplicate native
-command regression passes. Full build, 1,703 package cases, the domain suite,
-migration isolation and the ordinary Keiro gate against `0e38c0a8` pass; the
-gate reports no breaking changes or findings and all 169 conformance controls
-pass. Native operator recovery remains under qualification before milestone 4
-and IR-15 are closed.
+Complete on 2026-11-03. The [acceptance matrix](../evidence/plan-84/acceptance.md)
+and [retained results](../evidence/plan-84/acceptance.json) map all six IR-15
+acceptance cases and IR-14 acceptance 8 to consumer tests and real providers.
+The full build, 1,703 package cases, domain suite, migration isolation, Haskell
+conventions and ordinary Keiro gate pass. The gate is replay-neutral, with zero
+findings and 177 passing generated conformance controls. Nine native Linux
+ownership/restart cases additionally qualify the actual administrative recovery
+path and its duplicate command against the real supervisor and objective owner.
 
-Implementation started after plan 83 completed at `a0d6f2a`. As of 2026-10-30,
-[plan 96](96-provide-governed-mutable-repository-workspaces-for-durable-agents.md)
-has qualified configured durable upgrades with native edit/process/Git recovery
-and implemented the concrete workspace transfer owner, retained successor
-admission and exact artifact integration. Transfer-aware adapter activation and
-native successor writes remain gated. Consume
-`Shikigami.Workspace.TransferClient.workspaceTransferClient` through the private
-peer-checked supervisor RPC; session results alone supply no fence. IR-13's objective-backed checkpoint, ownership and retained-scope providers are now qualified by plans 98–99 under MasterPlan 17; the separate workspace/joint qualification below remains open. Plan 96's complete workspace-owned native matrix now passes 22
-cases,
-including integration, same-owner follow-up/cleanup and a real late old-owner
-edit refusal across provider restart. See its
-[bounded native evidence](../evidence/plan-96/native-workspace-facts.json).
-This plan's real verified-epoch successor/ownership integration and full IR-15
-acceptance stay open; workspace-only facts cannot close them.
+The runtime implementation is checkpoint b8611d2b. The native report names its
+separate immutable controller output and bounded guest profile. No workflow
+body, label, patch set, wire version or containment property changes in this
+closeout. IR-15 is complete. Plan 85 may start; plan 86 retains the integrated
+UC-1/live coding recheck, and plan 87 retains recurrence. Those later gates do
+not keep this child open.
 
-
-2026-11-02 UTC IR-13 completion-gate evidence: [plan 99](99-supply-trusted-objective-associations-and-the-real-checkpoint-ownership-and-scope-providers.md) qualifies and installs the real objective adapters. [Provider completion qualification](../evidence/plan-99/provider-completion-qualification.json) covers simultaneous sibling commits, lost acknowledgement plus local cursor failure, instruction/criteria invalidation and explicit non-commit reconciliation, immutable accepted-result references, stale checkpoint refusal after fenced owner change, and retained scopes after source workflow GC. The actual command owner opens distinct worker scopes with original roots and limits. Eleven provider cases and the full suites pass (632 core, 490 PostgreSQL, 280 worker, 96 server, 37 agent); the native gate is neutral with 169 conformance checks. The deterministic fence qualifies only objective-side receipt recovery. The IR-11 and joint real successor/late-writer/restart gate remains open, this plan remains In Progress, and plan 85 still waits for this whole child.
-
-2026-11-02 workspace prerequisite accepted: plan 96's runtime `d38d2793`
-passes all 25 native cases with the real objective owner. The
-[joint provider evidence](../evidence/plan-96/joint-native-qualification.json) proves held-process uncertainty,
-restart with original-attempt settlement, lost ownership acknowledgement,
-recovered successor editing/validation and former-owner refusal after epoch
-establishment. Normal workers install this composition. This satisfies the
-workspace and joint provider boundary; this plan retains its full IR-15 consumer
-acceptance and milestone 4 review. Its status stays In Progress, and plan 85
-still requires this whole child Complete.
 
 ## Surprises & Discoveries
 
@@ -165,13 +143,40 @@ only final event acknowledgement, and cannot discard queued or unresolved work.
 records retained coordination scopes, fresh exact action authorization, explicit
 coordinator behavior, bounded protected tools/inspection, transactional Flow
 wakes and replay repair. Flow, Skill and operator paths share one command owner.
-Production composition stays unconfigured for the separately owned providers.
+Production composition was unconfigured at that checkpoint pending the separately owned providers.
 
 
 ## Outcomes & Retrospective
 
 
-To be filled during implementation. Do not claim request completion until every acceptance case below, including stated external integration gates, has evidence.
+2026-11-03 completion: the operator consumes the same peer-checked process
+fence as workers through core-owned wire types and transport. The server keeps
+its package boundary and starts no supervisor. The combined PostgreSQL case
+runs two continuing assignments, carries the first finding into the follow-up,
+retains another queued message, accepts one accounted summary, reconstructs its
+driver and replays the same native command without changing session state or
+root accounting. The actual administrative recovery function establishes and
+re-reads a real handoff after objective acknowledgement loss and supervisor
+restart; successor writes succeed and the former owner remains fenced.
+
+All acceptance owners are mapped in the retained matrix. Build and full suites
+pass on the named macOS candidate; native ownership/recovery has its own
+immutable output and native arm64 payload/guard evidence. The historical full
+25-case workspace/provider matrix remains separate evidence, not a claim that
+all 25 were rerun here. Adaptive decision/capacity acceptance and the live finite
+coding trial remain in plans 85/86. IR-14's integrated UC-1 recheck remains in
+plan 86 even though its continuing-assignment acceptance 8 is now established.
+
+ADR 0066 now records shared client ownership and the server/worker role boundary.
+FRIC-13 remains accepted with its previously tested module-local compiler
+workaround; this closeout does not remove it or claim an upstream compiler fix.
+[FRIC-50](../friction-log/50-native-operator-qualification-omitted-its-manifest-directory.md)
+is resolved by explicitly configuring the copied guest manifest directory.
+Historical milestone evidence below applies to its dated checkpoint; its then-open provider gates are superseded by the
+completion summary above.
+
+### Historical milestone records
+
 
 Milestone 1 acceptance: the full suites pass with 504 core, 323 PostgreSQL
 (including 12 new WorkerSessionStore cases), 37 agent, 64 server and 99 worker
@@ -240,7 +245,7 @@ actual coordinator admission and old/new deployment branches. Session fixtures
 also repair a registered child missing its input and acknowledge a result
 committed before handoff without consulting a replacement owner.
 
-The IR-13 current-objective, checkpoint/ownership and retained coordination source gate is satisfied by plan 99. Completion remains gated on real IR-11 workspace/process fencing with joint late-write/restart and verified successor qualification. The requests remain separately owned; this does not close IR-15 or change the child start gates. This plan does not supply a task store or repository provider. Plan 85
+The IR-13 current-objective, checkpoint/ownership and retained coordination source gate is satisfied by plan 99. At that checkpoint, completion remained gated on real IR-11 workspace/process fencing with joint late-write/restart and verified successor qualification. The requests remain separately owned; this does not close IR-15 or change the child start gates. This plan does not supply a task store or repository provider. Plan 85
 requires this whole child Complete, so it and its dependents cannot start at
 this checkpoint.
 
