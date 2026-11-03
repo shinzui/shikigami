@@ -82,7 +82,8 @@ data Ready = Ready {binding :: !WorkspaceBinding, admission :: !WorkspaceAdmissi
   deriving anyclass (Aeson.FromJSON)
 
 data Qualification = Qualification
-  { env :: !AppEnv,
+  { config :: !AppConfig,
+    env :: !AppEnv,
     authorizer :: !ActionAuthorizer,
     current :: !(ExecutionSnapshot -> IO (Either Text.Text ())),
     lifecycle :: !(AgentIdentity -> IO (Either Text.Text ())),
@@ -111,7 +112,8 @@ withQualification configFile prefix use = do
         client = ProcessClient socket ((either (error . show) id . parseRpcPeerUserId) 0) ((either (error . show) id . parseRpcRequestSeconds) 5) ((either (error . show) id . parseRpcWaitSeconds) 60)
         current = identityLifecycleAdmission directory.handle . (.identity)
     host <- right (configuredWorkspaceHostWithTransfers env store.pool directory.handle authorizer settings)
-    use (Qualification env authorizer current (identityLifecycleAdmission directory.handle) client host (objectiveHost (Goal.defaultObjectiveSettings & #enabled .~ Goal.ObjectivesEnabled) directory.handle authorizer) initial prefix)
+    let qualifiedConfig = config & #workspaceSettings .~ Just settings & #objectiveSettings . #enabled .~ Goal.ObjectivesEnabled
+    use (Qualification qualifiedConfig env authorizer current (identityLifecycleAdmission directory.handle) client host (objectiveHost (Goal.defaultObjectiveSettings & #enabled .~ Goal.ObjectivesEnabled) directory.handle authorizer) initial prefix)
 
 loadAssignment :: Qualification -> ExecutionRootId -> Text.Text -> AgentIdentity -> IO WorkspaceAdmission
 loadAssignment q root runId owner = do

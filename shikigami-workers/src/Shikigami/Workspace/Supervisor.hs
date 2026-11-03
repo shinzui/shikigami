@@ -66,6 +66,7 @@ import Shikigami.Workspace.ContainedFile
 import Shikigami.Workspace.Instructions
 import Shikigami.Workspace.Process
 import Shikigami.Workspace.ProcessStore qualified as Processes
+import Shikigami.Workspace.Protocol (SupervisorError (..), SupervisorRequest (..))
 import Shikigami.Workspace.Provider (workspaceProcessAction, workspaceTransferredProcessAction)
 import Shikigami.Workspace.Reference (WorkspaceRef (..))
 import Shikigami.Workspace.Store qualified as Workspaces
@@ -81,27 +82,6 @@ import System.FilePath ((</>))
 -- An error carries no completion/no-launch proof: another request may already
 -- have committed intent. Only a retained ProcessRefused record proves a
 -- pre-launch refusal; only a matching settled receipt proves completion.
-data SupervisorError = SupervisorRefused | SupervisorUnavailable | SupervisorUnresolved | SupervisorUnsupported
-  deriving stock (Eq, Show, Generic)
-  deriving anyclass (ToJSON, FromJSON)
-
-data SupervisorRequest = SupervisorRequest
-  { executionId :: !ExecutionId,
-    operationId :: !OperationId,
-    attemptId :: !AttemptId,
-    owner :: !ClaimOwner,
-    generation :: !(StateRevision "execution-attempt")
-  }
-  deriving stock (Eq, Generic)
-  deriving anyclass (ToJSON)
-
-instance FromJSON SupervisorRequest where
-  parseJSON = Aeson.withObject "supervisor request" \fields -> do
-    unless (length fields == 5 && all (`KeyMap.member` fields) ["executionId", "operationId", "attemptId", "owner", "generation"]) (fail "unsupported supervisor request")
-    Aeson.genericParseJSON Aeson.defaultOptions (Aeson.Object fields)
-
-instance Show SupervisorRequest where show _ = "SupervisorRequest <protected>"
-
 -- Trusted service configuration. Rule lookup must resolve the retained policy
 -- revision, complete reviewed instruction digest and immutable command/root
 -- profile. It must not reinterpret an old revision through current defaults.

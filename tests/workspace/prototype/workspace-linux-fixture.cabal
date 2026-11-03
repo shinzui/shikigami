@@ -53,6 +53,7 @@ executable shikigami-workspace-prototype
     kiroku-store,
     process,
     shikigami-core,
+    shikigami-server,
     shikigami-workers,
     shikumi-tools,
     text,

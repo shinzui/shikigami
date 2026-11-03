@@ -16,7 +16,6 @@ import Shikigami.Execution.SelectionRuntime (currentExecutionAuthority)
 import Shikigami.Execution.Start (SkillAssignment (..))
 import Shikigami.Execution.Transcript (ExecutionSnapshot (..))
 import Shikigami.Prelude
-import Shikigami.WorkerSession.Transfer (WorkspaceProvider)
 import Shikigami.Workspace.Admission (WorkspaceHost)
 import Shikigami.Workspace.Catalog
 import Shikigami.Workspace.FileProvider
@@ -28,7 +27,7 @@ import Shikigami.Workspace.Profile (retainedFileProfile)
 import Shikigami.Workspace.Provision
 import Shikigami.Workspace.Settings
 import Shikigami.Workspace.Systemd qualified as Systemd
-import Shikigami.Workspace.TransferClient (workspaceTransferClient)
+import Shikigami.Workspace.TransferClient (configuredWorkspaceTransfers)
 import Shikigami.Workspace.Types
 import Shikigami.Workspace.Value
 
@@ -39,13 +38,6 @@ configuredWorkspaceHost = configuredWorkspaceHostFor False
 -- previously accepted snapshots alongside fresh successor-aware revisions.
 configuredWorkspaceHostWithTransfers :: AppEnv -> Pool -> DirectoryHandle -> ActionAuthorizer -> WorkspaceSettings -> Either Text WorkspaceHost
 configuredWorkspaceHostWithTransfers = configuredWorkspaceHostFor True
-
--- File-only hosts cannot fence an external process. The process-backed host
--- uses the same peer-checked endpoint for launch, recovery and transfer.
-configuredWorkspaceTransfers :: WorkspaceSettings -> Maybe WorkspaceProvider
-configuredWorkspaceTransfers settings = do
-  process <- settings.process
-  pure (workspaceTransferClient (ProcessClient process.socketPath process.serverUser process.requestSeconds process.waitSeconds))
 
 configuredWorkspaceHostFor :: Bool -> AppEnv -> Pool -> DirectoryHandle -> ActionAuthorizer -> WorkspaceSettings -> Either Text WorkspaceHost
 configuredWorkspaceHostFor transferable appEnv pool directory authorizer settings = do

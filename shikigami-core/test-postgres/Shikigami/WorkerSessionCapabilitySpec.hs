@@ -2,10 +2,12 @@
 
 module Shikigami.WorkerSessionCapabilitySpec (tests) where
 
+import Baikai.Options (emptyOptions)
 import Control.Exception (SomeException, try)
 import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
+import Data.ByteString.Lazy qualified as Lazy
 import Data.Generics.Labels ()
 import Data.IORef
 import Data.Map.Strict qualified as Map
@@ -13,6 +15,7 @@ import Data.Set qualified as Set
 import Data.Text qualified as AliasText
 import Data.Text qualified as AssignmentText
 import Data.Text qualified as Text
+import Data.Text.Encoding qualified as Encoding
 import Data.Time (addUTCTime)
 import Data.UUID qualified as UUID
 import Effectful (Eff, runEff)
@@ -24,6 +27,7 @@ import Keiro.Workflow.Gc (WorkflowGcPolicy (..), gcWorkflowsOnce)
 import Keiro.Workflow.Instance (lookupInstance)
 import Keiro.Workflow.Types (WorkflowId (..))
 import Kioku.Id (genSessionId)
+import Kiroku.Store.Connection (KirokuStore (..), withStore)
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Action.Authorization (ActionAuthorizationFailure (..), ActionAuthorizer (..), allowAllActionAuthorizerForTests)
 import Shikigami.Activity.Coordinate
@@ -33,26 +37,37 @@ import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
 import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.RunJob (RunJob (..), runJobWorkflowId)
 import Shikigami.Agent.Workflow qualified as Agent
-import Shikigami.App (AppEffects, AppEnv, runAppIO)
+import Shikigami.App (AppEffects, AppEnv (..), runAppIO)
 import Shikigami.Behavior.Provider.Coordinate qualified as Coordinate
 import Shikigami.Behavior.Run (newBehaviorEnv)
+import Shikigami.Behavior.StubProvider (stubModel)
 import Shikigami.Capability.Overlay (emptyResolvedCapabilitySet)
 import Shikigami.Decision.Contract (ModelAlias, ModelDescriptor (..))
 import Shikigami.Decision.Contract qualified as Model
 import Shikigami.Decision.ModelAlias qualified as Alias
+import Shikigami.Decision.ModelCatalog (modelCatalog)
 import Shikigami.Directory (disabledDirectoryHandle)
 import Shikigami.Execution.AssignmentKey (AssignmentKey, parseAssignmentKey)
 import Shikigami.Execution.Coordinate qualified as ExecutionValue
+import Shikigami.Execution.Driver qualified as Driver
 import Shikigami.Execution.Executor (BoundTool (..))
+import Shikigami.Execution.Executor qualified as Executor
 import Shikigami.Execution.Identity (OperationId)
+import Shikigami.Execution.Policy (ContextProvenance (..), ContextView (..), ModelOperationInput (..))
+import Shikigami.Execution.Policy.Limits (PolicyNumber (..))
 import Shikigami.Execution.Policy.Types (defaultHarnessPolicy)
+import Shikigami.Execution.Quantity (parseResourceAmount)
 import Shikigami.Execution.Resources (Admission (..))
+import Shikigami.Execution.Resources qualified as Resources
+import Shikigami.Execution.ResourcesStore qualified as Roots
 import Shikigami.Execution.Runner (OperationContext (..))
-import Shikigami.Execution.Selection (ExecutionSelection (..), SelectionSource (ProcessDefault))
+import Shikigami.Execution.Selection (ExecutionSelection (..), SelectionSource (ProcessDefault), defaultBinding, resolveExecutionSelection)
 import Shikigami.Execution.SelectionRuntime (assignmentIdFor)
 import Shikigami.Execution.Store qualified as Execution
 import Shikigami.Execution.Tools (NativeToolFactory (..))
 import Shikigami.Execution.Transcript qualified as Replay
+import Shikigami.ExecutionDriver.Generated.WorkflowRuntime qualified as DriverGenerated
+import Shikigami.ExecutionTranscriptSpec qualified as TranscriptFixture
 import Shikigami.Fixture.ExecutionIdentity (fixtureOperationId)
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Flow.Workers qualified as Flow
@@ -61,6 +76,7 @@ import Shikigami.Migrations.TestSupport (DatabaseFixture)
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.RouterWorkflowSpec qualified as Fixture
 import Shikigami.StateRevision (StateRevision, initialRevision, parseRevision)
+import Shikigami.Trigger.Enqueue (ensureRunQueue)
 import Shikigami.Trigger.Schedule (parseCron)
 import Shikigami.WorkerSession.Capability
 import Shikigami.WorkerSession.Handoff (TransferServices (..))
@@ -72,7 +88,9 @@ import Shikigami.WorkerSession.Store qualified as Store
 import Shikigami.WorkerSession.Tools qualified as Tools
 import Shikigami.WorkerSession.Types qualified as Session
 import Shikigami.WorkerSession.Workflow (SessionRuntime (..))
-import Shikigami.WorkerSessionStoreSpec (checkpointVersion, fixtureCheckpoints, withFixture)
+import Shikigami.WorkerSession.Workflow qualified as Sessions
+import Shikigami.WorkerSessionSpec qualified as SessionFixture
+import Shikigami.WorkerSessionStoreSpec (checkpointVersion, fixtureCheckpoints, withConfiguredFixture, withFixture)
 import Shikigami.Workflow.Versioning (shikigamiWorkflowRunOptions)
 import Shikumi.Error (ShikumiError)
 import Shikumi.LLM (runLLM)
@@ -279,6 +297,8 @@ tests fixture =
           prepared.binding @?= binding
           bad <- runEff (runErrorNoCallStack @ShikumiError (runLLM (runErasedOutput prepared.tool command)))
           case bad of Right (Left _) -> pure (); _ -> assertFailure "accepted old menu gained a new mutation",
+      testCase "continuing followup compacts and resumes with retained findings queued messages and deduplicated native control" $
+        continuingRecoveryCase fixture,
       testCase "native tools pin a scope across replay and never accept model operation or root coordinates" $
         withCapabilityFixture fixture \env admission host scope authorizer _ current -> do
           snapshot <- snapshotFor scope
@@ -302,6 +322,122 @@ tests fixture =
           Aeson.eitherDecode (Aeson.encode accepted) @?= Right accepted
     ]
 
+-- Exercise the assignment workflow, compaction driver and native command owner
+-- together. Every drive reconstructs persisted state through fresh store effects.
+continuingRecoveryCase :: DatabaseFixture -> IO ()
+continuingRecoveryCase fixture =
+  withConfiguredCapabilityFixture fixture (\admission -> admission & #context . #executionPermissions .~ Just [fixtureModelAlias "__process_default__"]) \env admission host scope authorizer _ current -> do
+    snapshot <- snapshotFor scope
+    let factory = Tools.coordinationTools (Just host) authorizer
+        session = Session.sessionIdFor admission
+        runtime = host.services.sessions
+        drive = run env (runWorkflowWith (shikigamiWorkflowRunOptions env) sessionWorkflowName (sessionWorkflowId session) (Sessions.sessionWorkflow runtime (Just (Sessions.WorkerSessionStart session))))
+        inspectSession = do Just (state, _) <- expectRight =<< run env (Store.inspectSession session); pure state
+        rootId = fromMaybe (error "fixture root missing") scope.run.rootId
+    [described] <- expectRight =<< factory.describe snapshot
+    let accepted = snapshot & #toolBindings .~ [described.binding] & #offeredTools .~ toJSON [lowerSomeTool described.tool]
+        commandContext key = OperationContext accepted.executionId (fixtureOperationId key) (fixtureOperationId key) (ExecutionValue.executionDigest "fingerprint") (ExecutionValue.executionDigest "scope")
+        send key revision instruction = do
+          [tool] <- expectRight =<< factory.prepare accepted (commandContext key) (Just (ExecutionValue.executionCoordinate "workers"))
+          executeTool tool (toJSON (SendWorker session revision initialRevision (draft instruction)))
+    first <- send "first-assignment" initialRevision "Investigate the dependency."
+    acceptedReply first @?= Accepted
+    drive >>= (@?= Suspended)
+    active <- inspectSession
+    firstAssignment <- maybe (fail "first assignment absent") pure active.activeAssignment
+    access <- expectRight =<< run env (Store.authorizeSession session admission.context.identity (pure (Right ())))
+    firstRow <- expectRight =<< run env (Store.readAssignment access firstAssignment)
+    firstChild <- maybe (fail "first child absent") pure firstRow.childWorkflowId
+    callbacks <- newIORef (0 :: Int)
+    SessionFixture.completeFixtureChild env firstChild callbacks (Aeson.object ["finding" .= ("dependency requires bounded validation" :: Text)])
+    drive >>= (@?= ContinuedAsNew)
+    drive >>= (@?= Suspended)
+    idle <- inspectSession
+    _ <- send "second-assignment" idle.revision "Apply the retained finding."
+    drive >>= (@?= ContinuedAsNew)
+    drive >>= (@?= Suspended)
+    working <- inspectSession
+    secondAssignment <- maybe (fail "followup absent") pure working.activeAssignment
+    secondRow <- expectRight =<< run env (Store.readAssignment access secondAssignment)
+    secondChild <- maybe (fail "followup child absent") pure secondRow.childWorkflowId
+    assertBool "followup has a distinct child" (secondChild /= firstChild)
+    job <- SessionFixture.childJob env secondChild
+    findings <- expectRight =<< run env (Store.readAssignmentContext access secondAssignment)
+    map (\finding -> finding.receipt.assignmentId) findings @?= [firstAssignment]
+    let request = Encoding.decodeUtf8 (Lazy.toStrict (Aeson.encode job.triggerPayload))
+    assertBool "accepted request carries earlier work" ("dependency requires bounded validation" `Text.isInfixOf` request)
+    queued <- send "queued-after-followup" working.revision "Retain this pending next assignment."
+    acceptedReply queued @?= Accepted
+    before <- inspectSession
+    now <- getCurrentTime
+    selection <- expectRight (resolveExecutionSelection (assignmentIdFor secondChild.unWorkflowId) (either (error . show) id (modelCatalog [])) (defaultBinding stubModel emptyOptions) Nothing job.executionRequest job.executionPermissions Nothing job.executionRootId now)
+    memory <- genSessionId
+    let replayContext =
+          Replay.ReplayContext
+            Replay.RequestContext
+            (Just "Apply only accepted instructions.")
+            ([Replay.RequestTurn [Replay.TextBlock request] Nothing] <> replicate 4 (Replay.UserTurn [Replay.TextBlock (Text.replicate 500 "x")] Nothing) <> [Replay.UserTurn [Replay.TextBlock "continue"] Nothing])
+        contextLimit = either (error . show) id (parsePolicyNumber (toInteger (Lazy.length (Aeson.encode replayContext)) - 500))
+        workerSnapshot =
+          TranscriptFixture.summaryConfiguration snapshot
+            & #policy
+            . #contextBytes
+            .~ contextLimit
+            & #executionId
+            .~ Replay.executionIdFor selection.assignmentId
+            & #runId
+            .~ secondChild
+            & #agent
+            .~ job.agentName
+            & #identity
+            .~ job.identity
+            & #sessionId
+            .~ memory
+            & #selection
+            .~ selection
+            & #initialContext
+            .~ replayContext
+    _ <- expectRight =<< run env (Execution.admitExecution workerSnapshot)
+    workerAccess <- expectRight =<< run env (Execution.authorizeReplay workerSnapshot.executionId workerSnapshot.identity (pure (Right ())))
+    withStore env.connectionSettings (\store -> ensureRunQueue store.pool >>= expectRight)
+    (executor, modelCalls, _) <- TranscriptFixture.driverRuntime env False
+    let advance = run env (runWorkflowWith (shikigamiWorkflowRunOptions env) DriverGenerated.workflowName (Replay.executionWorkflowId workerSnapshot.executionId) (Driver.executionWorkflow executor (Just (Driver.ExecutionStart workerSnapshot.executionId))))
+    advance >>= (@?= ContinuedAsNew)
+    advance >>= (@?= Suspended)
+    reference <- TranscriptFixture.pendingReference env workerSnapshot
+    Executor.executeAcceptedAttempt executor workerSnapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
+    advance >>= (@?= ContinuedAsNew)
+    advance >>= (@?= ContinuedAsNew)
+    length <$> modelCalls >>= (@?= 1)
+    -- Crash after accepting the summary, then reacquire the pinned native scope.
+    writeIORef current Nothing
+    saved <- expectRight =<< run env (Execution.loadExecution workerAccess)
+    fst saved @?= workerSnapshot
+    ledgerBefore <- expectRight =<< run env (Roots.inspectRoot rootId)
+    replay <- send "queued-after-followup" working.revision "Retain this pending next assignment."
+    acceptedReply replay @?= AlreadyAccepted
+    afterReplay <- inspectSession
+    afterReplay @?= before
+    ledgerAfter <- expectRight =<< run env (Roots.inspectRoot rootId)
+    ledgerAfter @?= ledgerBefore
+    (restarted, restartedCalls, _) <- TranscriptFixture.driverRuntime env False
+    result <- TranscriptFixture.pumpDriver env restarted workerSnapshot 12
+    result.phase @?= Replay.Succeeded
+    observed <- modelCalls
+    length observed @?= 1
+    resumedCalls <- restartedCalls
+    length resumedCalls @?= 1
+    assertBool "resumed model retains accepted finding" ("dependency requires bounded validation" `Text.isInfixOf` Text.pack (show (Aeson.encode (last resumedCalls))))
+    Just (_, _, operations) <- expectRight =<< run env (Execution.inspectExecution workerSnapshot.executionId)
+    map (\operation -> operation.specification.kind) operations @?= [Replay.ModelSummary, Replay.ModelTurn]
+    regular <- expectRight =<< run env (Execution.readReplayPayload @ModelOperationInput workerAccess "operation-input" (last operations).input)
+    assertBool "accepted summary is used after resume" (isJust (regular.provenance >>= (.summary)))
+    assertBool "context really omitted old history" (not (null regular.view.omitted))
+    finalSession <- inspectSession
+    finalSession @?= before
+    finalLedger <- expectRight =<< run env (Roots.inspectRoot rootId)
+    Map.lookup Resources.ModelAttempts finalLedger.usage.settled @?= Just (either (error . show) id (parseResourceAmount 2))
+
 flowName :: WorkflowName
 flowName = WorkflowName "fixture.worker-events"
 
@@ -314,7 +450,10 @@ permit env host scope authorizer = do
   pure grant
 
 withCapabilityFixture :: DatabaseFixture -> (AppEnv -> Session.SessionAdmission -> CoordinationHost -> CoordinationScope -> ActionAuthorizer -> IORef Bool -> IORef (Maybe CoordinationScope) -> IO a) -> IO a
-withCapabilityFixture fixture callback = withFixture fixture \env admission _ -> do
+withCapabilityFixture fixture = withConfiguredCapabilityFixture fixture id
+
+withConfiguredCapabilityFixture :: DatabaseFixture -> (Session.SessionAdmission -> Session.SessionAdmission) -> (AppEnv -> Session.SessionAdmission -> CoordinationHost -> CoordinationScope -> ActionAuthorizer -> IORef Bool -> IORef (Maybe CoordinationScope) -> IO a) -> IO a
+withConfiguredCapabilityFixture fixture configure callback = withConfiguredFixture fixture configure \env admission _ -> do
   memory <- maybe (assertFailure "missing parent session" >> fail "missing parent session") pure admission.context.sessionId
   version <- checkpointVersion admission
   (checkpoints, _) <- fixtureCheckpoints version False
@@ -337,8 +476,9 @@ listenerToken env scope = do
 snapshotFor :: CoordinationScope -> IO Replay.ExecutionSnapshot
 snapshotFor scope = do
   now <- getCurrentTime
-  let descriptor = ModelDescriptor (fixtureModelAlias "worker-model") (fixtureModelRegistration "1") (Model.modelDescriptorDigest (toJSON ("fixture-model" :: Text))) (Coordinate.providerCoordinate "fixture") (Coordinate.providerCoordinate "fixture") (Coordinate.providerCoordinate "fixture") (Coordinate.providerCoordinate "fixture") Nothing (fixtureModelRegistration "fixture") (fixtureModelRegistration "1")
-      selection = ExecutionSelection (fixtureAssignment "coordination-assignment") descriptor (Aeson.object []) [fixtureModelAlias "worker-model"] Nothing scope.run.rootId ProcessDefault now
+  let alias = case scope.run.permittedAliases of Just (value : _) -> value; _ -> fixtureModelAlias "worker-model"
+      descriptor = ModelDescriptor alias (fixtureModelRegistration "1") (Model.modelDescriptorDigest (toJSON ("fixture-model" :: Text))) (Coordinate.providerCoordinate "fixture") (Coordinate.providerCoordinate "fixture") (Coordinate.providerCoordinate "fixture") (Coordinate.providerCoordinate "fixture") Nothing (fixtureModelRegistration "fixture") (fixtureModelRegistration "1")
+      selection = ExecutionSelection (fixtureAssignment "coordination-assignment") descriptor (Aeson.object []) (fromMaybe [alias] scope.run.permittedAliases) Nothing scope.run.rootId ProcessDefault now
   pure (Replay.ExecutionSnapshot V1 (Replay.executionIdFor selection.assignmentId) scope.run.runId (fixtureAgentName "coordinator") scope.run.identity scope.run.sessionId selection Nothing (Replay.SkillInstructions (ExecutionValue.executionCoordinate "fixture") "fixture" "fixture") (Replay.ReplayContext Replay.RequestContext Nothing [Replay.RequestTurn [Replay.TextBlock "coordinate"] Nothing]) emptyResolvedCapabilitySet (toJSON ([] :: [Aeson.Value])) defaultHarnessPolicy [] Nothing Nothing)
 
 executeTool :: BoundTool -> Aeson.Value -> IO ToolOutput

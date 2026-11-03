@@ -1,6 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 
-module Shikigami.ExecutionTranscriptSpec (tests, withFixture, withConfiguredResourceFixture, driverRuntime, pumpDriver, run) where
+module Shikigami.ExecutionTranscriptSpec (tests, withFixture, withConfiguredResourceFixture, driverRuntime, pumpDriver, pendingReference, summaryConfiguration, run) where
 
 import Baikai.Api (Api (OpenAIResponses))
 import Baikai.Content qualified as Content

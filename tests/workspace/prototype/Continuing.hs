@@ -43,7 +43,9 @@ import Shikigami.Objective.Store qualified as Goals
 import Shikigami.Objective.Types qualified as Goal
 import Shikigami.Prelude ((&), (.~))
 import Shikigami.RunEvidence.Catalog qualified as Catalog
+import Shikigami.Server.Command.Workers (runWorkersControl)
 import Shikigami.StateRevision (StateRevision, advanceRevision, parseRevision)
+import Shikigami.WorkerSession.Capability (WorkerCommand (ReconcileWorker))
 import Shikigami.WorkerSession.Checkpoint (CheckpointProvider (..), ObjectiveVersion (..))
 import Shikigami.WorkerSession.Handoff qualified as Handoff
 import Shikigami.WorkerSession.Input (InstructionText, SessionLimit (..), parseInstructionText)
@@ -158,8 +160,12 @@ continuingCase config prefix stage = withQualification config prefix \q -> case 
     putStrLn "PASS real objective ownership commits once while acknowledgement loss leaves the local session frozen"
   "successor" -> withCase q \item -> do
     intent <- right . Aeson.eitherDecodeStrict @TransferIntent =<< Bytes.readFile (prefix </> "continuing-intent.json")
+    -- The real administrative path reconstructs its admitted parent scope,
+    -- authenticates the private supervisor and recovers objective ownership.
+    runWorkersControl (fixtureOperationId "native-operator-reconcile") (ReconcileWorker item.session) q.config
     outcome <- right =<< run q.env (Handoff.resumeHandoff (transferServices q item) item.session)
     unless (outcome == Handoff.HandoffEstablished intent.newOwner intent.newEpoch) (fail "real ownership recovery did not establish successor")
+    runWorkersControl (fixtureOperationId "native-operator-reconcile") (ReconcileWorker item.session) q.config
     repeated <- right =<< run q.env (Handoff.resumeHandoff (transferServices q item) item.session)
     unless (repeated == outcome) (fail "duplicate ownership recovery differs")
     access <- sessionAccess q item

@@ -16,19 +16,11 @@ import Shikigami.Execution.Transcript (ExecutionSnapshot (..))
 import Shikigami.Prelude
 import Shikigami.Workspace.Instructions (WorkspaceAdmission (..), supervisedFilePolicy, transferableFilePolicy)
 import Shikigami.Workspace.Rpc
+import Shikigami.Workspace.RpcClient (ProcessClient (..))
 import Shikigami.Workspace.Supervisor
 import Shikigami.Workspace.Value
 import Shikumi.Tool (mkDynTool)
 import System.Timeout (timeout)
-
--- Trusted endpoint, kernel server identity and bounded caller waiting policy.
--- None of these values is a tool argument or grants command authority.
-data ProcessClient = ProcessClient
-  { socketPath :: !(WorkspaceLocator "rpc-socket"),
-    serverUser :: !(RpcPeerUserId),
-    requestSeconds :: !(RpcRequestSeconds),
-    waitSeconds :: !(RpcWaitSeconds)
-  }
 
 workspaceExecAdapter :: ProcessClient -> DurableAdapter
 workspaceExecAdapter = execAdapterFor False

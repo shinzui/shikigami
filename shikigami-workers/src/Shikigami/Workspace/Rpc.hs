@@ -2,8 +2,8 @@
 {-# LANGUAGE ForeignFunctionInterface #-}
 {-# LANGUAGE ViewPatterns #-}
 
--- | Bounded, credential-checked Unix transport. The manager owns the listener
--- through daemon restart; repository services never receive this descriptor.
+-- | Manager-owned supervisor listener and dispatch. Clients and service share
+-- the core wire codecs and bounded, kernel-peer-checked transport.
 module Shikigami.Workspace.Rpc
   ( RpcError (..),
     RpcRequest (..),
@@ -19,106 +19,29 @@ module Shikigami.Workspace.Rpc
 where
 
 import Control.Concurrent.Async (replicateConcurrently_)
-import Control.Exception (IOException, bracket, catch, mask_)
+import Control.Exception (bracket, mask_)
 import Control.Monad (forever)
-import Data.Aeson ((.:), (.=))
 import Data.Aeson qualified as Aeson
-import Data.Aeson.Key (Key)
-import Data.Aeson.KeyMap qualified as KeyMap
 import Data.ByteString qualified as Bytes
 import Data.ByteString.Lazy qualified as Lazy
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Encoding
 import Foreign.C
 import Network.Socket qualified as Socket
-import Network.Socket.ByteString qualified as SocketBytes
-import Shikigami.Agent.Principal (AgentIdentity)
-import Shikigami.Execution.Identity (AttemptId, OperationId, attemptIdText, operationIdText)
-import Shikigami.Prelude hiding ((.=))
-import Shikigami.StateRevision
-import Shikigami.WorkerSession.Transfer
-import Shikigami.WorkerSession.Types (WorkerSessionId)
+import Shikigami.Prelude
+import Shikigami.WorkerSession.Transfer (WorkspaceProvider (..))
 import Shikigami.Workspace.Process
+import Shikigami.Workspace.Protocol
+import Shikigami.Workspace.RpcClient
 import Shikigami.Workspace.Supervisor
 import Shikigami.Workspace.Transfer (workspaceTransferProvider)
 import Shikigami.Workspace.Value
 import Shikumi.Tool (ToolError)
 import Shikumi.Tool.Output (ToolOutput)
-import System.FilePath (isAbsolute, normalise)
 import System.Timeout (timeout)
 
-data RpcError = RpcRefused | RpcUnavailable | RpcMalformed | RpcPeerDenied | RpcTimeout | RpcUnsupported
-  deriving stock (Eq, Show, Generic)
-  deriving anyclass (ToJSON, FromJSON)
-
-data RpcRequest = RpcLaunch !SupervisorRequest | RpcObserve !OperationId | RpcFence !TransferIntent | RpcAdmitWrite !WorkspaceRef !WorkerSessionId !AgentIdentity !(StateRevision "worker-owner") !OperationId
-  deriving stock (Eq)
-
-instance Show RpcRequest where show _ = "RpcRequest <protected>"
-
-data ProcessView = ProcessView
-  { operationId :: !OperationId,
-    attemptId :: !AttemptId,
-    generation :: !(StateRevision "execution-attempt"),
-    bindingDigest :: !(WorkspaceCoordinate "binding-digest"),
-    phase :: !ProcessPhase,
-    receipt :: !(Maybe ProcessReceipt)
-  }
-  deriving stock (Eq, Generic)
-  deriving anyclass (ToJSON, FromJSON)
-
-instance Show ProcessView where show _ = "ProcessView <protected>"
-
--- An error carries no no-launch/completion proof.
-data RpcReply = RpcFailure !SupervisorError | RpcView !ProcessView | RpcFenceResult !FenceOutcome | RpcWriteResult !Bool
-  deriving stock (Eq)
-
-instance Show RpcReply where show _ = "RpcReply <protected>"
-
-data RpcPolicy = RpcPolicy {users :: !([RpcPeerUserId]), workers :: !(RpcConcurrency), timeoutSeconds :: !(RpcRequestSeconds)}
+data RpcPolicy = RpcPolicy {users :: ![RpcPeerUserId], workers :: !RpcConcurrency, timeoutSeconds :: !RpcRequestSeconds}
   deriving stock (Eq, Show)
-
-instance ToJSON RpcRequest where
-  toJSON request = case request of
-    RpcLaunch value -> Aeson.object ["format" .= (1 :: Int), "action" .= ("launch" :: Text), "request" .= value]
-    RpcObserve value -> Aeson.object ["format" .= (1 :: Int), "action" .= ("observe" :: Text), "operationId" .= value]
-    RpcFence value -> Aeson.object ["format" .= (2 :: Int), "action" .= ("fence" :: Text), "intent" .= value]
-    RpcAdmitWrite workspace session owner epoch operation -> Aeson.object ["format" .= (2 :: Int), "action" .= ("admitWrite" :: Text), "workspace" .= workspace, "sessionId" .= session, "owner" .= owner, "epoch" .= epoch, "operationId" .= operation]
-
-instance FromJSON RpcRequest where
-  parseJSON = Aeson.withObject "workspace request" \fields -> do
-    format <- fields .: "format"
-    action <- fields .: "action"
-    case (format :: Int, action :: Text) of
-      (1, "launch") | keys fields ["format", "action", "request"] -> RpcLaunch <$> fields .: "request"
-      (1, "observe") | keys fields ["format", "action", "operationId"] -> do
-        operation <- fields .: "operationId"
-        let value = operationIdText operation
-        unless (bounded value) (fail "invalid operation")
-        pure (RpcObserve operation)
-      (2, "fence") | keys fields ["format", "action", "intent"] -> RpcFence <$> fields .: "intent"
-      (2, "admitWrite") | keys fields ["format", "action", "workspace", "sessionId", "owner", "epoch", "operationId"] -> RpcAdmitWrite <$> fields .: "workspace" <*> fields .: "sessionId" <*> fields .: "owner" <*> fields .: "epoch" <*> fields .: "operationId"
-      _ -> fail "unsupported request"
-
-instance ToJSON RpcReply where
-  toJSON reply = case reply of
-    RpcFailure err -> Aeson.object ["format" .= (1 :: Int), "error" .= err]
-    RpcView value -> Aeson.object ["format" .= (1 :: Int), "view" .= value]
-    RpcFenceResult value -> Aeson.object ["format" .= (2 :: Int), "fence" .= value]
-    RpcWriteResult value -> Aeson.object ["format" .= (2 :: Int), "admitted" .= value]
-
-instance FromJSON RpcReply where
-  parseJSON = Aeson.withObject "workspace reply" \fields -> do
-    format <- fields .: "format"
-    case (format :: Int) of
-      1 | keys fields ["format", "error"] -> RpcFailure <$> fields .: "error"
-      1 | keys fields ["format", "view"] -> RpcView <$> fields .: "view"
-      2 | keys fields ["format", "fence"] -> RpcFenceResult <$> fields .: "fence"
-      2 | keys fields ["format", "admitted"] -> RpcWriteResult <$> fields .: "admitted"
-      _ -> fail "unsupported reply"
-
-keys :: Aeson.Object -> [Key] -> Bool
-keys fields expected = length fields == length expected && all (`KeyMap.member` fields) expected
 
 foreign import ccall unsafe "shikigami_workspace_systemd_socket" adoptSocket :: CString -> IO CInt
 
@@ -163,37 +86,6 @@ serveRpc policy listener dispatch
           pure (Right ())
         _ -> pure (Left RpcRefused)
 
-callRpc :: WorkspaceLocator "rpc-socket" -> RpcPeerUserId -> RpcRequestSeconds -> RpcRequest -> IO (Either RpcError RpcReply)
-callRpc (workspaceLocatorPath -> path) (rpcPeerUserIdNumber -> serverUser) (rpcRequestSecondsNumber -> seconds) request
-  | not (validPath path) || serverUser < 0 || serverUser > 4294967295 || seconds < 1 || seconds > 120 = pure (Left RpcRefused)
-  | otherwise = do
-      result <- timeout (seconds * 1000000) $
-        protect $
-          bracket (Socket.socket Socket.AF_UNIX Socket.Stream Socket.defaultProtocol) Socket.close \connection -> do
-            Socket.withFdSocket connection Socket.setCloseOnExecIfNeeded
-            Socket.connect connection (Socket.SockAddrUnix path)
-            (_, user, _) <- Socket.getPeerCredential connection
-            if maybe False ((== serverUser) . toInteger) user
-              then do
-                sent <- sendFrame 4096 connection (Lazy.toStrict (Aeson.encode request))
-                case sent of
-                  Left err -> pure (Left err)
-                  Right () -> do
-                    received <- receiveFrame 8192 connection
-                    pure do
-                      body <- received
-                      reply <- either (const (Left RpcMalformed)) Right (Aeson.eitherDecodeStrict body)
-                      case (request, reply) of
-                        (_, RpcFailure _) -> Right reply
-                        (RpcLaunch _, RpcView value) | value.operationId == requestOperation request && validView value -> Right reply
-                        (RpcObserve _, RpcView value) | value.operationId == requestOperation request && validView value -> Right reply
-                        (RpcFence intent, RpcFenceResult (FencedAndSettled proof)) | matchesFence intent proof -> Right reply
-                        (RpcFence _, RpcFenceResult outcome) | outcome `elem` [FenceUnresolved, FenceConflict, FenceUnavailable] -> Right reply
-                        (RpcAdmitWrite {}, RpcWriteResult _) -> Right reply
-                        _ -> Left RpcMalformed
-              else pure (Left RpcPeerDenied)
-      pure (fromMaybe (Left RpcTimeout) result)
-
 dispatchSupervisorRpc :: SupervisorRuntime -> RpcRequest -> IO RpcReply
 dispatchSupervisorRpc runtime (RpcFence intent) = RpcFenceResult <$> (workspaceTransferProvider runtime).reconcile intent
 dispatchSupervisorRpc runtime (RpcAdmitWrite workspace session owner epoch operation) = do
@@ -207,57 +99,7 @@ dispatchSupervisorRpc runtime request = do
     Left err -> RpcFailure err
     Right record -> RpcView (ProcessView record.operationId record.attemptId record.generation record.bindingDigest record.phase record.receipt)
 
-requestOperation :: RpcRequest -> OperationId
-requestOperation (RpcLaunch request) = request.operationId
-requestOperation (RpcObserve operation) = operation
-requestOperation (RpcFence intent) = intent.operationId
-requestOperation (RpcAdmitWrite _ _ _ _ operation) = operation
-
 processViewResult :: ProcessView -> Maybe (Either ToolError ToolOutput)
 processViewResult value
   | validView value && value.phase `elem` [ProcessSettled, ProcessRefused] = Just (renderProcessResult value.receipt)
   | otherwise = Nothing
-
-validView :: ProcessView -> Bool
-validView value =
-  bounded operation && bounded attempt && value.generation > initialRevision && revisionNumber value.generation < 9223372036854775808 && digestText (workspaceCoordinateText value.bindingDigest) && case value.receipt of
-    Nothing -> value.phase /= ProcessSettled
-    Just receipt -> value.phase == ProcessSettled && receipt.operationId == value.operationId && receipt.attemptId == value.attemptId && receipt.generation == value.generation && receipt.bindingDigest == value.bindingDigest && digestText (workspaceCoordinateText receipt.fingerprint) && receipt.unit == processUnit value.operationId receipt.fingerprint && hostIdentity (workspaceCoordinateText receipt.bootId) && hostIdentity (workspaceCoordinateText receipt.invocationId) && descendantsSettled receipt.descendantsEmpty && outputCollected receipt.outputComplete && maybe (receipt.termination /= ProcessExited) (\code -> processExitStatusNumber code >= 0 && processExitStatusNumber code <= 255) receipt.exitCode && all validOutput [receipt.stdout, receipt.stderr] && capturedBytesNumber receipt.stdout.bytes + capturedBytesNumber receipt.stderr.bytes <= 1048576
-  where
-    operation = operationIdText value.operationId
-    attempt = attemptIdText value.attemptId
-    validOutput output = bounded (workspaceCoordinateText output.artifact) && workspaceCoordinateText output.artifact `notElem` [".", ".."] && Text.all (\c -> (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c `elem` ("._-" :: String)) (workspaceCoordinateText output.artifact) && digestText (workspaceCoordinateText output.digest) && capturedBytesNumber output.bytes >= 0
-
-validPath :: FilePath -> Bool
-validPath path = isAbsolute path && path /= "/" && normalise path == path && not ('\0' `elem` path) && not (".." `elem` Text.splitOn "/" (Text.pack path)) && Bytes.length (Encoding.encodeUtf8 (Text.pack path)) <= 100
-
-receiveFrame :: Int -> Socket.Socket -> IO (Either RpcError Bytes.ByteString)
-receiveFrame limit connection = do
-  header <- receiveExact connection 4
-  case header of
-    Nothing -> pure (Left RpcMalformed)
-    Just prefix -> do
-      let size = Bytes.foldl' (\total byte -> total * 256 + fromIntegral byte) (0 :: Integer) prefix
-      if size < 1 || size > toInteger limit
-        then pure (Left RpcMalformed)
-        else maybe (Left RpcMalformed) Right <$> receiveExact connection (fromInteger size)
-
-receiveExact :: Socket.Socket -> Int -> IO (Maybe Bytes.ByteString)
-receiveExact connection size = go size []
-  where
-    go 0 chunks = pure (Just (Bytes.concat (reverse chunks)))
-    go remaining chunks = do
-      chunk <- SocketBytes.recv connection remaining
-      if Bytes.null chunk then pure Nothing else go (remaining - Bytes.length chunk) (chunk : chunks)
-
-sendFrame :: Int -> Socket.Socket -> Bytes.ByteString -> IO (Either RpcError ())
-sendFrame limit connection body
-  | Bytes.null body || Bytes.length body > limit = pure (Left RpcMalformed)
-  | otherwise = do
-      let size = Bytes.length body
-          prefix = Bytes.pack [fromIntegral (size `div` divisor `mod` 256) | divisor <- [16777216, 65536, 256, 1]]
-      SocketBytes.sendAll connection (prefix <> body)
-      pure (Right ())
-
-protect :: IO (Either RpcError a) -> IO (Either RpcError a)
-protect work = catch work (\(_ :: IOException) -> pure (Left RpcUnavailable))

@@ -196,13 +196,18 @@ unresolved work. Reuse the original operation key and input after a lost
 acknowledgement. Conflicting reuse or stale revisions refuse; retry never creates
 a replacement root. Reconcile continues the retained handoff operation.
 
-The default CLI has no selected IR-13 objective/checkpoint provider or IR-11
-workspace/ownership provider. New send/interrupt/integrate and transfer work
-therefore refuses until those separately owned integrations are supplied and
-qualified. Deterministic provider fixtures establish consumer mechanics only.
-Inspection and authorized idle closure remain available. Flows, admitted
-`CoordinatingSkill` tools and qualified operator hosts use the same command owner;
-declaration text alone supplies no control authority.
+Enable objective tracking and configure the accepted objective/assignment
+associations for send, interrupt and result integration. Repository transfer and
+handoff recovery also require the process-backed `workspaces` settings used by
+workers: the private supervisor socket, expected server UID and bounded request
+deadline. The CLI selects that same peer-checked client; it does not start a
+supervisor. The CLI's Unix identity must be admitted by the supervisor's socket
+policy. File-only or absent workspace settings supply no process fence, and
+missing providers leave protected work refused or the handoff unresolved.
+
+Flows, admitted `CoordinatingSkill` tools and operator commands share the same
+command owner. Inspection and authorized idle closure remain available without
+a process provider. Declaration text alone supplies no control authority.
 
 **"How do I answer a human approval request?"** — `resolve-approval`.
 

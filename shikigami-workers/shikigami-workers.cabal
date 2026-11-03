@@ -83,7 +83,6 @@ library
     Shikigami.Workspace.Supervisor
     Shikigami.Workspace.Systemd
     Shikigami.Workspace.Transfer
-    Shikigami.Workspace.TransferClient
 
   build-depends:
     aeson >=2.2,

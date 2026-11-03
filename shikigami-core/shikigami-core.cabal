@@ -299,10 +299,13 @@ library
     Shikigami.Workspace.ProcessPolicy
     Shikigami.Workspace.ProcessProfileStore
     Shikigami.Workspace.ProcessStore
+    Shikigami.Workspace.Protocol
     Shikigami.Workspace.Provider
     Shikigami.Workspace.Reference
+    Shikigami.Workspace.RpcClient
     Shikigami.Workspace.Settings
     Shikigami.Workspace.Store
+    Shikigami.Workspace.TransferClient
     Shikigami.Workspace.TransferStore
     Shikigami.Workspace.Types
     Shikigami.Workspace.Value
@@ -439,6 +442,7 @@ library
     lens >=5.2,
     memory >=0.18 && <0.19,
     mmzk-typeid,
+    network,
     network-uri,
     optparse-applicative >=0.19 && <0.20,
     pgmq-hasql,

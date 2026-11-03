@@ -33,6 +33,7 @@ import Shikigami.WorkerSession.Position (MessagePosition)
 import Shikigami.WorkerSession.Store qualified as Store
 import Shikigami.WorkerSession.Types
 import Shikigami.WorkerSession.Workflow (SessionRuntime (..))
+import Shikigami.Workspace.TransferClient (configuredWorkspaceTransfers)
 import System.Exit (die)
 
 runWorkersInspect :: Text -> MessagePosition -> Int -> Bool -> AppConfig -> IO ()
@@ -77,7 +78,7 @@ runWorkersControl key command config = do
   let run = CoordinatorRun (WorkflowId ("operator-workers:" <> session.value)) admission.context.identity memory admission.context.executionRootId admission.context.executionPermissions
       scope = CoordinationScope V1 run admission.scope.parent admission.delegator admission.context [WorkerSlot admission.scope.workerKey admission.worker admission.identity admission.objective (Just session)] maximumSessionCapacity admission.maximumAssignments admission.mailboxLimit
       authority = CoordinationAuthority (\requested -> pure (if requested == run then Right (Just scope) else Left "foreign control scope")) (\requested pinned -> pure (if requested == run && pinned == scopeFingerprint scope then Right scope else Left "control scope unavailable"))
-      configured = Objectives.coordinationHost env config.objectiveSettings directory.handle authorizer agents config.delegationBudget Nothing
+      configured = Objectives.coordinationHost env config.objectiveSettings directory.handle authorizer agents config.delegationBudget (config.workspaceSettings >>= configuredWorkspaceTransfers)
       host = CoordinationHost configured.services authority
   result <- executeWorkerControl host authorizer scope key command
   case result of
@@ -85,7 +86,7 @@ runWorkersControl key command config = do
     Left _ -> die "worker command refused; fresh parent authority and any required objective/workspace providers must be configured"
 
 -- | Qualified hosts use the exact same owner as Flow and Skill calls. The
--- CLI composition uses the real objective provider and refuses missing workspace fencing.
+-- CLI composition uses real objective and configured process-fencing providers.
 executeWorkerControl :: CoordinationHost -> ActionAuthorizer -> CoordinationScope -> OperationId -> WorkerCommand -> IO (Either SessionError WorkerReply)
 executeWorkerControl host authorizer scope key command = do
   result <- runAppIO host.services.sessions.appEnv do

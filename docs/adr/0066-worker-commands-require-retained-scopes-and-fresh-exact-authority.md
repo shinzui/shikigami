@@ -67,6 +67,14 @@ protected admission read only after lifecycle and exact C13 checks against its
 public binding; they then use the same command owner. Unsupported real-provider
 operations refuse rather than fabricate objective or fencing state.
 
+Operator commands and process-backed workers select the same workspace transfer
+client from validated workspace process settings. Core owns the retained wire
+types, bounded framing and kernel peer verification in `Workspace.Protocol`,
+`Workspace.RpcClient` and `Workspace.TransferClient`. Workers retain systemd
+listener adoption, process supervision and server dispatch. The administrative
+role acquires no worker runtime, and the server must not depend on the workers
+package. File-only or absent workspace settings supply no process fence.
+
 `CoordinatingSkill` explicitly selects the admitted durable coordinator path.
 It requires a worker binding before any model call. Ordinary `Skill` declarations
 with delegates retain their fixed-supervisor behavior. Ephemeral behavior and

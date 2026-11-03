@@ -80,6 +80,12 @@ forbidden. In particular `shikigami-workers` must never depend on `shikigami-api
 `shikigami-server`, `shikigami-server` must never depend on `shikigami-workers`, and
 `shikigami-core` must never depend on any sibling.
 
+The workspace supervisor's wire codecs and bounded, peer-checked Unix client
+live in core (`Workspace.Protocol`, `Workspace.RpcClient` and
+`Workspace.TransferClient`) so worker and administrative roles share them.
+Listener adoption, supervisor dispatch and process execution remain in workers;
+operator transfer control does not introduce a server-to-workers dependency.
+
 `shikigami-migrations` depends on no Shikigami sibling *production library*. Production
 test suites in any package may depend on the public `shikigami-migrations:test-support`
 sublibrary; production libraries may not.

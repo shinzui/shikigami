@@ -118,10 +118,11 @@ Instructions and `delegates` request capabilities; they do not grant control.
 
 An ordinary `Skill` with delegates continues to use the existing fixed supervisor.
 `CoordinatingSkill` cannot run through `shikigami-run-behavior`, conversation
-fallback, or a routed declaration. Production coordination remains unavailable
-until the separately owned objective/checkpoint and workspace providers are
-configured and qualified. See [worker operations](../operations/operator-cli.md)
-for command semantics and the current provider gates.
+fallback, or a routed declaration. Objective-backed coordination requires
+enabled tracking and retained admitted associations. Repository transfer also
+requires the configured process-backed workspace supervisor; file-only settings
+provide no process fence. See [worker operations](../operations/operator-cli.md)
+for configuration, command semantics and provider requirements.
 
 ## Flow — the durable lifecycle path
 

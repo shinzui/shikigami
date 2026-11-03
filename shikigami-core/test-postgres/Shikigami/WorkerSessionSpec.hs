@@ -1,4 +1,4 @@
-module Shikigami.WorkerSessionSpec (tests) where
+module Shikigami.WorkerSessionSpec (tests, childJob, completeFixtureChild) where
 
 import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson

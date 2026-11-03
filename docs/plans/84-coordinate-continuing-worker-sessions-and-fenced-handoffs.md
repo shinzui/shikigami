@@ -48,6 +48,11 @@ provenance:
       at: 2026-11-02T18:39:36Z
       mode: "update"
       note: "Track plan 96 real ownership and successor qualification without closing full IR-15 acceptance."
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-11-03T18:55:48Z
+      mode: "implement"
+      note: "Finish operator fencing composition and combined continuing-assignment compaction/replay acceptance."
 ---
 
 # Coordinate continuing worker sessions and fenced handoffs
@@ -70,6 +75,17 @@ A coordinator can send a second assignment to the same worker, recover accepted 
 - [x] Milestone 2: Recoverable assignment workflow and checkpoint-intent integration against deterministic adapters (2026-10-28); real IR-13 integration remains a completion gate.
 - [x] Milestone 3: Durable fenced-transfer mechanics against deterministic owners (2026-10-28); real IR-11/IR-13 qualification remains a completion gate.
 - [ ] Milestone 4: Governed Flow/Skill/operator command mechanics qualified against deterministic adapters (2026-10-28); real-provider runtime qualification remains open.
+
+2026-11-03 closeout in progress: operator commands now select the same peer-checked
+workspace client as workers from validated process settings. Shared wire types
+and the client live in core; listener adoption and supervisor dispatch stay in
+workers, preserving the server/worker package boundary. The combined continuing
+assignment, recorded compaction, reconstructed driver and duplicate native
+command regression passes. Full build, 1,703 package cases, the domain suite,
+migration isolation and the ordinary Keiro gate against `0e38c0a8` pass; the
+gate reports no breaking changes or findings and all 169 conformance controls
+pass. Native operator recovery remains under qualification before milestone 4
+and IR-15 are closed.
 
 Implementation started after plan 83 completed at `a0d6f2a`. As of 2026-10-30,
 [plan 96](96-provide-governed-mutable-repository-workspaces-for-durable-agents.md)
@@ -129,6 +145,14 @@ workaround, and measure scheduling throughput in plan 85's capacity acceptance.
 
 ## Decision Log
 
+
+2026-11-03: Share supervisor wire types and its bounded authenticated client in
+core, while retaining listener adoption and process ownership in workers.
+Operator commands consume the same configured provider without adding the
+forbidden server-to-workers dependency or a second wire codec. Existing frame
+versions, result validation, peer checks and refusal semantics are preserved.
+[ADR 0066](../adr/0066-worker-commands-require-retained-scopes-and-fresh-exact-authority.md)
+records this role boundary.
 
 2026-10-10: Keep continuing worker sessions distinct from Kioku session history and Danwa lifecycle. Queue follow-ups at assignment boundaries; interrupt and ownership transfer are explicit reconciling operations. External workspace/checkpoint completion remains visible rather than being bundled into this plan.
 
