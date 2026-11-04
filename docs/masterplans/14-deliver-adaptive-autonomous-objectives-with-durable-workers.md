@@ -103,7 +103,7 @@ Relevant local decisions consulted include [ADR 0007](../adr/0007-a-resolved-pro
 | EP-2 | Pin governed execution settings for agent assignments | [docs/plans/82-pin-governed-execution-settings-for-agent-assignments.md](../plans/82-pin-governed-execution-settings-for-agent-assignments.md) | EP-1; external plan 73 | None | Complete |
 | EP-3 | Recover durable model and tool turns with composed policies | [docs/plans/83-recover-durable-model-and-tool-turns-with-composed-policies.md](../plans/83-recover-durable-model-and-tool-turns-with-composed-policies.md) | EP-1, EP-2 | None | Complete |
 | EP-4 | Coordinate continuing worker sessions and fenced handoffs | [docs/plans/84-coordinate-continuing-worker-sessions-and-fenced-handoffs.md](../plans/84-coordinate-continuing-worker-sessions-and-fenced-handoffs.md) | EP-1, EP-2, EP-3; IR-11/joint provider boundary qualified by plan 96; IR-13 provider qualified by plan 99; full consumer acceptance qualified by plan 84 | None | Complete |
-| EP-5 | Adapt durable delivery through validated coordinator decisions | [docs/plans/85-adapt-durable-delivery-through-validated-coordinator-decisions.md](../plans/85-adapt-durable-delivery-through-validated-coordinator-decisions.md) | EP-4; external plan 76; completion gate IR-13 provider | None | In Progress |
+| EP-5 | Adapt durable delivery through validated coordinator decisions | [docs/plans/85-adapt-durable-delivery-through-validated-coordinator-decisions.md](../plans/85-adapt-durable-delivery-through-validated-coordinator-decisions.md) | EP-4; external plan 76; completion gate IR-13 provider | None | Complete |
 | EP-6 | Qualify integrated adaptive autonomous delivery | [docs/plans/86-qualify-integrated-adaptive-autonomous-delivery.md](../plans/86-qualify-integrated-adaptive-autonomous-delivery.md) | EP-5; IR-11 and IR-13 providers before milestones 2–3 | None | Not Started |
 | EP-7 | Supervise recurring objectives from current durable checkpoints | [docs/plans/87-supervise-recurring-objectives-from-current-durable-checkpoints.md](../plans/87-supervise-recurring-objectives-from-current-durable-checkpoints.md) | EP-5; completion gate IR-13 provider | EP-6 fixture reuse | Not Started |
 
@@ -160,15 +160,16 @@ Coordinate those prerequisite deliverables with their separate owning plans when
 ## Progress
 
 
-2026-11-03 current state: EP-1 through EP-4 are Complete. Plan 84 closes the
-continuing-worker consumer boundary and IR-15, including the combined
-follow-up/compaction/replay case and actual operator recovery against the real
-workspace/objective providers. See its [acceptance matrix](../evidence/plan-84/acceptance.md)
-and [results](../evidence/plan-84/acceptance.json). IR-14 acceptance 8 is established
-for this consumer and retains its integrated UC-1 recheck in EP-6. EP-5's hard
-start prerequisites are satisfied; its adaptive coordinator, accepted decision
-accounting and shared capacity are implemented and in final qualification.
-EP-6 and EP-7 continue to wait for EP-5. The initiative remains in progress.
+2026-11-04 UTC current state: EP-1 through EP-5 are Complete. EP-5 qualifies the
+native adaptive coordinator, actual typed-call accounting, shared capacity,
+inspection and exact fixture completion through the real objective/session
+owners. Its [acceptance evidence](../evidence/plan-85/acceptance.md) records
+1,711 package cases, 183 conformance controls and an additive-only native gate.
+This closes its IR-16 mechanics and IR-17 decision-permission/escalation cases.
+EP-6 and EP-7 are now eligible under their declared provider gates and have not
+started. EP-6 retains real repository artifacts, the live trial and integrated
+UC-1/IR-14/IR-16/IR-17 qualification; EP-7 retains recurrence. The initiative
+remains in progress.
 
 Historical checkpoints below describe their named revisions and earlier gates.
 
@@ -311,4 +312,10 @@ recurring child gates. See [objective operations](../operations/objective-tracki
 ## Outcomes & Retrospective
 
 
-EP-1 through EP-4 are complete. EP-5 may begin; EP-6 and EP-7 still wait for its adaptive coordinator and capacity acceptance. Overall completion requires all seven children, the acceptance ownership matrix above, workflow evolution/conformance evidence and ADR distillation. Finite delivery may be qualified before recurrence; report that narrower milestone honestly without marking the entire initiative complete.
+EP-1 through EP-5 are complete. EP-6 can qualify the integrated repository
+delivery and live trial; EP-7 can implement explicit recurrence. EP-5 preserves
+existing populations with real patch branches, and its shared native producer
+and capacity contracts are distilled in ADRs 0108–0111. Overall completion still
+requires both remaining children and the acceptance ownership matrix above.
+Finite integrated delivery may be qualified before recurrence without marking
+the entire initiative complete.

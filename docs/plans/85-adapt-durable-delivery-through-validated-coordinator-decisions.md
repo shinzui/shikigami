@@ -54,9 +54,9 @@ Let a coordinator change its organization when new evidence warrants it: work di
 - [x] (2026-11-03) Milestone 1: Versioned bounded proposals, whole-proposal validation and the production checkpoint adapter atomically retain graph changes and executable manifests. Fifteen pure proposal cases and eleven PostgreSQL adapter cases cover protected restart reads before live policy, revision races, revocation, root refusal, current workspace references, wake races, inspection corruption and exact combined-check refusal.
 - [x] (2026-11-04 UTC) Milestone 2: The native `adaptive-delivery` Flow executes accepted typed programs with actual-call root/evidence accounting, pinned catalogs and reference-only rotating seeds. Five native Flow cases pass: one worker/finding/follow-up, lost validation acknowledgement plus permitted actual model escalation, a local coordinator with two descendants under a larger live catalog, direct work, and same-session handoff reconciliation. Five typed-execution cases cover replay, internal-call exhaustion, retained limits and provider overlap while an unrelated root/timer advances. Three native-ingestion cases preserve fresh and historical patch semantics.
 - [x] (2026-11-04 UTC) Milestone 3: Shared database capacity gates accepted executor claims; positive runtime configuration keeps defaults at one and validates pool headroom. All nine capacity cases pass, including useful interval overlap, root fairness, lowering/draining, two runtime processes and a real root last-slot race with spare global capacity. All 291 worker cases pass at this checkpoint.
-- [ ] Milestone 4: Decision/graph/resource/refusal inspection, exact completion and compatible declarations are implemented. Finish broad regression qualification and the committed-generation workflow gate.
+- [x] (2026-11-04 UTC) Milestone 4: Supported HTTP/CLI inspection publishes bounded current graph, decision history, root usage and coarse refusals; completion uses exact owner-verified combined evidence and settled sources. Full build, 706 core unit, 572 PostgreSQL, 291 worker, 105 server and 37 agent cases pass. The workflow gate against `1a7d5ebd2b4a7eca058fe61726807b38076fe6e8` passes deterministic regeneration and 183 conformance controls, with three additive findings and no breaking change. [Acceptance evidence](../evidence/plan-85/acceptance.md) records the scope and commands.
 
-Implementation checkpoints are `8f4d40a0` (validated owner decisions), `72a56e27` (retained authority), `af298bf2` (shared capacity) and `55c4eae0` (accepted typed decisions). The last committed foundation passed `cabal build all`, 703 core unit, 558 core PostgreSQL, 289 worker and 105 server tests plus schema isolation. The native coordinator qualification now passes all 24 focused PostgreSQL cases. The first broad candidate found only registry-inventory assertions and an old unassociated transport guard consulting optional objective services. Those are being corrected before final acceptance; no historical patch population is reset.
+Implementation checkpoints are `8f4d40a0` (validated owner decisions), `72a56e27` (retained authority), `af298bf2` (shared capacity), `55c4eae0` (accepted typed decisions), `9c3cc615` (native coordinator) and `73ce5be0` (reviewed conformance expectations). Final qualification covers 1,711 package cases and 183 conformance controls, plus migration schema isolation, the Haskell conventions check and its thirteen controls. No historical patch population is reset. The native coordinator contributes 24 focused PostgreSQL cases within the broad suite.
 
 Implementation started 2026-11-03 from baseline `1a7d5ebd2b4a7eca058fe61726807b38076fe6e8` on the existing branch. Hard prerequisites and baseline qualification are complete. `nix develop --no-write-lock-file -c cabal build all` passes. Use the Nix environment because plain Cabal cannot locate the configured GHC.
 
@@ -94,6 +94,14 @@ A session may exist before its first checkpoint publishes a session reference in
 
 ## Decision Log
 
+2026-11-04 UTC: Keep native first-input/patch admission in the single Versioning
+owner, composing its prepared transaction with the source owner's authority
+check. Propagate the admitted catalog and separate objective association through
+real continuing-worker children. Discover native transport sources before
+consulting optional services so historical unassociated runs retain their old
+branches. [ADR 0111](../adr/0111-adaptive-delivery-carries-native-admission-and-reference-only-seeds.md)
+records these shared producer and controller contracts.
+
 2026-11-03: Reuse accepted execution operations for typed programs without charging a synthetic wrapper attempt. The wrapper owns one shared runtime permit and serializes internal transport calls; each actual retry/node atomically retains its own root/selection receipt with the existing decision evidence owner. Accepted recovery precedes live parameter/program lookup. The old synchronous interpreter keeps its journal branch. [ADR 0110](../adr/0110-accepted-typed-decisions-account-for-every-transport-call.md) records the transaction and replay boundaries.
 
 2026-11-03: Qualify the existing executor capacity boundary before extending it with typed decision work. Admission is atomic with the existing attempt claim/fence. Unknown dispatch without a confirmed local stop retains its permit; the exact local executor finalizer may release runtime occupancy while leaving unknown root usage charged. Tests deliberately allowing recovery alongside unknown work configure both root and runtime capacity separately. A capacity deferral acknowledges only its queue delivery and leaves repair to the accepted driver's existing timer, avoiding exhaustion of provider-delivery retries. [ADR 0109](../adr/0109-runtime-capacity-admission-shares-accepted-attempt-fences.md) records the storage, fairness and configuration contract.
@@ -108,14 +116,29 @@ A session may exist before its first checkpoint publishes a session reference in
 ## Outcomes & Retrospective
 
 
-Milestones 1–3 are implemented and qualified. The native adaptive coordinator,
-operator inspection and compatible declarations are implemented. Final broad
-regression and the committed-generation workflow gate remain before completion.
-Synchronous decision labels/codecs and existing supervisor branches retain their
-shape. FRIC-51 is accepted with bounded sequential test concurrency; FRIC-52 is
-resolved by verified native child association; FRIC-53 is resolved by atomic
-fresh input/patch admission. Entries are in `docs/friction-log/`. Real repository
-artifact/live trial qualification remains with plan 86.
+All four milestones are complete. The compiled Flow makes validated adaptive
+decisions, retains native workers and descendants across recovery, performs
+bounded direct work and same-session handoff, and waits for exact combined
+evidence before proposing completion. Actual typed calls and worker calls share
+root accounting and physical runtime capacity. Operator inspection reads the
+same authoritative owners without exposing instruction or result bodies.
+
+Qualification passes 1,711 package cases, 183 conformance controls, full build,
+schema isolation and Haskell conventions. The native diff has exactly two
+`WorkflowEvolutionGuardAdded` findings and one `DeclarationAdded`, all additive;
+its aggregate replay-impact verdict is `replay-neutral`. Historical agent,
+conversation, synchronous decision and bare-ingestion branches remain exercised.
+ADRs 0108–0111 retain the owner, capacity, typed-call and native-controller
+contracts. Defaults remain one; internal typed nodes serialize within their
+wrapper permit. Handoff here qualifies the real owner/session protocol with an
+explicit deterministic fence contract fixture, not filesystem containment.
+
+FRIC-51 in `docs/friction-log/` is accepted with bounded sequential test
+concurrency. FRIC-52 is resolved by verified native child association and the
+full local-descendant fixture. FRIC-53 is resolved by atomic fresh input/patch
+admission and explicit historical replay controls. This completes coordinator
+mechanics; plan 86 still owns real integrated repository artifacts and a live
+trial, and plan 87 owns recurrence. Neither broader request is closed here.
 
 
 ## Context and Orientation

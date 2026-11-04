@@ -23,10 +23,14 @@ restrictions, retain immutable bindings and correlate actual provider attempts.
 three-alias HTTP fixture and replay/refusal evidence; it does not claim a live vendor trial.
 
 The request remains open under MasterPlan 14's acceptance matrix. Continued-assignment
-cases still consume [plan 84](../plans/84-coordinate-continuing-worker-sessions-and-fenced-handoffs.md) (in progress, real providers missing); [plan 85](../plans/85-adapt-durable-delivery-through-validated-coordinator-decisions.md) owns the
-coordinator-proposed escalation and real IR-12 Flow permission regression; [plan 86](../plans/86-qualify-integrated-adaptive-autonomous-delivery.md)
-owns integrated distinct-model delivery. Plans 85 and 86 are not started. These are
-remaining acceptance gates, rather than missing whole-assignment selection primitives.
+cases are qualified by completed [plan 84](../plans/84-coordinate-continuing-worker-sessions-and-fenced-handoffs.md), including its real providers.
+Completed [plan 85](../plans/85-adapt-durable-delivery-through-validated-coordinator-decisions.md)
+qualifies coordinator-proposed escalation reaching the actual specialist model in
+the same native session and the real IR-12 Flow permission regression. Its
+[acceptance evidence](../evidence/plan-85/acceptance.md) retains those boundaries.
+[plan 86](../plans/86-qualify-integrated-adaptive-autonomous-delivery.md) has not
+started and still owns integrated distinct-model repository delivery and the live
+trial. These remaining integrated gates do not indicate missing selection primitives.
 The declaration fields and operator model catalog are documented in
 [Writing agents](../user/writing-agents.md).
 
@@ -41,7 +45,8 @@ assignment or widen its authority.
 [IR-12](compose-shikumi-decisions-in-durable-flows.md) is complete through [MasterPlan 13](../masterplans/13-compose-shikumi-decisions-in-durable-flows.md)
 and plans 73–76. Its per-slot Flow permissions remain distinct from whole-assignment
 permissions, although both reuse the operator model catalog. The actual cross-feature
-Flow regression and coordinator escalation remain in plans 85/86.
+Flow regression and coordinator escalation are qualified by plan 85; plan 86
+retains their integrated delivery recheck.
 
 [plan 80](../plans/80-configure-model-providers-and-agent-launches-through-baikai.md) delivers HTTP providers and foreground launch configuration; background CLI
 responses retain the released cancellation-support gate. Foreground process settings
