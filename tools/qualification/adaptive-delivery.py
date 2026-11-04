@@ -210,6 +210,9 @@ def qualify(directory, config, mode):
                     "An explicitly supplied live provider configuration, fresh authorization and enforceable limits are required")
             elif config["max_model_attempts"] != 48:
                 manifest["limitations"].append("native fixture currently admits exactly the declared 48-call ceiling")
+            elif "runtime" not in config:
+                manifest["limitations"].append(
+                    "an explicitly built Linux runtime is required; supply runtime in a private configuration before bounded objective admission")
             elif any(shutil.which(name) is None for name in ["container", "nix"]):
                 manifest["limitations"].append("the Apple container and Nix executables are required for native qualification")
             else:

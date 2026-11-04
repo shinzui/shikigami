@@ -99,8 +99,8 @@ retains a blocked gate, and no milestone or request is marked complete from
 these compiler and fixture-mechanics results.
 
 The [host qualification report](../evidence/adaptive-delivery/host-qualification.md)
-records the full build, 1,674 requested Haskell suite cases and 35 Python tool
-cases, including fourteen new adaptive controls. An actual Git bundle restores
+records the full build, 1,674 requested Haskell suite cases and 36 Python tool
+cases, including fifteen new adaptive controls. An actual Git bundle restores
 the exact returned commit/tree and bytes in a fresh repository after removing
 access to its original source path. The guest's cleanup now archives its four
 worker commits and two integrated commits before disposal; failed runs retain
@@ -218,8 +218,10 @@ issuer. It does not qualify live production authority.
 The driver configuration is JSON-form YAML, with no additional parser
 dependency. It admits exactly the two canonical fixture identities, bounds
 duration and model attempts, strips ambient provider/database configuration and
-writes private per-attempt manifests. Optional `runtime` selects an explicitly
-built Nix output; record that actual output alongside source facts. The current
+writes private per-attempt manifests. Required `runtime` selects an explicitly
+built Nix output; record that actual output alongside source facts. Missing
+runtime selection returns blocked before native admission. Cold compilation is
+a separate preparation step and cannot consume the finite objective budget. The current
 native envelope has a 48-model-attempt ceiling and 1,200-second cutoff. Its
 provider is free and deterministic; token/invoice dimensions are explicitly
 unbounded fixture policy. `--mode live` remains blocked until a separate actual
@@ -270,10 +272,32 @@ The gate must report no unexplained breaking change and generated conformance mu
 ## Validation and Acceptance
 
 
-After implementation, from the repository root run the new driver against explicit configuration files:
+Prepare the immutable Linux runtime before admitting the bounded objective.
+The checked-in fixture configuration deliberately has no machine-specific output
+path. From the repository root, build the runtime separately and create a private
+copy selecting that exact output:
 
 ```bash
-python3 tools/qualification/adaptive-delivery.py --mode fixture --config tests/adaptive-delivery/fixture.yaml --artifact-dir build/adaptive-delivery-fixture
+umask 077
+mkdir -p build/adaptive-delivery-config
+nix build .#packages.x86_64-linux.shikigami-workspace-prototype --max-jobs 0 --cores 2 --no-link --no-write-lock-file --json > build/adaptive-delivery-config/runtime.json
+python3 - <<'PY'
+import json
+from pathlib import Path
+directory = Path("build/adaptive-delivery-config")
+runtime = json.loads((directory / "runtime.json").read_text())
+assert len(runtime) == 1
+config = json.loads(Path("tests/adaptive-delivery/fixture.yaml").read_text())
+config["runtime"] = runtime[0]["outputs"]["out"]
+(directory / "fixture.yaml").write_text(json.dumps(config, indent=2) + "\n")
+PY
+```
+
+After implementation, run the driver against the selected runtime and the
+separately supplied live configuration:
+
+```bash
+python3 tools/qualification/adaptive-delivery.py --mode fixture --config build/adaptive-delivery-config/fixture.yaml --artifact-dir build/adaptive-delivery-fixture
 python3 tools/qualification/adaptive-delivery.py --mode live --config "$MP14_LIVE_CONFIG" --artifact-dir "$MP14_LIVE_EVIDENCE"
 ```
 

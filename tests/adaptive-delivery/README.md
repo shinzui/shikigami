@@ -49,7 +49,8 @@ corrected seed proves fixture mechanics only.
 
 The qualification driver accepts JSON-form YAML without an additional Python
 dependency. `fixture.yaml` admits only the two identities, a 1,800-second
-driver timeout and 48 actual model attempts. Run it with:
+driver timeout and 48 actual model attempts. As shipped it has no machine-specific
+runtime path, so this command demonstrates the mechanics and returns blocked:
 
 ```bash
 python3 tools/qualification/adaptive-delivery.py --mode fixture \
@@ -78,8 +79,10 @@ bash tests/workspace/run-apple.sh --adaptive-only
 ```
 
 An optional second argument selects an explicitly built Nix runtime output;
-the same output can be supplied as `runtime` in a private driver configuration
-to avoid rebuilding. This does not establish that an older output qualifies
+the driver requires that output as `runtime` in a private copy of `fixture.yaml`.
+Compile the runtime before bounded objective admission; a cold build must not
+consume the objective's execution deadline. The template driver never starts
+an implicit cold build. This does not establish that an older output qualifies
 the current source; record the actual selected output and source versions.
 There are no host mounts or inherited SSH credentials. The runner creates its
 own guest database, temporary authorization issuer and native immutable process

@@ -19,7 +19,7 @@ a live model trial or UC-1 delivery. No live model credentials were used.
 | Worker suite | 291 passed |
 | Server suite | 105 passed |
 | Existing `AdaptiveWorkflow` PostgreSQL group | Five passed; also included in the full PostgreSQL total |
-| Python qualification tools | 35 passed, including fourteen new adaptive-delivery controls |
+| Python qualification tools | 36 passed, including fifteen new adaptive-delivery controls |
 | Migration schema isolation | Passed |
 | Haskell conventions and checker controls | Passed, thirteen checker controls |
 | Changed shell syntax | Passed |

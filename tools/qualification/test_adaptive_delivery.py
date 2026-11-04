@@ -139,7 +139,7 @@ class AdaptiveDeliveryTests(unittest.TestCase):
             self.assertEqual((path / "output.log").stat().st_size, 1048576)
 
     def test_a_passing_native_scenario_does_not_close_the_full_fault_gate(self):
-        config = json.loads((driver.FIXTURE / "fixture.yaml").read_text())
+        config = json.loads((driver.FIXTURE / "fixture.yaml").read_text()) | {"runtime": "/nix/store/" + "a" * 32 + "-fixture"}
         with tempfile.TemporaryDirectory() as raw, \
                 patch.object(driver.shutil, "which", return_value="available"), \
                 patch.object(driver, "run_case", return_value={"state": "passed"}), \
@@ -149,7 +149,7 @@ class AdaptiveDeliveryTests(unittest.TestCase):
             self.assertEqual(manifest["native"]["status"], "Completed")
 
     def test_malformed_native_evidence_still_retains_a_failed_manifest(self):
-        config = json.loads((driver.FIXTURE / "fixture.yaml").read_text())
+        config = json.loads((driver.FIXTURE / "fixture.yaml").read_text()) | {"runtime": "/nix/store/" + "a" * 32 + "-fixture"}
         with tempfile.TemporaryDirectory() as raw, \
                 patch.object(driver.shutil, "which", return_value="available"), \
                 patch.object(driver, "run_case", return_value={"state": "passed"}), \
@@ -157,6 +157,14 @@ class AdaptiveDeliveryTests(unittest.TestCase):
             manifest = driver.qualify(Path(raw), config, "fixture")
             self.assertEqual(manifest["state"], "failed")
             self.assertNotIn("PRIVATE_MARKER", json.dumps(manifest))
+
+    def test_cold_compilation_is_not_started_inside_the_objective_budget(self):
+        config = json.loads((driver.FIXTURE / "fixture.yaml").read_text())
+        with tempfile.TemporaryDirectory() as raw, patch.object(driver, "run_case", wraps=driver.run_case) as run:
+            manifest = driver.qualify(Path(raw), config, "fixture")
+            self.assertEqual(manifest["state"], "blocked")
+            self.assertEqual(run.call_count, 3)
+            self.assertNotIn("native", manifest)
 
     def test_native_evidence_refuses_stale_artifacts_duplicates_and_unknown_work(self):
         starts = [{"identity": identity, "base": str(index + 1) * 40}
