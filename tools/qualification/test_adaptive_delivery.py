@@ -140,7 +140,8 @@ class AdaptiveDeliveryTests(unittest.TestCase):
             self.assertEqual((path / "output.log").stat().st_size, 1048576)
 
     def test_a_passing_native_scenario_does_not_close_the_full_fault_gate(self):
-        config = json.loads((driver.FIXTURE / "fixture.yaml").read_text()) | {"runtime": "/nix/store/" + "a" * 32 + "-fixture"}
+        config = json.loads((driver.FIXTURE / "fixture.yaml").read_text()) | {
+            "runtime": "/nix/store/" + "a" * 32 + "-fixture", "scenario": "baseline"}
         with tempfile.TemporaryDirectory() as raw, \
                 patch.object(driver.shutil, "which", return_value="available"), \
                 patch.object(driver, "run_case", return_value={"state": "passed"}), \
