@@ -104,6 +104,7 @@ import Shikigami.PracticeReview.Capability qualified as Practice
 import Shikigami.Prelude ((%~), (&), (.~))
 import Shikigami.Program.Decision.Adaptive (AdaptiveInput (..))
 import Shikigami.Repository (RepositoryId, repositoryId)
+import Shikigami.RunEvidence.Catalog qualified as Catalog
 import Shikigami.Sink (GrantSource (StaticGrants), defaultGrantTable)
 import Shikigami.Sink.Config
 import Shikigami.Sink.Http (HttpLimits (..), credentialsFromConfig, newSinkHttp)
@@ -176,6 +177,7 @@ adaptiveCase config prefix stage = withQualification config prefix \original -> 
           Nothing -> do
             current <- right =<< run env (O.readObjective owner goal)
             right =<< run env (O.executeCommand owner goal current.revision (fixtureOperationId operation) change)
+  void (right =<< run env Catalog.registerProjectionCatalog)
   repos <- forM ["producer", "consumer"] \name -> do
     let source = prefix </> "adaptive-repositories" </> Text.unpack name
     base <- workspaceCoordinate . Text.strip . Encoding.decodeUtf8 <$> (right =<< runWorkspaceGit prefix 65536 ["-C", source, "rev-parse", "HEAD"])
@@ -320,8 +322,12 @@ adaptiveCase config prefix stage = withQualification config prefix \original -> 
       unless (accepted.status == Completed) (fail "exact integrated objective did not close")
       rootUsage <- right =<< run env (Roots.inspectRoot (fromMaybe (error "root") saved.job.executionRootId))
       unless (rootUsage.active == noAttempts && rootUsage.unknown == noAttempts) (fail "native completion retained unsettled spending")
+      counts <- run env (runTransaction (Tx.statement () (preparable "SELECT (SELECT count(*) FROM shikigami.worker_sessions), (SELECT count(*) FROM shikigami.worker_session_messages), (SELECT count(*) FROM shikigami.worker_session_results)" E.noParams (D.singleRow ((,,) <$> D.column (D.nonNullable D.int8) <*> D.column (D.nonNullable D.int8) <*> D.column (D.nonNullable D.int8))))))
+      unless (counts == (4, 5, 5)) (fail "native recovery duplicated a worker, followup or result")
+      calls <- Text.lines . Encoding.decodeUtf8 <$> Bytes.readFile (prefix </> "adaptive-provider-calls")
+      unless (all (\name -> length (filter (== name) calls) == if name == "consumer" then 4 else 2) names) (fail "native worker provider calls repeated or omitted completed turns")
       integrated <- right . Aeson.eitherDecodeStrict @Aeson.Value =<< Bytes.readFile (prefix </> "adaptive-integrated.json")
-      Lazy.writeFile (prefix </> "adaptive-evidence.json") (Aeson.encode (Aeson.object ["format" .= (1 :: Int), "objective" .= saved.objectiveId, "status" .= accepted.status, "root" .= rootUsage, "integrated" .= integrated, "reportedResults" .= accepted.reportedResults]))
+      Lazy.writeFile (prefix </> "adaptive-evidence.json") (Aeson.encode (Aeson.object ["format" .= (1 :: Int), "objective" .= saved.objectiveId, "status" .= accepted.status, "root" .= rootUsage, "integrated" .= integrated, "reportedResults" .= accepted.reportedResults, "sessionMessageResultCounts" .= counts, "providerCalls" .= Map.fromList [(name, length (filter (== name) calls)) | name <- "adaptive" : names]]))
       putStrLn "PASS native adaptive two-repository delivery closes only against the exact integrated journey"
 
 -- Native integration targets are separate configured workspaces under the same

@@ -88,6 +88,16 @@ The installed workspace/ownership path passes the 25-case native matrix in plan
 96. All start gates are satisfied; private live configuration remains an
 operator-supplied prerequisite of milestone 3 only.
 
+Implementation checkpoint `f468b6b9` supplies deterministic producer/consumer
+Git seeds, a separately executable failing-then-corrected journey, the bounded
+driver and eight argument/manifest controls. All 29 qualification-tool cases
+pass, the five existing native adaptive PostgreSQL regressions pass, and
+`nix develop --no-write-lock-file -c cabal build workspace-linux-fixture` passes.
+`tests/workspace/prototype/Adaptive.hs` is the new coupled consumer; its
+`--adaptive-only` Apple runner is not yet runtime-qualified. The driver therefore
+retains a blocked gate, and no milestone or request is marked complete from
+these compiler and fixture-mechanics results.
+
 ## Surprises & Discoveries
 
 
@@ -96,6 +106,18 @@ Plan 85's native Flow, plan 96's configured transfer-aware workspace host and
 plan 99's actual objective owner exist. The remaining gap is their coupled
 repository consumer. The historical `AdaptiveWorkflowSpec` integration check
 uses a synthetic artifact and must not be relabeled as real repository evidence.
+
+The existing integration planner accepts only direct worker commits from the
+same repository/common base, and requires at least two artifacts. The new
+fixture therefore uses a delivery worker and a bounded review worker in each
+repository, with the consumer correction committed only after its follow-up.
+It combines each pair in a separate configured workspace and runs the journey
+on blobs read from the resulting exact trees. It never feeds cross-repository
+artifacts into that planner.
+
+FRIC-54 in `docs/friction-log/` records that a fixture-only native derivation
+change recompiles the complete frozen Cabal graph. Local compilation precedes
+the configured-builder run; that build is preparation, not runtime evidence.
 
 
 ## Decision Log
@@ -171,6 +193,29 @@ The repository is a Cabal multi-package Haskell service. `shikigami-core` owns d
 Create `tests/adaptive-delivery/` with two small temporary Git repositories and a combined user journey. Use a producer that emits a versioned record and a consumer that reads it, with an independently executable contract test. Choose the fixture so each worker's initial local checks can pass while the combined behavior fails until coordinated schema assumptions are reconciled. Provide per-repository instructions and canonical admitted fixture repository identities through the IR-11 catalog; no model-chosen absolute paths. Store starting revisions, expected behavior, authority/resource envelope and test commands in `tests/adaptive-delivery/README.md`.
 
 Add `tools/qualification/adaptive-delivery.py` with `--mode fixture|live`, `--config` and `--artifact-dir`. The driver prepares only isolated fixture workspaces, starts an explicitly finite objective via the supported CLI/internal enqueue adapter, observes durable state, and writes a bounded evidence manifest. Missing provider/checkpoint/authority prerequisites yield a clear blocked result and nonzero exit, not a simulated success. The fixture-mode provider supplies scripted model responses but still traverses real journals, reservations, session messages, authority adapters and workspace tools. Add driver argument/manifest tests without requiring live credentials.
+
+The implementation entry points are now `tests/adaptive-delivery/prepare.py`,
+the per-repository templates, `journey.py`, `fixture.yaml` and
+`tests/workspace/prototype/Adaptive.hs`. The latter is compiled in the existing
+optional `workspace-linux-fixture` package. `tests/workspace/run-apple.sh
+--adaptive-only` provisions the real Linux substrate and the guest runner
+initializes the same deterministic seeds. The native consumer creates the
+objective with its real owner, accepts an objective-bound run through
+`Ledger.acceptObjectiveRunRequest`, pins native admission and resumes accepted
+decision and worker jobs. It uses the configured transfer-aware provider and
+the production C13 proof-verification client against a disposable fixture
+issuer. It does not qualify live production authority.
+
+The driver configuration is JSON-form YAML, with no additional parser
+dependency. It admits exactly the two canonical fixture identities, bounds
+duration and model attempts, strips ambient provider/database configuration and
+writes private per-attempt manifests. Optional `runtime` selects an explicitly
+built Nix output; record that actual output alongside source facts. The current
+native envelope has a 48-model-attempt ceiling and 1,200-second cutoff. Its
+provider is free and deterministic; token/invoice dimensions are explicitly
+unbounded fixture policy. `--mode live` remains blocked until a separate actual
+provider/authority adapter and operator-supplied limits are installed. Do not
+reuse these fixture policies as a live spending claim.
 
 ### Milestone 2: Exercise adaptation, integration and fault recovery
 

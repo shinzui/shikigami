@@ -57,6 +57,11 @@ provenance:
       at: 2026-11-04T00:08:01Z
       mode: "implement"
       note: "Record EP-5 adaptive delivery implementation, shared admission fixes and qualification boundary."
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-11-04T03:25:13Z
+      mode: "implement"
+      note: "Start EP-6 after verified completed prerequisites; retain native fault and live acceptance gates."
 ---
 
 # Deliver adaptive autonomous objectives with durable workers
@@ -104,7 +109,7 @@ Relevant local decisions consulted include [ADR 0007](../adr/0007-a-resolved-pro
 | EP-3 | Recover durable model and tool turns with composed policies | [docs/plans/83-recover-durable-model-and-tool-turns-with-composed-policies.md](../plans/83-recover-durable-model-and-tool-turns-with-composed-policies.md) | EP-1, EP-2 | None | Complete |
 | EP-4 | Coordinate continuing worker sessions and fenced handoffs | [docs/plans/84-coordinate-continuing-worker-sessions-and-fenced-handoffs.md](../plans/84-coordinate-continuing-worker-sessions-and-fenced-handoffs.md) | EP-1, EP-2, EP-3; IR-11/joint provider boundary qualified by plan 96; IR-13 provider qualified by plan 99; full consumer acceptance qualified by plan 84 | None | Complete |
 | EP-5 | Adapt durable delivery through validated coordinator decisions | [docs/plans/85-adapt-durable-delivery-through-validated-coordinator-decisions.md](../plans/85-adapt-durable-delivery-through-validated-coordinator-decisions.md) | EP-4; external plan 76; completion gate IR-13 provider | None | Complete |
-| EP-6 | Qualify integrated adaptive autonomous delivery | [docs/plans/86-qualify-integrated-adaptive-autonomous-delivery.md](../plans/86-qualify-integrated-adaptive-autonomous-delivery.md) | EP-5; IR-11 and IR-13 providers before milestones 2–3 | None | Not Started |
+| EP-6 | Qualify integrated adaptive autonomous delivery | [docs/plans/86-qualify-integrated-adaptive-autonomous-delivery.md](../plans/86-qualify-integrated-adaptive-autonomous-delivery.md) | EP-5; IR-11 and IR-13 providers before milestones 2–3 | None | In Progress |
 | EP-7 | Supervise recurring objectives from current durable checkpoints | [docs/plans/87-supervise-recurring-objectives-from-current-durable-checkpoints.md](../plans/87-supervise-recurring-objectives-from-current-durable-checkpoints.md) | EP-5; completion gate IR-13 provider | EP-6 fixture reuse | Not Started |
 
 EP numbers identify rows in this master plan; the linked ExecPlan file ids are 81–87. A child reference is a whole-child start gate: that child must be Complete before the dependent child begins. External plans 73 and 76 are start gates of the same kind, owned by [MasterPlan 13](13-compose-shikumi-decisions-in-durable-flows.md). IR-11 is owned by [plan 96](../plans/96-provide-governed-mutable-repository-workspaces-for-durable-agents.md) and IR-13 by [MasterPlan 17](17-track-durable-objectives-and-authoritative-assignment-checkpoints-without-rei.md), whose EP-2 (plan 99) delivers the provider that closes the IR-13 gate; where a row names one as a completion gate, the child may build its mechanics against the fixture adapter its own plan defines, but it cannot be marked Complete until the real provider passes the acceptance cases named in the ownership matrix below. EP-6 is the exception: its milestones 2–3 exercise real workspaces and checkpoints, so both providers must exist before those milestones start. Initial status is Not Started, not a claim that every row is currently implementable.
@@ -159,6 +164,13 @@ Coordinate those prerequisite deliverables with their separate owning plans when
 
 ## Progress
 
+
+2026-11-04 UTC: EP-6 is In Progress after auditing completed EP-5 and the real
+workspace/objective providers. Its deterministic two-repository seeds, bounded
+driver and compiled native consumer are implemented; native runtime, the full
+coupled fault matrix and the explicitly configured live trial still gate
+acceptance. The child retains those distinctions and its current evidence.
+EP-7 remains independently eligible and outside this implementation request.
 
 2026-11-04 UTC current state: EP-1 through EP-5 are Complete. EP-5 qualifies the
 native adaptive coordinator, actual typed-call accounting, shared capacity,
