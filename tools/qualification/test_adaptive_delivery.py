@@ -360,7 +360,7 @@ class AdaptiveDeliveryTests(unittest.TestCase):
             value["providerCalls"].update(consumer=2, **{"consumer-successor": 2})
             value["ownership"] = {
                 "intent": {"oldOwner": "original", "newOwner": "successor", "oldEpoch": 0, "newEpoch": 1,
-                           "workspace": workspace, "objective": "objective", "operationId": "transfer"},
+                           "workspace": workspace, "sessionId": "consumer-session", "objective": "objective", "operationId": "transfer"},
                 "fence": {"workspace": workspace, "oldEpoch": 0, "newEpoch": 1},
                 "receipt": {"objective": "objective", "operationId": "transfer"},
                 "sessionOwner": "original", "sessionEpoch": 0,
@@ -414,13 +414,16 @@ class AdaptiveDeliveryTests(unittest.TestCase):
     @staticmethod
     def transfer_probes():
         reference = {"attemptId": "edit-attempt", "operationId": "edit-operation", "executionId": "execution"}
-        return {"rootId": "same-root", "objective": "objective", "completionHold": {
+        workspace = {"provider": "native-workspace", "resource": "retained-workspace"}
+        return {"rootId": "same-root", "objective": "objective", "ownership": {"intent": {
+                    "newOwner": "successor", "newEpoch": 1, "sessionId": "consumer-session", "workspace": workspace}}, "completionHold": {
                     "rootId": "same-root", "objective": "objective", "validProposal": True,
                     "unchangedObjective": True, "refusal": "ObjectiveUnresolved", "activeAtCut": 1, "unknownAtCut": 1,
                     "scope": "resource admission only; no external dispatch"}, "unknown": {
                     "reference": reference, "phase": "AttemptCommitted", "outcome": "outcome-ref", "lateReceipt": "receipt-ref",
                     "observed": {"rootId": "same-root", "reference": reference,
-                                 "root": {"active": 1, "unknown": 1}, "transferDenied": True,
+                                 "successor": "successor", "successorEpoch": 1, "sessionId": "consumer-session", "workspace": workspace,
+                                 "root": {"active": 1, "unknown": 1}, "successorWriteDenied": True,
                                  "completionDenied": True, "status": "Open"}},
                 "rootRace": {"rootId": "same-root", "accepted": 1, "refused": 1, "activeAtCut": 1,
                              "activeAfter": 0, "unknownAfter": 0, "loserAbsent": True, "sameRootAfterRetry": True,
@@ -440,7 +443,8 @@ class AdaptiveDeliveryTests(unittest.TestCase):
         mutations = [lambda v: v["unknown"]["observed"].update(rootId="other-root"),
                      lambda v: v["unknown"]["observed"].update(reference={"attemptId": "different"}),
                      lambda v: v["unknown"]["observed"]["root"].update(unknown=0),
-                     lambda v: v["unknown"]["observed"].update(transferDenied=False),
+                     lambda v: v["unknown"]["observed"].update(successorWriteDenied=False),
+                     lambda v: v["unknown"]["observed"].update(successor="unadmitted-owner"),
                      lambda v: v["unknown"].update(lateReceipt=None),
                      lambda v: v["unknown"].update(phase="AttemptUncertain")]
         for mutate in mutations:

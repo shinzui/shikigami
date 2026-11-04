@@ -328,13 +328,16 @@ def validate_transfer_probes(value, recovery):
     unknown = value["unknown"]
     observed = unknown["observed"]
     reference = unknown["reference"]
+    successor = value["ownership"]["intent"]
     if (type(cut["exitCode"]) is not int or cut["exitCode"] != 92 or cut["markerObserved"] is not True
             or observed["rootId"] != root or observed["reference"] != reference
             or any(not isinstance(reference[field], str) or not reference[field]
                    for field in ["attemptId", "executionId", "operationId"])
             or any(type(observed["root"][field]) is not int or observed["root"][field] <= 0
                    for field in ["active", "unknown"])
-            or observed["transferDenied"] is not True or observed["completionDenied"] is not True
+            or observed["successorWriteDenied"] is not True or observed["completionDenied"] is not True
+            or observed["successor"] != successor["newOwner"] or observed["successorEpoch"] != successor["newEpoch"]
+            or observed["sessionId"] != successor["sessionId"] or observed["workspace"] != successor["workspace"]
             or observed["status"] != "Open" or unknown["phase"] not in ["AttemptCommitted", "AttemptSuperseded"]
             or unknown["lateReceipt"] is None or unknown["outcome"] is None):
         raise ValueError("native unknown edit lacks its held root and recovered original receipt")

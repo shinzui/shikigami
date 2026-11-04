@@ -31,7 +31,7 @@ import Data.Generics.Labels ()
 import Data.IORef (newIORef, readIORef, writeIORef)
 import Data.List (find)
 import Data.Map.Strict qualified as Map
-import Data.Maybe (fromMaybe, isJust)
+import Data.Maybe (fromMaybe, isJust, listToMaybe)
 import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as Text
@@ -46,7 +46,7 @@ import Hasql.Encoders qualified as E
 import Hasql.Statement (preparable)
 import Hasql.Transaction qualified as Tx
 import Keiro.Workflow qualified as W
-import Keiro.Workflow.Resume (resumeWorkflowsOnce)
+import Keiro.Workflow.Resume (WorkflowDef (..), resumeWorkflowsOnce)
 import Kioku.Id (genSessionId)
 import Kiroku.Store.Connection (KirokuStore (..), withStore)
 import Kiroku.Store.Transaction (runTransaction)
@@ -56,7 +56,6 @@ import Shikigami.AdaptiveDelivery.Generated.WorkflowRuntime qualified as Generat
 import Shikigami.Agent.Approval (autoApprovePolicy)
 import Shikigami.Agent.Approval.Workflow qualified as Approval
 import Shikigami.Agent.Decl
-import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
 import Shikigami.Agent.Loader (loadAgent)
 import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (AgentIdentity (VerifiedIdentity), mkAgentPrincipal)
@@ -97,6 +96,7 @@ import Shikigami.Execution.SelectionRuntime (assignmentIdFor)
 import Shikigami.Execution.Start (SkillAssignment (..))
 import Shikigami.Execution.Store qualified as Execution
 import Shikigami.Execution.Transcript qualified as Replay
+import Shikigami.ExecutionDriver.Generated.WorkflowRuntime qualified as ExecutionDriver
 import Shikigami.Flow.Decision qualified as Decision
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.FormatVersion (FormatVersion (V1))
@@ -112,13 +112,11 @@ import Shikigami.Prelude ((%~), (&), (.~))
 import Shikigami.Program.Decision.Adaptive (AdaptiveInput (..))
 import Shikigami.Repository (RepositoryId, repositoryId)
 import Shikigami.RunEvidence.Catalog qualified as Catalog
-import Shikigami.Server.Command.Workers (executeWorkerControl)
 import Shikigami.Sink (GrantSource (StaticGrants), defaultGrantTable)
 import Shikigami.Sink.Config
 import Shikigami.Sink.Http (HttpLimits (..), credentialsFromConfig, newSinkHttp)
 import Shikigami.Trigger.Enqueue (addressedRunJob, ensureRunQueue)
 import Shikigami.WorkerSession.Capability qualified as Workers
-import Shikigami.WorkerSession.Handoff (TransferServices (..))
 import Shikigami.WorkerSession.Input qualified as Input
 import Shikigami.WorkerSession.Store qualified as SessionStore
 import Shikigami.WorkerSession.Transfer qualified as Transfer
@@ -344,7 +342,13 @@ adaptiveCase config prefix requestedStage = withQualification config prefix \ori
   registry <- Provider.newProviderRegistryFrom [provider]
   http <- right =<< newSinkHttp (HttpLimits q.config.httpRequestMaxBytes q.config.httpResponseMaxBytes) (credentialsFromConfig q.config) (DanwaConfig "http://localhost:1" (declarationCoordinate "fixture"))
   let deps = Agent.AgentRunDeps env (baseBehavior & #model .~ resumedDefault & #providerRegistry .~ Just registry) (Decision.defaultDecisionServices catalog & #providers .~ [provider]) q.authorizer nativeHost.capabilities (Just nativeHost) (Just sessions) (Just objectives) declarations (KizashiConfig "http://localhost:1" (declarationCoordinate "recipient")) (KawaConfig "http://localhost:1" (activityCoordinate "fixture")) (KanmonConfig "http://localhost:1") (DanwaConfig "http://localhost:1" (declarationCoordinate "fixture")) (ReiConfig Nothing) http (Agent.defaultAgentRunHooks & #afterStepBody .~ (\name -> when (stage == "crash" && name == W.StepName "adaptive-validation") (Bytes.writeFile (prefix </> "adaptive-crashed") "1\n" >> exitImmediately (ExitFailure 86)))) (autoApprovePolicy (checked (parseDuration 900))) Approval.defaultApprovalWorkflowEnv (checked (parseDuration 30)) defaultHarnessPolicy defaultDelegationBudget (StaticGrants defaultGrantTable) directory.handle (Routing.RoutingRuntime (\_ -> error "no routing") (\_ _ _ -> error "no routing")) Practice.unavailablePracticeReviewRuntime (Just store.pool) Log.silentLogger (\profile version -> pure (Left (UnknownProfile profile version)))
-      workflows = Agent.agentRunRegistry deps `Map.union` Driver.executionRegistry (Agent.executionRuntime deps) `Map.union` Adaptive.registry (Agent.adaptiveRuntime deps) `Map.union` Sessions.sessionRegistry (Agent.workerSessionRuntime deps)
+      -- Trusted integration tools are driven synchronously below. Their factual
+      -- receipts still publish normal execution wakes. Supply only those two
+      -- known starts to the normal driver so it can observe their stopped state;
+      -- worker execution starts retain the production journal admission path.
+      integrationStart workflow = listToMaybe [Driver.ExecutionStart execution | repo <- repos, let execution = Replay.executionIdFor (assignmentIdFor ("adaptive-integrate-" <> repo.name)), Replay.executionWorkflowId execution == workflow]
+      executionRegistry = Map.singleton ExecutionDriver.workflowName (WorkflowDef \workflow -> Driver.executionWorkflow (Agent.executionRuntime deps) (integrationStart workflow))
+      workflows = Agent.agentRunRegistry deps `Map.union` executionRegistry `Map.union` Adaptive.registry (Agent.adaptiveRuntime deps) `Map.union` Sessions.sessionRegistry (Agent.workerSessionRuntime deps)
   writeIORef runtimeRef (Agent.adaptiveRuntime deps)
   if stage == "admit"
     then do
@@ -353,7 +357,7 @@ adaptiveCase config prefix requestedStage = withQualification config prefix \ori
       putStrLn "PASS finite native adaptive objective admitted without completing it"
     else
       if stage == "unknown-observe"
-        then observeUnknown q deps sessions saved.objectiveId owner
+        then observeUnknown q deps saved.objectiveId owner
         else do
           let pump 0 = fail "adaptive native fixture exceeded its bounded advances"
               pump remaining = do
@@ -503,8 +507,8 @@ unknownRuntime prefix original@Executor.ExecutionRuntime {Executor.withTools = o
         _ -> pure ()
       pure result
 
-observeUnknown :: Qualification -> Agent.AgentRunDeps -> Workers.CoordinationHost -> ObjectiveId -> O.ObjectiveHost -> IO ()
-observeUnknown q deps host goal owner = do
+observeUnknown :: Qualification -> Agent.AgentRunDeps -> ObjectiveId -> O.ObjectiveHost -> IO ()
+observeUnknown q deps goal owner = do
   cut <- right . Aeson.eitherDecodeStrict @UnknownCut =<< Bytes.readFile (q.prefix </> "adaptive-unknown-crashed.json")
   let awaitExpiry 0 = fail "original file attempt did not reach its bounded expiry"
       awaitExpiry remaining = do
@@ -518,19 +522,14 @@ observeUnknown q deps host goal owner = do
   identifiers <- run q.env (runTransaction (Tx.statement () (preparable "SELECT session_id FROM shikigami.worker_sessions ORDER BY session_id" E.noParams (D.rowList (D.column (D.nonNullable D.text))))))
   sessions <- forM identifiers \raw -> right =<< run q.env (SessionStore.inspectSession (Input.workerSessionId raw))
   (state, _) <- maybe (fail "unknown file attempt has no retained worker session") pure (find (\(state, binding) -> state.owner == cut.identity && binding.rootId == cut.admission.rootId) [entry | Just entry <- sessions])
-  access <- right =<< run q.env (Sessions.sessionAccess host.services.sessions state.sessionId)
-  admission <- right =<< run q.env (SessionStore.loadAdmission access)
-  memory <- maybe (fail "unknown worker has no admitted parent memory") pure admission.context.sessionId
-  let runId = Workers.CoordinatorRun (W.WorkflowId ("operator-workers:" <> state.sessionId.value)) admission.context.identity memory admission.context.executionRootId admission.context.executionPermissions
-      scope = Workers.CoordinationScope V1 runId admission.scope.parent admission.delegator admission.context [Workers.WorkerSlot admission.scope.workerKey admission.worker admission.identity admission.objective (Just state.sessionId)] Input.maximumSessionCapacity admission.maximumAssignments admission.mailboxLimit
-      authority = Workers.CoordinationAuthority (\requested -> pure (if requested == runId then Right (Just scope) else Left "foreign control scope")) (\requested pinned -> pure (if requested == runId && pinned == Workers.scopeFingerprint scope then Right scope else Left "foreign control scope"))
-      control = Workers.CoordinationHost host.services authority
-  refused <- executeWorkerControl control q.authorizer scope (fixtureOperationId "adaptive-unknown-transfer") (Workers.TransferWorker state.sessionId state.revision state.epoch cut.admission.workspace (agent "consumer-successor"))
-  unless (either (const True) (const False) refused) (fail "unknown active assignment admitted a successor")
+  let successor = actor "consumer-successor"
+      successorEpoch = advanceRevision state.epoch
+  refused <- (workspaceTransferClient q.client).admitWrite cut.admission.workspace state.sessionId successor successorEpoch (fixtureOperationId "adaptive-unknown-successor-write")
+  unless (either (const True) (const False) refused) (fail "unknown active assignment admitted a successor write")
   current <- right =<< run q.env (O.readObjective owner goal)
   completion <- run q.env (O.executeCommand owner goal current.revision (fixtureOperationId "adaptive-unknown-completion") Command.AcceptCompletion)
   unless (current.status == Open && either (const True) (const False) completion) (fail "unknown active work completed its objective")
-  Lazy.writeFile (q.prefix </> "adaptive-unknown-observed.json") (Aeson.encode (Aeson.object ["rootId" .= cut.admission.rootId, "reference" .= cut.reference, "root" .= held, "sessionId" .= state.sessionId, "phase" .= state.phase, "transferDenied" .= True, "completionDenied" .= True, "status" .= current.status]))
+  Lazy.writeFile (q.prefix </> "adaptive-unknown-observed.json") (Aeson.encode (Aeson.object ["rootId" .= cut.admission.rootId, "reference" .= cut.reference, "root" .= held, "workspace" .= cut.admission.workspace, "sessionId" .= state.sessionId, "phase" .= state.phase, "successor" .= successor, "successorEpoch" .= successorEpoch, "successorWriteDenied" .= True, "completionDenied" .= True, "status" .= current.status]))
   putStrLn "PASS unknown mutable work retains its root hold and refuses successor admission and completion"
 
 -- Native integration targets are separate configured workspaces under the same

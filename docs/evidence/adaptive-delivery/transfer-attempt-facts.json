@@ -1,0 +1,110 @@
+{
+  "source_revision": "39ef726380ba5399eaf0a6c9e08ab4f8ff66f58d",
+  "source_dirty": false,
+  "runtime": "/nix/store/y9vni868sq1dbj3xf82izy3cbkf0vaf6-shikigami-workspace-prototype-0.1.0.0-39ef726",
+  "started_at": "2026-11-04T07:46:45.771510+00:00",
+  "finished_at": "2026-11-04T07:50:38.499157+00:00",
+  "cases": [
+    {
+      "case": "producer-local",
+      "started_at": "2026-11-04T07:46:45.896135+00:00",
+      "log": "producer-local.log",
+      "expected_exit": 0,
+      "exit_code": 0,
+      "state": "passed",
+      "finished_at": "2026-11-04T07:46:45.912432+00:00",
+      "elapsed_seconds": 0.016
+    },
+    {
+      "case": "consumer-local",
+      "started_at": "2026-11-04T07:46:45.912489+00:00",
+      "log": "consumer-local.log",
+      "expected_exit": 0,
+      "exit_code": 0,
+      "state": "passed",
+      "finished_at": "2026-11-04T07:46:45.928937+00:00",
+      "elapsed_seconds": 0.016
+    },
+    {
+      "case": "initial-combined-refusal",
+      "started_at": "2026-11-04T07:46:45.929073+00:00",
+      "log": "initial-combined-refusal.log",
+      "expected_exit": 1,
+      "exit_code": 1,
+      "state": "passed",
+      "finished_at": "2026-11-04T07:46:45.956359+00:00",
+      "elapsed_seconds": 0.027
+    },
+    {
+      "case": "native",
+      "started_at": "2026-11-04T07:46:45.956833+00:00",
+      "log": "native.log",
+      "expected_exit": 0,
+      "exit_code": 1,
+      "state": "failed",
+      "finished_at": "2026-11-04T07:50:38.499010+00:00",
+      "elapsed_seconds": 232.541
+    }
+  ],
+  "format": 1,
+  "state": "failed",
+  "failure": "The probe expected transfer-request refusal; the owner legitimately accepted a queued handoff and withheld successor establishment. No full matrix qualification is claimed.",
+  "root_race": {
+    "accepted": 1,
+    "activeAfter": 0,
+    "activeAtCut": 1,
+    "loser": {
+      "attemptId": "shikigami_execution_attempt_01j0000000fgy8mmnp5yeszjsg",
+      "operationId": "adaptive-root-race-left",
+      "policy": "EnforcedCeiling",
+      "quantities": [
+        [
+          "ActiveWork",
+          1
+        ],
+        [
+          "ToolAttempts",
+          1
+        ]
+      ]
+    },
+    "loserAbsent": true,
+    "refused": 1,
+    "rootId": "shikigami_execution_root_01j0000000f6xrmjx8bkby3j3g",
+    "sameRootAfterRetry": true,
+    "scope": "resource admission only; no external dispatch",
+    "unknownAfter": 0,
+    "winner": {
+      "attemptId": "shikigami_execution_attempt_01j0000000f548htnxzeh9gtnr",
+      "operationId": "adaptive-root-race-right",
+      "policy": "EnforcedCeiling",
+      "quantities": [
+        [
+          "ActiveWork",
+          1
+        ],
+        [
+          "ToolAttempts",
+          1
+        ]
+      ]
+    }
+  },
+  "alias_policy": {
+    "admitted": true,
+    "allowedAlias": "consumer",
+    "dispatches": 0,
+    "forbiddenAlias": "producer",
+    "refused": true,
+    "rootId": "shikigami_execution_root_01j0000000f6xrmjx8bkby3j3g"
+  },
+  "target_refusal": {
+    "checkpointRevision": 7,
+    "operationId": "adaptive-forbidden-target",
+    "refused": true,
+    "rootId": "shikigami_execution_root_01j0000000f6xrmjx8bkby3j3g",
+    "sessionsAtCut": 0,
+    "target": "forbidden-role",
+    "unchangedCheckpoint": true
+  }
+}

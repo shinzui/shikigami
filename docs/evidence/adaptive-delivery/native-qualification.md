@@ -1,5 +1,29 @@
 # Adaptive delivery native qualification
 
+The corrected baseline passes on clean `39ef7263` in 324.755 seconds. Its
+[retained facts](baseline-native-facts.json) bind both exact integrated trees,
+six independently restored Git artifacts, the returned-pair journey, controller
+restarts, fresh authority controls and unchanged terminal replay. Milestone 1
+is complete. The driver remains blocked on the full coupled matrix and the
+separate actual-model/production-authority trial has not run.
+
+The first full transfer attempt on that runtime failed after 232.541 seconds.
+Its [partial facts](transfer-attempt-facts.json) retain the passed last-slot
+root race, foreign-alias refusal and undeclared-target refusal. The unknown-edit
+probe incorrectly expected the owner to reject a transfer request while work
+was active. The actual contract permits recording a queued handoff while
+withholding successor establishment. The corrected probe checks the real
+successor write-admission fence directly, without creating a handoff. A later
+valid-proposal accounting hold separately isolates the completion resource gate.
+The corrected immutable candidate and full matrix still need execution.
+
+The passing baseline's two manually driven integration executions also emitted
+receipt wakeups without an initial driver seed, producing harmless retries while
+their factual effects and root accounting settled. The fixture now supplies only
+those two known starts to the normal execution driver so it can observe their
+terminal state. Worker starts still use normal production admission. This fix
+also awaits the next native candidate.
+
 The first coupled trial on 2026-11-04 UTC failed during initial objective setup.
 It does not qualify adaptive repository delivery, any recovery cut or the live
 trial. No request or use-case acceptance is closed by this attempt.

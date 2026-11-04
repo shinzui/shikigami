@@ -139,8 +139,10 @@ has not yet been runtime-qualified.
 
 It also loses the consumer's reply after a real accepted edit, pauses the
 independent receipt publisher, waits for the original attempt's expiry and
-requires the root to retain active/unknown work. Transfer and completion must
-refuse during that observation. After publication resumes, final acceptance
+requires the root to retain active/unknown work. Successor write admission and
+completion must refuse during that observation. A transfer request may be queued
+while active work remains; queued intent does not establish a successor.
+After publication resumes, final acceptance
 requires the original attempt's independent late receipt. A same-root admission
 probe races two local clients for one active slot and settles its winner without
 external dispatch. This probe is not reported as a model or workspace tool call.

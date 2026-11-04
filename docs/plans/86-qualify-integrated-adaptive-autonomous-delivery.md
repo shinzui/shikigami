@@ -168,7 +168,7 @@ production runtime retains its original build path.
 
 The compiled transfer scenario now also loses a real consumer edit reply,
 pauses the independent receipt publisher, observes the expired attempt's held
-root and denied transfer/completion, and requires recovery of that original
+root and denied successor writes/completion, and requires recovery of that original
 independent receipt. It races two local reservation clients at the same root's
 last active slot without external dispatch, checks a foreign worker alias and
 an undeclared target before dispatch, and changes the process default after
@@ -219,6 +219,18 @@ and final resource settlement are retained, and that fixture noise remains to
 be resolved. Milestone 1 is complete; the full transfer/refusal scenario is
 running and milestone 2 remains open. The driver correctly reports blocked
 until that additional gate passes. No live acceptance is claimed.
+
+The first full transfer attempt failed at the unknown-effect assertion: the
+worker owner correctly accepts a queued handoff while work is active; this
+neither establishes the successor nor admits its writes. The probe had
+incorrectly required refusal of that request. It now directly checks the real
+private-socket successor write fence while the root retains uncertainty, without
+creating an unrelated handoff. [Partial facts](../evidence/adaptive-delivery/transfer-attempt-facts.json)
+retain the passed root race, alias and target controls, with the failed gate
+explicit. The fixture also supplies the two known manually driven integration
+starts to the normal execution driver, allowing their receipt wakes to observe
+terminal execution state instead of retrying without a seed. The corrections
+compile; a new immutable runtime and full native scenario remain required.
 
 ## Surprises & Discoveries
 
