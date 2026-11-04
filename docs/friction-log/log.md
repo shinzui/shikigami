@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-11-04
+* **Addition**: FRIC-54 records slowdown tooling friction with mori://shinzui/shikigami: Qualification runtime rebuild repeats the entire frozen Cabal graph
 * **Update**: FRIC-53 resolved: Resolve fresh external ingestion patch loss for delegated, session and adaptive native children without rewriting historical snapshots.
 * **Update**: FRIC-52 resolved: Resolve the child association gap through the native owner and qualify pinned descendant admission.
 * **Update**: FRIC-51 accepted: Document and accept the qualified local test concurrency; the bounded suites pass.

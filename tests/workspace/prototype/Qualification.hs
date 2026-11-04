@@ -1,7 +1,7 @@
 -- Native accepted-adapter qualification. Production configured policy and host
 -- select every allocation/profile; this fixture supplies deterministic model
 -- replies and no objective ownership receipts.
-module Qualification (Qualification (..), Ready (..), withQualification, loadAssignment, runTools, executeConfigured, resultValue, run, right, integrationCase) where
+module Qualification (Qualification (..), Ready (..), withQualification, loadAssignment, runTools, executeConfigured, resultValue, successful, run, right, integrationCase) where
 
 import Accepted
 import Baikai.Options (emptyOptions)
@@ -93,6 +93,7 @@ data Qualification = Qualification
     initial :: !Ready,
     prefix :: !FilePath
   }
+  deriving stock (Generic)
 
 withQualification :: FilePath -> FilePath -> (Qualification -> IO a) -> IO a
 withQualification configFile prefix use = do

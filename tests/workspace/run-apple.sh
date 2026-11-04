@@ -4,7 +4,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 mode=${1:---prototype}
-[[ "$mode" == --prototype || "$mode" == --provision || "$mode" == --git || "$mode" == --workflow || "$mode" == --workflow-only || "$mode" == --workspace-gates || "$mode" == --qualify || "$mode" == --continuing-only || "$mode" == --handoff-only || "$mode" == --ownership-only ]] || { echo 'Usage: run-apple.sh --prototype|--provision|--git|--workflow|--workflow-only|--workspace-gates|--qualify|--continuing-only|--handoff-only|--ownership-only [RUNTIME]'; exit 64; }
+[[ "$mode" == --prototype || "$mode" == --provision || "$mode" == --git || "$mode" == --workflow || "$mode" == --workflow-only || "$mode" == --workspace-gates || "$mode" == --qualify || "$mode" == --continuing-only || "$mode" == --handoff-only || "$mode" == --ownership-only || "$mode" == --adaptive-only ]] || { echo 'Usage: run-apple.sh MODE [RUNTIME]'; exit 64; }
 taskdir=$(mktemp -d /tmp/shikigami-workspace-run.XXXXXX)
 chmod 700 "$taskdir"
 if [[ $# -ge 2 ]]; then runtime=$2; else
@@ -31,7 +31,7 @@ cleanup() {
       container exec "$name" /bin/bash -c '
         cd "$1"
         files=()
-        for name in provision.log diagnostics.log process-debug.log clock-events.log clock-service.log clock-barrier.log http-status.log authority.log oauth.log supervisor.log migrations.log nix-tool.log nix-guard.log nix-postgres.log postgres-version.log pg-init.log pg-start.log workflow-admit.log workflow-edit.log workflow-run.log workflow-verify.log workflow-evidence.json workflow-model-calls integration.log integration-evidence.json integration-process-evidence.json continuing-followup.log continuing-followup-evidence.json continuing-prepare.log continuing-freeze.log continuing-settled.log continuing-late.log continuing-evidence.json continuing-status.json continuing-worker.log continuing-ownership.log continuing-ownership.json continuing-successor.log continuing-successor.json continuing-successor-fence.json public-metadata.jsonl continuing-diagnostics.jsonl; do [[ ! -f "$name" ]] || files+=("$name"); done
+        for name in adaptive-admit.log adaptive-crash.log adaptive-drive.log adaptive-evidence.json adaptive-seeds.json adaptive-provider-calls provision.log diagnostics.log process-debug.log clock-events.log clock-service.log clock-barrier.log http-status.log authority.log oauth.log supervisor.log migrations.log nix-tool.log nix-guard.log nix-postgres.log postgres-version.log pg-init.log pg-start.log workflow-admit.log workflow-edit.log workflow-run.log workflow-verify.log workflow-evidence.json workflow-model-calls integration.log integration-evidence.json integration-process-evidence.json continuing-followup.log continuing-followup-evidence.json continuing-prepare.log continuing-freeze.log continuing-settled.log continuing-late.log continuing-evidence.json continuing-status.json continuing-worker.log continuing-ownership.log continuing-ownership.json continuing-successor.log continuing-successor.json continuing-successor-fence.json public-metadata.jsonl continuing-diagnostics.jsonl; do [[ ! -f "$name" ]] || files+=("$name"); done
         for case_name in duplicate worker-restart supervisor-restart cancellation completion-recovery denials capture-loss authority-denial git-upgrade git-recovery git-denial; do
           for kind in prepare worker inspect verify advance git-worker duplicate; do name="$kind-$case_name.log"; [[ ! -f "$name" ]] || files+=("$name"); done
           name="status-$case_name.json"; [[ ! -f "$name" ]] || files+=("$name")
@@ -104,5 +104,5 @@ export NIX_SSHOPTS="-F /dev/null -o BatchMode=yes -o StrictHostKeyChecking=yes -
 target="ssh-ng://root@127.0.0.1:$port?ssh-key=$taskdir/key"
 nix copy --no-check-sigs --to "$target" "$runtime" >"$taskdir/copy.log" 2>&1
 # Copy only explicit fixture sources; no host directories or credentials mount.
-tar -cf - tests/workspace/run-linux.sh tests/workspace/fixture-oauth.py tests/workspace/prototype-payload.c nix/workspace-deadline.nix shikigami-workers/cbits/workspace-deadline.c schema/Agent.dhall agents/triage-note.dhall agents/skills/triage-note | container exec --interactive "$name" tar -xf - -C /var/lib/shikigami-workspace-fixture-code
+tar -cf - tests/workspace/run-linux.sh tests/workspace/fixture-oauth.py tests/workspace/prototype-payload.c tests/adaptive-delivery nix/workspace-deadline.nix shikigami-workers/cbits/workspace-deadline.c schema/Agent.dhall agents/triage-note.dhall agents/skills/triage-note | container exec --interactive "$name" tar -xf - -C /var/lib/shikigami-workspace-fixture-code
 container exec "$name" /usr/bin/timeout 1800 /bin/bash /var/lib/shikigami-workspace-fixture-code/tests/workspace/run-linux.sh "$mode" "$runtime"

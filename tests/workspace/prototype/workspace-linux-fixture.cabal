@@ -7,6 +7,7 @@ synopsis: Disposable governed workspace Linux qualification
 executable shikigami-workspace-prototype
   other-modules:
     Accepted
+    Adaptive
     Continuing
     Durable
     FixtureIdentity
@@ -43,6 +44,7 @@ executable shikigami-workspace-prototype
     en-core,
     filepath,
     generic-lens,
+    hasql,
     hasql-transaction,
     http-types,
     keiro,

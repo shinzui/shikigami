@@ -5,7 +5,7 @@ set -eEuo pipefail
 export LANG=C.UTF-8 LC_ALL=C.UTF-8
 mode=${1:-}
 runtime=${2:-}
-[[ $# == 2 && ( "$mode" == --prototype || "$mode" == --provision || "$mode" == --git || "$mode" == --workflow || "$mode" == --workflow-only || "$mode" == --workspace-gates || "$mode" == --qualify || "$mode" == --continuing-only || "$mode" == --handoff-only || "$mode" == --ownership-only ) && "$runtime" == /nix/store/* ]] || { echo 'Usage: run-linux.sh --prototype|--provision|--git|--workflow|--workflow-only|--workspace-gates|--qualify|--continuing-only|--handoff-only|--ownership-only RUNTIME'; exit 64; }
+[[ $# == 2 && ( "$mode" == --prototype || "$mode" == --provision || "$mode" == --git || "$mode" == --workflow || "$mode" == --workflow-only || "$mode" == --workspace-gates || "$mode" == --qualify || "$mode" == --continuing-only || "$mode" == --handoff-only || "$mode" == --ownership-only || "$mode" == --adaptive-only ) && "$runtime" == /nix/store/* ]] || { echo 'Usage: run-linux.sh MODE RUNTIME'; exit 64; }
 [[ $(uname -s) == Linux && $(id -u) == 0 && -f /run/shikigami-workspace-prototype.disposable ]] || { echo 'REFUSED: a marked disposable Linux guest running as root is required'; exit 78; }
 [[ $(ps -p 1 -o comm=) == systemd && $(stat -fc %T /sys/fs/cgroup) == cgroup2fs ]]
 sudo -n true
@@ -118,7 +118,11 @@ nix --extra-experimental-features 'nix-command flakes' copy --no-check-sigs --to
 ln -s "$tool/bin/busybox" "$prefix/root/bin/env"
 cc -static -Wall -Wextra -Werror -O2 -DHOST_SECRET_PATH="\"$prefix/host-secret\"" -DSIBLING_SECRET_PATH="\"$prefix/sibling/secret\"" -o "$prefix/root/bin/probe" "$repo/tests/workspace/prototype-payload.c"
 chmod 555 "$prefix/root/bin/probe"
-image_digest=$( { printf '%s\n' "$tool" "$guard"; sha256sum "$prefix/root/bin/probe"; } | sha256sum | cut -d ' ' -f1)
+if [[ "$mode" == --adaptive-only ]]; then
+  cc -static -Wall -Wextra -Werror -O2 -o "$prefix/root/bin/adaptive-check" "$repo/tests/adaptive-delivery/validate.c"
+  chmod 555 "$prefix/root/bin/adaptive-check"
+fi
+image_digest=$( { printf '%s\n' "$tool" "$guard"; sha256sum "$prefix/root/bin/probe"; if [[ "$mode" == --adaptive-only ]]; then sha256sum "$prefix/root/bin/adaptive-check"; fi; } | sha256sum | cut -d ' ' -f1)
 # The fixture HTTP issuer listens only inside this guest on loopback.
 authority_port=$(python3 - <<'PY'
 import socket
@@ -143,7 +147,7 @@ import json,sys
 from pathlib import Path
 prefix,connection,port,runtime,guard,digest,oauth_port,repo=sys.argv[1:]
 p=Path(prefix)
-(p/'directory.json').write_text(json.dumps([{'principal_id':'agent_01h000000000000000'+name,'handle':name,'lifecycle':'active','display_name':'Workspace fixture'} for name in ['triage','coordinator','successor']]))
+(p/'directory.json').write_text(json.dumps([{'principal_id':'agent_01h000000000000000'+name,'handle':name,'lifecycle':'active','display_name':'Workspace fixture'} for name in ['triage','coordinator','successor','producer','producer-review','consumer','consumer-review']]))
 config={'database':{'connection_string':connection},'directory':{'mode':'file','file':{'path':str(p/'directory.json')},'refresh_interval_seconds':1},'workspace':{'supervisor':{'socketPath':str(p/'rpc/supervisor.sock'),'users':[0],'workers':4,'timeoutSeconds':5}},'authorization':{'actions':{'mode':'kikan','kikan_en':{'base_url':f'http://127.0.0.1:{oauth_port}'},'shomei':{'base_url':f'http://127.0.0.1:{oauth_port}','client_id':'fixture'},'en':{'issuer_public_keys':(p/'issuer-public.txt').read_text(),'schema_hashes':'workspace-fixture-schema'},'caller_id':'workspace-fixture'}},'credentials':{'authorization':{'actions':{'shomei':{'client_secret':'fixture-secret'}}}}}
 config['agents']={'directory':str(Path(repo)/'agents')}
 (p/'config.json').write_text(json.dumps(config))
@@ -181,6 +185,20 @@ for _ in {1..200}; do
   sleep 0.1
 done
 jq -Rse 'split("\n") | any(.[]; try (fromjson | .event=="workspace.supervisor.started") catch false)' "$prefix/supervisor.log" >/dev/null
+if [[ "$mode" == --adaptive-only ]]; then
+  python3 -I "$repo/tests/adaptive-delivery/prepare.py" --directory "$prefix/adaptive-repositories" >"$prefix/adaptive-seeds.json"
+  "$prototype" adaptive "$config" "$prefix" admit >"$prefix/adaptive-admit.log" 2>&1
+  set +e
+  "$prototype" adaptive "$config" "$prefix" crash >"$prefix/adaptive-crash.log" 2>&1
+  crash_status=$?
+  set -e
+  [[ "$crash_status" == 86 && -f "$prefix/adaptive-crashed" ]]
+  "$prototype" adaptive "$config" "$prefix" drive >"$prefix/adaptive-drive.log" 2>&1
+  cat "$prefix/adaptive-admit.log" "$prefix/adaptive-drive.log"
+  jq -e '.format==1 and .status=="Completed" and (.integrated.repositories | length)==2' "$prefix/adaptive-evidence.json" >/dev/null
+  echo 'Native adaptive two-repository qualification passed; live trial and the complete coupled fault matrix remain separate gates.'
+  exit 0
+fi
 prepare() {
   if [[ -f /run/shikigami-workspace-prototype.clock-steps ]]; then
     /usr/bin/timeout 40 "$prefix/root/bin/probe" --await-clock-step >>"$prefix/clock-barrier.log"

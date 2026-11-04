@@ -3,6 +3,7 @@
 module Main (main) where
 
 import Accepted (Prepared (..), advanceUpgrade, executeGitWithBackend, executePrepared, prepareAccepted, prepareUpgrade)
+import Adaptive (adaptiveCase)
 import Auth.Biscuit (toPublic)
 import Continuing (continuingCase)
 import Control.Concurrent (threadDelay)
@@ -125,6 +126,7 @@ main = catch dispatch \(failure :: SomeException) -> do
               authority <- authorityApplication prefix
               runSettings (setHost "127.0.0.1" (setPort number defaultSettings)) authority
         ["continuing", config, prefix, stage] -> checkPrefix prefix >> continuingCase config prefix stage
+        ["adaptive", config, prefix, stage] -> checkPrefix prefix >> adaptiveCase config prefix stage
         ["integration", config, prefix] -> checkPrefix prefix >> integrationCase config prefix
         ["workflow", config, prefix, stage] -> checkPrefix prefix >> workflowCase config prefix stage
         ["native-provision", config, spec] -> nativeProvision config spec
@@ -250,7 +252,7 @@ authorityApplication prefix = do
         body <- strictRequestBody request
         case Aeson.eitherDecode body of
           Right (accepted :: Kikan.AuthorizeActionRequest)
-            | Kikan.agentPrincipalText accepted.principal `elem` ["agent_01h000000000000000triage", "agent_01h000000000000000coordinator", "agent_01h000000000000000successor"],
+            | Kikan.agentPrincipalText accepted.principal `elem` ["agent_01h000000000000000" <> name | name <- ["triage", "coordinator", "successor", "producer", "producer-review", "consumer", "consumer-review"]],
               Kikan.InvokeCapabilityTool _ <- accepted.action -> do
                 now <- getCurrentTime
                 let expiry = addUTCTime 30 now
