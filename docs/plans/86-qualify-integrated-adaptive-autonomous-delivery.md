@@ -28,6 +28,11 @@ provenance:
       at: 2026-11-02T18:39:36Z
       mode: "update"
       note: "Refresh real workspace and objective prerequisites while retaining adaptive and live-trial gates."
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-11-04T03:03:02Z
+      mode: "implement"
+      note: "Refresh completed native coordinator, workspace and objective prerequisites before integrated qualification."
 ---
 
 # Qualify integrated adaptive autonomous delivery
@@ -40,13 +45,18 @@ If durable project context changes, update or create ADRs in docs/adr/ in the sa
 ## Purpose / Big Picture
 
 
-Prove [UC-1](../use-cases/adaptive-autonomous-delivery.md) finite delivery with a real adaptive coordinator, recoverable workers and exact combined repository artifacts. This closes integrated acceptance for [IR-16](../improvement-requests/support-adaptive-durable-orchestration.md) and supplies shared evidence for IR-14, IR-15 and IR-17. Hard dependencies are `docs/plans/85-adapt-durable-delivery-through-validated-coordinator-decisions.md`, a delivered IR-11 governed workspace provider, and a delivered IR-13 checkpoint provider. Neither external provider has a selected implementation plan at this planning baseline. Do not mark the full use case delivered using substitutes. Recurrence remains independently qualified in plan 87.
+Prove [UC-1](../use-cases/adaptive-autonomous-delivery.md) finite delivery with a real adaptive coordinator, recoverable workers and exact combined repository artifacts. This closes integrated acceptance for [IR-16](../improvement-requests/support-adaptive-durable-orchestration.md) and supplies shared evidence for IR-14, IR-15 and IR-17. The hard prerequisites are now delivered: [plan 85](85-adapt-durable-delivery-through-validated-coordinator-decisions.md) supplies the native adaptive coordinator, [plan 96](96-provide-governed-mutable-repository-workspaces-for-durable-agents.md) supplies the IR-11 governed workspace provider, and [plan 99](99-supply-trusted-objective-associations-and-the-real-checkpoint-ownership-and-scope-providers.md) supplies the IR-13 checkpoint/ownership provider. Their component evidence does not prove this combined consumer. Do not mark the full use case delivered using substitutes. Recurrence remains independently qualified in plan 87.
 
 
 ## Progress
 
 
-Implementation has not started. Seed unchecked milestone entries when implementation begins.
+Implementation began on 2026-11-04 UTC at baseline
+`05e2a3d94deeb0dd1d92c16e8403707dc9bb7c99`, on the existing branch.
+
+- [ ] Milestone 1: Reproducible two-repository finite fixture, bounded qualification driver and argument/manifest tests.
+- [ ] Milestone 2: Native adaptive integration, exact combined artifacts and deterministic recovery/refusal evidence through real providers.
+- [ ] Milestone 3: Explicitly configured bounded live coding trial, published evidence and corresponding coverage updates.
 
 Prerequisite update (2026-10-30):
 [plan 96](96-provide-governed-mutable-repository-workspaces-for-durable-agents.md)
@@ -65,20 +75,40 @@ and the real IR-13 provider still gate this plan's live milestones.
 and plan 96's runtime `d38d2793` passes the complete 25-case native workspace
 matrix. The [joint provider evidence](../evidence/plan-96/joint-native-qualification.json) retains exact
 artifacts, real ownership recovery, successor effects and process fences.
-This plan remains Not Started and still requires plan 85, adaptive coordinator
+At that checkpoint this plan remained Not Started and still required plan 85, adaptive coordinator
 acceptance, integrated objective completion and the bounded live coding trial.
 These provider facts do not complete UC-1 or its two-repository trial.
+
+2026-11-04 refresh: plan 85 is complete, with five native adaptive Flow cases,
+accepted typed decisions, shared executor capacity and real objective acceptance.
+Its [acceptance report](../evidence/plan-85/acceptance.md) explicitly uses key-free
+providers, a protocol fence fixture and owner-supplied synthetic artifacts. It
+does not supply this plan's real two-repository consumer or live coding trial.
+The installed workspace/ownership path passes the 25-case native matrix in plan
+96. All start gates are satisfied; private live configuration remains an
+operator-supplied prerequisite of milestone 3 only.
 
 ## Surprises & Discoveries
 
 
-None recorded during implementation.
+The pre-implementation audit found obsolete provider and coordinator blockers.
+Plan 85's native Flow, plan 96's configured transfer-aware workspace host and
+plan 99's actual objective owner exist. The remaining gap is their coupled
+repository consumer. The historical `AdaptiveWorkflowSpec` integration check
+uses a synthetic artifact and must not be relabeled as real repository evidence.
 
 
 ## Decision Log
 
 
 2026-10-10: Give integrated qualification its own child so green component tests cannot close UC-1. Require both deterministic fault tests through real durability boundaries and a bounded live coding trial; retain external workspace/checkpoint blockers explicitly.
+
+2026-11-04: Consume the completed native coordinator and provider owners rather
+than recreate them. Use the disposable Apple-container Linux substrate for
+physical effects and host PostgreSQL tests for focused controller contracts.
+Retain the full original acceptance, including a distinct live gate. Existing
+component reports may establish prerequisites but cannot stand in for a coupled
+adaptive repository run.
 
 
 ## Outcomes & Retrospective
@@ -90,7 +120,43 @@ To be filled during implementation. Do not claim request completion until every 
 ## Context and Orientation
 
 
-The use case requires two repository workstreams, an evidence-triggered adaptation, restart recovery and integrated user-journey checks. `shikigami-workers/src/Shikigami/Workers/Config.hs` installs the reviewed configured workspace host when operator workspace settings are supplied; absent settings retain `emptyCapabilityRuntime`. A declaration alone grants no allocation or tool authority. `docs/plans/48-add-a-portable-one-off-repository-agent-harness.md` and completed read-only plan 59 do not implement IR-11. Existing `tools/qualification/` and `docs/evidence/local-qualification/readiness.md` separate environment readiness from actual runtime proof; their baseline cannot establish autonomous coding.
+The use case requires two repository workstreams, an evidence-triggered adaptation, restart recovery and integrated user-journey checks. `shikigami-workers/src/Shikigami/Workers/Config.hs` installs the reviewed configured workspace host when operator workspace settings are supplied; absent settings retain `emptyCapabilityRuntime`. A declaration alone grants no allocation or tool authority. Plan 96, rather than the older portable harness plans 48/59, delivers the mutable provider. Existing `tools/qualification/` and `docs/evidence/local-qualification/readiness.md` separate environment readiness from actual runtime proof; their baseline cannot establish autonomous coding.
+
+The concrete consumer entry points now exist. The `adaptive-delivery` Flow is
+registered in `shikigami-core/src/Shikigami/Flow.hs`; its native controller is
+`shikigami-core/src/Shikigami/Coordination/Workflow.hs`. Start an objective-bound
+run through `Ledger.acceptObjectiveRunRequest` and the normal AgentRun producer,
+as exercised by `shikigami-core/test-postgres/Shikigami/AdaptiveWorkflowSpec.hs`.
+Never insert bare fresh workflow input: the producer must pin the deployment
+patch snapshot with the original input. `Objective.Capability` owns creation,
+criteria, membership, evidence and final acceptance; `Coordination.Checkpoint`
+owns accepted adaptive manifests, not another objective state store.
+
+`tests/workspace/prototype/Durable.hs` supplies the normal AgentRun/accepted
+execution consumer with a configured writable host. `Qualification.hs` supplies
+retained Git artifact integration in a separate workspace; `Continuing.hs`
+supplies real objective ownership and accepted successor effects. Their
+`workspace-linux-fixture.cabal` executable is built by the existing Nix
+`shikigami-workspace-prototype` attribute. `tests/workspace/run-apple.sh` provisions
+a disposable guest with no host mounts or existing credentials and copies only
+explicit fixture sources. Extend or reuse this substrate for the coupled test;
+do not turn host filesystem mocks into containment evidence. Account for the
+guest's periodic realtime step as documented in AGENTS.md: observe a step before
+short admissions and keep the absolute deadline guard enabled.
+
+[ADR 0108](../adr/0108-adaptive-decisions-commit-with-authoritative-checkpoints.md)
+requires proposal manifests and objective receipts to commit atomically.
+[ADR 0109](../adr/0109-runtime-capacity-admission-shares-accepted-attempt-fences.md)
+separates shared runtime occupancy from root usage and unknown spending.
+[ADR 0110](../adr/0110-accepted-typed-decisions-account-for-every-transport-call.md)
+requires every actual internal decision call to spend the same root.
+[ADR 0111](../adr/0111-adaptive-delivery-carries-native-admission-and-reference-only-seeds.md)
+defines pinned role catalogs, native objective child association, generation
+wakes and reference-only controller seeds. Consume these implemented boundaries
+without altering old journal branches. Workspace integration is per canonical
+repository identity; a two-repository journey must retain one exact resulting
+tree per repository and test that exact pair, rather than feed cross-repository
+commits to a same-repository integration planner.
 
 [ADR 0025](../adr/0025-capability-overlays-are-requests-for-additive-model-tools.md) requires admitted provider revisions; [ADR 0036](../adr/0036-external-agent-actions-require-fresh-exact-authorization.md) requires live external authority. [ADR 0040](../adr/0040-response-options-and-foreground-launches-have-separate-authority.md) says a foreground process exit is not durable agent completion. The `IntegratedAcceptance` contract from plan 85 binds exact artifact/evidence identities to the criteria revision; IR-11 owns workspace creation/edit/process/Git/integration and IR-13 owns objective completion.
 
@@ -122,20 +188,26 @@ Write `docs/evidence/adaptive-delivery/` summaries containing tested service/sou
 ## Concrete Steps
 
 
-Run from the repository root in the existing development environment; if native tools are unavailable, enter `nix develop` first. PostgreSQL tests own disposable databases and must not be pointed at production. Capture a baseline before implementation, then run the following after each applicable milestone:
+Run from the repository root. Use the existing Nix development environment:
+plain Cabal cannot locate this project's configured GHC. PostgreSQL tests own
+disposable databases and must not be pointed at production. FRIC-51 established
+that database suites need bounded concurrency and sequential execution. Capture
+the baseline before implementation and run these at coherent boundaries:
 
 ```bash
 MP14_BASE=$(git rev-parse HEAD)
-cabal build all
-cabal test shikigami-core-test shikigami-core-postgres-test shikigami-workers-test shikigami-server-test --test-show-details=direct
-just migration-schema-isolation
+nix develop --no-write-lock-file -c cabal build all
+TASTY_NUM_THREADS=2 nix develop --no-write-lock-file -c cabal test shikigami-core-test shikigami-server-test --test-show-details=direct
+TASTY_NUM_THREADS=2 nix develop --no-write-lock-file -c cabal test shikigami-core-postgres-test --test-show-details=direct
+TASTY_NUM_THREADS=2 nix develop --no-write-lock-file -c cabal test shikigami-workers-test --test-show-details=direct
+nix develop --no-write-lock-file -c just migration-schema-isolation
 python3 -m unittest discover -s tools/qualification -p 'test_*.py' -v
 ```
 
 The build and tests must exit zero; tests report all cases passed. These are future implementation checks, not results of creating this plan. Add the named new test groups before using their success as evidence. If domain or workflow contracts change, scaffold with the checked workspace, stage/commit generated artifacts so the existing regeneration check compares the intended baseline, then run:
 
 ```bash
-just keiro-gate "$MP14_BASE"
+TASTY_NUM_THREADS=2 nix develop --no-write-lock-file -c just keiro-gate "$MP14_BASE"
 ```
 
 The gate must report no unexplained breaking change and generated conformance must pass. Record actual commands, baseline revision and bounded evidence in the living sections. Dependency source lookup starts with Mori; no new dependency bound is selected here. Before a later bound, pin or workaround change, verify the authoritative registry and upstream release tags as well as the Mori-located source.
@@ -163,4 +235,13 @@ Use additive, schema-qualified migrations created through `just new-migration`; 
 ## Interfaces and Dependencies
 
 
-This plan owns only the fixture, qualification driver, evidence format and integration test/report changes. IR-11 owns real workspace tools and fences; IR-13 owns task/checkpoint state; plan 85 owns adaptive decisions and `IntegratedAcceptance`; plan 84 owns session events; plan 83 owns durable turns; plan 82 owns selections; plan 81 owns shared budgets. An unavailable external provider is a visible blocking prerequisite, not permission to build its entire feature here. Provider/checkpoint adapter interface mismatches are coordinated in the master plan before changing owners. Generic deployment readiness, external executor plan 78, public HTTP control and signed attestation completion remain separate.
+This plan owns only the fixture, qualification driver, evidence format and integration test/report changes. IR-11 owns real workspace tools and fences; IR-13 owns task/checkpoint state; plan 85 owns adaptive decisions and `IntegratedAcceptance`; plan 84 owns session events; plan 83 owns durable turns; plan 82 owns selections; plan 81 owns shared budgets. The providers and coordinator are delivered; a missing operator configuration is a visible blocked trial, not permission to bypass their boundaries. Provider/checkpoint adapter interface mismatches are coordinated in the master plan before changing owners. Generic deployment readiness, external executor plan 78, public HTTP control and signed attestation completion remain separate.
+
+## Revision Notes
+
+
+2026-11-04: Audited the working tree and completed plans 85, 96 and 99 before
+implementation. Replaced obsolete blockers with concrete native producer,
+controller, configured host and Linux qualification entry points; added ADRs
+0108–0111, per-repository integration semantics and bounded sequential Nix test
+commands. Acceptance and ownership remain unchanged.
