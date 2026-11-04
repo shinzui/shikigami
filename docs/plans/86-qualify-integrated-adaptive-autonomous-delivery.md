@@ -59,7 +59,7 @@ Prove [UC-1](../use-cases/adaptive-autonomous-delivery.md) finite delivery with 
 Implementation began on 2026-11-04 UTC at baseline
 `05e2a3d94deeb0dd1d92c16e8403707dc9bb7c99`, on the existing branch.
 
-- [ ] Milestone 1: Reproducible two-repository finite fixture, bounded qualification driver and argument/manifest tests.
+- [x] Milestone 1 (2026-11-04): Reproducible two-repository finite fixture, bounded driver, 49 host controls and native objective admission; see the baseline evidence below.
 - [ ] Milestone 2: Native adaptive integration, exact combined artifacts and deterministic recovery/refusal evidence through real providers.
 - [ ] Milestone 3: Explicitly configured bounded live coding trial, published evidence and corresponding coverage updates.
 
@@ -202,6 +202,23 @@ runner instead of building and copying every application executable. Production
 assembly and the frozen dependency derivation retain their original targets;
 the latter's derivation is unchanged. The replacement prototype runs alone to
 bound temporary and installation disk demand.
+
+The clean `39ef7263` reduced runtime builds successfully and its native baseline
+passes in 324.755 seconds. The objective completed only against both exact
+integrated repositories. Four retained sessions produced five messages/results;
+worker dispatches were 2/2/4/2 and six adaptive decisions, with no active/unknown
+root work at acceptance. Controller reconstruction passed at adaptive validation,
+tool outcome, unconsumed result and accepted follow-up. Identical protected
+commands passed before/after authority denial, and completed replay preserved
+evidence, selections and actual-call receipts. All six returned bundles restored
+independently, both worker-pair trees recomputed exactly, and the returned-pair
+journey passed. [Baseline facts](../evidence/adaptive-delivery/baseline-native-facts.json)
+retain exact artifact identities and receipts. Two manually driven integration
+execution wakeups retried without initial driver starts; their accepted effects
+and final resource settlement are retained, and that fixture noise remains to
+be resolved. Milestone 1 is complete; the full transfer/refusal scenario is
+running and milestone 2 remains open. The driver correctly reports blocked
+until that additional gate passes. No live acceptance is claimed.
 
 ## Surprises & Discoveries
 

@@ -1,0 +1,769 @@
+{
+  "source_revision": "39ef726380ba5399eaf0a6c9e08ab4f8ff66f58d",
+  "source_dirty": false,
+  "runtime": "/nix/store/y9vni868sq1dbj3xf82izy3cbkf0vaf6-shikigami-workspace-prototype-0.1.0.0-39ef726",
+  "started_at": "2026-11-04T07:39:17.215448+00:00",
+  "finished_at": "2026-11-04T07:44:42.916308+00:00",
+  "cases": [
+    {
+      "case": "producer-local",
+      "started_at": "2026-11-04T07:39:17.339537+00:00",
+      "log": "producer-local.log",
+      "expected_exit": 0,
+      "exit_code": 0,
+      "state": "passed",
+      "finished_at": "2026-11-04T07:39:17.356072+00:00",
+      "elapsed_seconds": 0.017
+    },
+    {
+      "case": "consumer-local",
+      "started_at": "2026-11-04T07:39:17.356120+00:00",
+      "log": "consumer-local.log",
+      "expected_exit": 0,
+      "exit_code": 0,
+      "state": "passed",
+      "finished_at": "2026-11-04T07:39:17.372496+00:00",
+      "elapsed_seconds": 0.016
+    },
+    {
+      "case": "initial-combined-refusal",
+      "started_at": "2026-11-04T07:39:17.372631+00:00",
+      "log": "initial-combined-refusal.log",
+      "expected_exit": 1,
+      "exit_code": 1,
+      "state": "passed",
+      "finished_at": "2026-11-04T07:39:17.399322+00:00",
+      "elapsed_seconds": 0.027
+    },
+    {
+      "case": "native",
+      "started_at": "2026-11-04T07:39:17.399951+00:00",
+      "log": "native.log",
+      "expected_exit": 0,
+      "exit_code": 0,
+      "state": "passed",
+      "finished_at": "2026-11-04T07:44:42.156838+00:00",
+      "elapsed_seconds": 324.755
+    }
+  ],
+  "repositories": [
+    {
+      "identity": "mori://fixture/adaptive-producer",
+      "base": "02dd5ee5e300a00f187d455f5f9edf9d58279c9f",
+      "tree": "de975070714af54cda16b0e90508dcd29b44f4be",
+      "files": {
+        "AGENTS.md": "13c3270462c0c83e5a263327a5f05c5196a04f813ec336674f6f52ae9c167d06",
+        "delivery.txt": "52d26753462488ad21852bc6718e21b84835f53765304d0a1e1b89d05a2a71b1",
+        "local_check.py": "39832d8dfa41a7f7ab80591edd5cc166bf3f3efb32e41a097851d4323d708740",
+        "record.json": "0d80a43539692e8c63d4c207816e2aedae29b74bbc32d0cb4bbc27c3a4cd2222",
+        "review.txt": "52d26753462488ad21852bc6718e21b84835f53765304d0a1e1b89d05a2a71b1"
+      }
+    },
+    {
+      "identity": "mori://fixture/adaptive-consumer",
+      "base": "5040a3c99659fba0355324811a666884c0297217",
+      "tree": "b9f280df0ae47379916ae088fe55b66acd06b0cb",
+      "files": {
+        "AGENTS.md": "8e4fa17955ae19b24faf18d2f090beef8798c1ac47b090ccc583b70c5690c2dd",
+        "contract.json": "4abdb7da6226beb325bc9c8fb50544670955275e3ecd2a7a7b1eb875837c929c",
+        "delivery.txt": "52d26753462488ad21852bc6718e21b84835f53765304d0a1e1b89d05a2a71b1",
+        "local_check.py": "8757040ea54d143dac6277ca93976301d20b34becbd95a1839c7cc6f08a5e993",
+        "review.txt": "52d26753462488ad21852bc6718e21b84835f53765304d0a1e1b89d05a2a71b1"
+      }
+    }
+  ],
+  "format": 1,
+  "scope": "key-free deterministic baseline; disposable production interpreters and fixture authorization issuer",
+  "native": {
+    "aliasPolicy": null,
+    "completionHold": null,
+    "format": 1,
+    "initialProcessDefault": "stub-v1",
+    "integrated": {
+      "journey": {
+        "exitCode": 0,
+        "output": "combined journey passed: hello\n",
+        "scope": "immutable blobs from the two retained combined trees"
+      },
+      "repositories": [
+        {
+          "base": "02dd5ee5e300a00f187d455f5f9edf9d58279c9f",
+          "combined": {
+            "parent": "02dd5ee5e300a00f187d455f5f9edf9d58279c9f",
+            "paths": [
+              "delivery.txt",
+              "review.txt"
+            ],
+            "result": "7373b509381f52cbb325a5629dbfd71109f59ebd",
+            "tree": "af81302c9ab6d1ccd298179869cc00970d311f28"
+          },
+          "repository": "mori://fixture/adaptive-producer",
+          "validation": {
+            "attemptId": "shikigami_execution_attempt_01j0000000ek2rgyst177dfnpa",
+            "bindingDigest": "sha256:b23b7d06f7dbc7c50fa27d0f02f951ef1eedfc88676e8926618daac920f123ad",
+            "bootId": "c4d1a759-35ee-4d7f-b487-5002b95affe6",
+            "descendantsEmpty": true,
+            "exitCode": 0,
+            "fingerprint": "sha256:ca05e0bf4ecf1f3792a77744b96f74908c102193539f216d6ae89a6db1e04bbb",
+            "generation": 1,
+            "invocationId": "f5f62ab757484d94893e4ce0f300c066",
+            "operationId": "operation:sha256:f8008c11582644098de5631b81e0afc870c13ef00882b1c1a309d4a6fb8d5cfb",
+            "outputComplete": true,
+            "stderr": {
+              "artifact": "stderr",
+              "bytes": 0,
+              "digest": "sha256:75384fd75cdef76c52b2f4bca3f2a749405a70653924190c5b0f2f26abe614e2",
+              "truncated": false
+            },
+            "stdout": {
+              "artifact": "stdout",
+              "bytes": 59,
+              "digest": "sha256:9513c5846e7ac1a6d8f2d3088f527929df976e7b3e7247ce93adfce6f0c7bddd",
+              "truncated": false
+            },
+            "termination": "ProcessExited",
+            "unit": "shikigami-workspace-ee172712ecc27a5e616ecf02173deec9ae47fe67a8bbb5bb629e85d0dbce3562.service"
+          },
+          "workers": [
+            {
+              "base": "02dd5ee5e300a00f187d455f5f9edf9d58279c9f",
+              "bindingDigest": "sha256:bc17b5d5e5df790c1b66fd3384b330a71ec4134ab4f90a55419927f3fd6e7922",
+              "operationId": "operation:sha256:be1034041e82d20d9fba595e1b48c4c33bf0a0462f3ca8509f34732643ec1000",
+              "revision": "5db1b94218ade30c52e5158ef663aa0e8eda177a"
+            },
+            {
+              "base": "02dd5ee5e300a00f187d455f5f9edf9d58279c9f",
+              "bindingDigest": "sha256:455d3074f5b58a7002caf88c03b1f98f33f8b256723c9387f4124cdb58eeaa05",
+              "operationId": "operation:sha256:c76b6a76ec0a7d3443551848f396123e34ec0cfda7ea23ab6c19a98ed9d9e403",
+              "revision": "549c050075544b0d70989476e5a1f84c8b3c647c"
+            }
+          ]
+        },
+        {
+          "base": "5040a3c99659fba0355324811a666884c0297217",
+          "combined": {
+            "parent": "5040a3c99659fba0355324811a666884c0297217",
+            "paths": [
+              "contract.json",
+              "delivery.txt",
+              "review.txt"
+            ],
+            "result": "05acbf54e0a2c2b6a54bf776d2c4bff061e57905",
+            "tree": "7068c31fead3c40b9cb8f520f0e7770a7fb3eb35"
+          },
+          "repository": "mori://fixture/adaptive-consumer",
+          "validation": {
+            "attemptId": "shikigami_execution_attempt_01j0000000f24r1rt4bmaprv60",
+            "bindingDigest": "sha256:fe6f0d79d847b9c85f8f101de1d7c9a4beaf1365f66ffa91f823647808ce5043",
+            "bootId": "c4d1a759-35ee-4d7f-b487-5002b95affe6",
+            "descendantsEmpty": true,
+            "exitCode": 0,
+            "fingerprint": "sha256:b5650c3e253cd54d40ed1a6fb2183e5e0e5629ef6ad5b88f2a8ba14978bf665a",
+            "generation": 1,
+            "invocationId": "94d017391bfe4efb83b6deab07d3f8a7",
+            "operationId": "operation:sha256:84f112f535df93b9d8f0788d5566d97cf35f4bd233dfe136ed9489249d247e7f",
+            "outputComplete": true,
+            "stderr": {
+              "artifact": "stderr",
+              "bytes": 0,
+              "digest": "sha256:75384fd75cdef76c52b2f4bca3f2a749405a70653924190c5b0f2f26abe614e2",
+              "truncated": false
+            },
+            "stdout": {
+              "artifact": "stdout",
+              "bytes": 59,
+              "digest": "sha256:9513c5846e7ac1a6d8f2d3088f527929df976e7b3e7247ce93adfce6f0c7bddd",
+              "truncated": false
+            },
+            "termination": "ProcessExited",
+            "unit": "shikigami-workspace-00899884f94fd56b78b437e580c54ce34f42101bd07678718a479af8467ef2e9.service"
+          },
+          "workers": [
+            {
+              "base": "5040a3c99659fba0355324811a666884c0297217",
+              "bindingDigest": "sha256:7a4fbb1734a7230511ee4d6c00556e5727f66dc389d26a222c58ff82c7b23d74",
+              "operationId": "operation:sha256:c672716314a62daf084d47450225ceab30e43253d065fe747629b5e80d2a959e",
+              "revision": "8dd63f92cc50948cd8ab1c16fd8a9fdd6cb3330c"
+            },
+            {
+              "base": "5040a3c99659fba0355324811a666884c0297217",
+              "bindingDigest": "sha256:7f20f3452a8c687a2577cb41fdeae6cf0a54062eccb124f1d4c469af7e492fdd",
+              "operationId": "operation:sha256:d0e0f7ffd18f7fcbb9ad9c328ab26c89b64fea3c8ae03dae72b21aa8d37082f6",
+              "revision": "48b06e04c5e7a8559229b3e9f9b632fc66ed614a"
+            }
+          ]
+        }
+      ]
+    },
+    "objective": "shikigami_objective_01m6jr0hgfe0fsacsamp141mvw",
+    "ownership": null,
+    "providerCalls": {
+      "adaptive": 6,
+      "consumer": 4,
+      "consumer-review": 2,
+      "producer": 2,
+      "producer-review": 2
+    },
+    "reportedResults": [
+      {
+        "artifacts": [],
+        "assignmentId": {
+          "value": "producer"
+        },
+        "receipt": {
+          "assignmentId": "84600ec1-6404-5ffc-bf7c-9ee9226fc948",
+          "cursor": 3,
+          "disposition": "AssignmentSucceeded",
+          "fingerprint": "sha256:3d89411a95e5d9fe3340fe938bf7124e243bda0e29f93250ccaf76aeae845dbd",
+          "format": 1,
+          "operationId": "result:84600ec1-6404-5ffc-bf7c-9ee9226fc948",
+          "output": {
+            "bytes": 3701,
+            "digest": "sha256:42f6166d881a97f2b437dc7a999f44c786f2997ce8f2fe420c239f637eccfbe1",
+            "payloadId": "payload:sha256:42f6166d881a97f2b437dc7a999f44c786f2997ce8f2fe420c239f637eccfbe1"
+          },
+          "sessionId": "9e79af59-1412-5ef1-a5b8-2b6892e90800"
+        }
+      },
+      {
+        "artifacts": [],
+        "assignmentId": {
+          "value": "producer-review"
+        },
+        "receipt": {
+          "assignmentId": "def441e0-f6aa-5356-ac31-65b2d6e71665",
+          "cursor": 3,
+          "disposition": "AssignmentSucceeded",
+          "fingerprint": "sha256:31e1fb449fbdf9a7df46db027a0d555523b767140a0fcc7a8a2ad57a022f52d1",
+          "format": 1,
+          "operationId": "result:def441e0-f6aa-5356-ac31-65b2d6e71665",
+          "output": {
+            "bytes": 3695,
+            "digest": "sha256:c2b789ccc0fc6e4100f75f008532d229799f4e5dcc85eed7321d8ce2ebf5129b",
+            "payloadId": "payload:sha256:c2b789ccc0fc6e4100f75f008532d229799f4e5dcc85eed7321d8ce2ebf5129b"
+          },
+          "sessionId": "64fb2251-6863-521d-a384-0b55f50ddbc2"
+        }
+      },
+      {
+        "artifacts": [],
+        "assignmentId": {
+          "value": "consumer"
+        },
+        "receipt": {
+          "assignmentId": "3dd22b3b-5fd2-5500-9e3b-28fa3156896d",
+          "cursor": 6,
+          "disposition": "AssignmentSucceeded",
+          "fingerprint": "sha256:4fcc883015fa7501b603125474ae1344ac106a5431786bd5179779a101fdcc8a",
+          "format": 1,
+          "operationId": "result:3dd22b3b-5fd2-5500-9e3b-28fa3156896d",
+          "output": {
+            "bytes": 3725,
+            "digest": "sha256:32d7f5848a11479901c7b8d7a9c9ad17badd1ce2e9806cd54d3d0dded2965bd5",
+            "payloadId": "payload:sha256:32d7f5848a11479901c7b8d7a9c9ad17badd1ce2e9806cd54d3d0dded2965bd5"
+          },
+          "sessionId": "809834d9-6235-503b-b0f1-1626e3d146cf"
+        }
+      },
+      {
+        "artifacts": [],
+        "assignmentId": {
+          "value": "consumer-review"
+        },
+        "receipt": {
+          "assignmentId": "404acb6c-92cc-52c6-91cb-30510f80ea7b",
+          "cursor": 3,
+          "disposition": "AssignmentSucceeded",
+          "fingerprint": "sha256:7aeb3c69948ddaceed7dbc2d4feb3b9efa22f5bae2173c3cae78635d529e94eb",
+          "format": 1,
+          "operationId": "result:404acb6c-92cc-52c6-91cb-30510f80ea7b",
+          "output": {
+            "bytes": 3695,
+            "digest": "sha256:e360a8f62a89b7975e42ded274c02644a98cf6407c947d93b252f6c63b6c9f37",
+            "payloadId": "payload:sha256:e360a8f62a89b7975e42ded274c02644a98cf6407c947d93b252f6c63b6c9f37"
+          },
+          "sessionId": "d0b3c885-c0f4-56ce-be89-0192a1e48c70"
+        }
+      }
+    ],
+    "resumedProcessDefault": "stub-v1",
+    "root": {
+      "active": 0,
+      "activeLimit": null,
+      "cancelled": false,
+      "envelope": {
+        "cutoff": "2026-11-04T08:00:09.673286176Z",
+        "limits": [
+          [
+            "ActiveWork",
+            {
+              "tag": "ExplicitlyUnbounded"
+            }
+          ],
+          [
+            "LifetimeDescendants",
+            {
+              "tag": "ExplicitlyUnbounded"
+            }
+          ],
+          [
+            "ModelAttempts",
+            {
+              "contents": 48,
+              "tag": "Limited"
+            }
+          ],
+          [
+            "ToolAttempts",
+            {
+              "tag": "ExplicitlyUnbounded"
+            }
+          ],
+          [
+            "Tokens",
+            {
+              "tag": "ExplicitlyUnbounded"
+            }
+          ],
+          [
+            "CostMicroUsd",
+            {
+              "tag": "ExplicitlyUnbounded"
+            }
+          ]
+        ]
+      },
+      "known": [
+        [
+          "LifetimeDescendants",
+          5
+        ],
+        [
+          "ModelAttempts",
+          20
+        ],
+        [
+          "ToolAttempts",
+          25
+        ],
+        [
+          "Tokens",
+          4
+        ],
+        [
+          "CostMicroUsd",
+          0
+        ]
+      ],
+      "overage": false,
+      "revision": 0,
+      "unknown": 0,
+      "usage": {
+        "held": [
+          [
+            "ActiveWork",
+            0
+          ],
+          [
+            "LifetimeDescendants",
+            0
+          ],
+          [
+            "ModelAttempts",
+            0
+          ],
+          [
+            "ToolAttempts",
+            0
+          ],
+          [
+            "Tokens",
+            0
+          ],
+          [
+            "CostMicroUsd",
+            0
+          ]
+        ],
+        "settled": [
+          [
+            "LifetimeDescendants",
+            5
+          ],
+          [
+            "ModelAttempts",
+            20
+          ],
+          [
+            "ToolAttempts",
+            25
+          ],
+          [
+            "Tokens",
+            4
+          ],
+          [
+            "CostMicroUsd",
+            0
+          ]
+        ]
+      }
+    },
+    "rootId": "shikigami_execution_root_01j0000000f6xrmjx8bkby3j3g",
+    "rootRace": null,
+    "sessionMessageResultCounts": [
+      4,
+      5,
+      5
+    ],
+    "status": "Completed",
+    "targetRefusal": null,
+    "unknown": null,
+    "recovery": {
+      "format": 1,
+      "adaptation_commit_restart": {
+        "exitCode": 86,
+        "markerObserved": true
+      },
+      "committed_boundary_restarts": {
+        "outcome": {
+          "signal": 9,
+          "controllerStoppedBeforeSnapshot": true,
+          "records": [
+            {
+              "outcome": {
+                "bytes": 938,
+                "digest": "sha256:d7ae4eb720b9b12e8912bb623e4168cb4548569177385a1425798a4203d7cfe4",
+                "payloadId": "payload:sha256:d7ae4eb720b9b12e8912bb623e4168cb4548569177385a1425798a4203d7cfe4"
+              },
+              "executionId": "execution:sha256:a68a603561a51a87d7a431d63de9397b617f45d968c4dcd87b04ba4f11be493c",
+              "fingerprint": "sha256:cb30378fa6b5104e802a741241382aeab45d3a33b4562c39260031ad976483fa",
+              "operationId": "operation:sha256:35c87fb337893997a3db54dc9ff9aa1bad0b9d441ec58107768a9f7b596f3687"
+            }
+          ]
+        },
+        "result": {
+          "signal": 9,
+          "controllerStoppedBeforeSnapshot": true,
+          "records": [
+            {
+              "receipt": {
+                "cursor": 3,
+                "format": 1,
+                "output": {
+                  "bytes": 3701,
+                  "digest": "sha256:42f6166d881a97f2b437dc7a999f44c786f2997ce8f2fe420c239f637eccfbe1",
+                  "payloadId": "payload:sha256:42f6166d881a97f2b437dc7a999f44c786f2997ce8f2fe420c239f637eccfbe1"
+                },
+                "sessionId": "9e79af59-1412-5ef1-a5b8-2b6892e90800",
+                "disposition": "AssignmentSucceeded",
+                "fingerprint": "sha256:3d89411a95e5d9fe3340fe938bf7124e243bda0e29f93250ccaf76aeae845dbd",
+                "operationId": "result:84600ec1-6404-5ffc-bf7c-9ee9226fc948",
+                "assignmentId": "84600ec1-6404-5ffc-bf7c-9ee9226fc948"
+              },
+              "sessionId": "9e79af59-1412-5ef1-a5b8-2b6892e90800",
+              "assignmentId": "84600ec1-6404-5ffc-bf7c-9ee9226fc948",
+              "consumedCursor": 0
+            }
+          ]
+        },
+        "followup": {
+          "signal": 9,
+          "controllerStoppedBeforeSnapshot": true,
+          "records": [
+            {
+              "sequence": 1,
+              "sessionId": "809834d9-6235-503b-b0f1-1626e3d146cf",
+              "operationId": "adaptive:sha256:0fd287031086c4a044051fe014251dcdfda6ee3bee7071e912f11d0891434977",
+              "assignmentId": "3dd22b3b-5fd2-5500-9e3b-28fa3156896d"
+            }
+          ]
+        }
+      },
+      "action_denial": {
+        "exitCode": 1,
+        "authorized": {
+          "contents": {
+            "contents": 3,
+            "tag": "EventsCaughtUp"
+          },
+          "tag": "EventsIntegratedReply"
+        },
+        "restored": {
+          "contents": {
+            "contents": 3,
+            "tag": "EventsCaughtUp"
+          },
+          "tag": "EventsIntegratedReply"
+        },
+        "noProviderCalls": true
+      },
+      "worker_selections": [
+        {
+          "calls": [
+            {
+              "phase": "CallTerminal",
+              "rootId": "shikigami_execution_root_01j0000000f6xrmjx8bkby3j3g",
+              "ordinal": 1,
+              "attemptId": "shikigami_execution_attempt_01m6jr3zr3eck8npbw74ttpwx8",
+              "operationId": "operation:sha256:f3b86071e09c1e1b7ead6baf6764f3e1c4434e47351caba36b81138f6e9b7923"
+            },
+            {
+              "phase": "CallTerminal",
+              "rootId": "shikigami_execution_root_01j0000000f6xrmjx8bkby3j3g",
+              "ordinal": 2,
+              "attemptId": "shikigami_execution_attempt_01m6jr4shkeh683hw496nx6ck4",
+              "operationId": "operation:sha256:cd43e0502d01adeeca83aa6138b5883dad98304ff3857f5df4add58a1c529ac0"
+            }
+          ],
+          "selection": {
+            "rootId": "shikigami_execution_root_01j0000000f6xrmjx8bkby3j3g",
+            "source": "DeclaredAlias",
+            "descriptor": {
+              "api": "stub",
+              "alias": "consumer",
+              "digest": "sha256:fcaf60f3e9a7c50f332ae17bb256371216bd37b008f85d10c8a39f5220871200",
+              "modelId": "consumer",
+              "version": "1",
+              "provider": "stub",
+              "thinking": null,
+              "bindingId": "adaptive-fixture-consumer",
+              "endpointClass": "in-process",
+              "bindingVersion": "1"
+            },
+            "permittedAliases": [
+              "consumer"
+            ]
+          },
+          "assignmentId": "assignment:sha256:5424bf94741e28dfb18e11fbe7ff948c1b13c5f5f40a56428caf76e06b89bad0"
+        },
+        {
+          "calls": [
+            {
+              "phase": "CallTerminal",
+              "rootId": "shikigami_execution_root_01j0000000f6xrmjx8bkby3j3g",
+              "ordinal": 1,
+              "attemptId": "shikigami_execution_attempt_01m6jr51mre8pte45s242tdhwt",
+              "operationId": "operation:sha256:24ae709fbea7ca60493e8eee0bc1ce0ac85d4ccdb8abda5359eafdbc61efbe83"
+            },
+            {
+              "phase": "CallTerminal",
+              "rootId": "shikigami_execution_root_01j0000000f6xrmjx8bkby3j3g",
+              "ordinal": 2,
+              "attemptId": "shikigami_execution_attempt_01m6jr6vexer9v0az0b3wrxsf1",
+              "operationId": "operation:sha256:4c484f0ac448da00a184d610b677742f5aa0145460078f60de8ed5b634569fd7"
+            }
+          ],
+          "selection": {
+            "rootId": "shikigami_execution_root_01j0000000f6xrmjx8bkby3j3g",
+            "source": "DeclaredAlias",
+            "descriptor": {
+              "api": "stub",
+              "alias": "consumer-review",
+              "digest": "sha256:8deb8bbd487cd47917849641a5b76809404285b4bcdc63f9ce27d81f316562c3",
+              "modelId": "consumer-review",
+              "version": "1",
+              "provider": "stub",
+              "thinking": null,
+              "bindingId": "adaptive-fixture-consumer-review",
+              "endpointClass": "in-process",
+              "bindingVersion": "1"
+            },
+            "permittedAliases": [
+              "consumer-review"
+            ]
+          },
+          "assignmentId": "assignment:sha256:8a3556556d8b8055b2d6f4be2dcc42c95e7f12de5a5e3716df781f500c6cd39f"
+        },
+        {
+          "calls": [
+            {
+              "phase": "CallTerminal",
+              "rootId": "shikigami_execution_root_01j0000000f6xrmjx8bkby3j3g",
+              "ordinal": 1,
+              "attemptId": "shikigami_execution_attempt_01m6jr2gmseama6btewbf9ck8e",
+              "operationId": "operation:sha256:99b88822bfb250f145104493c69101a199107aead56a1d8f0f80a16fcb0503b4"
+            },
+            {
+              "phase": "CallTerminal",
+              "rootId": "shikigami_execution_root_01j0000000f6xrmjx8bkby3j3g",
+              "ordinal": 2,
+              "attemptId": "shikigami_execution_attempt_01m6jr2w95ejnbxjw22bkdyk26",
+              "operationId": "operation:sha256:b210dab896d6879de2ed8592f8cec81e2e27e710658ac37980db5bd792faca14"
+            }
+          ],
+          "selection": {
+            "rootId": "shikigami_execution_root_01j0000000f6xrmjx8bkby3j3g",
+            "source": "DeclaredAlias",
+            "descriptor": {
+              "api": "stub",
+              "alias": "producer",
+              "digest": "sha256:4723201b49ae675a41043ef6754467a08a4e6b4033197ee91e42c338622b0450",
+              "modelId": "producer",
+              "version": "1",
+              "provider": "stub",
+              "thinking": null,
+              "bindingId": "adaptive-fixture-producer",
+              "endpointClass": "in-process",
+              "bindingVersion": "1"
+            },
+            "permittedAliases": [
+              "producer"
+            ]
+          },
+          "assignmentId": "assignment:sha256:a0e0f11a787f029b05ebb543e7a8bef5afde63fef14f0962688f831d23dfe329"
+        },
+        {
+          "calls": [
+            {
+              "phase": "CallTerminal",
+              "rootId": "shikigami_execution_root_01j0000000f6xrmjx8bkby3j3g",
+              "ordinal": 1,
+              "attemptId": "shikigami_execution_attempt_01m6jr31agewyvtzdcwmvmm6qa",
+              "operationId": "operation:sha256:60fd8b7338acfe1efb8965e8f2bb378ba17567be15012f4c28185f33a9e7c607"
+            },
+            {
+              "phase": "CallTerminal",
+              "rootId": "shikigami_execution_root_01j0000000f6xrmjx8bkby3j3g",
+              "ordinal": 2,
+              "attemptId": "shikigami_execution_attempt_01m6jr3v19ebzv464zxxevj38n",
+              "operationId": "operation:sha256:22f3fdcd483bb9c0bd584a0129c25457e49cce95f9e84fdf5823523bf67e9424"
+            }
+          ],
+          "selection": {
+            "rootId": "shikigami_execution_root_01j0000000f6xrmjx8bkby3j3g",
+            "source": "DeclaredAlias",
+            "descriptor": {
+              "api": "stub",
+              "alias": "producer-review",
+              "digest": "sha256:cee664819f0708a859c3b36ba4fd61be332df0601c0ea53ccd8002b2bd36216a",
+              "modelId": "producer-review",
+              "version": "1",
+              "provider": "stub",
+              "thinking": null,
+              "bindingId": "adaptive-fixture-producer-review",
+              "endpointClass": "in-process",
+              "bindingVersion": "1"
+            },
+            "permittedAliases": [
+              "producer-review"
+            ]
+          },
+          "assignmentId": "assignment:sha256:a9b44064a7b7757fd2718caa35237ce26888c22a51f3ce01a0d4670e9bd97531"
+        },
+        {
+          "calls": [
+            {
+              "phase": "CallTerminal",
+              "rootId": "shikigami_execution_root_01j0000000f6xrmjx8bkby3j3g",
+              "ordinal": 1,
+              "attemptId": "shikigami_execution_attempt_01m6jr51k8enmt47hqem774z44",
+              "operationId": "operation:sha256:881421c4add88c99e7ddfdcafeee94fe66caacb833f892e35b6bcd1a7c31edea"
+            },
+            {
+              "phase": "CallTerminal",
+              "rootId": "shikigami_execution_root_01j0000000f6xrmjx8bkby3j3g",
+              "ordinal": 2,
+              "attemptId": "shikigami_execution_attempt_01m6jr6v58ev78cshzdng2mvxt",
+              "operationId": "operation:sha256:b8c2103ee1214c6467b3b689b91641430daf0e959dc36fc4d9bc693b19e84a73"
+            }
+          ],
+          "selection": {
+            "rootId": "shikigami_execution_root_01j0000000f6xrmjx8bkby3j3g",
+            "source": "DeclaredAlias",
+            "descriptor": {
+              "api": "stub",
+              "alias": "consumer",
+              "digest": "sha256:fcaf60f3e9a7c50f332ae17bb256371216bd37b008f85d10c8a39f5220871200",
+              "modelId": "consumer",
+              "version": "1",
+              "provider": "stub",
+              "thinking": null,
+              "bindingId": "adaptive-fixture-consumer",
+              "endpointClass": "in-process",
+              "bindingVersion": "1"
+            },
+            "permittedAliases": [
+              "consumer"
+            ]
+          },
+          "assignmentId": "assignment:sha256:e0477061900b240fdab2d402e8471c2c116e2d576e457937c518e640318f7c7d"
+        }
+      ],
+      "ownership_commit_restart": null,
+      "unknown_effect_restart": null,
+      "terminal_replay": {
+        "sameEvidence": true,
+        "providerCallsBefore": "c05c22b345a1468d8eb8fb313be6f2194c8c293bbef94ad6742e51b87e9f7ed7",
+        "providerCallsAfter": "c05c22b345a1468d8eb8fb313be6f2194c8c293bbef94ad6742e51b87e9f7ed7"
+      }
+    },
+    "git_artifacts": {
+      "format": 1,
+      "scope": "forensic local artifacts; no outcome reconciliation implied",
+      "artifacts": [
+        {
+          "repository": "mori://fixture/adaptive-consumer",
+          "base": "5040a3c99659fba0355324811a666884c0297217",
+          "head": "8dd63f92cc50948cd8ab1c16fd8a9fdd6cb3330c",
+          "bundle": "workspace-0.bundle",
+          "sha256": "a50c87aa3b320289d12717b24236f80401993492d5e762e9235cb09a51813a6c"
+        },
+        {
+          "repository": "mori://fixture/adaptive-producer",
+          "base": "02dd5ee5e300a00f187d455f5f9edf9d58279c9f",
+          "head": "549c050075544b0d70989476e5a1f84c8b3c647c",
+          "bundle": "workspace-1.bundle",
+          "sha256": "6e3a7e66a075706fe9d908400ac13acf6a15d392c696fce0e47e31b164705962"
+        },
+        {
+          "repository": "mori://fixture/adaptive-consumer",
+          "base": "5040a3c99659fba0355324811a666884c0297217",
+          "head": "48b06e04c5e7a8559229b3e9f9b632fc66ed614a",
+          "bundle": "workspace-2.bundle",
+          "sha256": "f3b96c12911d80e38f5a0f53fb76b06e9c1f20f34b0fc3cf261dfb630f2d19bc"
+        },
+        {
+          "repository": "mori://fixture/adaptive-producer",
+          "base": "02dd5ee5e300a00f187d455f5f9edf9d58279c9f",
+          "head": "7373b509381f52cbb325a5629dbfd71109f59ebd",
+          "bundle": "workspace-3.bundle",
+          "sha256": "a93575dea7f86b000976293ace6ac2f77fd810c34b937dd33a6aefdc56756de0"
+        },
+        {
+          "repository": "mori://fixture/adaptive-consumer",
+          "base": "5040a3c99659fba0355324811a666884c0297217",
+          "head": "05acbf54e0a2c2b6a54bf776d2c4bff061e57905",
+          "bundle": "workspace-4.bundle",
+          "sha256": "9d2e0fcd6f03009600da0635e055d3d54f9706d09ffed08edea27037044eec8c"
+        },
+        {
+          "repository": "mori://fixture/adaptive-producer",
+          "base": "02dd5ee5e300a00f187d455f5f9edf9d58279c9f",
+          "head": "5db1b94218ade30c52e5158ef663aa0e8eda177a",
+          "bundle": "workspace-5.bundle",
+          "sha256": "7dda36b4ec82b0a8db326eb0dc1cef940ab9ca51b1a478992164676005c6c9fb"
+        }
+      ]
+    },
+    "returned_artifact_verification": {
+      "artifacts": 6,
+      "worker_pairs_recomputed": 2,
+      "journey": {
+        "case": "returned-exact-pair-journey",
+        "started_at": "2026-11-04T07:44:42.888344+00:00",
+        "log": "returned-exact-pair-journey.log",
+        "expected_exit": 0,
+        "exit_code": 0,
+        "state": "passed",
+        "finished_at": "2026-11-04T07:44:42.915887+00:00",
+        "elapsed_seconds": 0.028
+      }
+    }
+  },
+  "limitations": [
+    "Full coupled transfer/refusal matrix remains pending.",
+    "The two manually driven integration executions generated wake retries without an initial driver start; accepted effects and root accounting settled.",
+    "No actual model transport or production authorization trial ran; fixture token and invoice dimensions are explicitly unbounded."
+  ]
+}
