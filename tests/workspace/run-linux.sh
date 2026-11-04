@@ -188,10 +188,11 @@ jq -Rse 'split("\n") | any(.[]; try (fromjson | .event=="workspace.supervisor.st
 if [[ "$mode" == --adaptive-only ]]; then
   python3 -I "$repo/tests/adaptive-delivery/prepare.py" --directory "$prefix/adaptive-repositories" >"$prefix/adaptive-seeds.json"
   "$prototype" adaptive "$config" "$prefix" admit >"$prefix/adaptive-admit.log" 2>&1
-  set +e
-  "$prototype" adaptive "$config" "$prefix" crash >"$prefix/adaptive-crash.log" 2>&1
-  crash_status=$?
-  set -e
+  if "$prototype" adaptive "$config" "$prefix" crash >"$prefix/adaptive-crash.log" 2>&1; then
+    crash_status=0
+  else
+    crash_status=$?
+  fi
   [[ "$crash_status" == 86 && -f "$prefix/adaptive-crashed" ]]
   "$prototype" adaptive "$config" "$prefix" drive >"$prefix/adaptive-drive.log" 2>&1
   cat "$prefix/adaptive-admit.log" "$prefix/adaptive-drive.log"

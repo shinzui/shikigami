@@ -1,6 +1,6 @@
 import importlib.util
+import copy
 import json
-import os
 from pathlib import Path
 import subprocess
 import sys
@@ -57,7 +57,7 @@ class AdaptiveDeliveryTests(unittest.TestCase):
         baseline = json.loads((driver.FIXTURE / "fixture.yaml").read_text())
         with tempfile.TemporaryDirectory() as raw:
             path = Path(raw) / "config.yaml"
-            for changes in [{"mode": "live"}, {"max_model_attempts": True}, {"timeout_seconds": 0},
+            for changes in [{"mode": "live"}, {"format": True}, {"max_model_attempts": True}, {"timeout_seconds": 0},
                             {"timeout_seconds": 3601}, {"credentials": {"secret": "PRIVATE_MARKER"}},
                             {"repositories": ["/user/repo"]}, {"runtime": "/user/executable"}]:
                 path.write_text(json.dumps(baseline | changes))
@@ -90,6 +90,78 @@ class AdaptiveDeliveryTests(unittest.TestCase):
             result = driver.run_case(Path(raw), "timeout", [sys.executable, "-c", "import time; time.sleep(10)"], .1)
             self.assertEqual(result["exit_code"], 124)
             self.assertEqual(result["state"], "failed")
+
+    def test_closed_stdout_does_not_disable_process_deadline(self):
+        with tempfile.TemporaryDirectory() as raw:
+            result = driver.run_case(Path(raw), "closed", [sys.executable, "-c",
+                                    "import os,time; os.close(1); os.close(2); time.sleep(10)"], .1)
+            self.assertEqual(result["exit_code"], 124)
+
+    def test_output_bound_does_not_limit_child_artifact_files(self):
+        with tempfile.TemporaryDirectory() as raw:
+            path = Path(raw)
+            code = "from pathlib import Path; Path('large-artifact').write_bytes(b'x'*2000000); print('ok')"
+            result = driver.run_case(path, "artifact", [sys.executable, "-c", code], 10, cwd=path)
+            self.assertEqual(result["state"], "passed")
+            self.assertEqual((path / "large-artifact").stat().st_size, 2000000)
+            result = driver.run_case(path, "output", [sys.executable, "-c", "print('x'*2000000)"], 10)
+            self.assertEqual(result["exit_code"], 125)
+            self.assertEqual((path / "output.log").stat().st_size, 1048576)
+
+    def test_a_passing_native_scenario_does_not_close_the_full_fault_gate(self):
+        config = json.loads((driver.FIXTURE / "fixture.yaml").read_text())
+        with tempfile.TemporaryDirectory() as raw, \
+                patch.object(driver.shutil, "which", return_value="available"), \
+                patch.object(driver, "run_case", return_value={"state": "passed"}), \
+                patch.object(driver, "native_evidence", return_value={"status": "Completed"}):
+            manifest = driver.qualify(Path(raw), config, "fixture")
+            self.assertEqual(manifest["state"], "blocked")
+            self.assertEqual(manifest["native"]["status"], "Completed")
+
+    def test_malformed_native_evidence_still_retains_a_failed_manifest(self):
+        config = json.loads((driver.FIXTURE / "fixture.yaml").read_text())
+        with tempfile.TemporaryDirectory() as raw, \
+                patch.object(driver.shutil, "which", return_value="available"), \
+                patch.object(driver, "run_case", return_value={"state": "passed"}), \
+                patch.object(driver, "native_evidence", side_effect=KeyError("PRIVATE_MARKER")):
+            manifest = driver.qualify(Path(raw), config, "fixture")
+            self.assertEqual(manifest["state"], "failed")
+            self.assertNotIn("PRIVATE_MARKER", json.dumps(manifest))
+
+    def test_native_evidence_refuses_stale_artifacts_duplicates_and_unknown_work(self):
+        starts = [{"identity": identity, "base": str(index + 1) * 40}
+                  for index, identity in enumerate(driver.prepare.REPOSITORIES)]
+        value = {"format": 1, "status": "Completed", "sessionMessageResultCounts": [4, 5, 5],
+                 "root": {"active": 0, "unknown": 0},
+                 "providerCalls": {name: (4 if name == "consumer" else 2)
+                                   for name in ["producer", "producer-review", "consumer", "consumer-review"]},
+                 "integrated": {"journey": {"exitCode": 0}, "repositories": [
+                     {"repository": repo["identity"], "base": repo["base"],
+                      "workers": [{"operationId": f"worker-{index}", "base": repo["base"], "revision": "3" * 40}
+                                  for index in [0, 1]],
+                      "combined": {"parent": repo["base"], "tree": "4" * 40, "result": "5" * 40},
+                      "validation": {"exitCode": 0, "termination": "ProcessExited", "descendantsEmpty": True,
+                                     "outputComplete": True}} for repo in starts]}}
+        with tempfile.TemporaryDirectory() as raw, tempfile.TemporaryDirectory(
+                prefix="shikigami-workspace-run.", dir="/tmp") as native:
+            path = Path(raw)
+            (path / "native.log").write_text(f"Private fixture evidence: {native}\n")
+            evidence = Path(native) / "evidence"
+            evidence.mkdir()
+            artifact = evidence / "adaptive-evidence.json"
+            artifact.write_text(json.dumps(value))
+            self.assertEqual(driver.native_evidence(path, starts)["status"], "Completed")
+            mutations = [lambda v: v["root"].update(unknown=1),
+                         lambda v: v["integrated"]["repositories"][0].update(base="0" * 40),
+                         lambda v: v["integrated"]["repositories"][0]["workers"][1].update(operationId="worker-0"),
+                         lambda v: v["integrated"]["repositories"][0]["validation"].update(exitCode=False),
+                         lambda v: v["integrated"]["journey"].update(exitCode=1)]
+            for mutate in mutations:
+                altered = copy.deepcopy(value)
+                mutate(altered)
+                artifact.write_text(json.dumps(altered))
+                with self.assertRaises(ValueError):
+                    driver.native_evidence(path, starts)
 
     def test_missing_native_prerequisite_cannot_pass_the_fixture(self):
         config = json.loads((driver.FIXTURE / "fixture.yaml").read_text())

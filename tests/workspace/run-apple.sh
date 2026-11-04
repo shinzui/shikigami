@@ -53,6 +53,7 @@ cleanup() {
   exit "$result"
 }
 trap cleanup EXIT
+trap 'exit 124' TERM INT
 port=$(python3 - <<'PY'
 import socket
 with socket.socket() as listener:
@@ -104,5 +105,5 @@ export NIX_SSHOPTS="-F /dev/null -o BatchMode=yes -o StrictHostKeyChecking=yes -
 target="ssh-ng://root@127.0.0.1:$port?ssh-key=$taskdir/key"
 nix copy --no-check-sigs --to "$target" "$runtime" >"$taskdir/copy.log" 2>&1
 # Copy only explicit fixture sources; no host directories or credentials mount.
-tar -cf - tests/workspace/run-linux.sh tests/workspace/fixture-oauth.py tests/workspace/prototype-payload.c tests/adaptive-delivery nix/workspace-deadline.nix shikigami-workers/cbits/workspace-deadline.c schema/Agent.dhall agents/triage-note.dhall agents/skills/triage-note | container exec --interactive "$name" tar -xf - -C /var/lib/shikigami-workspace-fixture-code
+tar --exclude='__pycache__' -cf - tests/workspace/run-linux.sh tests/workspace/fixture-oauth.py tests/workspace/prototype-payload.c tests/adaptive-delivery nix/workspace-deadline.nix shikigami-workers/cbits/workspace-deadline.c schema/Agent.dhall agents/triage-note.dhall agents/skills/triage-note | container exec --interactive "$name" tar -xf - -C /var/lib/shikigami-workspace-fixture-code
 container exec "$name" /usr/bin/timeout 1800 /bin/bash /var/lib/shikigami-workspace-fixture-code/tests/workspace/run-linux.sh "$mode" "$runtime"

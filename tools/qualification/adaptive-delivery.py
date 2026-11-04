@@ -39,7 +39,7 @@ def load_config(path, mode):
     allowed = {"format", "mode", "timeout_seconds", "max_model_attempts", "repositories", "runtime"}
     if not isinstance(value, dict) or set(value) - allowed:
         raise ValueError("configuration has unknown fields; credentials belong in private runtime configuration")
-    if value.get("format") != 1 or value.get("mode") != mode:
+    if type(value.get("format")) is not int or value["format"] != 1 or value.get("mode") != mode:
         raise ValueError("configuration format or mode differs")
     if value.get("repositories") != prepare.REPOSITORIES:
         raise ValueError("only the two canonical fixture repositories are admitted")
@@ -85,13 +85,18 @@ def run_case(directory, name, command, timeout, *, cwd=ROOT, expected=0):
                             break
                     if forced is not None:
                         break
+            if forced is None:
+                try:
+                    child.wait(timeout=max(.01, timeout - (time.monotonic() - started)))
+                except subprocess.TimeoutExpired:
+                    forced = 124
             if forced is not None:
                 try:
                     os.killpg(child.pid, signal.SIGTERM)
                 except ProcessLookupError:
                     pass
                 try:
-                    child.wait(timeout=5)
+                    child.wait(timeout=20)
                 except subprocess.TimeoutExpired:
                     pass
                 # Also settle descendants after a leader exits on SIGTERM.
@@ -100,7 +105,7 @@ def run_case(directory, name, command, timeout, *, cwd=ROOT, expected=0):
                 except ProcessLookupError:
                     pass
             child.stdout.close()
-            code = forced if forced is not None else child.wait(timeout=max(.01, timeout - (time.monotonic() - started)))
+            code = forced if forced is not None else child.returncode
             child.wait()
             result.update(exit_code=code, state="passed" if code == expected else "failed")
         except FileNotFoundError:
@@ -122,16 +127,23 @@ def fixture_mechanics(directory):
 
 def native_evidence(directory, repositories):
     text = (directory / "native.log").read_text()
-    matches = re.findall(r"^Private fixture evidence: (/tmp/shikigami-workspace-run\.[a-zA-Z0-9]+)$", text, re.M)
+    matches = re.findall(r"^Private fixture evidence: (/tmp/shikigami-workspace-run\.[a-zA-Z0-9_]+)$", text, re.M)
     if len(matches) != 1:
         raise ValueError("native evidence location missing")
     path = Path(matches[0]) / "evidence/adaptive-evidence.json"
-    if path.is_symlink() or path.stat().st_size > 1048576:
+    if path.is_symlink() or not path.is_file() or path.stat().st_size > 1048576:
         raise ValueError("native evidence is not a bounded regular artifact")
     value = json.loads(path.read_text())
     combined = value["integrated"]["repositories"]
     if value["format"] != 1 or value["status"] != "Completed" or len(combined) != 2:
         raise ValueError("finite objective did not complete against two integrated repositories")
+    if value["sessionMessageResultCounts"] != [4, 5, 5]:
+        raise ValueError("native recovery counts differ")
+    if value["root"]["active"] != 0 or value["root"]["unknown"] != 0:
+        raise ValueError("native root has unsettled work")
+    for name in ["producer", "producer-review", "consumer", "consumer-review"]:
+        if value["providerCalls"][name] != (4 if name == "consumer" else 2):
+            raise ValueError("native provider calls repeated or omitted completed turns")
     starts = {entry["identity"]: entry["base"] for entry in repositories}
     if {entry["repository"] for entry in combined} != set(starts):
         raise ValueError("integrated repositories differ from the admitted fixture")
@@ -143,8 +155,10 @@ def native_evidence(directory, repositories):
         if (entry["base"] != base or candidate["parent"] != base or len(workers) != 2
                 or len({worker["operationId"] for worker in workers}) != 2
                 or any(worker["base"] != base for worker in workers)
+                or any(not re.fullmatch("[0-9a-f]{40}", worker["revision"]) for worker in workers)
                 or any(not re.fullmatch("[0-9a-f]{40}", candidate[field]) for field in ["parent", "tree", "result"])
-                or validation["exitCode"] != 0 or validation["termination"] != "ProcessExited"
+                or type(validation["exitCode"]) is not int or validation["exitCode"] != 0
+                or validation["termination"] != "ProcessExited"
                 or validation["descendantsEmpty"] is not True or validation["outputComplete"] is not True):
             raise ValueError("native exact artifact or validation evidence is incomplete")
     if value["integrated"]["journey"]["exitCode"] != 0:
@@ -169,6 +183,8 @@ def qualify(directory, config, mode):
                     "An explicitly supplied live provider configuration, fresh authorization and enforceable limits are required")
             elif config["max_model_attempts"] != 48:
                 manifest["limitations"].append("native fixture currently admits exactly the declared 48-call ceiling")
+            elif any(shutil.which(name) is None for name in ["container", "nix"]):
+                manifest["limitations"].append("the Apple container and Nix executables are required for native qualification")
             else:
                 command = ["bash", "tests/workspace/run-apple.sh", "--adaptive-only"]
                 if "runtime" in config:
@@ -181,7 +197,7 @@ def qualify(directory, config, mode):
                     manifest["state"] = case["state"]
                 manifest["limitations"].append(
                     "The complete coupled fault/refusal matrix remains required before fixture qualification passes")
-    except (OSError, ValueError, subprocess.SubprocessError):
+    except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
         # Configuration or exception representations can contain private values.
         manifest["state"] = "failed"
         manifest["limitations"].append("fixture preparation failed; no native delivery is claimed")
