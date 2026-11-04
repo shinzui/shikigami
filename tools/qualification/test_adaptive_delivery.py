@@ -422,6 +422,8 @@ class AdaptiveDeliveryTests(unittest.TestCase):
                     "scope": "resource admission only; no external dispatch"}, "unknown": {
                     "reference": reference, "phase": "AttemptCommitted", "outcome": "outcome-ref", "lateReceipt": "receipt-ref",
                     "observed": {"rootId": "same-root", "reference": reference,
+                                 "probe": "production workspace owner; publisher paused", "originalOwnerAdmitted": True,
+                                 "sameRootAfterProbe": True,
                                  "successor": "successor", "successorEpoch": 1, "sessionId": "consumer-session", "workspace": workspace,
                                  "root": {"active": 1, "unknown": 1}, "successorWriteDenied": True,
                                  "completionDenied": True, "status": "Open"}},
@@ -445,6 +447,8 @@ class AdaptiveDeliveryTests(unittest.TestCase):
                      lambda v: v["unknown"]["observed"]["root"].update(unknown=0),
                      lambda v: v["unknown"]["observed"].update(successorWriteDenied=False),
                      lambda v: v["unknown"]["observed"].update(successor="unadmitted-owner"),
+                     lambda v: v["unknown"]["observed"].update(originalOwnerAdmitted=False),
+                     lambda v: v["unknown"]["observed"].update(sameRootAfterProbe=False),
                      lambda v: v["unknown"].update(lateReceipt=None),
                      lambda v: v["unknown"].update(phase="AttemptUncertain")]
         for mutate in mutations:

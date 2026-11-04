@@ -142,6 +142,11 @@ independent receipt publisher, waits for the original attempt's expiry and
 requires the root to retain active/unknown work. Successor write admission and
 completion must refuse during that observation. A transfer request may be queued
 while active work remains; queued intent does not establish a successor.
+Because the paused publisher shares its RPC process, this unknown-cut check
+invokes the concrete production workspace owner in the controller process with
+real fresh authority and OS locks. An admitted original-owner control and an
+unchanged root hold must accompany the successor refusal. The later ownership
+cut uses the live private socket for its old/early-successor controls.
 After publication resumes, final acceptance
 requires the original attempt's independent late receipt. A same-root admission
 probe races two local clients for one active slot and settles its winner without

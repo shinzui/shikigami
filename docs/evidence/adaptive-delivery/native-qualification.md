@@ -13,7 +13,10 @@ root race, foreign-alias refusal and undeclared-target refusal. The unknown-edit
 probe incorrectly expected the owner to reject a transfer request while work
 was active. The actual contract permits recording a queued handoff while
 withholding successor establishment. The corrected probe checks the real
-successor write-admission fence directly, without creating a handoff. A later
+successor write-admission owner directly, without creating a handoff. It uses
+the concrete production owner in-process while its independent publisher/RPC
+process is paused, requiring real fresh authority, OS locks, a passing old-owner
+control and an unchanged root hold. A later
 valid-proposal accounting hold separately isolates the completion resource gate.
 The corrected immutable candidate and full matrix still need execution.
 

@@ -336,6 +336,8 @@ def validate_transfer_probes(value, recovery):
             or any(type(observed["root"][field]) is not int or observed["root"][field] <= 0
                    for field in ["active", "unknown"])
             or observed["successorWriteDenied"] is not True or observed["completionDenied"] is not True
+            or observed["originalOwnerAdmitted"] is not True or observed["sameRootAfterProbe"] is not True
+            or observed["probe"] != "production workspace owner; publisher paused"
             or observed["successor"] != successor["newOwner"] or observed["successorEpoch"] != successor["newEpoch"]
             or observed["sessionId"] != successor["sessionId"] or observed["workspace"] != successor["workspace"]
             or observed["status"] != "Open" or unknown["phase"] not in ["AttemptCommitted", "AttemptSuperseded"]

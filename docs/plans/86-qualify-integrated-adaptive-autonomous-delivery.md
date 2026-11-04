@@ -224,13 +224,22 @@ The first full transfer attempt failed at the unknown-effect assertion: the
 worker owner correctly accepts a queued handoff while work is active; this
 neither establishes the successor nor admits its writes. The probe had
 incorrectly required refusal of that request. It now directly checks the real
-private-socket successor write fence while the root retains uncertainty, without
+concrete successor write owner while the root retains uncertainty, without
 creating an unrelated handoff. [Partial facts](../evidence/adaptive-delivery/transfer-attempt-facts.json)
 retain the passed root race, alias and target controls, with the failed gate
 explicit. The fixture also supplies the two known manually driven integration
 starts to the normal execution driver, allowing their receipt wakes to observe
 terminal execution state instead of retrying without a seed. The corrections
 compile; a new immutable runtime and full native scenario remain required.
+
+The unknown probe keeps the independent publisher paused, which also pauses
+its RPC listener. It therefore invokes the identical production workspace owner
+in the controller process with real directory authority, fresh authorization,
+retained policy lookup and OS locks, and requires an admitted original-owner
+control plus unchanged root hold. A socket timeout cannot satisfy that proof.
+The ownership-transition cut continues to use the live private socket. The
+superseded `b88fd025` build was stopped before completion to include this
+correction; the next candidate remains required.
 
 ## Surprises & Discoveries
 

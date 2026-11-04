@@ -136,9 +136,11 @@ import Shikigami.Workspace.Instructions
 import Shikigami.Workspace.Integration qualified as Integration
 import Shikigami.Workspace.Process
 import Shikigami.Workspace.ProcessPolicy
+import Shikigami.Workspace.Profile (retainedProcessRule)
 import Shikigami.Workspace.Provider (Replacement (..), contentDigest)
 import Shikigami.Workspace.Settings
-import Shikigami.Workspace.Supervisor (workspaceExecDescriptor)
+import Shikigami.Workspace.Supervisor (SupervisorRuntime (..), systemdSupervisorBackend, workspaceExecDescriptor)
+import Shikigami.Workspace.Transfer qualified as WorkspaceOwner
 import Shikigami.Workspace.TransferClient (workspaceTransferClient)
 import Shikigami.Workspace.Types
 import Shikigami.Workspace.Value
@@ -231,6 +233,10 @@ adaptiveCase config prefix requestedStage = withQualification config prefix \ori
       declarations = root : workers
       catalog = checked (modelCatalog [checked (modelBinding (alias name) "1" ("adaptive-fixture-" <> name) "1" (stubModel & #modelId .~ name) emptyOptions Nothing) | name <- "adaptive" : fixtureWorkers])
       baseSessions = Objectives.coordinationHost env settings directory.handle q.authorizer declarations defaultDelegationBudget (Just (workspaceTransferClient q.client))
+      -- Receipt publication is paused at the unknown cut. Invoke the same real
+      -- owner with directory authority, factual policy lookup and OS locks;
+      -- the paused listener cannot supply a meaningful admission refusal.
+      independentFence = WorkspaceOwner.workspaceTransferProvider (SupervisorRuntime env q.authorizer (Directory.identityLifecycleAdmission directory.handle) q.current (retainedProcessRule env) systemdSupervisorBackend)
       loseOwnership :: Transfer.OwnershipProvider -> Transfer.OwnershipProvider
       loseOwnership provider = Transfer.OwnershipProvider \intent proof -> do
         outcome <- provider.transfer intent proof
@@ -357,7 +363,7 @@ adaptiveCase config prefix requestedStage = withQualification config prefix \ori
       putStrLn "PASS finite native adaptive objective admitted without completing it"
     else
       if stage == "unknown-observe"
-        then observeUnknown q deps saved.objectiveId owner
+        then observeUnknown q deps independentFence saved.objectiveId owner
         else do
           let pump 0 = fail "adaptive native fixture exceeded its bounded advances"
               pump remaining = do
@@ -507,8 +513,8 @@ unknownRuntime prefix original@Executor.ExecutionRuntime {Executor.withTools = o
         _ -> pure ()
       pure result
 
-observeUnknown :: Qualification -> Agent.AgentRunDeps -> ObjectiveId -> O.ObjectiveHost -> IO ()
-observeUnknown q deps goal owner = do
+observeUnknown :: Qualification -> Agent.AgentRunDeps -> Transfer.WorkspaceProvider -> ObjectiveId -> O.ObjectiveHost -> IO ()
+observeUnknown q deps fence goal owner = do
   cut <- right . Aeson.eitherDecodeStrict @UnknownCut =<< Bytes.readFile (q.prefix </> "adaptive-unknown-crashed.json")
   let awaitExpiry 0 = fail "original file attempt did not reach its bounded expiry"
       awaitExpiry remaining = do
@@ -524,12 +530,16 @@ observeUnknown q deps goal owner = do
   (state, _) <- maybe (fail "unknown file attempt has no retained worker session") pure (find (\(state, binding) -> state.owner == cut.identity && binding.rootId == cut.admission.rootId) [entry | Just entry <- sessions])
   let successor = actor "consumer-successor"
       successorEpoch = advanceRevision state.epoch
-  refused <- (workspaceTransferClient q.client).admitWrite cut.admission.workspace state.sessionId successor successorEpoch (fixtureOperationId "adaptive-unknown-successor-write")
+  authorized <- fence.admitWrite cut.admission.workspace state.sessionId cut.identity state.epoch (fixtureOperationId "adaptive-unknown-owner-control")
+  unless (authorized == Right ()) (fail "unknown write probe has no passing original-owner admission control")
+  refused <- fence.admitWrite cut.admission.workspace state.sessionId successor successorEpoch (fixtureOperationId "adaptive-unknown-successor-write")
   unless (either (const True) (const False) refused) (fail "unknown active assignment admitted a successor write")
+  stillHeld <- right =<< run q.env (Roots.inspectRoot cut.admission.rootId)
+  unless (stillHeld == held) (fail "unknown write probe did not preserve its root hold")
   current <- right =<< run q.env (O.readObjective owner goal)
   completion <- run q.env (O.executeCommand owner goal current.revision (fixtureOperationId "adaptive-unknown-completion") Command.AcceptCompletion)
   unless (current.status == Open && either (const True) (const False) completion) (fail "unknown active work completed its objective")
-  Lazy.writeFile (q.prefix </> "adaptive-unknown-observed.json") (Aeson.encode (Aeson.object ["rootId" .= cut.admission.rootId, "reference" .= cut.reference, "root" .= held, "workspace" .= cut.admission.workspace, "sessionId" .= state.sessionId, "phase" .= state.phase, "successor" .= successor, "successorEpoch" .= successorEpoch, "successorWriteDenied" .= True, "completionDenied" .= True, "status" .= current.status]))
+  Lazy.writeFile (q.prefix </> "adaptive-unknown-observed.json") (Aeson.encode (Aeson.object ["rootId" .= cut.admission.rootId, "reference" .= cut.reference, "root" .= held, "workspace" .= cut.admission.workspace, "sessionId" .= state.sessionId, "phase" .= state.phase, "successor" .= successor, "successorEpoch" .= successorEpoch, "probe" .= ("production workspace owner; publisher paused" :: Text), "originalOwnerAdmitted" .= True, "sameRootAfterProbe" .= True, "successorWriteDenied" .= True, "completionDenied" .= True, "status" .= current.status]))
   putStrLn "PASS unknown mutable work retains its root hold and refuses successor admission and completion"
 
 -- Native integration targets are separate configured workspaces under the same
