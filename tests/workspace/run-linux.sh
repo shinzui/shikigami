@@ -29,7 +29,7 @@ cleanup() {
   status=$?
   trap - EXIT ERR
   if [[ "$mode" == --adaptive-only || "$mode" == --adaptive-transfer-only ]] && "$pg_started"; then
-    if /usr/bin/psql "$connection" -Atc "SELECT jsonb_agg(binding ORDER BY resource) FROM shikigami.workspace_bindings WHERE binding->>'repository' IN ('mori://fixture/adaptive-producer','mori://fixture/adaptive-consumer')" >"$prefix/adaptive-bindings.json" &&
+    if /usr/bin/psql "$connection" -Atc "SELECT COALESCE(jsonb_agg(binding ORDER BY resource),'[]'::jsonb) FROM shikigami.workspace_bindings WHERE binding->>'repository' IN ('mori://fixture/adaptive-producer','mori://fixture/adaptive-consumer')" >"$prefix/adaptive-bindings.json" &&
       python3 -I "$repo/tests/adaptive-delivery/archive.py" --prefix "$prefix" >"$prefix/adaptive-archive.log" 2>&1; then
       :
     elif [[ "$status" == 0 ]]; then
@@ -74,6 +74,7 @@ diagnose() {
   journalctl -u systemd-timesyncd.service -n 10 --output=short-monotonic --no-pager >"$prefix/clock-events.log" 2>&1 || true
   systemctl show systemd-timesyncd.service --property=ActiveState,StatusText >"$prefix/clock-service.log" 2>&1 || true
   if "$pg_started"; then
+    /usr/bin/psql "$connection" -Atc "SELECT jsonb_build_object('kind','objective','objectiveId',objective_id,'revision',state->'revision','status',state->'status') FROM shikigami.objectives UNION ALL SELECT jsonb_build_object('kind','objective-receipt','objectiveId',objective_id,'operationKey',operation_key,'outcome',outcome) FROM shikigami.objective_receipts LIMIT 128" >"$prefix/adaptive-objectives.jsonl" 2>/dev/null || true
     /usr/bin/psql "$connection" -Atc "SELECT (SELECT count(*) FROM shikigami.workspace_bindings), (SELECT count(*) FROM shikigami.workspace_bindings WHERE state='ready'), (SELECT count(*) FROM shikigami.workspace_process_profiles), (SELECT count(*) FROM shikigami.workspace_process_profiles WHERE ready)" >"$prefix/diagnostics.log" 2>&1 || true
     /usr/bin/psql "$connection" -Atc "SELECT jsonb_build_object('kind','execution','data',to_jsonb(e)) FROM shikigami.executions e WHERE binding->>'rootId' IN (SELECT binding->>'rootId' FROM shikigami.worker_sessions) UNION ALL SELECT jsonb_build_object('kind','session','data',to_jsonb(s)) FROM shikigami.worker_sessions s UNION ALL SELECT jsonb_build_object('kind','message','data',to_jsonb(m)) FROM shikigami.worker_session_messages m UNION ALL SELECT jsonb_build_object('kind','admission','data',to_jsonb(a)) FROM shikigami.workspace_successor_admissions a UNION ALL SELECT jsonb_build_object('kind','control','data',to_jsonb(c)) FROM shikigami.workspace_controls c UNION ALL SELECT jsonb_build_object('kind','operation','data',to_jsonb(o)) FROM shikigami.execution_transcript_operations o JOIN shikigami.executions e USING(execution_id) WHERE e.binding->>'rootId' IN (SELECT binding->>'rootId' FROM shikigami.worker_sessions)" >"$prefix/continuing-diagnostics.jsonl" 2>/dev/null || true
     for uid in 64000 64001; do if getent passwd "$uid" >/dev/null; then echo "identity $uid present"; else echo "identity $uid absent"; fi; done >>"$prefix/diagnostics.log"

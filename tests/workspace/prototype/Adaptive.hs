@@ -3,7 +3,7 @@
 -- The native adaptive controller, real continuing workers, configured mutable
 -- host, accepted tools and objective owner. Only model responses and the
 -- disposable C13 issuer are deterministic fixtures.
-module Adaptive (adaptiveCase) where
+module Adaptive (adaptiveCase, adaptiveContract) where
 
 import Accepted (Prepared (..), continueTools, prepareToolsFor)
 import Baikai.Content qualified as Content
@@ -95,6 +95,7 @@ import Shikigami.Flow.Decision qualified as Decision
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Log qualified as Log
+import Shikigami.Objective.Acceptance (validateGraph)
 import Shikigami.Objective.Capability qualified as O
 import Shikigami.Objective.Command qualified as Command
 import Shikigami.Objective.Reference (ObjectiveAssociation (..))
@@ -165,6 +166,14 @@ checked = either (error . show) id
 json :: (Aeson.ToJSON a) => a -> Text
 json = Encoding.decodeUtf8 . Lazy.toStrict . Aeson.encode
 
+initialAssignment :: AssignmentDraft
+initialAssignment = AssignmentDraft (key "delivery") (checked (parseInstructions "Deliver a verified finite pair")) [] (actor "coordinator") Pending Nothing Nothing Nothing
+
+adaptiveContract :: IO ()
+adaptiveContract = do
+  either (fail . show) pure (validateGraph [initialAssignment])
+  putStrLn "PASS native adaptive initial assignment is valid before root/cutoff admission"
+
 adaptiveCase :: FilePath -> FilePath -> String -> IO ()
 adaptiveCase config prefix requestedStage = withQualification config prefix \original -> withStore original.env.connectionSettings \store -> do
   let stageText = Text.pack requestedStage
@@ -183,7 +192,8 @@ adaptiveCase config prefix requestedStage = withQualification config prefix \ori
           Just result -> right result
           Nothing -> do
             current <- right =<< run env (O.readObjective owner goal)
-            right =<< run env (O.executeCommand owner goal current.revision (fixtureOperationId operation) change)
+            outcome <- run env (O.executeCommand owner goal current.revision (fixtureOperationId operation) change)
+            either (fail . (("native objective command " <> Text.unpack operation <> " refused: ") <>) . show) pure outcome
   void (right =<< run env Catalog.registerProjectionCatalog)
   repos <- forM ["producer", "consumer"] \name -> do
     let source = prefix </> "adaptive-repositories" </> Text.unpack name
@@ -242,7 +252,7 @@ adaptiveCase config prefix requestedStage = withQualification config prefix \ori
         let rootId = fixtureRootId "adaptive-delivery-root"
             limits = Map.fromList [(dimension, if dimension == R.ModelAttempts then R.Limited (checked (parseResourceAmount 48)) else R.ExplicitlyUnbounded) | dimension <- [minBound .. maxBound]]
         void (right =<< run env (Roots.enrollRoot rootId (R.Envelope limits (addUTCTime 1200 now))))
-        void (command goal "adaptive-initial-assignment" (Command.SetAssignments [AssignmentDraft own (checked (parseInstructions "Deliver a verified finite pair")) [] (actor "coordinator") Pending Nothing (Just rootId) Nothing]))
+        void (command goal "adaptive-initial-assignment" (Command.SetAssignments [initialAssignment]))
         let request = checked (parseRequestKey "adaptive-delivery-native")
             job = addressedRunJob now (actor "coordinator") root.name AgentWorkflowRoute Aeson.Null (Ledger.httpRunKey root.name request) & #objective .~ Just (ObjectiveAssociation goal own) & #executionRootId .~ Just rootId
         void (right =<< Ledger.acceptObjectiveRunRequest settings store.pool job request (Ledger.callerAttribution "workspace-fixture"))

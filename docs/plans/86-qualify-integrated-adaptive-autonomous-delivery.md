@@ -145,6 +145,18 @@ satisfy that selected scenario. The new deterministic action-denial control also
 requires identical passing protected commands before and after authority
 restoration, without another provider call. No milestone is accepted yet.
 
+The [first native attempt](../evidence/adaptive-delivery/native-qualification.md)
+on `64d9e4f4` failed during fixture objective setup after both native provisioning
+controls passed. Its initial assignment supplied a root without a cutoff, which
+the real objective graph validator correctly rejects. The corrected shared
+initial assignment is unbound until native admission and passes
+`cabal run workspace-linux-fixture -- adaptive-contract`. A queued `2dce160d`
+runtime containing the same defect was stopped before completion. The corrected
+immutable runtime and both coupled scenarios must still run; no recovery or
+delivery success is inferred from this failed attempt. Empty binding archives
+now emit JSON `[]`, and future failures retain command errors and bounded
+objective/receipt diagnostics.
+
 ## Surprises & Discoveries
 
 

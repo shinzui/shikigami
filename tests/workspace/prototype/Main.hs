@@ -3,7 +3,7 @@
 module Main (main) where
 
 import Accepted (Prepared (..), advanceUpgrade, executeGitWithBackend, executePrepared, prepareAccepted, prepareUpgrade)
-import Adaptive (adaptiveCase)
+import Adaptive (adaptiveCase, adaptiveContract)
 import Auth.Biscuit (toPublic)
 import Continuing (continuingCase)
 import Control.Concurrent (threadDelay)
@@ -126,6 +126,7 @@ main = catch dispatch \(failure :: SomeException) -> do
               authority <- authorityApplication prefix
               runSettings (setHost "127.0.0.1" (setPort number defaultSettings)) authority
         ["continuing", config, prefix, stage] -> checkPrefix prefix >> continuingCase config prefix stage
+        ["adaptive-contract"] -> adaptiveContract
         ["adaptive", config, prefix, stage] -> checkPrefix prefix >> adaptiveCase config prefix stage
         ["integration", config, prefix] -> checkPrefix prefix >> integrationCase config prefix
         ["workflow", config, prefix, stage] -> checkPrefix prefix >> workflowCase config prefix stage

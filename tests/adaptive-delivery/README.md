@@ -70,6 +70,7 @@ The native consumer is `tests/workspace/prototype/Adaptive.hs` in the existing
 
 ```bash
 nix develop --no-write-lock-file -c cabal build workspace-linux-fixture
+nix develop --no-write-lock-file -c cabal run workspace-linux-fixture -- adaptive-contract
 ```
 
 The actual Linux fixture uses the existing disposable Apple-container runner:
