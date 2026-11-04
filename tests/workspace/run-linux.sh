@@ -36,6 +36,7 @@ cleanup() {
       status=1
     fi
   fi
+  systemctl kill --kill-whom=all --signal=CONT "$service" >/dev/null 2>&1 || true
   systemctl stop "$socket" "$service" "$authority" "$oauth" >/dev/null 2>&1 || true
   systemctl stop "$task-continuing.service" >/dev/null 2>&1 || true
   for boundary in outcome result followup; do
@@ -243,6 +244,16 @@ if [[ "$mode" == --adaptive-only || "$mode" == --adaptive-transfer-only ]]; then
     done
     "$observed"
   }
+  if [[ "$mode" == --adaptive-transfer-only ]]; then
+    if adaptive unknown-crash >"$prefix/adaptive-unknown-crash.log" 2>&1; then
+      unknown_status=0
+    else
+      unknown_status=$?
+    fi
+    [[ "$unknown_status" == 92 && -f "$prefix/adaptive-unknown-crashed.json" ]]
+    adaptive unknown-observe >"$prefix/adaptive-unknown-observe.log" 2>&1
+    systemctl kill --kill-whom=all --signal=CONT "$service"
+  fi
   adaptive_restart_after outcome "SELECT jsonb_agg(jsonb_build_object('operationId',operation_id,'executionId',execution_id,'fingerprint',state->'fingerprint','outcome',state->'outcome') ORDER BY operation_id) FROM shikigami.execution_transcript_operations WHERE execution_id IN (SELECT execution_id FROM shikigami.executions WHERE binding->>'rootId' IN (SELECT binding->>'rootId' FROM shikigami.worker_sessions)) AND state->'specification'->>'kind'='ToolOperation' AND state->'outcome' IS NOT NULL AND state->'outcome'<>'null'::jsonb"
   adaptive_restart_after result "SELECT jsonb_agg(jsonb_build_object('sessionId',r.session_id,'assignmentId',r.assignment_id,'receipt',r.state,'consumedCursor',s.state->'consumedCursor') ORDER BY r.assignment_id) FROM shikigami.worker_session_results r JOIN shikigami.worker_sessions s USING(session_id) WHERE (s.state->>'consumedCursor')::bigint < (r.state->>'cursor')::bigint"
   if [[ "$mode" == --adaptive-transfer-only ]]; then
@@ -294,6 +305,7 @@ assert (p/'adaptive-crashed').read_text()=='1\n'
                                     for name in ['outcome','result','followup']},
     'action_denial':{'exitCode':1,'authorized':authorized,'restored':restored,'noProviderCalls':True},
     'ownership_commit_restart':({'exitCode':91,'markerObserved':True} if first['format']==2 else None),
+    'unknown_effect_restart':({'exitCode':92,'markerObserved':True} if first['format']==2 else None),
     'terminal_replay':{'sameEvidence':True,'providerCallsBefore':hashlib.sha256(before).hexdigest(),
                        'providerCallsAfter':hashlib.sha256(after).hexdigest()}
 },indent=2)+'\n')

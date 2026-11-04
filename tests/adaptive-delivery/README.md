@@ -137,6 +137,17 @@ pending session coordinates. The baseline runtime's version 1 evidence cannot
 satisfy this selected transfer scenario. This extension compiles locally and
 has not yet been runtime-qualified.
 
+It also loses the consumer's reply after a real accepted edit, pauses the
+independent receipt publisher, waits for the original attempt's expiry and
+requires the root to retain active/unknown work. Transfer and completion must
+refuse during that observation. After publication resumes, final acceptance
+requires the original attempt's independent late receipt. A same-root admission
+probe races two local clients for one active slot and settles its winner without
+external dispatch. This probe is not reported as a model or workspace tool call.
+The selected scenario checks foreign-alias and undeclared-target refusal and
+changes its process default after suspension; all dispatched model ids must
+still belong to the admitted fixture roles.
+
 The runner also compares a successful caught-up `workers integrate` command
 with its exact retry after restoring authority, while requiring that command to
 fail with exit 1 during authority denial. The final provider-call bytes must
@@ -173,3 +184,12 @@ descendant confinement are qualified; a foreground process result alone cannot
 complete this objective. See [the execution runbook](../../docs/operations/baikai-execution.md).
 It must never fall back to the deterministic provider. No publication, merge,
 deployment or recurring mandate is authorized by this fixture.
+
+Prototype builds reuse `packages.x86_64-linux.shikigami-qualification-dependencies`,
+a Nix-built copy of the same frozen cohort's dependency build tree. Its inputs
+include package manifests, exact sources, metadata, flags and toolchain; Haskell
+application/fixture edits do not invalidate that dependency layer. The prototype
+replaces application sources, restores original dependency descriptors, reruns
+the cohort verifier/restriction and builds the selected application/fixture
+source. Production runtime assembly retains its existing path. This avoids a
+second dependency solve and does not turn cache construction into runtime proof.

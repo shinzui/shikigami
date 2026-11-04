@@ -1,4 +1,5 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE RankNTypes #-}
 
 -- The native adaptive controller, real continuing workers, configured mutable
 -- host, accepted tools and objective owner. Only model responses and the
@@ -19,6 +20,7 @@ import Baikai.StopReason (StopReason (ToolUse))
 import Baikai.Stream (liftCompleteToStream)
 import Baikai.Usage qualified as Usage
 import Control.Concurrent (threadDelay)
+import Control.Concurrent.Async (concurrently)
 import Control.Monad (forM, forM_, unless, void, when)
 import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
@@ -26,6 +28,7 @@ import Data.Aeson.KeyMap qualified as KeyMap
 import Data.ByteString qualified as Bytes
 import Data.ByteString.Lazy qualified as Lazy
 import Data.Generics.Labels ()
+import Data.IORef (newIORef, readIORef, writeIORef)
 import Data.List (find)
 import Data.Map.Strict qualified as Map
 import Data.Maybe (fromMaybe, isJust)
@@ -35,7 +38,8 @@ import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Encoding
 import Data.Time (addUTCTime, getCurrentTime)
 import Data.Vector qualified as Vector
-import FixtureIdentity (fixtureOperationId, fixtureRootId)
+import Effectful.Dispatch.Static (unsafeEff_)
+import FixtureIdentity (fixtureAttemptId, fixtureOperationId, fixtureRootId)
 import GHC.Generics (Generic)
 import Hasql.Decoders qualified as D
 import Hasql.Encoders qualified as E
@@ -52,6 +56,7 @@ import Shikigami.AdaptiveDelivery.Generated.WorkflowRuntime qualified as Generat
 import Shikigami.Agent.Approval (autoApprovePolicy)
 import Shikigami.Agent.Approval.Workflow qualified as Approval
 import Shikigami.Agent.Decl
+import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
 import Shikigami.Agent.Loader (loadAgent)
 import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (AgentIdentity (VerifiedIdentity), mkAgentPrincipal)
@@ -62,7 +67,7 @@ import Shikigami.AgentRun.RequestKey (parseRequestKey)
 import Shikigami.App (AppEnv (..))
 import Shikigami.App.Config
 import Shikigami.Attestation.Resolve (ProfileResolutionError (UnknownProfile))
-import Shikigami.Behavior.Run (newBehaviorEnv)
+import Shikigami.Behavior.Run (BehaviorEnv (..), newBehaviorEnv)
 import Shikigami.Behavior.Skill (SkillDir (..))
 import Shikigami.Behavior.StubProvider (stubApiProvider, stubModel)
 import Shikigami.Capability.Overlay (CapabilityDescriptor (..), emptyResolvedCapabilitySet)
@@ -76,16 +81,17 @@ import Shikigami.Decision.ModelCatalog (modelBinding, modelCatalog)
 import Shikigami.Directory qualified as Directory
 import Shikigami.Duration
 import Shikigami.Execution.Attempt qualified as Attempt
-import Shikigami.Execution.Coordinate (executionCoordinateText)
-import Shikigami.Execution.Counter (noAttempts)
+import Shikigami.Execution.Coordinate (executionCoordinate, executionCoordinateText)
+import Shikigami.Execution.Counter (attemptNumber, noAttempts)
 import Shikigami.Execution.Driver qualified as Driver
+import Shikigami.Execution.Executor qualified as Executor
 import Shikigami.Execution.Identity (ExecutionRootId, parseOperationId)
 import Shikigami.Execution.Policy.Types
 import Shikigami.Execution.Quantity (parseResourceAmount)
-import Shikigami.Execution.Request (ExecutionPolicy (..))
+import Shikigami.Execution.Request (ExecutionPolicy (..), ExecutionRequest (..))
 import Shikigami.Execution.Resources qualified as R
 import Shikigami.Execution.ResourcesStore qualified as Roots
-import Shikigami.Execution.Runner (OperationContext (..))
+import Shikigami.Execution.Runner (DispatchContext (..), OperationContext (..))
 import Shikigami.Execution.Selection (defaultBinding, resolveExecutionSelection)
 import Shikigami.Execution.SelectionRuntime (assignmentIdFor)
 import Shikigami.Execution.Start (SkillAssignment (..))
@@ -106,11 +112,13 @@ import Shikigami.Prelude ((%~), (&), (.~))
 import Shikigami.Program.Decision.Adaptive (AdaptiveInput (..))
 import Shikigami.Repository (RepositoryId, repositoryId)
 import Shikigami.RunEvidence.Catalog qualified as Catalog
+import Shikigami.Server.Command.Workers (executeWorkerControl)
 import Shikigami.Sink (GrantSource (StaticGrants), defaultGrantTable)
 import Shikigami.Sink.Config
 import Shikigami.Sink.Http (HttpLimits (..), credentialsFromConfig, newSinkHttp)
 import Shikigami.Trigger.Enqueue (addressedRunJob, ensureRunQueue)
 import Shikigami.WorkerSession.Capability qualified as Workers
+import Shikigami.WorkerSession.Handoff (TransferServices (..))
 import Shikigami.WorkerSession.Input qualified as Input
 import Shikigami.WorkerSession.Store qualified as SessionStore
 import Shikigami.WorkerSession.Transfer qualified as Transfer
@@ -136,13 +144,19 @@ import Shikigami.Workspace.Supervisor (workspaceExecDescriptor)
 import Shikigami.Workspace.TransferClient (workspaceTransferClient)
 import Shikigami.Workspace.Types
 import Shikigami.Workspace.Value
+import Shikumi.Tool qualified as Tool
+import Shikumi.Tool.Output (ToolOutput (..))
 import System.Directory (doesFileExist)
 import System.Exit (ExitCode (ExitFailure, ExitSuccess))
-import System.FilePath ((</>))
+import System.FilePath (takeFileName, (</>))
 import System.Posix.Process (exitImmediately)
-import System.Process (readProcess, readProcessWithExitCode)
+import System.Process (callProcess, readProcess, readProcessWithExitCode)
 
 data Saved = Saved {objectiveId :: !ObjectiveId, job :: !RunJob}
+  deriving stock (Generic)
+  deriving anyclass (Aeson.ToJSON, Aeson.FromJSON)
+
+data UnknownCut = UnknownCut {reference :: !Attempt.JobReference, identity :: !AgentIdentity, admission :: !WorkspaceAdmission}
   deriving stock (Generic)
   deriving anyclass (Aeson.ToJSON, Aeson.FromJSON)
 
@@ -212,9 +226,10 @@ adaptiveCase config prefix requestedStage = withQualification config prefix \ori
   nativeHost <- right (configuredWorkspaceHostWithTransfers env store.pool directory.handle q.authorizer workspaceSettings)
   template <- right =<< loadAgent "/var/lib/shikigami-workspace-fixture-code/agents/triage-note.dhall"
   let alias name = checked (parseModelAlias name)
-      worker name = template & #name .~ agent name & #identity .~ Just (IdentityDecl (declarationCoordinate ("agent_01h000000000000000" <> name))) & #behavior .~ Skill (declarationCoordinate "/var/lib/shikigami-workspace-fixture-code/agents/skills/triage-note") & #execution .~ Just (ExecutionPolicy (alias name) [alias name]) & #capabilityOverlays .~ map (.capability) [supervisedWorkspaceEditDescriptor, workspaceExecDescriptor, workspaceGitDescriptor] & #sinks .~ [] & #memory . #recordPolicy .~ Never
+      rolePolicy name = ExecutionPolicy (alias name) [alias name]
+      worker name = template & #name .~ agent name & #identity .~ Just (IdentityDecl (declarationCoordinate ("agent_01h000000000000000" <> name))) & #behavior .~ Skill (declarationCoordinate "/var/lib/shikigami-workspace-fixture-code/agents/skills/triage-note") & #execution .~ Just (rolePolicy name) & #capabilityOverlays .~ map (.capability) [supervisedWorkspaceEditDescriptor, workspaceExecDescriptor, workspaceGitDescriptor] & #sinks .~ [] & #memory . #recordPolicy .~ Never
       workers = map worker fixtureWorkers
-      root = template & #name .~ agent "coordinator" & #identity .~ Just (IdentityDecl (declarationCoordinate "agent_01h000000000000000coordinator")) & #behavior .~ Flow (declarationCoordinate "adaptive-delivery") & #delegates .~ map (.name) workers & #decisionModels .~ [alias "adaptive"] & #sinks .~ [] & #memory . #recordPolicy .~ Never
+      root = template & #name .~ agent "coordinator" & #identity .~ Just (IdentityDecl (declarationCoordinate "agent_01h000000000000000coordinator")) & #behavior .~ Flow (declarationCoordinate "adaptive-delivery") & #delegates .~ map (.name) workers & #decisionModels .~ [alias "adaptive"] & #execution .~ Just (ExecutionPolicy (alias "adaptive") (map alias ("adaptive" : fixtureWorkers))) & #sinks .~ [] & #memory . #recordPolicy .~ Never
       declarations = root : workers
       catalog = checked (modelCatalog [checked (modelBinding (alias name) "1" ("adaptive-fixture-" <> name) "1" (stubModel & #modelId .~ name) emptyOptions Nothing) | name <- "adaptive" : fixtureWorkers])
       baseSessions = Objectives.coordinationHost env settings directory.handle q.authorizer declarations defaultDelegationBudget (Just (workspaceTransferClient q.client))
@@ -252,6 +267,12 @@ adaptiveCase config prefix requestedStage = withQualification config prefix \ori
         let rootId = fixtureRootId "adaptive-delivery-root"
             limits = Map.fromList [(dimension, if dimension == R.ModelAttempts then R.Limited (checked (parseResourceAmount 48)) else R.ExplicitlyUnbounded) | dimension <- [minBound .. maxBound]]
         void (right =<< run env (Roots.enrollRoot rootId (R.Envelope limits (addUTCTime 1200 now))))
+        when transferring (rootReservationRace q rootId)
+        when transferring do
+          let select required = resolveExecutionSelection (assignmentIdFor "adaptive-alias-probe") catalog (defaultBinding stubModel emptyOptions) (Just (rolePolicy "consumer")) (Just (ExecutionRequest (Just (alias required)) Nothing Nothing)) Nothing Nothing (Just rootId) now
+          void (right (select "consumer"))
+          unless (either (const True) (const False) (select "producer")) (fail "consumer acquired a foreign role alias")
+          Lazy.writeFile (prefix </> "adaptive-alias-policy.json") (Aeson.encode (Aeson.object ["rootId" .= rootId, "allowedAlias" .= ("consumer" :: Text), "forbiddenAlias" .= ("producer" :: Text), "admitted" .= True, "refused" .= True, "dispatches" .= (0 :: Int)]))
         void (command goal "adaptive-initial-assignment" (Command.SetAssignments [initialAssignment]))
         let request = checked (parseRequestKey "adaptive-delivery-native")
             job = addressedRunJob now (actor "coordinator") root.name AgentWorkflowRoute Aeson.Null (Ledger.httpRunKey root.name request) & #objective .~ Just (ObjectiveAssociation goal own) & #executionRootId .~ Just rootId
@@ -261,8 +282,11 @@ adaptiveCase config prefix requestedStage = withQualification config prefix \ori
         pure value
       else right . Aeson.eitherDecodeStrict =<< Bytes.readFile (prefix </> "adaptive-state.json")
   baseBehavior <- newBehaviorEnv
-  let readGoal = right =<< run env (O.readObjective owner saved.objectiveId)
+  runtimeRef <- newIORef Nothing
+  let resumedDefault = if transferring && stage /= "admit" then stubModel & #modelId .~ "forbidden-process-default" else baseBehavior.model
+      readGoal = right =<< run env (O.readObjective owner saved.objectiveId)
       complete model context options = do
+        unless (Model.modelId model `elem` ("adaptive" : fixtureWorkers)) (fail "process defaults escaped the admitted fixture aliases")
         response <- Provider.complete stubApiProvider model context options
         (output, calls) <-
           if Model.modelId model == "adaptive"
@@ -286,6 +310,16 @@ adaptiveCase config prefix requestedStage = withQualification config prefix \ori
                     | Just value <- consumer, Just result <- reported, revisionNumber result.receipt.cursor <= 3 = [P.FollowUpContext (key "consumer") (Workers.WorkerInstruction (checked (Input.parseInstructionText "reconcile-v2: the retained producer emits version 2 at value.text; correct the consumer and commit")) current.revision value.revision current.criteriaRevision Nothing)]
                     | otherwise = [P.AwaitAssignments [own]]
                   proposal = P.Proposal V1 saved.objectiveId current.revision current.instructionsRevision current.criteriaRevision (Runtime.operationKey "decision" (Aeson.toJSON (admission.run, generation, current.revision))) (map (.input.key) current.evidence) (checked (parseCriterionDescription "Reflect on the retained producer schema finding")) (Just (checked (parseCriterionDescription "Worker local checks use different schema assumptions"))) (checked (parseCriterionDescription "Reconcile the consumer before integrating exact commits")) evidenceKey changes
+              probed <- doesFileExist (prefix </> "adaptive-target-refusal.json")
+              when (transferring && not probed && null [a | a <- current.assignments, a.definition.assignmentId /= own]) do
+                runtime <- readIORef runtimeRef >>= maybe (fail "native adaptive runtime absent from refusal probe") pure
+                let forbidden = proposal & #operationId .~ fixtureOperationId "adaptive-forbidden-target" & #changes .~ [P.CreateAssignment (P.Placement (AssignmentDraft (key "producer") (checked (parseInstructions "bounded forbidden-target probe")) [] (actor "producer") Pending Nothing (Just admission.organization.rootId) (Just admission.organization.cutoff)) (agent "forbidden-role") Nothing)]
+                denied <- Runtime.accept runtime admission pinned forbidden
+                unless (either (const True) (const False) denied) (fail "native checkpoint admitted an undeclared target")
+                unchanged <- readGoal
+                count <- run env (runTransaction (Tx.statement () (preparable "SELECT count(*) FROM shikigami.worker_sessions" E.noParams (D.singleRow (D.column (D.nonNullable D.int8))))))
+                unless (unchanged.revision == current.revision && count == 0) (fail "forbidden native target changed the checkpoint or dispatched a worker")
+                Lazy.writeFile (prefix </> "adaptive-target-refusal.json") (Aeson.encode (Aeson.object ["rootId" .= admission.organization.rootId, "operationId" .= forbidden.operationId, "checkpointRevision" .= current.revision, "target" .= ("forbidden-role" :: Text), "refused" .= True, "sessionsAtCut" .= count, "unchangedCheckpoint" .= True]))
               pure (json (Aeson.object ["proposalJson" .= json proposal]), [])
             else do
               let name = Model.modelId model
@@ -309,67 +343,169 @@ adaptiveCase config prefix requestedStage = withQualification config prefix \ori
       provider = stubApiProvider & #complete .~ complete & #stream .~ liftCompleteToStream complete
   registry <- Provider.newProviderRegistryFrom [provider]
   http <- right =<< newSinkHttp (HttpLimits q.config.httpRequestMaxBytes q.config.httpResponseMaxBytes) (credentialsFromConfig q.config) (DanwaConfig "http://localhost:1" (declarationCoordinate "fixture"))
-  let deps = Agent.AgentRunDeps env (baseBehavior & #providerRegistry .~ Just registry) (Decision.defaultDecisionServices catalog & #providers .~ [provider]) q.authorizer nativeHost.capabilities (Just nativeHost) (Just sessions) (Just objectives) declarations (KizashiConfig "http://localhost:1" (declarationCoordinate "recipient")) (KawaConfig "http://localhost:1" (activityCoordinate "fixture")) (KanmonConfig "http://localhost:1") (DanwaConfig "http://localhost:1" (declarationCoordinate "fixture")) (ReiConfig Nothing) http (Agent.defaultAgentRunHooks & #afterStepBody .~ (\name -> when (stage == "crash" && name == W.StepName "adaptive-validation") (Bytes.writeFile (prefix </> "adaptive-crashed") "1\n" >> exitImmediately (ExitFailure 86)))) (autoApprovePolicy (checked (parseDuration 900))) Approval.defaultApprovalWorkflowEnv (checked (parseDuration 30)) defaultHarnessPolicy defaultDelegationBudget (StaticGrants defaultGrantTable) directory.handle (Routing.RoutingRuntime (\_ -> error "no routing") (\_ _ _ -> error "no routing")) Practice.unavailablePracticeReviewRuntime (Just store.pool) Log.silentLogger (\profile version -> pure (Left (UnknownProfile profile version)))
+  let deps = Agent.AgentRunDeps env (baseBehavior & #model .~ resumedDefault & #providerRegistry .~ Just registry) (Decision.defaultDecisionServices catalog & #providers .~ [provider]) q.authorizer nativeHost.capabilities (Just nativeHost) (Just sessions) (Just objectives) declarations (KizashiConfig "http://localhost:1" (declarationCoordinate "recipient")) (KawaConfig "http://localhost:1" (activityCoordinate "fixture")) (KanmonConfig "http://localhost:1") (DanwaConfig "http://localhost:1" (declarationCoordinate "fixture")) (ReiConfig Nothing) http (Agent.defaultAgentRunHooks & #afterStepBody .~ (\name -> when (stage == "crash" && name == W.StepName "adaptive-validation") (Bytes.writeFile (prefix </> "adaptive-crashed") "1\n" >> exitImmediately (ExitFailure 86)))) (autoApprovePolicy (checked (parseDuration 900))) Approval.defaultApprovalWorkflowEnv (checked (parseDuration 30)) defaultHarnessPolicy defaultDelegationBudget (StaticGrants defaultGrantTable) directory.handle (Routing.RoutingRuntime (\_ -> error "no routing") (\_ _ _ -> error "no routing")) Practice.unavailablePracticeReviewRuntime (Just store.pool) Log.silentLogger (\profile version -> pure (Left (UnknownProfile profile version)))
       workflows = Agent.agentRunRegistry deps `Map.union` Driver.executionRegistry (Agent.executionRuntime deps) `Map.union` Adaptive.registry (Agent.adaptiveRuntime deps) `Map.union` Sessions.sessionRegistry (Agent.workerSessionRuntime deps)
+  writeIORef runtimeRef (Agent.adaptiveRuntime deps)
   if stage == "admit"
     then do
       outcome <- right =<< Agent.runAgentRunWorkflow deps saved.job
       unless (outcome == W.Suspended) (fail "adaptive parent failed admission")
       putStrLn "PASS finite native adaptive objective admitted without completing it"
-    else do
-      let pump 0 = fail "adaptive native fixture exceeded its bounded advances"
-          pump remaining = do
-            void (run env (resumeWorkflowsOnce (shikigamiWorkflowResumeOptions env 30) workflows))
-            identifiers <- run env (runTransaction (Tx.statement () (preparable "SELECT execution_id FROM shikigami.executions ORDER BY execution_id" E.noParams (D.rowList (D.column (D.nonNullable D.text))))))
-            forM_ identifiers \raw -> do
-              retained <- right =<< run env (Execution.inspectExecution (Replay.executionIdentity raw))
-              forM_ retained \(state, binding, _) -> forM_ state.activeOperation \operation -> do
-                attempts <- right =<< run env (Execution.inspectOperationAttempts operation)
-                forM_ (filter Attempt.logicalAttempt attempts) \attempt -> do
-                  -- Guest realtime steps expire absolute guards. Observe a step
-                  -- before a short validation; never disable that protection.
-                  op <- right =<< run env (Execution.inspectOperation operation)
-                  when (maybe False ((== "overlay__workspace-exec__validate") . executionCoordinateText . (.specification.name)) op) (void (readProcess "/usr/bin/timeout" ["40", prefix </> "root/bin/probe", "--await-clock-step"] ""))
-                  void (right =<< Agent.executeAcceptedOperation deps binding.identity (Attempt.JobReference V1 state.executionId operation attempt.request.attemptId))
-            current <- readGoal
-            let ready = length current.reportedResults == 4 && any (\r -> r.assignmentId == key "consumer" && revisionNumber r.receipt.cursor > 3) current.reportedResults
-            existing <- doesFileExist (prefix </> "adaptive-integrated.json")
-            when ready do
-              integrated <-
-                if existing
-                  then right . Aeson.eitherDecodeStrict =<< Bytes.readFile (prefix </> "adaptive-integrated.json")
-                  else do
-                    value <- integrate q nativeHost repos saved.job.executionRootId
-                    Lazy.writeFile (prefix </> "adaptive-integrated.json") (Aeson.encode value)
-                    pure value
-              let artifactRef = checked (parseArtifactRef ("pair:" <> versionedDigest "shikigami.adaptive-integrated-pair/1" integrated))
-              pair <- decode @[Aeson.Value] =<< field "repositories" integrated
-              exact <- forM pair \entry -> do
-                repository <- field "repository" entry
-                candidate <- field "combined" entry
-                pure (Aeson.object ["repository" .= repository, "combined" .= candidate])
-              forM_ names \name -> void (command saved.objectiveId ("adaptive-done-" <> name) (Command.RecordProgress (key name) Done [] []))
-              void (command saved.objectiveId "adaptive-exact-journey" (Command.RecordEvidence (key "consumer") (Attestation evidenceKey criterion artifactRef (checked (parseAttestationStatement (json exact))) JourneyObserved)))
-            latest <- readGoal
-            if isJust latest.proposed then pure latest else threadDelay 200000 >> pump (remaining - 1)
-      proposed <- pump (600 :: Int)
-      unless (proposed.status == Open) (fail "model closed its own objective")
-      void (command saved.objectiveId "adaptive-owner-accept" Command.AcceptCompletion)
-      accepted <- readGoal
-      unless (accepted.status == Completed) (fail "exact integrated objective did not close")
-      rootUsage <- right =<< run env (Roots.inspectRoot (fromMaybe (error "root") saved.job.executionRootId))
-      unless (rootUsage.active == noAttempts && rootUsage.unknown == noAttempts) (fail "native completion retained unsettled spending")
-      counts <- run env (runTransaction (Tx.statement () (preparable "SELECT (SELECT count(*) FROM shikigami.worker_sessions), (SELECT count(*) FROM shikigami.worker_session_messages), (SELECT count(*) FROM shikigami.worker_session_results)" E.noParams (D.singleRow ((,,) <$> D.column (D.nonNullable D.int8) <*> D.column (D.nonNullable D.int8) <*> D.column (D.nonNullable D.int8))))))
-      unless (counts == (4, 5, 5)) (fail "native recovery duplicated a worker, followup or result")
-      calls <- Text.lines . Encoding.decodeUtf8 <$> Bytes.readFile (prefix </> "adaptive-provider-calls")
-      unless (all (\name -> length (filter (== name) calls) == if name == "consumer" && not transferring then 4 else 2) fixtureWorkers) (fail "native worker provider calls repeated or omitted completed turns")
-      integrated <- right . Aeson.eitherDecodeStrict @Aeson.Value =<< Bytes.readFile (prefix </> "adaptive-integrated.json")
-      ownership <- if transferring then right . Aeson.eitherDecodeStrict @Aeson.Value =<< Bytes.readFile (prefix </> "adaptive-ownership-crashed.json") else pure Aeson.Null
-      when transferring do
-        assignment <- maybe (fail "accepted consumer missing") pure (find ((== key "consumer") . (.definition.assignmentId)) accepted.assignments)
-        unless (assignment.definition.owner == actor "consumer-successor") (fail "successor did not own the accepted consumer artifact")
-      Lazy.writeFile (prefix </> "adaptive-evidence.json") (Aeson.encode (Aeson.object ["format" .= (if transferring then 2 else 1 :: Int), "ownership" .= ownership, "objective" .= saved.objectiveId, "status" .= accepted.status, "root" .= rootUsage, "integrated" .= integrated, "reportedResults" .= accepted.reportedResults, "sessionMessageResultCounts" .= counts, "providerCalls" .= Map.fromList [(name, length (filter (== name) calls)) | name <- "adaptive" : fixtureWorkers]]))
-      putStrLn "PASS native adaptive two-repository delivery closes only against the exact integrated journey"
+    else
+      if stage == "unknown-observe"
+        then observeUnknown q deps sessions saved.objectiveId owner
+        else do
+          let pump 0 = fail "adaptive native fixture exceeded its bounded advances"
+              pump remaining = do
+                void (run env (resumeWorkflowsOnce (shikigamiWorkflowResumeOptions env 30) workflows))
+                identifiers <- run env (runTransaction (Tx.statement () (preparable "SELECT execution_id FROM shikigami.executions ORDER BY execution_id" E.noParams (D.rowList (D.column (D.nonNullable D.text))))))
+                forM_ identifiers \raw -> do
+                  retained <- right =<< run env (Execution.inspectExecution (Replay.executionIdentity raw))
+                  forM_ retained \(state, binding, _) -> forM_ state.activeOperation \operation -> do
+                    attempts <- right =<< run env (Execution.inspectOperationAttempts operation)
+                    forM_ (filter Attempt.logicalAttempt attempts) \attempt -> do
+                      -- Guest realtime steps expire absolute guards. Observe a step
+                      -- before a short validation; never disable that protection.
+                      op <- right =<< run env (Execution.inspectOperation operation)
+                      when (maybe False ((== "overlay__workspace-exec__validate") . executionCoordinateText . (.specification.name)) op) (void (readProcess "/usr/bin/timeout" ["40", prefix </> "root/bin/probe", "--await-clock-step"] ""))
+                      let reference = Attempt.JobReference V1 state.executionId operation attempt.request.attemptId
+                          loseFileReply = transferring && stage == "unknown-crash" && binding.identity == actor "consumer" && maybe False ((== "overlay__workspace-edit__replace") . executionCoordinateText . (.specification.name)) op
+                      void (right =<< if loseFileReply then Executor.executeAcceptedAttempt (unknownRuntime prefix (Agent.executionRuntime deps)) binding.identity reference else Agent.executeAcceptedOperation deps binding.identity reference)
+                current <- readGoal
+                let ready = length current.reportedResults == 4 && any (\r -> r.assignmentId == key "consumer" && revisionNumber r.receipt.cursor > 3) current.reportedResults
+                existing <- doesFileExist (prefix </> "adaptive-integrated.json")
+                when ready do
+                  integrated <-
+                    if existing
+                      then right . Aeson.eitherDecodeStrict =<< Bytes.readFile (prefix </> "adaptive-integrated.json")
+                      else do
+                        value <- integrate q nativeHost repos saved.job.executionRootId
+                        Lazy.writeFile (prefix </> "adaptive-integrated.json") (Aeson.encode value)
+                        pure value
+                  let artifactRef = checked (parseArtifactRef ("pair:" <> versionedDigest "shikigami.adaptive-integrated-pair/1" integrated))
+                  pair <- decode @[Aeson.Value] =<< field "repositories" integrated
+                  exact <- forM pair \entry -> do
+                    repository <- field "repository" entry
+                    candidate <- field "combined" entry
+                    pure (Aeson.object ["repository" .= repository, "combined" .= candidate])
+                  forM_ names \name -> void (command saved.objectiveId ("adaptive-done-" <> name) (Command.RecordProgress (key name) Done [] []))
+                  void (command saved.objectiveId "adaptive-exact-journey" (Command.RecordEvidence (key "consumer") (Attestation evidenceKey criterion artifactRef (checked (parseAttestationStatement (json exact))) JourneyObserved)))
+                latest <- readGoal
+                if isJust latest.proposed then pure latest else threadDelay 200000 >> pump (remaining - 1)
+          proposed <- pump (600 :: Int)
+          unless (proposed.status == Open) (fail "model closed its own objective")
+          void (command saved.objectiveId "adaptive-owner-accept" Command.AcceptCompletion)
+          accepted <- readGoal
+          unless (accepted.status == Completed) (fail "exact integrated objective did not close")
+          rootUsage <- right =<< run env (Roots.inspectRoot (fromMaybe (error "root") saved.job.executionRootId))
+          unless (rootUsage.active == noAttempts && rootUsage.unknown == noAttempts) (fail "native completion retained unsettled spending")
+          counts <- run env (runTransaction (Tx.statement () (preparable "SELECT (SELECT count(*) FROM shikigami.worker_sessions), (SELECT count(*) FROM shikigami.worker_session_messages), (SELECT count(*) FROM shikigami.worker_session_results)" E.noParams (D.singleRow ((,,) <$> D.column (D.nonNullable D.int8) <*> D.column (D.nonNullable D.int8) <*> D.column (D.nonNullable D.int8))))))
+          unless (counts == (4, 5, 5)) (fail "native recovery duplicated a worker, followup or result")
+          calls <- Text.lines . Encoding.decodeUtf8 <$> Bytes.readFile (prefix </> "adaptive-provider-calls")
+          unless (all (\name -> length (filter (== name) calls) == if name == "consumer" && not transferring then 4 else 2) fixtureWorkers) (fail "native worker provider calls repeated or omitted completed turns")
+          integrated <- right . Aeson.eitherDecodeStrict @Aeson.Value =<< Bytes.readFile (prefix </> "adaptive-integrated.json")
+          ownership <- if transferring then right . Aeson.eitherDecodeStrict @Aeson.Value =<< Bytes.readFile (prefix </> "adaptive-ownership-crashed.json") else pure Aeson.Null
+          unknown <-
+            if transferring
+              then do
+                observed <- right . Aeson.eitherDecodeStrict @Aeson.Value =<< Bytes.readFile (prefix </> "adaptive-unknown-observed.json")
+                cut <- right . Aeson.eitherDecodeStrict @UnknownCut =<< Bytes.readFile (prefix </> "adaptive-unknown-crashed.json")
+                Just actual <- right =<< run env (Execution.inspectExecutionAttempt cut.reference.attemptId)
+                unless (actual.phase `elem` [Attempt.AttemptCommitted, Attempt.AttemptSuperseded] && isJust actual.lateReceipt && isJust actual.outcome && actual.executionId == cut.reference.executionId && actual.operationId == cut.reference.operationId) (fail "unknown file outcome did not recover its original independent receipt")
+                pure (Aeson.object ["observed" .= observed, "reference" .= cut.reference, "phase" .= actual.phase, "outcome" .= actual.outcome, "lateReceipt" .= actual.lateReceipt])
+              else pure Aeson.Null
+          race <- if transferring then right . Aeson.eitherDecodeStrict @Aeson.Value =<< Bytes.readFile (prefix </> "adaptive-root-race.json") else pure Aeson.Null
+          aliases <- if transferring then right . Aeson.eitherDecodeStrict @Aeson.Value =<< Bytes.readFile (prefix </> "adaptive-alias-policy.json") else pure Aeson.Null
+          targets <- if transferring then right . Aeson.eitherDecodeStrict @Aeson.Value =<< Bytes.readFile (prefix </> "adaptive-target-refusal.json") else pure Aeson.Null
+          when transferring do
+            assignment <- maybe (fail "accepted consumer missing") pure (find ((== key "consumer") . (.definition.assignmentId)) accepted.assignments)
+            unless (assignment.definition.owner == actor "consumer-successor") (fail "successor did not own the accepted consumer artifact")
+          Lazy.writeFile (prefix </> "adaptive-evidence.json") (Aeson.encode (Aeson.object ["format" .= (if transferring then 2 else 1 :: Int), "ownership" .= ownership, "unknown" .= unknown, "rootRace" .= race, "aliasPolicy" .= aliases, "targetRefusal" .= targets, "initialProcessDefault" .= Model.modelId baseBehavior.model, "resumedProcessDefault" .= Model.modelId resumedDefault, "rootId" .= saved.job.executionRootId, "objective" .= saved.objectiveId, "status" .= accepted.status, "root" .= rootUsage, "integrated" .= integrated, "reportedResults" .= accepted.reportedResults, "sessionMessageResultCounts" .= counts, "providerCalls" .= Map.fromList [(name, length (filter (== name) calls)) | name <- "adaptive" : fixtureWorkers]]))
+          putStrLn "PASS native adaptive two-repository delivery closes only against the exact integrated journey"
+
+-- Two local control clients race the last active reservation at the same root
+-- later used by the native objective. The accepted probe is settled without
+-- external dispatch; it is not reported as a model or workspace tool call.
+rootReservationRace :: Qualification -> ExecutionRootId -> IO ()
+rootReservationRace q root = do
+  current <- right =<< run q.env (Roots.inspectRoot root)
+  let one = checked (parseResourceAmount 1)
+      operation name = R.OperationRequest (fixtureOperationId ("adaptive-root-race-" <> name)) Nothing R.ToolOperation Map.empty (executionCoordinate "adaptive-root-race/1")
+      attempt name = R.AttemptRequest (fixtureAttemptId ("adaptive-root-race-" <> name)) (operation name).operationId (Map.fromList [(R.ActiveWork, one), (R.ToolAttempts, one)]) R.EnforcedCeiling
+  void (right =<< run q.env (Roots.setRootControl root current.revision R.ContinueWork (Just one)))
+  narrowed <- right =<< run q.env (Roots.inspectRoot root)
+  now <- getCurrentTime
+  forM_ ["left", "right"] \name -> void (right =<< run q.env (Roots.reserveOperation root narrowed.revision (operation name) now))
+  (left, rightResult) <- concurrently (run q.env (Roots.beginAttempt root narrowed.revision (attempt "left") now)) (run q.env (Roots.beginAttempt root narrowed.revision (attempt "right") now))
+  winner <- case (left, rightResult) of
+    (Right R.Accepted, Left (R.ResourceExhausted R.ActiveWork)) -> pure "left"
+    (Left (R.ResourceExhausted R.ActiveWork), Right R.Accepted) -> pure "right"
+    _ -> fail "shared root admitted other than one last-slot reservation"
+  let loser = if winner == "left" then "right" else "left"
+  held <- right =<< run q.env (Roots.inspectRoot root)
+  missing <- right =<< run q.env (Roots.inspectAttempt root (attempt loser).attemptId)
+  unless (attemptNumber held.active == 1 && missing == Nothing) (fail "losing root reservation published an actual attempt")
+  void (right =<< run q.env (Roots.settleAttempt root (attempt winner).attemptId (R.KnownUsage Map.empty)))
+  settled <- right =<< run q.env (Roots.inspectRoot root)
+  void (right =<< run q.env (Roots.setRootControl root settled.revision R.ContinueWork Nothing))
+  before <- right =<< run q.env (Roots.inspectRoot root)
+  repeated <- right =<< run q.env (Roots.beginAttempt root narrowed.revision (attempt winner) now)
+  after <- right =<< run q.env (Roots.inspectRoot root)
+  unless (repeated == R.AlreadyAccepted && before == after && after.active == noAttempts && after.unknown == noAttempts) (fail "root reservation recovery changed held or settled usage")
+  Lazy.writeFile (q.prefix </> "adaptive-root-race.json") (Aeson.encode (Aeson.object ["rootId" .= root, "winner" .= (attempt winner), "loser" .= (attempt loser), "accepted" .= (1 :: Int), "refused" .= (1 :: Int), "activeAtCut" .= held.active, "loserAbsent" .= True, "sameRootAfterRetry" .= True, "activeAfter" .= after.active, "unknownAfter" .= after.unknown, "scope" .= ("resource admission only; no external dispatch" :: Text)]))
+
+-- Lose only the executor reply after the real configured file adapter returns.
+-- Pause its independent publisher so expiry can expose the retained uncertainty;
+-- no projection, provider receipt or journal is edited by the fault injector.
+unknownRuntime :: FilePath -> Executor.ExecutionRuntime -> Executor.ExecutionRuntime
+unknownRuntime prefix original@Executor.ExecutionRuntime {Executor.withTools = originalTools} =
+  original
+    { Executor.withTools = \snapshot dispatch wanted callback ->
+        originalTools snapshot dispatch wanted \tools -> callback [Executor.BoundTool binding (wrapped snapshot dispatch tool) | Executor.BoundTool binding tool <- tools]
+    }
+  where
+    wrapped :: Replay.ExecutionSnapshot -> DispatchContext -> Tool.SomeTool -> Tool.SomeTool
+    wrapped snapshot dispatch tool = Tool.mkDynTool (Tool.someToolName tool) (Tool.someToolDescription tool) (Tool.someToolSchema tool) \arguments -> do
+      result <- Tool.runErasedOutput tool arguments
+      case result of
+        Right output | not output.result.isError -> unsafeEff_ do
+          admission <- maybe (fail "unknown file cut has no admitted workspace") pure snapshot.workspace
+          let reference = Attempt.JobReference V1 snapshot.executionId dispatch.operation.operationId dispatch.attemptId
+          Lazy.writeFile (prefix </> "adaptive-unknown-crashed.json") (Aeson.encode (UnknownCut reference snapshot.identity admission))
+          callProcess "/usr/bin/systemctl" ["kill", "--kill-whom=all", "--signal=STOP", takeFileName prefix <> ".service"]
+          exitImmediately (ExitFailure 92)
+        _ -> pure ()
+      pure result
+
+observeUnknown :: Qualification -> Agent.AgentRunDeps -> Workers.CoordinationHost -> ObjectiveId -> O.ObjectiveHost -> IO ()
+observeUnknown q deps host goal owner = do
+  cut <- right . Aeson.eitherDecodeStrict @UnknownCut =<< Bytes.readFile (q.prefix </> "adaptive-unknown-crashed.json")
+  let awaitExpiry 0 = fail "original file attempt did not reach its bounded expiry"
+      awaitExpiry remaining = do
+        Just attempt <- right =<< run q.env (Execution.inspectExecutionAttempt cut.reference.attemptId)
+        now <- getCurrentTime
+        if maybe False (now >=) attempt.expiresAt then pure () else threadDelay 1000000 >> awaitExpiry (remaining - 1)
+  awaitExpiry (100 :: Int)
+  void (right =<< Executor.executeAcceptedAttempt (Agent.executionRuntime deps) cut.identity cut.reference)
+  held <- right =<< run q.env (Roots.inspectRoot cut.admission.rootId)
+  unless (held.unknown /= noAttempts && held.active /= noAttempts) (fail "unknown mutable outcome lost its root hold")
+  identifiers <- run q.env (runTransaction (Tx.statement () (preparable "SELECT session_id FROM shikigami.worker_sessions ORDER BY session_id" E.noParams (D.rowList (D.column (D.nonNullable D.text))))))
+  sessions <- forM identifiers \raw -> right =<< run q.env (SessionStore.inspectSession (Input.workerSessionId raw))
+  (state, _) <- maybe (fail "unknown file attempt has no retained worker session") pure (find (\(state, binding) -> state.owner == cut.identity && binding.rootId == cut.admission.rootId) [entry | Just entry <- sessions])
+  access <- right =<< run q.env (Sessions.sessionAccess host.services.sessions state.sessionId)
+  admission <- right =<< run q.env (SessionStore.loadAdmission access)
+  memory <- maybe (fail "unknown worker has no admitted parent memory") pure admission.context.sessionId
+  let runId = Workers.CoordinatorRun (W.WorkflowId ("operator-workers:" <> state.sessionId.value)) admission.context.identity memory admission.context.executionRootId admission.context.executionPermissions
+      scope = Workers.CoordinationScope V1 runId admission.scope.parent admission.delegator admission.context [Workers.WorkerSlot admission.scope.workerKey admission.worker admission.identity admission.objective (Just state.sessionId)] Input.maximumSessionCapacity admission.maximumAssignments admission.mailboxLimit
+      authority = Workers.CoordinationAuthority (\requested -> pure (if requested == runId then Right (Just scope) else Left "foreign control scope")) (\requested pinned -> pure (if requested == runId && pinned == Workers.scopeFingerprint scope then Right scope else Left "foreign control scope"))
+      control = Workers.CoordinationHost host.services authority
+  refused <- executeWorkerControl control q.authorizer scope (fixtureOperationId "adaptive-unknown-transfer") (Workers.TransferWorker state.sessionId state.revision state.epoch cut.admission.workspace (agent "consumer-successor"))
+  unless (either (const True) (const False) refused) (fail "unknown active assignment admitted a successor")
+  current <- right =<< run q.env (O.readObjective owner goal)
+  completion <- run q.env (O.executeCommand owner goal current.revision (fixtureOperationId "adaptive-unknown-completion") Command.AcceptCompletion)
+  unless (current.status == Open && either (const True) (const False) completion) (fail "unknown active work completed its objective")
+  Lazy.writeFile (q.prefix </> "adaptive-unknown-observed.json") (Aeson.encode (Aeson.object ["rootId" .= cut.admission.rootId, "reference" .= cut.reference, "root" .= held, "sessionId" .= state.sessionId, "phase" .= state.phase, "transferDenied" .= True, "completionDenied" .= True, "status" .= current.status]))
+  putStrLn "PASS unknown mutable work retains its root hold and refuses successor admission and completion"
 
 -- Native integration targets are separate configured workspaces under the same
 -- root. Every replacement, validation and local commit remains accepted work.

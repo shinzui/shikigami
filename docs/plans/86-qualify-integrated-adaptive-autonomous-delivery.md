@@ -157,6 +157,24 @@ delivery success is inferred from this failed attempt. Empty binding archives
 now emit JSON `[]`, and future failures retain command errors and bounded
 objective/receipt diagnostics.
 
+The fixture-only Nix path now has a reusable frozen dependency derivation,
+`shikigami-qualification-dependencies`. It builds the same verified Cabal cohort
+with `--only-dependencies`, retains the build tree, and lets each prototype
+candidate replace all application/fixture sources and recheck original
+descriptor bytes before building. The dependency build passes. Source-isolated
+evaluation proves Haskell changes reuse its derivation while Cabal manifest
+changes invalidate it. End-to-end runtime reuse remains to be qualified; the
+production runtime retains its original build path.
+
+The compiled transfer scenario now also loses a real consumer edit reply,
+pauses the independent receipt publisher, observes the expired attempt's held
+root and denied transfer/completion, and requires recovery of that original
+independent receipt. It races two local reservation clients at the same root's
+last active slot without external dispatch, checks a foreign worker alias and
+an undeclared target before dispatch, and changes the process default after
+suspension while retaining admitted aliases. These probes still await native
+execution. Their implementation is not acceptance evidence.
+
 ## Surprises & Discoveries
 
 
@@ -204,6 +222,13 @@ before consumer integration. The original “after result commit before
 notification” wording described an interleaving the real owner prevents. Retain
 the no-lost-result guarantee and explicit committed-record evidence rather than
 introduce a fixture-only split transaction.
+
+2026-11-04: Reuse a Nix-built frozen dependency tree for prototype qualification
+after FRIC-54–56 and earlier plan-96 occurrences repeatedly delayed consumer
+feedback. Keep one cohort/verifier, replace current application sources, restore
+original descriptor bytes before verification, and retain a distinct immutable
+candidate output. This changes prototype build preparation, not workflow,
+authorization or production runtime contracts.
 
 
 ## Outcomes & Retrospective
