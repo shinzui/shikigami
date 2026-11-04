@@ -101,7 +101,7 @@ import Shikigami.Flow.Decision qualified as Decision
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Log qualified as Log
-import Shikigami.Objective.Acceptance (validateGraph)
+import Shikigami.Objective.Acceptance (validateAcceptance, validateGraph)
 import Shikigami.Objective.Capability qualified as O
 import Shikigami.Objective.Command qualified as Command
 import Shikigami.Objective.Reference (ObjectiveAssociation (..))
@@ -392,9 +392,12 @@ adaptiveCase config prefix requestedStage = withQualification config prefix \ori
                   void (command saved.objectiveId "adaptive-exact-journey" (Command.RecordEvidence (key "consumer") (Attestation evidenceKey criterion artifactRef (checked (parseAttestationStatement (json exact))) JourneyObserved)))
                 latest <- readGoal
                 if isJust latest.proposed then pure latest else threadDelay 200000 >> pump (remaining - 1)
-          proposed <- pump (600 :: Int)
-          unless (proposed.status == Open) (fail "model closed its own objective")
-          void (command saved.objectiveId "adaptive-owner-accept" Command.AcceptCompletion)
+          starting <- readGoal
+          proposed <- if starting.status == Completed then pure starting else pump (600 :: Int)
+          unless (proposed.status == Completed) do
+            unless (proposed.status == Open) (fail "model closed its own objective")
+            when transferring (completionHold q owner proposed (fromMaybe (error "root") saved.job.executionRootId))
+            void (command saved.objectiveId "adaptive-owner-accept" Command.AcceptCompletion)
           accepted <- readGoal
           unless (accepted.status == Completed) (fail "exact integrated objective did not close")
           rootUsage <- right =<< run env (Roots.inspectRoot (fromMaybe (error "root") saved.job.executionRootId))
@@ -417,11 +420,34 @@ adaptiveCase config prefix requestedStage = withQualification config prefix \ori
           race <- if transferring then right . Aeson.eitherDecodeStrict @Aeson.Value =<< Bytes.readFile (prefix </> "adaptive-root-race.json") else pure Aeson.Null
           aliases <- if transferring then right . Aeson.eitherDecodeStrict @Aeson.Value =<< Bytes.readFile (prefix </> "adaptive-alias-policy.json") else pure Aeson.Null
           targets <- if transferring then right . Aeson.eitherDecodeStrict @Aeson.Value =<< Bytes.readFile (prefix </> "adaptive-target-refusal.json") else pure Aeson.Null
+          completion <- if transferring then right . Aeson.eitherDecodeStrict @Aeson.Value =<< Bytes.readFile (prefix </> "adaptive-completion-hold.json") else pure Aeson.Null
           when transferring do
             assignment <- maybe (fail "accepted consumer missing") pure (find ((== key "consumer") . (.definition.assignmentId)) accepted.assignments)
             unless (assignment.definition.owner == actor "consumer-successor") (fail "successor did not own the accepted consumer artifact")
-          Lazy.writeFile (prefix </> "adaptive-evidence.json") (Aeson.encode (Aeson.object ["format" .= (if transferring then 2 else 1 :: Int), "ownership" .= ownership, "unknown" .= unknown, "rootRace" .= race, "aliasPolicy" .= aliases, "targetRefusal" .= targets, "initialProcessDefault" .= Model.modelId baseBehavior.model, "resumedProcessDefault" .= Model.modelId resumedDefault, "rootId" .= saved.job.executionRootId, "objective" .= saved.objectiveId, "status" .= accepted.status, "root" .= rootUsage, "integrated" .= integrated, "reportedResults" .= accepted.reportedResults, "sessionMessageResultCounts" .= counts, "providerCalls" .= Map.fromList [(name, length (filter (== name) calls)) | name <- "adaptive" : fixtureWorkers]]))
+          Lazy.writeFile (prefix </> "adaptive-evidence.json") (Aeson.encode (Aeson.object ["format" .= (if transferring then 2 else 1 :: Int), "ownership" .= ownership, "unknown" .= unknown, "completionHold" .= completion, "rootRace" .= race, "aliasPolicy" .= aliases, "targetRefusal" .= targets, "initialProcessDefault" .= Model.modelId baseBehavior.model, "resumedProcessDefault" .= Model.modelId resumedDefault, "rootId" .= saved.job.executionRootId, "objective" .= saved.objectiveId, "status" .= accepted.status, "root" .= rootUsage, "integrated" .= integrated, "reportedResults" .= accepted.reportedResults, "sessionMessageResultCounts" .= counts, "providerCalls" .= Map.fromList [(name, length (filter (== name) calls)) | name <- "adaptive" : fixtureWorkers]]))
           putStrLn "PASS native adaptive two-repository delivery closes only against the exact integrated journey"
+
+-- Isolate the completion resource gate with an otherwise valid exact-artifact
+-- proposal. This local accounting probe performs no mutable effect; the earlier
+-- lost configured edit separately establishes actual mutable uncertainty.
+completionHold :: Qualification -> O.ObjectiveHost -> Objective -> ExecutionRootId -> IO ()
+completionHold q owner goal root = do
+  (proposal, _) <- maybe (fail "completion probe has no integrated proposal") pure goal.proposed
+  void (right (validateAcceptance goal proposal))
+  now <- getCurrentTime
+  current <- right =<< run q.env (Roots.inspectRoot root)
+  let operation = R.OperationRequest (fixtureOperationId "adaptive-completion-hold") Nothing R.ToolOperation Map.empty (executionCoordinate "adaptive-completion-hold/1")
+      attempt = R.AttemptRequest (fixtureAttemptId "adaptive-completion-hold") operation.operationId (Map.fromList [(dimension, checked (parseResourceAmount 1)) | dimension <- [R.ActiveWork, R.ToolAttempts]]) R.EnforcedCeiling
+  void (right =<< run q.env (Roots.reserveOperation root current.revision operation now))
+  void (right =<< run q.env (Roots.beginAttempt root current.revision attempt now))
+  void (right =<< run q.env (Roots.settleAttempt root attempt.attemptId (R.UnknownUsage "local accounting gate probe; no dispatch")))
+  held <- right =<< run q.env (Roots.inspectRoot root)
+  denied <- run q.env (O.executeCommand owner goal.objectiveId goal.revision (fixtureOperationId "adaptive-owner-accept") Command.AcceptCompletion)
+  unless (denied == Left ObjectiveUnresolved && held.active /= noAttempts && held.unknown /= noAttempts) (fail "valid integrated completion bypassed an unknown root hold")
+  unchanged <- right =<< run q.env (O.readObjective owner goal.objectiveId)
+  unless (unchanged == goal) (fail "refused completion changed its integrated proposal")
+  void (right =<< run q.env (Roots.reconcileAttempt root attempt.attemptId Map.empty))
+  Lazy.writeFile (q.prefix </> "adaptive-completion-hold.json") (Aeson.encode (Aeson.object ["rootId" .= root, "objective" .= goal.objectiveId, "revision" .= goal.revision, "validProposal" .= True, "refusal" .= ObjectiveUnresolved, "unchangedObjective" .= True, "activeAtCut" .= held.active, "unknownAtCut" .= held.unknown, "scope" .= ("resource admission only; no external dispatch" :: Text)]))
 
 -- Two local control clients race the last active reservation at the same root
 -- later used by the native objective. The accepted probe is settled without

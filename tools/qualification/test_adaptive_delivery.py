@@ -354,6 +354,8 @@ class AdaptiveDeliveryTests(unittest.TestCase):
             starts, value, artifact, _ = self.native_artifacts(path, Path(native))
             workspace = {"provider": "native-workspace", "resource": "retained-workspace"}
             value["format"] = 2
+            probes, unknown_restart = self.transfer_probes()
+            value.update({key: entry for key, entry in probes.items() if key != "providerCalls"})
             value["providerCalls"].update(consumer=2, **{"consumer-successor": 2})
             value["ownership"] = {
                 "intent": {"oldOwner": "original", "newOwner": "successor", "oldEpoch": 0, "newEpoch": 1,
@@ -366,6 +368,7 @@ class AdaptiveDeliveryTests(unittest.TestCase):
             recovery_path = Path(native) / "evidence/adaptive-recovery.json"
             recovery = json.loads(recovery_path.read_text())
             recovery["ownership_commit_restart"] = {"exitCode": 91, "markerObserved": True}
+            recovery.update(unknown_restart)
             recovery_path.write_text(json.dumps(recovery))
             for changes in [{"sessionOwner": "successor"}, {"oldWriteDenied": False},
                             {"earlySuccessorWriteDenied": False}]:
@@ -376,6 +379,63 @@ class AdaptiveDeliveryTests(unittest.TestCase):
                     driver.native_evidence(path, starts)
             artifact.write_text(json.dumps(value))
             self.assertEqual(driver.native_evidence(path, starts)["format"], 2)
+
+    @staticmethod
+    def transfer_probes():
+        reference = {"attemptId": "edit-attempt", "operationId": "edit-operation", "executionId": "execution"}
+        return {"rootId": "same-root", "objective": "objective", "completionHold": {
+                    "rootId": "same-root", "objective": "objective", "validProposal": True,
+                    "unchangedObjective": True, "refusal": "ObjectiveUnresolved", "activeAtCut": 1, "unknownAtCut": 1,
+                    "scope": "resource admission only; no external dispatch"}, "unknown": {
+                    "reference": reference, "phase": "AttemptCommitted", "outcome": "outcome-ref", "lateReceipt": "receipt-ref",
+                    "observed": {"rootId": "same-root", "reference": reference,
+                                 "root": {"active": 1, "unknown": 1}, "transferDenied": True,
+                                 "completionDenied": True, "status": "Open"}},
+                "rootRace": {"rootId": "same-root", "accepted": 1, "refused": 1, "activeAtCut": 1,
+                             "activeAfter": 0, "unknownAfter": 0, "loserAbsent": True, "sameRootAfterRetry": True,
+                             "winner": {"attemptId": "winner", "operationId": "winner-operation"},
+                             "loser": {"attemptId": "loser", "operationId": "loser-operation"},
+                             "scope": "resource admission only; no external dispatch"},
+                "aliasPolicy": {"rootId": "same-root", "allowedAlias": "consumer", "forbiddenAlias": "producer",
+                                "admitted": True, "refused": True, "dispatches": 0},
+                "targetRefusal": {"rootId": "same-root", "target": "forbidden-role", "refused": True,
+                                  "unchangedCheckpoint": True, "sessionsAtCut": 0},
+                "initialProcessDefault": "original", "resumedProcessDefault": "forbidden-process-default",
+                "providerCalls": {}}, {"unknown_effect_restart": {"exitCode": 92, "markerObserved": True}}
+
+    def test_unknown_edit_requires_the_same_held_root_and_original_receipt(self):
+        value, recovery = self.transfer_probes()
+        driver.validate_transfer_probes(value, recovery)
+        mutations = [lambda v: v["unknown"]["observed"].update(rootId="other-root"),
+                     lambda v: v["unknown"]["observed"].update(reference={"attemptId": "different"}),
+                     lambda v: v["unknown"]["observed"]["root"].update(unknown=0),
+                     lambda v: v["unknown"]["observed"].update(transferDenied=False),
+                     lambda v: v["unknown"].update(lateReceipt=None),
+                     lambda v: v["unknown"].update(phase="AttemptUncertain")]
+        for mutate in mutations:
+            altered = copy.deepcopy(value)
+            mutate(altered)
+            with self.assertRaisesRegex(ValueError, "recovered original receipt"):
+                driver.validate_transfer_probes(altered, recovery)
+
+    def test_reservations_refusals_and_default_changes_must_match_the_native_root(self):
+        value, recovery = self.transfer_probes()
+        mutations = [lambda v: v["rootRace"].update(accepted=2),
+                     lambda v: v["rootRace"].update(rootId="other-root"),
+                     lambda v: v["rootRace"].update(loserAbsent=False),
+                     lambda v: v["rootRace"].update(activeAfter=1),
+                     lambda v: v["aliasPolicy"].update(dispatches=1),
+                     lambda v: v["targetRefusal"].update(unchangedCheckpoint=False),
+                     lambda v: v["targetRefusal"].update(sessionsAtCut=1),
+                     lambda v: v["completionHold"].update(validProposal=False),
+                     lambda v: v["completionHold"].update(refusal="ObjectiveInvalidEvidence"),
+                     lambda v: v.update(resumedProcessDefault="original"),
+                     lambda v: v["providerCalls"].update({"forbidden-process-default": 1})]
+        for mutate in mutations:
+            altered = copy.deepcopy(value)
+            mutate(altered)
+            with self.assertRaises(ValueError):
+                driver.validate_transfer_probes(altered, recovery)
 
     def test_missing_native_prerequisite_cannot_pass_the_fixture(self):
         config = json.loads((driver.FIXTURE / "fixture.yaml").read_text())

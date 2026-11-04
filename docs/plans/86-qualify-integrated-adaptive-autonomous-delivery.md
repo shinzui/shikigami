@@ -175,6 +175,17 @@ an undeclared target before dispatch, and changes the process default after
 suspension while retaining admitted aliases. These probes still await native
 execution. Their implementation is not acceptance evidence.
 
+All 48 Python qualification cases now pass, including rejection of substituted
+unknown-attempt coordinates, missing late receipts, a foreign root, duplicate
+reservation winners and dispatched forbidden selections. The compiled fixture
+also isolates the completion resource gate after a valid integrated proposal:
+a local accounting-only unknown hold must yield `ObjectiveUnresolved` without
+changing the proposal, then the exact acceptance operation retries after
+reconciliation. This supplements the actual lost mutable-edit probe; it is not
+reported as another external effect. Terminal replay now inspects the completed
+objective directly. The immutable `e6ec2d77` candidate is building; these latest
+fixture changes require the subsequent candidate and native evidence.
+
 ## Surprises & Discoveries
 
 

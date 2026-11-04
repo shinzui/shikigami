@@ -267,7 +267,7 @@ if [[ "$mode" == --adaptive-only || "$mode" == --adaptive-transfer-only ]]; then
   adaptive_restart_after followup "SELECT jsonb_agg(jsonb_build_object('sessionId',session_id,'assignmentId',assignment_id,'operationId',operation_id,'sequence',sequence) ORDER BY assignment_id) FROM shikigami.worker_session_messages WHERE sequence>0"
   adaptive drive >"$prefix/adaptive-drive.log" 2>&1
   cat "$prefix/adaptive-admit.log" "$prefix/adaptive-drive.log"
-  jq -e '.format==1 and .status=="Completed" and (.integrated.repositories | length)==2' "$prefix/adaptive-evidence.json" >/dev/null
+  jq -e '(.format==1 or .format==2) and .status=="Completed" and (.integrated.repositories | length)==2' "$prefix/adaptive-evidence.json" >/dev/null
   cp "$prefix/adaptive-evidence.json" "$prefix/adaptive-first-evidence.json"
   cp "$prefix/adaptive-provider-calls" "$prefix/adaptive-first-provider-calls"
   probe_session=$(/usr/bin/psql "$connection" -Atc "SELECT session_id FROM shikigami.worker_sessions WHERE (state->>'consumedCursor')::bigint=(state->>'eventCursor')::bigint ORDER BY session_id LIMIT 1")

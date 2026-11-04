@@ -148,6 +148,13 @@ The selected scenario checks foreign-alias and undeclared-target refusal and
 changes its process default after suspension; all dispatched model ids must
 still belong to the admitted fixture roles.
 
+A separate completion control starts from a valid exact-artifact proposal,
+creates a same-root accounting-only unknown hold and requires
+`ObjectiveUnresolved` without changing that proposal. It reconciles the local
+probe and retries the exact acceptance operation. This isolates the completion
+resource gate; the earlier lost configured edit supplies the mutable-effect
+uncertainty. The local accounting probe performs no external dispatch.
+
 The runner also compares a successful caught-up `workers integrate` command
 with its exact retry after restoring authority, while requiring that command to
 fail with exit 1 during authority denial. The final provider-call bytes must

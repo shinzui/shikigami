@@ -285,6 +285,7 @@ def native_evidence(directory, repositories):
                 or fence["newEpoch"] != intent["newEpoch"] or receipt["objective"] != intent["objective"]
                 or receipt["operationId"] != intent["operationId"]):
             raise ValueError("native ownership cut does not bind real fenced owner and successor receipts")
+        validate_transfer_probes(value, recovery)
     value["recovery"] = recovery
     archives = path.parent / "adaptive-artifacts"
     inventory = archives / "manifest.json"
@@ -316,6 +317,56 @@ def native_evidence(directory, repositories):
     shutil.copyfile(recovery_path, directory / "native-recovery.json")
     shutil.copyfile(path, directory / "native-evidence.json")
     return value
+
+
+def validate_transfer_probes(value, recovery):
+    root = value["rootId"]
+    if not isinstance(root, str) or not root:
+        raise ValueError("native probes have no admitted root")
+    cut = recovery["unknown_effect_restart"]
+    unknown = value["unknown"]
+    observed = unknown["observed"]
+    reference = unknown["reference"]
+    if (type(cut["exitCode"]) is not int or cut["exitCode"] != 92 or cut["markerObserved"] is not True
+            or observed["rootId"] != root or observed["reference"] != reference
+            or any(not isinstance(reference[field], str) or not reference[field]
+                   for field in ["attemptId", "executionId", "operationId"])
+            or any(type(observed["root"][field]) is not int or observed["root"][field] <= 0
+                   for field in ["active", "unknown"])
+            or observed["transferDenied"] is not True or observed["completionDenied"] is not True
+            or observed["status"] != "Open" or unknown["phase"] not in ["AttemptCommitted", "AttemptSuperseded"]
+            or unknown["lateReceipt"] is None or unknown["outcome"] is None):
+        raise ValueError("native unknown edit lacks its held root and recovered original receipt")
+    race = value["rootRace"]
+    if (race["rootId"] != root or any(type(race[field]) is not int or race[field] != expected
+            for field, expected in [("accepted", 1), ("refused", 1), ("activeAtCut", 1),
+                                    ("activeAfter", 0), ("unknownAfter", 0)])
+            or race["winner"]["attemptId"] == race["loser"]["attemptId"]
+            or race["winner"]["operationId"] == race["loser"]["operationId"]
+            or race["loserAbsent"] is not True or race["sameRootAfterRetry"] is not True
+            or race["scope"] != "resource admission only; no external dispatch"):
+        raise ValueError("native root race does not retain one exact last-slot winner")
+    aliases = value["aliasPolicy"]
+    target = value["targetRefusal"]
+    if (aliases["rootId"] != root or aliases["allowedAlias"] != "consumer"
+            or aliases["forbiddenAlias"] != "producer" or aliases["admitted"] is not True
+            or aliases["refused"] is not True or type(aliases["dispatches"]) is not int or aliases["dispatches"] != 0
+            or target["rootId"] != root or target["target"] != "forbidden-role"
+            or target["refused"] is not True or target["unchangedCheckpoint"] is not True
+            or type(target["sessionsAtCut"]) is not int or target["sessionsAtCut"] != 0):
+        raise ValueError("native forbidden alias or target reached dispatch")
+    if (value["initialProcessDefault"] == value["resumedProcessDefault"]
+            or value["resumedProcessDefault"] != "forbidden-process-default"
+            or "forbidden-process-default" in value["providerCalls"]):
+        raise ValueError("native admitted aliases did not survive a process default change")
+    completion = value["completionHold"]
+    if (completion["rootId"] != root or completion["objective"] != value["objective"]
+            or completion["validProposal"] is not True or completion["unchangedObjective"] is not True
+            or completion["refusal"] != "ObjectiveUnresolved"
+            or any(type(completion[field]) is not int or completion[field] <= 0
+                   for field in ["activeAtCut", "unknownAtCut"])
+            or completion["scope"] != "resource admission only; no external dispatch"):
+        raise ValueError("native completion refusal did not isolate the unknown root gate")
 
 
 def qualify(directory, config, mode):
