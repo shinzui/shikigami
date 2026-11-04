@@ -110,7 +110,16 @@ executions. Live integration behavior remains a separately required trial.
 
 The shell injects process death after an adaptive decision commits but before
 the journal acknowledges it, then reconstructs the controller over the retained
-database. The complete coupled fault/refusal matrix in milestone 2 remains a
+database. It also observes an accepted tool outcome, an unconsumed worker result
+and an accepted follow-up, stops the controller cgroup, rechecks the committed
+owner record and kills that cgroup before starting another controller. The
+independent workspace supervisor and payload units survive these controller
+faults. Result and wake publication share one owner transaction; the result cut
+precedes consumer integration, rather than inventing an unpublished-wake gap.
+A final completed-run replay must preserve the entire evidence object and the
+provider-call bytes. Each cut retains private receipt metadata in
+`adaptive-recovery.json`. These probes still require their first Linux run.
+The complete coupled fault/refusal matrix in milestone 2 remains a
 separate acceptance gate. Native compilation alone proves none of these runtime
 claims. The driver retains that gate as blocked until the full matrix exists.
 
@@ -137,5 +146,10 @@ runtime output separately from the driver's source revision.
 has been supplied and no live adapter is selected. Live acceptance additionally
 requires an actual model-driven coding path, production authorization, explicit
 attempt/duration/token policy, fresh service readiness, and retained evidence.
+Baikai's Codex CLI transport and Shikigami's foreground/unattended launch wrapper
+already exist, but are not the admitted durable response path used here. The
+current response guard refuses `codex-cli` until bounded output, deadlines and
+descendant confinement are qualified; a foreground process result alone cannot
+complete this objective. See [the execution runbook](../../docs/operations/baikai-execution.md).
 It must never fall back to the deterministic provider. No publication, merge,
 deployment or recurring mandate is authorized by this fixture.

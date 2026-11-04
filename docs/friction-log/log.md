@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-11-04
+* **Addition**: FRIC-56 records slowdown tooling friction with mori://shinzui/shikigami: Resuming adaptive qualification rebuilds the frozen native graph
 * **Addition**: FRIC-55 records detour tooling friction with mori://shinzui/shikigami: Cold native qualification build interrupted before output publication
 * **Addition**: FRIC-54 records slowdown tooling friction with mori://shinzui/shikigami: Qualification runtime rebuild repeats the entire frozen Cabal graph
 * **Update**: FRIC-53 resolved: Resolve fresh external ingestion patch loss for delegated, session and adaptive native children without rewriting historical snapshots.

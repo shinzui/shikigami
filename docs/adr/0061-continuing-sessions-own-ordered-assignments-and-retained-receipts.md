@@ -1,6 +1,6 @@
 # 0061. Continuing sessions own ordered assignments and retained receipts
 
-Date: 2026-10-28
+Date: 2026-11-04
 
 Status: accepted
 
@@ -35,7 +35,12 @@ Command operation keys bind immutable payload fingerprints and owner epochs.
 Identical retries return the original receipt even after progress advances;
 conflicting reuse refuses. A losing optimistic revision race may retry the same
 key at the new revision. Result acceptance stores the protected result,
-assignment completion and correlated event together. Notifications are hints.
+assignment completion, correlated event and prepared generation-bound wakes in
+one checked transaction. Notifications are hints. A crash after that commit can
+precede consumer integration, but cannot leave a committed result without its
+prepared wake publication. Recovery qualification targets the unconsumed result
+cursor at that actual boundary; it never splits the owner transaction to create
+a synthetic notification gap.
 Local progress integration and event-cursor advancement share one transaction;
 an external checkpoint owner requires its own pending-intent protocol.
 
@@ -86,6 +91,7 @@ completion gates; deterministic store fixtures do not satisfy them.
 ## References
 
 - [Plan 84](../plans/84-coordinate-continuing-worker-sessions-and-fenced-handoffs.md)
+- [Plan 86](../plans/86-qualify-integrated-adaptive-autonomous-delivery.md)
 - [ADR 0022](0022-the-journal-ends-at-enqueue-and-receipts-own-delivery-truth.md)
 - [ADR 0023](0023-delegation-is-governed-at-the-child-spawn-boundary.md)
 - [ADR 0033](0033-recorded-agent-principals-key-durable-state.md)

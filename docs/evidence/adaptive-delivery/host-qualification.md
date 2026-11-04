@@ -64,3 +64,11 @@ the returned combined blobs. Tests use real Git bundles; matching hashes of
 non-Git bytes, a substituted tree, omission of a worker change, and an obsolete
 consumer schema each refuse acceptance. This strengthens the host verification
 mechanism and does not add native runtime or live-trial evidence.
+
+The subsequent restart/replay manifest controls bring the Python suite to 42
+passing cases. The guest runner stages cgroup death after committed tool,
+result and follow-up records, plus an unchanged completed replay; those new cuts
+remain unqualified until the Linux runner actually executes them. Shell syntax
+checks pass. The result cut follows the atomic result/wake owner transaction
+and checks that its receipt cursor remains unconsumed, as clarified in
+[ADR 0061](../../adr/0061-continuing-sessions-own-ordered-assignments-and-retained-receipts.md).

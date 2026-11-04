@@ -38,6 +38,10 @@ cleanup() {
   fi
   systemctl stop "$socket" "$service" "$authority" "$oauth" >/dev/null 2>&1 || true
   systemctl stop "$task-continuing.service" >/dev/null 2>&1 || true
+  for boundary in outcome result followup; do
+    systemctl kill --kill-whom=all --signal=CONT "$task-adaptive-$boundary.service" >/dev/null 2>&1 || true
+    systemctl stop "$task-adaptive-$boundary.service" >/dev/null 2>&1 || true
+  done
   if [[ -f "$prefix/continuing-status.json" ]]; then
     for key in '.process.unit' '.capture'; do
       unit=$(jq -r "$key // empty" "$prefix/continuing-status.json")
@@ -202,9 +206,68 @@ if [[ "$mode" == --adaptive-only ]]; then
     crash_status=$?
   fi
   [[ "$crash_status" == 86 && -f "$prefix/adaptive-crashed" ]]
+  # Observe committed owner records, then kill the entire controller cgroup.
+  # Workspace payload units belong to the independent supervisor and survive.
+  # These probes never write a journal, mailbox or operation projection.
+  adaptive_restart_after() {
+    local boundary=$1 query=$2 unit="$task-adaptive-$1.service"
+    local end=$((SECONDS + 180)) observed=false
+    systemd-run --quiet --unit="$unit" -p Type=exec -p Restart=no -p RemainAfterExit=yes -p KillMode=control-group -p UMask=0077 -p "StandardOutput=file:$prefix/adaptive-$boundary.log" -p "StandardError=file:$prefix/adaptive-$boundary.log" -- "$prototype" adaptive "$config" "$prefix" drive
+    while (( SECONDS < end )); do
+      /usr/bin/psql "$connection" -Atc "$query" >"$prefix/adaptive-$boundary.json"
+      if jq -e 'length>0' "$prefix/adaptive-$boundary.json" >/dev/null; then
+        [[ $(systemctl show "$unit" --property=ActiveState --value) == active ]]
+        systemctl kill --kill-whom=all --signal=STOP "$unit"
+        # Recheck with the controller stopped: the result probe must precede
+        # its consumer's integration, rather than merely win a polling race.
+        /usr/bin/psql "$connection" -Atc "$query" >"$prefix/adaptive-$boundary.json"
+        if ! jq -e 'length>0' "$prefix/adaptive-$boundary.json" >/dev/null; then
+          systemctl kill --kill-whom=all --signal=CONT "$unit"
+          continue
+        fi
+        systemctl kill --kill-whom=all --signal=KILL "$unit"
+        for _ in {1..100}; do
+          [[ $(systemctl show "$unit" --property=ExecMainStatus --value) != 9 ]] || break
+          sleep 0.1
+        done
+        [[ $(systemctl show "$unit" --property=ExecMainCode --value) == 2 && $(systemctl show "$unit" --property=ExecMainStatus --value) == 9 ]]
+        observed=true
+        break
+      fi
+      [[ $(systemctl show "$unit" --property=ActiveState --value) != failed ]]
+      sleep 0.1
+    done
+    "$observed"
+  }
+  adaptive_restart_after outcome "SELECT jsonb_agg(jsonb_build_object('operationId',operation_id,'executionId',execution_id,'fingerprint',state->'fingerprint','outcome',state->'outcome') ORDER BY operation_id) FROM shikigami.execution_transcript_operations WHERE execution_id IN (SELECT execution_id FROM shikigami.executions WHERE binding->>'rootId' IN (SELECT binding->>'rootId' FROM shikigami.worker_sessions)) AND state->'specification'->>'kind'='ToolOperation' AND state->'outcome' IS NOT NULL AND state->'outcome'<>'null'::jsonb"
+  adaptive_restart_after result "SELECT jsonb_agg(jsonb_build_object('sessionId',r.session_id,'assignmentId',r.assignment_id,'receipt',r.state,'consumedCursor',s.state->'consumedCursor') ORDER BY r.assignment_id) FROM shikigami.worker_session_results r JOIN shikigami.worker_sessions s USING(session_id) WHERE (s.state->>'consumedCursor')::bigint < (r.state->>'cursor')::bigint"
+  adaptive_restart_after followup "SELECT jsonb_agg(jsonb_build_object('sessionId',session_id,'assignmentId',assignment_id,'operationId',operation_id,'sequence',sequence) ORDER BY assignment_id) FROM shikigami.worker_session_messages WHERE sequence>0"
   "$prototype" adaptive "$config" "$prefix" drive >"$prefix/adaptive-drive.log" 2>&1
   cat "$prefix/adaptive-admit.log" "$prefix/adaptive-drive.log"
   jq -e '.format==1 and .status=="Completed" and (.integrated.repositories | length)==2' "$prefix/adaptive-evidence.json" >/dev/null
+  cp "$prefix/adaptive-evidence.json" "$prefix/adaptive-first-evidence.json"
+  cp "$prefix/adaptive-provider-calls" "$prefix/adaptive-first-provider-calls"
+  "$prototype" adaptive "$config" "$prefix" drive >"$prefix/adaptive-replay.log" 2>&1
+  python3 - "$prefix" <<'REPLAY'
+import hashlib,json,sys
+from pathlib import Path
+p=Path(sys.argv[1])
+first=json.loads((p/'adaptive-first-evidence.json').read_text())
+replayed=json.loads((p/'adaptive-evidence.json').read_text())
+before=(p/'adaptive-first-provider-calls').read_bytes()
+after=(p/'adaptive-provider-calls').read_bytes()
+assert first==replayed, 'terminal replay changed accepted evidence or root usage'
+assert before==after, 'terminal replay repeated provider work'
+assert (p/'adaptive-crashed').read_text()=='1\n'
+(p/'adaptive-recovery.json').write_text(json.dumps({
+    'format':1,
+    'adaptation_commit_restart':{'exitCode':86,'markerObserved':True},
+    'committed_boundary_restarts':{name:{'signal':9,'controllerStoppedBeforeSnapshot':True,'records':json.loads((p/f'adaptive-{name}.json').read_text())}
+                                    for name in ['outcome','result','followup']},
+    'terminal_replay':{'sameEvidence':True,'providerCallsBefore':hashlib.sha256(before).hexdigest(),
+                       'providerCallsAfter':hashlib.sha256(after).hexdigest()}
+},indent=2)+'\n')
+REPLAY
   echo 'Native adaptive two-repository qualification passed; live trial and the complete coupled fault matrix remain separate gates.'
   exit 0
 fi

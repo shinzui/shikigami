@@ -223,6 +223,29 @@ def native_evidence(directory, repositories):
             raise ValueError("native exact artifact or validation evidence is incomplete")
     if value["integrated"]["journey"]["exitCode"] != 0:
         raise ValueError("combined journey failed")
+    recovery_path = path.parent / "adaptive-recovery.json"
+    if recovery_path.is_symlink() or not recovery_path.is_file() or recovery_path.stat().st_size > 65536:
+        raise ValueError("bounded native recovery evidence missing")
+    recovery = json.loads(recovery_path.read_text())
+    restart = recovery["adaptation_commit_restart"]
+    replay = recovery["terminal_replay"]
+    if (recovery["format"] != 1 or type(restart["exitCode"]) is not int or restart["exitCode"] != 86
+            or restart["markerObserved"] is not True or replay["sameEvidence"] is not True
+            or not re.fullmatch("[0-9a-f]{64}", replay["providerCallsBefore"])
+            or replay["providerCallsBefore"] != replay["providerCallsAfter"]):
+        raise ValueError("native restart or completed replay evidence differs")
+    boundaries = recovery["committed_boundary_restarts"]
+    if set(boundaries) != {"outcome", "result", "followup"}:
+        raise ValueError("native committed-boundary restart evidence missing")
+    for name, key in [("outcome", "operationId"), ("result", "assignmentId"), ("followup", "operationId")]:
+        case = boundaries[name]
+        if (type(case["signal"]) is not int or case["signal"] != 9
+                or case["controllerStoppedBeforeSnapshot"] is not True
+                or not isinstance(case["records"], list) or not 1 <= len(case["records"]) <= 128
+                or any(not isinstance(record, dict) or not isinstance(record.get(key), str)
+                       or not record[key] for record in case["records"])):
+            raise ValueError("native committed-boundary restart records invalid")
+    value["recovery"] = recovery
     archives = path.parent / "adaptive-artifacts"
     inventory = archives / "manifest.json"
     if inventory.is_symlink() or not inventory.is_file() or inventory.stat().st_size > 65536:
@@ -250,6 +273,7 @@ def native_evidence(directory, repositories):
     (target / "manifest.json").write_text(json.dumps(captured, indent=2) + "\n")
     value["git_artifacts"] = captured
     value["returned_artifact_verification"] = verify_git_artifacts(directory, combined, records)
+    shutil.copyfile(recovery_path, directory / "native-recovery.json")
     shutil.copyfile(path, directory / "native-evidence.json")
     return value
 

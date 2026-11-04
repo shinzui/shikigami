@@ -208,6 +208,14 @@ class AdaptiveDeliveryTests(unittest.TestCase):
                  "integrated": {"journey": {"exitCode": 0}, "repositories": combined}}
         artifact = evidence / "adaptive-evidence.json"
         artifact.write_text(json.dumps(value))
+        (evidence / "adaptive-recovery.json").write_text(json.dumps({
+            "format": 1, "adaptation_commit_restart": {"exitCode": 86, "markerObserved": True},
+            "committed_boundary_restarts": {
+                "outcome": {"signal": 9, "controllerStoppedBeforeSnapshot": True, "records": [{"operationId": "tool-outcome"}]},
+                "result": {"signal": 9, "controllerStoppedBeforeSnapshot": True, "records": [{"assignmentId": "worker-result"}]},
+                "followup": {"signal": 9, "controllerStoppedBeforeSnapshot": True, "records": [{"operationId": "accepted-followup"}]}},
+            "terminal_replay": {"sameEvidence": True, "providerCallsBefore": "a" * 64,
+                                "providerCallsAfter": "a" * 64}}))
         (archives / "manifest.json").write_text(json.dumps({"format": 1, "artifacts": inventory}))
         return starts, value, artifact, archives
 
@@ -270,6 +278,31 @@ class AdaptiveDeliveryTests(unittest.TestCase):
                 mutate(altered)
                 artifact.write_text(json.dumps(altered))
                 with self.assertRaises(ValueError):
+                    driver.native_evidence(path, starts)
+
+    def test_native_replay_cannot_repeat_provider_work(self):
+        with tempfile.TemporaryDirectory() as raw, tempfile.TemporaryDirectory(
+                prefix="shikigami-workspace-run.", dir="/tmp") as native:
+            path = Path(raw)
+            starts, _, _, _ = self.native_artifacts(path, Path(native))
+            artifact = Path(native) / "evidence/adaptive-recovery.json"
+            value = json.loads(artifact.read_text())
+            value["terminal_replay"]["providerCallsAfter"] = "b" * 64
+            artifact.write_text(json.dumps(value))
+            with self.assertRaisesRegex(ValueError, "completed replay evidence differs"):
+                driver.native_evidence(path, starts)
+
+    def test_native_restart_requires_a_committed_owner_record(self):
+        with tempfile.TemporaryDirectory() as raw, tempfile.TemporaryDirectory(
+                prefix="shikigami-workspace-run.", dir="/tmp") as native:
+            path = Path(raw)
+            starts, _, _, _ = self.native_artifacts(path, Path(native))
+            artifact = Path(native) / "evidence/adaptive-recovery.json"
+            value = json.loads(artifact.read_text())
+            for records in [[], ["not an owner record"]]:
+                value["committed_boundary_restarts"]["outcome"]["records"] = records
+                artifact.write_text(json.dumps(value))
+                with self.assertRaisesRegex(ValueError, "restart records invalid"):
                     driver.native_evidence(path, starts)
 
     def test_missing_native_prerequisite_cannot_pass_the_fixture(self):

@@ -123,6 +123,15 @@ the clean `64d9e4f4` Linux runtime is building through the configured builder.
 These host controls do not yet qualify the coupled native execution or close
 any milestone.
 
+The resumed runner also now stages controller cgroup death after a committed
+tool outcome, an unconsumed worker result and an accepted follow-up. It stops
+the controller, rechecks the owner record and requires SIGKILL before proceeding
+with a newly constructed process. A final completed-run replay compares the
+entire native evidence and provider-call bytes. These joined probes are awaiting
+their first Linux execution; shell syntax and host manifest controls alone are
+not their acceptance. FRIC-56 in `docs/friction-log/` records this session's
+whole-cohort native rebuild delay.
+
 ## Surprises & Discoveries
 
 
@@ -144,6 +153,14 @@ FRIC-54 in `docs/friction-log/` records that a fixture-only native derivation
 change recompiles the complete frozen Cabal graph. Local compilation precedes
 the configured-builder run; that build is preparation, not runtime evidence.
 
+`WorkerSession.Store.recordResult` publishes its result event and prepared
+awakeable notifications in the same checked transaction (`mutate` and
+`prepareNotification`). There is no committed-result/unpublished-wake boundary
+to kill between. The coupled result probe therefore targets the actual boundary:
+a committed result/wake with its result cursor still beyond `consumedCursor`,
+followed by controller death and reconstruction. It does not fabricate a lost
+wake by changing framework or application projections.
+
 
 ## Decision Log
 
@@ -156,6 +173,12 @@ physical effects and host PostgreSQL tests for focused controller contracts.
 Retain the full original acceptance, including a distinct live gate. Existing
 component reports may establish prerequisites but cannot stand in for a coupled
 adaptive repository run.
+
+2026-11-04: Exercise result recovery at the owner's atomic result/wake commit
+before consumer integration. The original “after result commit before
+notification” wording described an interleaving the real owner prevents. Retain
+the no-lost-result guarantee and explicit committed-record evidence rather than
+introduce a fixture-only split transaction.
 
 
 ## Outcomes & Retrospective
@@ -248,7 +271,7 @@ reuse these fixture policies as a live spending claim.
 
 Run two admitted workers with different allowed execution aliases. Inject an early schema finding that changes one task boundary or requests a temporary specialist; record friction, proposed benefit and eventual evidence. Accept revision-pinned worker artifacts, combine them through IR-11's separate integration workspace, expose conflicts, and run checks on the exact combined tree. Preserve repository identities, base/worker/integrated revisions or tree digests, command/exit status and user-journey evidence. An obsolete green worker artifact must not satisfy current acceptance.
 
-Inject restart after a worker operation outcome, after a follow-up acceptance, after adaptation commit, after result commit before notification, and during ownership transfer. Redeliver messages/events and verify one accepted assignment/result integration per operation. Hold a mutable operation unknown; successor write and successful completion must remain blocked until reconciliation. Race the final root reservation between local orchestrators, deny a forbidden alias/action/target before dispatch, and change deployment defaults while suspended. Inspect persisted records and actual provider/workspace counters, not model narratives.
+Inject restart after a worker operation outcome, after a follow-up acceptance, after adaptation commit, after atomic result/wake commit before consumer integration, and during ownership transfer. Result and wake publication already share the owner transaction, so the result probe must observe a result cursor beyond the session's `consumedCursor` before killing its controller. Redeliver messages/events and verify one accepted assignment/result integration per operation. Hold a mutable operation unknown; successor write and successful completion must remain blocked until reconciliation. Race the final root reservation between local orchestrators, deny a forbidden alias/action/target before dispatch, and change deployment defaults while suspended. Inspect persisted records and actual provider/workspace counters, not model narratives.
 
 ### Milestone 3: Run a bounded live coding trial and publish evidence
 
@@ -339,3 +362,7 @@ implementation. Replaced obsolete blockers with concrete native producer,
 controller, configured host and Linux qualification entry points; added ADRs
 0108–0111, per-repository integration semantics and bounded sequential Nix test
 commands. Acceptance and ownership remain unchanged.
+
+2026-11-04: Align the result-recovery cut with the implemented atomic result/wake
+owner transaction. The preserved acceptance is recovery without losing or
+repeating a committed result, now observed before consumer integration.
