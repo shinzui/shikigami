@@ -55,3 +55,12 @@ FRIC-54 in `docs/friction-log/` records the full dependency rebuild incurred by
 fixture-only native Nix changes. A successful build alone cannot supply runtime
 evidence. Keep the live gate and complete coupled fault matrix open regardless
 of these host results.
+
+On resumption later on 2026-11-04 UTC, the Python qualification suite passes
+40 cases. Native evidence parsing now restores all six bundles into fresh bare
+repositories, verifies exact HEADs, direct parents and Git object integrity,
+recomputes both combined trees from their worker pairs, and runs the journey on
+the returned combined blobs. Tests use real Git bundles; matching hashes of
+non-Git bytes, a substituted tree, omission of a worker change, and an obsolete
+consumer schema each refuse acceptance. This strengthens the host verification
+mechanism and does not add native runtime or live-trial evidence.

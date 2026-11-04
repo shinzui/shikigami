@@ -123,6 +123,16 @@ the bundles; use `git bundle list-heads FILE` or clone a bundle into a fresh
 directory for inspection. This archival read is performed by the trusted fixture
 controller and is not agent publication authority.
 
+The host driver independently fetches each returned bundle into a fresh bare
+repository, checks its exact HEAD and single admitted base parent, and runs
+`git fsck --strict`. It recomputes each integration tree from the two retained
+worker commits with `git merge-tree --write-tree`, compares that tree with the
+accepted combined commit, and reruns the journey on blobs from the returned
+combined trees. These checks use no guest workspace paths. A hash of arbitrary
+bytes, an omitted reviewer change or an obsolete consumer contract cannot
+supply passing artifact evidence. The attempt manifest records the selected
+runtime output separately from the driver's source revision.
+
 `--mode live` currently returns blocked. No private live provider configuration
 has been supplied and no live adapter is selected. Live acceptance additionally
 requires an actual model-driven coding path, production authorization, explicit

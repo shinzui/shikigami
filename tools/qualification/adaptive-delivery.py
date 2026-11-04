@@ -126,6 +126,65 @@ def fixture_mechanics(directory):
     return repositories, cases
 
 
+def verify_git_artifacts(directory, combined, records):
+    """Restore only returned bundles; never consult guest paths or worker trees."""
+    restored = directory / "restored-artifacts"
+    restored.mkdir(mode=0o700)
+    env = {key: os.environ[key] for key in ["PATH", "TMPDIR"] if key in os.environ}
+    env.update(GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL=os.devnull,
+               GIT_TERMINAL_PROMPT="0", GIT_NO_REPLACE_OBJECTS="1")
+
+    def git(repository, *args):
+        return subprocess.run(["git", "-c", "core.hooksPath=/dev/null", "-C", str(repository), *args],
+                              env=env, capture_output=True, check=True, timeout=30).stdout
+
+    exact = {}
+    for index, entry in enumerate(records):
+        repository = restored / str(index)
+        repository.mkdir(mode=0o700)
+        bundle = directory / "git-artifacts" / entry["bundle"]
+        git(repository, "init", "--bare", "--object-format=sha1")
+        heads = git(repository, "bundle", "list-heads", str(bundle)).decode().strip()
+        if heads != f"{entry['head']} HEAD":
+            raise ValueError("retained bundle HEAD differs from its artifact identity")
+        git(repository, "fetch", "--no-tags", str(bundle), "HEAD")
+        revision = git(repository, "rev-parse", "FETCH_HEAD^{commit}").decode().strip()
+        parents = git(repository, "show", "-s", "--format=%P", revision).decode().strip()
+        if revision != entry["head"] or parents != entry["base"]:
+            raise ValueError("retained artifact is not a direct commit from its admitted base")
+        git(repository, "fsck", "--strict", "--no-reflogs", revision)
+        exact[entry["repository"], revision] = repository
+
+    files = {}
+    for entry in combined:
+        identity = entry["repository"]
+        candidate = entry["combined"]
+        repository = exact[identity, candidate["result"]]
+        tree = git(repository, "rev-parse", candidate["result"] + "^{tree}").decode().strip()
+        if tree != candidate["tree"]:
+            raise ValueError("returned combined tree differs from the accepted tree")
+        # Recompute integration from the independently retained worker commits.
+        for worker in entry["workers"]:
+            source = exact[identity, worker["revision"]]
+            git(repository, "fetch", "--no-tags", str(source), worker["revision"])
+        merged = git(repository, "merge-tree", "--write-tree", *[w["revision"] for w in entry["workers"]])
+        if merged.decode().strip() != tree:
+            raise ValueError("returned combined tree does not integrate the exact worker pair")
+        name = "record.json" if identity == prepare.REPOSITORIES[0] else "contract.json"
+        content = git(repository, "show", candidate["result"] + ":" + name)
+        if len(content) > 4096:
+            raise ValueError("returned journey blob exceeds the fixture bound")
+        path = restored / name
+        path.write_bytes(content)
+        files[name] = path
+    check = run_case(directory, "returned-exact-pair-journey",
+                     [sys.executable, "-I", str(FIXTURE / "journey.py"),
+                      "--producer", str(files["record.json"]), "--consumer", str(files["contract.json"])], 10)
+    if check["state"] != "passed":
+        raise ValueError("journey on independently restored artifacts failed")
+    return {"artifacts": len(exact), "worker_pairs_recomputed": len(combined), "journey": check}
+
+
 def native_evidence(directory, repositories):
     text = (directory / "native.log").read_text()
     matches = re.findall(r"^Private fixture evidence: (/tmp/shikigami-workspace-run\.[a-zA-Z0-9_]+)$", text, re.M)
@@ -190,6 +249,7 @@ def native_evidence(directory, repositories):
         (target / entry["bundle"]).write_bytes(content)
     (target / "manifest.json").write_text(json.dumps(captured, indent=2) + "\n")
     value["git_artifacts"] = captured
+    value["returned_artifact_verification"] = verify_git_artifacts(directory, combined, records)
     shutil.copyfile(path, directory / "native-evidence.json")
     return value
 
@@ -198,6 +258,8 @@ def qualify(directory, config, mode):
     manifest = {"format": 1, "mode": mode, "state": "blocked", "started_at": stamp(),
                 "scope": "finite isolated fixture; local edits/tests only; no recurrence or publication",
                 "cases": [], "limitations": [], "repositories": []}
+    if "runtime" in config:
+        manifest["runtime"] = config["runtime"]
     try:
         manifest["source_revision"] = prepare.git(ROOT, "rev-parse", "HEAD")
         manifest["source_dirty"] = bool(prepare.git(ROOT, "status", "--porcelain"))

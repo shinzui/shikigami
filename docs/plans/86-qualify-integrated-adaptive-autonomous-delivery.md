@@ -33,6 +33,11 @@ provenance:
       at: 2026-11-04T03:03:02Z
       mode: "implement"
       note: "Refresh completed native coordinator, workspace and objective prerequisites before integrated qualification."
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-11-04T05:33:34Z
+      mode: "implement"
+      note: "Resume native runtime qualification and independently verify retained integrated Git artifacts."
 ---
 
 # Qualify integrated adaptive autonomous delivery
@@ -106,6 +111,17 @@ access to its original source path. The guest's cleanup now archives its four
 worker commits and two integrated commits before disposal; failed runs retain
 available HEADs as forensic evidence without settling unknown effects. Native
 runtime evidence is still required before accepting these joined paths.
+
+2026-11-04 resumed qualification: all 40 Python qualification cases pass,
+including independent restoration of all six returned Git artifacts, direct-base
+parent and object checks, recomputation of both worker-pair integration trees,
+and the exact returned-pair journey. Four new negative controls refuse non-Git
+bytes with matching hashes, a substituted tree, an omitted worker change and a
+stale consumer schema with a falsely green reported journey. The driver records
+the selected runtime output. The container service was restarted successfully;
+the clean `64d9e4f4` Linux runtime is building through the configured builder.
+These host controls do not yet qualify the coupled native execution or close
+any milestone.
 
 ## Surprises & Discoveries
 

@@ -166,43 +166,103 @@ class AdaptiveDeliveryTests(unittest.TestCase):
             self.assertEqual(run.call_count, 3)
             self.assertNotIn("native", manifest)
 
-    def test_native_evidence_refuses_stale_artifacts_duplicates_and_unknown_work(self):
-        starts = [{"identity": identity, "base": str(index + 1) * 40}
-                  for index, identity in enumerate(driver.prepare.REPOSITORIES)]
+    def native_artifacts(self, path, native, *, omit_review=False, stale_consumer=False):
+        starts = driver.prepare.prepare(path / "sources")
+        (path / "native.log").write_text(f"Private fixture evidence: {native}\n")
+        evidence = native / "evidence"
+        evidence.mkdir()
+        archives = evidence / "adaptive-artifacts"
+        archives.mkdir()
+        combined, inventory = [], []
+        env = {"PATH": os.environ["PATH"], "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": os.devnull}
+        for name, repo in zip(["producer", "consumer"], starts):
+            source = path / "sources" / name
+            workers = []
+            candidate = None
+            for role in ["delivery", "review", "combined"]:
+                driver.prepare.git(source, "checkout", "--detach", repo["base"])
+                if role in ["delivery", "combined"]:
+                    (source / "delivery.txt").write_text("done\n")
+                    if name == "consumer" and not stale_consumer:
+                        (source / "contract.json").write_text('{"version":2,"path":["value","text"]}\n')
+                if role == "review" or (role == "combined" and not omit_review):
+                    (source / "review.txt").write_text("done\n")
+                driver.prepare.git(source, "add", "--", ".")
+                driver.prepare.git(source, "commit", "-m", "feat: " + role)
+                bundle = f"workspace-{len(inventory)}.bundle"
+                head, digest = archive.bundle(source / ".git", archives / bundle, env)
+                inventory.append({"repository": repo["identity"], "base": repo["base"], "head": head,
+                                  "bundle": bundle, "sha256": digest})
+                if role == "combined":
+                    candidate = {"parent": repo["base"], "tree": driver.prepare.git(source, "rev-parse", "HEAD^{tree}"),
+                                 "result": head}
+                else:
+                    workers.append({"operationId": name + "-" + role, "base": repo["base"], "revision": head})
+            combined.append({"repository": repo["identity"], "base": repo["base"], "workers": workers,
+                             "combined": candidate, "validation": {"exitCode": 0, "termination": "ProcessExited",
+                                                                    "descendantsEmpty": True, "outputComplete": True}})
         value = {"format": 1, "status": "Completed", "sessionMessageResultCounts": [4, 5, 5],
                  "root": {"active": 0, "unknown": 0},
                  "providerCalls": {name: (4 if name == "consumer" else 2)
                                    for name in ["producer", "producer-review", "consumer", "consumer-review"]},
-                 "integrated": {"journey": {"exitCode": 0}, "repositories": [
-                     {"repository": repo["identity"], "base": repo["base"],
-                      "workers": [{"operationId": f"worker-{index}", "base": repo["base"], "revision": str(index + 6) * 40}
-                                  for index in [0, 1]],
-                      "combined": {"parent": repo["base"], "tree": "4" * 40, "result": "5" * 40},
-                      "validation": {"exitCode": 0, "termination": "ProcessExited", "descendantsEmpty": True,
-                                     "outputComplete": True}} for repo in starts]}}
+                 "integrated": {"journey": {"exitCode": 0}, "repositories": combined}}
+        artifact = evidence / "adaptive-evidence.json"
+        artifact.write_text(json.dumps(value))
+        (archives / "manifest.json").write_text(json.dumps({"format": 1, "artifacts": inventory}))
+        return starts, value, artifact, archives
+
+    def test_returned_bundle_bytes_must_be_actual_git_objects(self):
         with tempfile.TemporaryDirectory() as raw, tempfile.TemporaryDirectory(
                 prefix="shikigami-workspace-run.", dir="/tmp") as native:
             path = Path(raw)
-            (path / "native.log").write_text(f"Private fixture evidence: {native}\n")
-            evidence = Path(native) / "evidence"
-            evidence.mkdir()
-            artifact = evidence / "adaptive-evidence.json"
+            starts, _, _, archives = self.native_artifacts(path, Path(native))
+            inventory = json.loads((archives / "manifest.json").read_text())
+            entry = inventory["artifacts"][0]
+            content = b"not a Git bundle, even with a matching digest"
+            (archives / entry["bundle"]).write_bytes(content)
+            entry["sha256"] = driver.hashlib.sha256(content).hexdigest()
+            (archives / "manifest.json").write_text(json.dumps(inventory))
+            with self.assertRaises(subprocess.CalledProcessError):
+                driver.native_evidence(path, starts)
+
+    def test_returned_combined_tree_must_match_the_accepted_tree(self):
+        with tempfile.TemporaryDirectory() as raw, tempfile.TemporaryDirectory(
+                prefix="shikigami-workspace-run.", dir="/tmp") as native:
+            path = Path(raw)
+            starts, value, artifact, _ = self.native_artifacts(path, Path(native))
+            value["integrated"]["repositories"][0]["combined"]["tree"] = "0" * 40
             artifact.write_text(json.dumps(value))
-            archives = evidence / "adaptive-artifacts"
-            archives.mkdir()
-            inventory = []
-            for repo in value["integrated"]["repositories"]:
-                for head in [repo["combined"]["result"], *[worker["revision"] for worker in repo["workers"]]]:
-                    name = f"workspace-{len(inventory)}.bundle"
-                    content = name.encode()
-                    (archives / name).write_bytes(content)
-                    inventory.append({"repository": repo["repository"], "base": repo["base"], "head": head,
-                                      "bundle": name, "sha256": driver.hashlib.sha256(content).hexdigest()})
-            (archives / "manifest.json").write_text(json.dumps({"format": 1, "artifacts": inventory}))
-            self.assertEqual(driver.native_evidence(path, starts)["status"], "Completed")
+            with self.assertRaisesRegex(ValueError, "combined tree differs"):
+                driver.native_evidence(path, starts)
+
+    def test_returned_combination_must_include_both_exact_workers(self):
+        with tempfile.TemporaryDirectory() as raw, tempfile.TemporaryDirectory(
+                prefix="shikigami-workspace-run.", dir="/tmp") as native:
+            path = Path(raw)
+            starts, _, _, _ = self.native_artifacts(path, Path(native), omit_review=True)
+            with self.assertRaisesRegex(ValueError, "exact worker pair"):
+                driver.native_evidence(path, starts)
+
+    def test_returned_pair_with_obsolete_schema_cannot_claim_a_green_journey(self):
+        with tempfile.TemporaryDirectory() as raw, tempfile.TemporaryDirectory(
+                prefix="shikigami-workspace-run.", dir="/tmp") as native:
+            path = Path(raw)
+            starts, _, _, _ = self.native_artifacts(path, Path(native), stale_consumer=True)
+            with self.assertRaisesRegex(ValueError, "restored artifacts failed"):
+                driver.native_evidence(path, starts)
+
+    def test_native_evidence_refuses_stale_artifacts_duplicates_and_unknown_work(self):
+        with tempfile.TemporaryDirectory() as raw, tempfile.TemporaryDirectory(
+                prefix="shikigami-workspace-run.", dir="/tmp") as native:
+            path = Path(raw)
+            starts, value, artifact, archives = self.native_artifacts(path, Path(native))
+            verified = driver.native_evidence(path, starts)
+            self.assertEqual(verified["status"], "Completed")
+            self.assertEqual(verified["returned_artifact_verification"]["artifacts"], 6)
+            self.assertEqual(verified["returned_artifact_verification"]["worker_pairs_recomputed"], 2)
             mutations = [lambda v: v["root"].update(unknown=1),
                          lambda v: v["integrated"]["repositories"][0].update(base="0" * 40),
-                         lambda v: v["integrated"]["repositories"][0]["workers"][1].update(operationId="worker-0"),
+                         lambda v: v["integrated"]["repositories"][0]["workers"][1].update(operationId="producer-delivery"),
                          lambda v: v["integrated"]["repositories"][0]["validation"].update(exitCode=False),
                          lambda v: v["integrated"]["journey"].update(exitCode=1)]
             for mutate in mutations:
