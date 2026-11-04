@@ -270,6 +270,10 @@ if [[ "$mode" == --adaptive-only || "$mode" == --adaptive-transfer-only ]]; then
   jq -e '(.format==1 or .format==2) and .status=="Completed" and (.integrated.repositories | length)==2' "$prefix/adaptive-evidence.json" >/dev/null
   cp "$prefix/adaptive-evidence.json" "$prefix/adaptive-first-evidence.json"
   cp "$prefix/adaptive-provider-calls" "$prefix/adaptive-first-provider-calls"
+  adaptive_selections() {
+    /usr/bin/psql "$connection" -Atc "SELECT COALESCE(jsonb_agg(jsonb_build_object('assignmentId',s.assignment_id,'selection',jsonb_build_object('rootId',s.state->'selection'->'rootId','descriptor',s.state->'selection'->'descriptor','permittedAliases',s.state->'selection'->'permittedAliases','source',s.state->'selection'->'source'),'calls',(SELECT COALESCE(jsonb_agg(jsonb_build_object('attemptId',c.attempt_id,'operationId',c.operation_id,'ordinal',c.ordinal,'rootId',c.state->'receipt'->'rootId','phase',c.state->'outcome'->'phase') ORDER BY c.ordinal),'[]'::jsonb) FROM shikigami.execution_selection_calls c WHERE c.assignment_id=s.assignment_id)) ORDER BY s.assignment_id),'[]'::jsonb) FROM shikigami.execution_selections s WHERE s.state->'selection'->'descriptor'->>'alias' IN ('producer','producer-review','consumer','consumer-review','consumer-successor')"
+  }
+  adaptive_selections >"$prefix/adaptive-first-selections.json"
   probe_session=$(/usr/bin/psql "$connection" -Atc "SELECT session_id FROM shikigami.worker_sessions WHERE (state->>'consumedCursor')::bigint=(state->>'eventCursor')::bigint ORDER BY session_id LIMIT 1")
   [[ -n "$probe_session" ]]
   "$runtime/bin/shikigami" --config "$config" workers integrate "$probe_session" --operation adaptive-authority-check >"$prefix/adaptive-authorized-control.json" 2>"$prefix/adaptive-authorized-control.log"
@@ -284,6 +288,7 @@ if [[ "$mode" == --adaptive-only || "$mode" == --adaptive-transfer-only ]]; then
   rm -f "$prefix/deny-authority"
   "$runtime/bin/shikigami" --config "$config" workers integrate "$probe_session" --operation adaptive-authority-check >"$prefix/adaptive-restored-control.json" 2>"$prefix/adaptive-restored-control.log"
   adaptive drive >"$prefix/adaptive-replay.log" 2>&1
+  adaptive_selections >"$prefix/adaptive-selections.json"
   python3 - "$prefix" <<'REPLAY'
 import hashlib,json,sys
 from pathlib import Path
@@ -294,6 +299,8 @@ before=(p/'adaptive-first-provider-calls').read_bytes()
 after=(p/'adaptive-provider-calls').read_bytes()
 authorized=json.loads((p/'adaptive-authorized-control.json').read_text())
 restored=json.loads((p/'adaptive-restored-control.json').read_text())
+selections=json.loads((p/'adaptive-selections.json').read_text())
+assert selections==json.loads((p/'adaptive-first-selections.json').read_text()), 'terminal replay changed pinned selections or call receipts'
 assert authorized==restored, 'restored authorization changed the accepted control response'
 assert first==replayed, 'terminal replay changed accepted evidence or root usage'
 assert before==after, 'terminal replay repeated provider work'
@@ -304,6 +311,7 @@ assert (p/'adaptive-crashed').read_text()=='1\n'
     'committed_boundary_restarts':{name:{'signal':9,'controllerStoppedBeforeSnapshot':True,'records':json.loads((p/f'adaptive-{name}.json').read_text())}
                                     for name in ['outcome','result','followup']},
     'action_denial':{'exitCode':1,'authorized':authorized,'restored':restored,'noProviderCalls':True},
+    'worker_selections':selections,
     'ownership_commit_restart':({'exitCode':91,'markerObserved':True} if first['format']==2 else None),
     'unknown_effect_restart':({'exitCode':92,'markerObserved':True} if first['format']==2 else None),
     'terminal_replay':{'sameEvidence':True,'providerCallsBefore':hashlib.sha256(before).hexdigest(),

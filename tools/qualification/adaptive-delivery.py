@@ -269,6 +269,7 @@ def native_evidence(directory, repositories):
             or not isinstance(control.get("contents"), dict)
             or control["contents"].get("tag") != "EventsCaughtUp"):
         raise ValueError("native action refusal lacks passing identical authorized controls")
+    validate_worker_selections(value, recovery, roles)
     if value["format"] == 2:
         cut = recovery["ownership_commit_restart"]
         proof = value["ownership"]
@@ -367,6 +368,42 @@ def validate_transfer_probes(value, recovery):
                    for field in ["activeAtCut", "unknownAtCut"])
             or completion["scope"] != "resource admission only; no external dispatch"):
         raise ValueError("native completion refusal did not isolate the unknown root gate")
+
+
+def validate_worker_selections(value, recovery, roles):
+    selections = recovery["worker_selections"]
+    if not isinstance(selections, list) or not len(roles) <= len(selections) <= 8:
+        raise ValueError("native pinned worker selections missing")
+    totals = {role: 0 for role in roles}
+    assignments, attempts, descriptors = set(), set(), {}
+    for record in selections:
+        selected = record["selection"]
+        descriptor = selected["descriptor"]
+        role = descriptor["alias"]
+        calls = record["calls"]
+        if (record["assignmentId"] in assignments or role not in roles or selected["rootId"] != value["rootId"]
+                or selected["source"] != "DeclaredAlias" or selected["permittedAliases"] != [role]
+                or descriptor["modelId"] != role or descriptor["version"] != "1"
+                or descriptor["bindingId"] != "adaptive-fixture-" + role or descriptor["bindingVersion"] != "1"
+                or (descriptor["provider"], descriptor["api"], descriptor["endpointClass"]) != ("stub", "stub", "in-process")
+                or descriptor["thinking"] is not None or not isinstance(descriptor["digest"], str) or not descriptor["digest"]
+                or (role in descriptors and descriptor != descriptors[role])
+                or not isinstance(calls, list) or not 1 <= len(calls) <= 4):
+            raise ValueError("native worker binding differs from its admitted alias")
+        assignments.add(record["assignmentId"])
+        descriptors[role] = descriptor
+        ordinals = set()
+        for call in calls:
+            if (call["attemptId"] in attempts or not isinstance(call["attemptId"], str) or not call["attemptId"]
+                    or not isinstance(call["operationId"], str) or not call["operationId"]
+                    or type(call["ordinal"]) is not int or call["ordinal"] in ordinals
+                    or call["rootId"] != value["rootId"] or call["phase"] != "CallTerminal"):
+                raise ValueError("native actual worker call receipt is duplicated or unsettled")
+            attempts.add(call["attemptId"])
+            ordinals.add(call["ordinal"])
+        totals[role] += len(calls)
+    if any(totals[role] != value["providerCalls"][role] for role in roles):
+        raise ValueError("native actual worker calls differ from provider dispatch counters")
 
 
 def qualify(directory, config, mode):

@@ -202,7 +202,7 @@ class AdaptiveDeliveryTests(unittest.TestCase):
             combined.append({"repository": repo["identity"], "base": repo["base"], "workers": workers,
                              "combined": candidate, "validation": {"exitCode": 0, "termination": "ProcessExited",
                                                                     "descendantsEmpty": True, "outputComplete": True}})
-        value = {"format": 1, "status": "Completed", "sessionMessageResultCounts": [4, 5, 5],
+        value = {"format": 1, "status": "Completed", "rootId": "same-root", "sessionMessageResultCounts": [4, 5, 5],
                  "root": {"active": 0, "unknown": 0},
                  "providerCalls": {name: (4 if name == "consumer" else 2)
                                    for name in ["producer", "producer-review", "consumer", "consumer-review"]},
@@ -221,6 +221,7 @@ class AdaptiveDeliveryTests(unittest.TestCase):
             "action_denial": {"exitCode": 1, "noProviderCalls": True,
                               "authorized": {"tag": "EventsIntegratedReply", "contents": {"tag": "EventsCaughtUp", "contents": 3}},
                               "restored": {"tag": "EventsIntegratedReply", "contents": {"tag": "EventsCaughtUp", "contents": 3}}},
+            "worker_selections": self.worker_selections(value),
             "terminal_replay": {"sameEvidence": True, "providerCallsBefore": "a" * 64,
                                 "providerCallsAfter": "a" * 64}}))
         (archives / "manifest.json").write_text(json.dumps({"format": 1, "artifacts": inventory}))
@@ -369,6 +370,7 @@ class AdaptiveDeliveryTests(unittest.TestCase):
             recovery = json.loads(recovery_path.read_text())
             recovery["ownership_commit_restart"] = {"exitCode": 91, "markerObserved": True}
             recovery.update(unknown_restart)
+            recovery["worker_selections"] = self.worker_selections(value)
             recovery_path.write_text(json.dumps(recovery))
             for changes in [{"sessionOwner": "successor"}, {"oldWriteDenied": False},
                             {"earlySuccessorWriteDenied": False}]:
@@ -379,6 +381,35 @@ class AdaptiveDeliveryTests(unittest.TestCase):
                     driver.native_evidence(path, starts)
             artifact.write_text(json.dumps(value))
             self.assertEqual(driver.native_evidence(path, starts)["format"], 2)
+
+    @staticmethod
+    def worker_selections(value):
+        return [{"assignmentId": role + "-assignment", "selection": {
+                    "rootId": value["rootId"], "source": "DeclaredAlias", "permittedAliases": [role],
+                    "descriptor": {"alias": role, "version": "1", "digest": role + "-digest", "modelId": role,
+                                   "provider": "stub", "api": "stub", "endpointClass": "in-process", "thinking": None,
+                                   "bindingId": "adaptive-fixture-" + role, "bindingVersion": "1"}},
+                 "calls": [{"attemptId": f"{role}-attempt-{n}", "operationId": f"{role}-operation-{n}",
+                            "ordinal": n, "rootId": value["rootId"], "phase": "CallTerminal"} for n in range(count)]}
+                for role, count in value["providerCalls"].items()]
+
+    def test_worker_calls_must_retain_their_admitted_tuple_and_unique_terminal_receipts(self):
+        roles = ["producer", "producer-review", "consumer", "consumer-review"]
+        value = {"rootId": "same-root", "providerCalls": dict.fromkeys(roles, 2)}
+        recovery = {"worker_selections": self.worker_selections(value)}
+        driver.validate_worker_selections(value, recovery, roles)
+        mutations = [lambda r: r[0]["selection"]["descriptor"].update(modelId="process-default"),
+                     lambda r: r[0]["selection"].update(permittedAliases=roles),
+                     lambda r: r[0]["selection"].update(source="ProcessDefault"),
+                     lambda r: r[0]["selection"].update(rootId="other-root"),
+                     lambda r: r[0]["calls"][1].update(attemptId=r[0]["calls"][0]["attemptId"]),
+                     lambda r: r[0]["calls"][0].update(phase="CallTransportUnknown"),
+                     lambda r: r[0]["calls"].pop()]
+        for mutate in mutations:
+            altered = copy.deepcopy(recovery)
+            mutate(altered["worker_selections"])
+            with self.assertRaises(ValueError):
+                driver.validate_worker_selections(value, altered, roles)
 
     @staticmethod
     def transfer_probes():

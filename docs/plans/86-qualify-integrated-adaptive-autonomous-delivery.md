@@ -186,6 +186,12 @@ reported as another external effect. Terminal replay now inspects the completed
 objective directly. The immutable `e6ec2d77` candidate is building; these latest
 fixture changes require the subsequent candidate and native evidence.
 
+The 49-case host suite additionally checks credential-free worker selection
+descriptors and terminal actual-call receipts against the admitted role, root,
+binding version and provider dispatch counters. The runner reads those owner
+records before and after terminal replay and requires equality. These joined
+facts await native execution along with the candidate runtimes.
+
 ## Surprises & Discoveries
 
 

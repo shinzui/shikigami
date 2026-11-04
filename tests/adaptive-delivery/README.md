@@ -160,6 +160,10 @@ with its exact retry after restoring authority, while requiring that command to
 fail with exit 1 during authority denial. The final provider-call bytes must
 remain unchanged. This is the disposable issuer's deterministic authorization
 control, not production authority or live-model evidence.
+Read-only selection snapshots also retain each worker's credential-free model
+descriptor, permitted alias, root and terminal call receipts. The host verifier
+checks those tuples and unique actual attempts against the provider counters;
+terminal replay must preserve the complete snapshot.
 
 Before the guest is destroyed, `archive.py` exports bounded local Git bundles
 from its authoritative fixture workspace bindings. A successful run must retain
