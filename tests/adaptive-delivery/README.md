@@ -18,8 +18,11 @@ The deterministic starting commits are:
 
 | Repository | Commit | Tree |
 | --- | --- | --- |
-| Producer | `02dd5ee5e300a00f187d455f5f9edf9d58279c9f` | `de975070714af54cda16b0e90508dcd29b44f4be` |
-| Consumer | `5040a3c99659fba0355324811a666884c0297217` | `b9f280df0ae47379916ae088fe55b66acd06b0cb` |
+| `mori://fixture/adaptive-producer` | `02dd5ee5e300a00f187d455f5f9edf9d58279c9f` | `de975070714af54cda16b0e90508dcd29b44f4be` |
+| `mori://fixture/adaptive-consumer` | `5040a3c99659fba0355324811a666884c0297217` | `b9f280df0ae47379916ae088fe55b66acd06b0cb` |
+
+Full Git object IDs are scoped by those canonical fixture repository identities;
+the artifact-level Git URI convention is pending.
 
 `prepare.py` fixes author, timestamp, object format, branch and file modes and
 ignores ambient Git configuration. Repeated preparation in fresh directories
@@ -94,6 +97,13 @@ cost policy. The independent combined check reads blobs from the exact two
 integrated trees, not mutable worker paths. Its verifier-owned attestation pins
 both resulting commits, and its artifact reference commits the full retained
 integration facts. The model proposes completion; the objective owner accepts it.
+
+The trusted integration controller drives accepted tool contracts without a
+final model turn, then explicitly stops those two fixture executions. Their
+failed terminal status supplies settlement, not successful check evidence:
+the owner uses the separate factual Git receipts, zero-exit native validations
+and exact-pair journey. Worker coding still traverses normal native Skill
+executions. Live integration behavior remains a separately required trial.
 
 The shell injects process death after an adaptive decision commits but before
 the journal acknowledges it, then reconstructs the controller over the retained

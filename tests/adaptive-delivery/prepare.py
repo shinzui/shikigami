@@ -26,6 +26,7 @@ def git(path, *args):
 
 def prepare(directory):
     # Exclusive creation makes retries use a fresh attempt, never overwrite work.
+    directory.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     directory.mkdir(mode=0o700)
     result = []
     for name, identity in zip(["producer", "consumer"], REPOSITORIES):
