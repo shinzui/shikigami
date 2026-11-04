@@ -252,7 +252,7 @@ authorityApplication prefix = do
         body <- strictRequestBody request
         case Aeson.eitherDecode body of
           Right (accepted :: Kikan.AuthorizeActionRequest)
-            | Kikan.agentPrincipalText accepted.principal `elem` ["agent_01h000000000000000" <> name | name <- ["triage", "coordinator", "successor", "producer", "producer-review", "consumer", "consumer-review"]],
+            | Kikan.agentPrincipalText accepted.principal `elem` ["agent_01h000000000000000" <> name | name <- ["triage", "coordinator", "successor", "producer", "producer-review", "consumer", "consumer-review", "consumer-successor"]],
               Kikan.InvokeCapabilityTool _ <- accepted.action -> do
                 now <- getCurrentTime
                 let expiry = addUTCTime 30 now

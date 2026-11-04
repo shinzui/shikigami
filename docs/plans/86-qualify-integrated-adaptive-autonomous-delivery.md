@@ -132,6 +132,19 @@ their first Linux execution; shell syntax and host manifest controls alone are
 not their acceptance. FRIC-56 in `docs/friction-log/` records this session's
 whole-cohort native rebuild delay.
 
+The clean `64d9e4f4` runtime built successfully and its first coupled baseline
+trial has started. In parallel, the optional `scenario: "transfer"` fixture
+extension compiles locally and the full Python qualification suite passes 46
+cases. The extension wires the real private-socket workspace fence into the
+native coordination host, admits a consumer successor, and injects exit 91
+after the objective owner commits but before local session establishment. It
+requires both old and premature successor writes to refuse at that cut and
+retains the exact provider receipts in version 2 evidence. Its later native
+build and runtime qualification remain required; version 1 evidence cannot
+satisfy that selected scenario. The new deterministic action-denial control also
+requires identical passing protected commands before and after authority
+restoration, without another provider call. No milestone is accepted yet.
+
 ## Surprises & Discoveries
 
 

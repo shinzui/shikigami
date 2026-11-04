@@ -37,13 +37,15 @@ def load_config(path, mode):
     if path.stat().st_size > 65536:
         raise ValueError("configuration exceeds 64 KiB")
     value = json.loads(path.read_text())
-    allowed = {"format", "mode", "timeout_seconds", "max_model_attempts", "repositories", "runtime"}
+    allowed = {"format", "mode", "timeout_seconds", "max_model_attempts", "repositories", "runtime", "scenario"}
     if not isinstance(value, dict) or set(value) - allowed:
         raise ValueError("configuration has unknown fields; credentials belong in private runtime configuration")
     if type(value.get("format")) is not int or value["format"] != 1 or value.get("mode") != mode:
         raise ValueError("configuration format or mode differs")
     if value.get("repositories") != prepare.REPOSITORIES:
         raise ValueError("only the two canonical fixture repositories are admitted")
+    if value.get("scenario", "baseline") not in ["baseline", "transfer"]:
+        raise ValueError("scenario must select baseline or transfer qualification")
     for field, maximum in [("timeout_seconds", 3600), ("max_model_attempts", 128)]:
         number = value.get(field)
         if type(number) is not int or not 1 <= number <= maximum:
@@ -195,14 +197,17 @@ def native_evidence(directory, repositories):
         raise ValueError("native evidence is not a bounded regular artifact")
     value = json.loads(path.read_text())
     combined = value["integrated"]["repositories"]
-    if value["format"] != 1 or value["status"] != "Completed" or len(combined) != 2:
+    if type(value["format"]) is not int or value["format"] not in [1, 2] or value["status"] != "Completed" or len(combined) != 2:
         raise ValueError("finite objective did not complete against two integrated repositories")
     if value["sessionMessageResultCounts"] != [4, 5, 5]:
         raise ValueError("native recovery counts differ")
     if value["root"]["active"] != 0 or value["root"]["unknown"] != 0:
         raise ValueError("native root has unsettled work")
-    for name in ["producer", "producer-review", "consumer", "consumer-review"]:
-        if value["providerCalls"][name] != (4 if name == "consumer" else 2):
+    roles = ["producer", "producer-review", "consumer", "consumer-review"]
+    if value["format"] == 2:
+        roles.append("consumer-successor")
+    for name in roles:
+        if value["providerCalls"][name] != (4 if name == "consumer" and value["format"] == 1 else 2):
             raise ValueError("native provider calls repeated or omitted completed turns")
     starts = {entry["identity"]: entry["base"] for entry in repositories}
     if {entry["repository"] for entry in combined} != set(starts):
@@ -245,6 +250,41 @@ def native_evidence(directory, repositories):
                 or any(not isinstance(record, dict) or not isinstance(record.get(key), str)
                        or not record[key] for record in case["records"])):
             raise ValueError("native committed-boundary restart records invalid")
+    for record in boundaries["result"]["records"]:
+        receipt = record["receipt"]
+        consumed = record["consumedCursor"]
+        if (not isinstance(receipt, dict) or type(consumed) is not int
+                or type(receipt.get("cursor")) is not int or consumed >= receipt["cursor"]
+                or receipt.get("assignmentId") != record["assignmentId"]
+                or receipt.get("sessionId") != record["sessionId"]):
+            raise ValueError("native result restart did not retain an unconsumed exact receipt")
+    if any(type(record["sequence"]) is not int or record["sequence"] <= 0
+           for record in boundaries["followup"]["records"]):
+        raise ValueError("native followup restart has no accepted successor message")
+    denial = recovery["action_denial"]
+    control = denial["authorized"]
+    if (type(denial["exitCode"]) is not int or denial["exitCode"] != 1
+            or denial["noProviderCalls"] is not True or control != denial["restored"]
+            or not isinstance(control, dict) or control.get("tag") != "EventsIntegratedReply"
+            or not isinstance(control.get("contents"), dict)
+            or control["contents"].get("tag") != "EventsCaughtUp"):
+        raise ValueError("native action refusal lacks passing identical authorized controls")
+    if value["format"] == 2:
+        cut = recovery["ownership_commit_restart"]
+        proof = value["ownership"]
+        intent = proof["intent"]
+        fence = proof["fence"]
+        receipt = proof["receipt"]
+        assignment = proof["assignment"]
+        if (type(cut["exitCode"]) is not int or cut["exitCode"] != 91 or cut["markerObserved"] is not True
+                or proof["oldWriteDenied"] is not True or proof["earlySuccessorWriteDenied"] is not True
+                or intent["oldOwner"] == intent["newOwner"] or proof["sessionOwner"] != intent["oldOwner"]
+                or proof["sessionEpoch"] != intent["oldEpoch"] or intent["newEpoch"] != intent["oldEpoch"] + 1
+                or assignment["definition"]["owner"] != intent["newOwner"] or assignment["ownerEpoch"] != intent["newEpoch"]
+                or fence["workspace"] != intent["workspace"] or fence["oldEpoch"] != intent["oldEpoch"]
+                or fence["newEpoch"] != intent["newEpoch"] or receipt["objective"] != intent["objective"]
+                or receipt["operationId"] != intent["operationId"]):
+            raise ValueError("native ownership cut does not bind real fenced owner and successor receipts")
     value["recovery"] = recovery
     archives = path.parent / "adaptive-artifacts"
     inventory = archives / "manifest.json"
@@ -284,6 +324,7 @@ def qualify(directory, config, mode):
                 "cases": [], "limitations": [], "repositories": []}
     if "runtime" in config:
         manifest["runtime"] = config["runtime"]
+    manifest["scenario"] = config.get("scenario", "baseline")
     try:
         manifest["source_revision"] = prepare.git(ROOT, "rev-parse", "HEAD")
         manifest["source_dirty"] = bool(prepare.git(ROOT, "status", "--porcelain"))
@@ -302,13 +343,16 @@ def qualify(directory, config, mode):
             elif any(shutil.which(name) is None for name in ["container", "nix"]):
                 manifest["limitations"].append("the Apple container and Nix executables are required for native qualification")
             else:
-                command = ["bash", "tests/workspace/run-apple.sh", "--adaptive-only"]
+                command = ["bash", "tests/workspace/run-apple.sh",
+                           "--adaptive-transfer-only" if config.get("scenario") == "transfer" else "--adaptive-only"]
                 if "runtime" in config:
                     command.append(config["runtime"])
                 case = run_case(directory, "native", command, config["timeout_seconds"])
                 manifest["cases"].append(case)
                 if case["state"] == "passed":
                     manifest["native"] = native_evidence(directory, manifest["repositories"])
+                    if config.get("scenario") == "transfer" and manifest["native"]["format"] != 2:
+                        raise ValueError("selected runtime did not exercise native transfer qualification")
                 else:
                     manifest["state"] = case["state"]
                 manifest["limitations"].append(

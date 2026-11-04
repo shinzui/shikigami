@@ -111,6 +111,8 @@ import Shikigami.Sink.Http (HttpLimits (..), credentialsFromConfig, newSinkHttp)
 import Shikigami.Trigger.Enqueue (addressedRunJob, ensureRunQueue)
 import Shikigami.WorkerSession.Capability qualified as Workers
 import Shikigami.WorkerSession.Input qualified as Input
+import Shikigami.WorkerSession.Store qualified as SessionStore
+import Shikigami.WorkerSession.Transfer qualified as Transfer
 import Shikigami.WorkerSession.Types qualified as WS
 import Shikigami.WorkerSession.Workflow qualified as Sessions
 import Shikigami.Workflow.Versioning (shikigamiWorkflowResumeOptions)
@@ -130,6 +132,7 @@ import Shikigami.Workspace.ProcessPolicy
 import Shikigami.Workspace.Provider (Replacement (..), contentDigest)
 import Shikigami.Workspace.Settings
 import Shikigami.Workspace.Supervisor (workspaceExecDescriptor)
+import Shikigami.Workspace.TransferClient (workspaceTransferClient)
 import Shikigami.Workspace.Types
 import Shikigami.Workspace.Value
 import System.Directory (doesFileExist)
@@ -163,8 +166,12 @@ json :: (Aeson.ToJSON a) => a -> Text
 json = Encoding.decodeUtf8 . Lazy.toStrict . Aeson.encode
 
 adaptiveCase :: FilePath -> FilePath -> String -> IO ()
-adaptiveCase config prefix stage = withQualification config prefix \original -> withStore original.env.connectionSettings \store -> do
-  let env = original.env & #store .~ Just store
+adaptiveCase config prefix requestedStage = withQualification config prefix \original -> withStore original.env.connectionSettings \store -> do
+  let stageText = Text.pack requestedStage
+      transferring = "-transfer" `Text.isSuffixOf` stageText
+      stage = Text.unpack (fromMaybe stageText (Text.stripSuffix "-transfer" stageText))
+      fixtureWorkers = names <> ["consumer-successor" | transferring]
+      env = original.env & #store .~ Just store
       q = original & #env .~ env
       settings = defaultObjectiveSettings & #enabled .~ ObjectivesEnabled
       own = key "delivery"
@@ -189,18 +196,37 @@ adaptiveCase config prefix stage = withQualification config prefix \original -> 
       policy repo = checked (mkProcessPolicy (ProcessPolicyInput ProcessPolicyV1 q.initial.profile.policy.image q.initial.profile.policy.propertiesDigest [checked (mkCommandRule (CommandRuleInput (workspaceCoordinate "validate") (workspaceCoordinate "/bin/adaptive-check") [workspaceCoordinate repo.name] (workspaceCoordinate "") Map.empty (checked (parseProcessSeconds 5)) (checked (parseProcessOutputBytes 1024))))] [workspaceCoordinate ""] [workspaceCoordinate ""]))
       repositories = [WorkspaceRepository repo.repository (workspaceLocator repo.source) [WorkspaceRevision repo.base (bundleDigest repo.bundle)] repo.base (workspaceCoordinate "adaptive-reviewed/1") [workspaceCoordinate ""] [workspaceCoordinate ""] | repo <- repos]
       process = fromMaybe (error "native process settings") (q.config.workspaceSettings >>= (.process))
-      workspaceSettings = WorkspaceSettings q.initial.binding.storageRoot repositories [WorkspaceGrant (agent name) (declarationCoordinate ("agent_01h000000000000000" <> if "integrate-" `Text.isPrefixOf` name then "coordinator" else name)) (repositoryFor (Text.replace "integrate-" "" name)).repository Nothing | name <- names <> ["integrate-producer", "integrate-consumer"]] (Just (process & #policies .~ Map.fromList [(repo.repository, policy repo) | repo <- repos]))
+      workspaceSettings = WorkspaceSettings q.initial.binding.storageRoot repositories [WorkspaceGrant (agent name) (declarationCoordinate ("agent_01h000000000000000" <> if "integrate-" `Text.isPrefixOf` name then "coordinator" else name)) (repositoryFor (Text.replace "integrate-" "" name)).repository Nothing | name <- fixtureWorkers <> ["integrate-producer", "integrate-consumer"]] (Just (process & #policies .~ Map.fromList [(repo.repository, policy repo) | repo <- repos]))
   -- The directory is loaded from the guest's explicitly provisioned file.
   directory <- right =<< Directory.startDirectory Log.silentLogger q.config.directorySettings
   nativeHost <- right (configuredWorkspaceHostWithTransfers env store.pool directory.handle q.authorizer workspaceSettings)
   template <- right =<< loadAgent "/var/lib/shikigami-workspace-fixture-code/agents/triage-note.dhall"
   let alias name = checked (parseModelAlias name)
       worker name = template & #name .~ agent name & #identity .~ Just (IdentityDecl (declarationCoordinate ("agent_01h000000000000000" <> name))) & #behavior .~ Skill (declarationCoordinate "/var/lib/shikigami-workspace-fixture-code/agents/skills/triage-note") & #execution .~ Just (ExecutionPolicy (alias name) [alias name]) & #capabilityOverlays .~ map (.capability) [supervisedWorkspaceEditDescriptor, workspaceExecDescriptor, workspaceGitDescriptor] & #sinks .~ [] & #memory . #recordPolicy .~ Never
-      workers = map worker names
+      workers = map worker fixtureWorkers
       root = template & #name .~ agent "coordinator" & #identity .~ Just (IdentityDecl (declarationCoordinate "agent_01h000000000000000coordinator")) & #behavior .~ Flow (declarationCoordinate "adaptive-delivery") & #delegates .~ map (.name) workers & #decisionModels .~ [alias "adaptive"] & #sinks .~ [] & #memory . #recordPolicy .~ Never
       declarations = root : workers
-      catalog = checked (modelCatalog [checked (modelBinding (alias name) "1" ("adaptive-fixture-" <> name) "1" (stubModel & #modelId .~ name) emptyOptions Nothing) | name <- "adaptive" : names])
-      sessions = Objectives.coordinationHost env settings directory.handle q.authorizer declarations defaultDelegationBudget Nothing
+      catalog = checked (modelCatalog [checked (modelBinding (alias name) "1" ("adaptive-fixture-" <> name) "1" (stubModel & #modelId .~ name) emptyOptions Nothing) | name <- "adaptive" : fixtureWorkers])
+      baseSessions = Objectives.coordinationHost env settings directory.handle q.authorizer declarations defaultDelegationBudget (Just (workspaceTransferClient q.client))
+      loseOwnership :: Transfer.OwnershipProvider -> Transfer.OwnershipProvider
+      loseOwnership provider = Transfer.OwnershipProvider \intent proof -> do
+        outcome <- provider.transfer intent proof
+        case outcome of
+          Transfer.OwnershipAccepted receipt | transferring && stage == "ownership-crash" -> do
+            unless (Transfer.matchesOwnership intent proof receipt) (fail "native ownership receipt changed")
+            Just (pending, _) <- right =<< run env (SessionStore.inspectSession intent.sessionId)
+            reference <- right =<< run env (O.resolveAssignment (q.objectives (actor "coordinator")) intent.objective)
+            goal <- right =<< run env (O.readObjective (q.objectives (actor "coordinator")) reference.objectiveId)
+            assignment <- maybe (fail "transferred objective assignment missing") pure (find ((== reference.assignmentId) . (.definition.assignmentId)) goal.assignments)
+            unless (pending.owner == intent.oldOwner && pending.epoch == intent.oldEpoch && assignment.definition.owner == intent.newOwner && assignment.ownerEpoch == intent.newEpoch) (fail "ownership cut is not between objective commit and local establishment")
+            let fence = workspaceTransferClient q.client
+            oldWrite <- fence.admitWrite intent.workspace intent.sessionId intent.oldOwner intent.oldEpoch (fixtureOperationId "adaptive-fenced-old-write")
+            earlyWrite <- fence.admitWrite intent.workspace intent.sessionId intent.newOwner intent.newEpoch (fixtureOperationId "adaptive-unestablished-successor-write")
+            unless (either (const True) (const False) oldWrite && either (const True) (const False) earlyWrite) (fail "unestablished ownership admitted a write")
+            Lazy.writeFile (prefix </> "adaptive-ownership-crashed.json") (Aeson.encode (Aeson.object ["intent" .= intent, "fence" .= proof, "receipt" .= receipt, "sessionOwner" .= pending.owner, "sessionEpoch" .= pending.epoch, "assignment" .= assignment, "oldWriteDenied" .= True, "earlySuccessorWriteDenied" .= True]))
+            exitImmediately (ExitFailure 91)
+          _ -> pure outcome
+      sessions = baseSessions & #services %~ (\services -> services & #ownership %~ fmap loseOwnership)
       objectives = Objectives.ObjectiveRuntime env settings directory.handle q.authorizer (Just sessions)
       criterion = checked (parseCriterionKey "combined-journey")
       evidenceKey = checked (parseEvidenceKey "exact-pair-journey")
@@ -210,7 +236,7 @@ adaptiveCase config prefix stage = withQualification config prefix \original -> 
         void (right =<< ensureRunQueue store.pool)
         created <- right =<< run env (O.createObjective owner (fixtureOperationId "adaptive-delivery-create") Nothing (CreateRequest (checked (parseTitle "Finite two repository delivery")) (checked (parseGoal "Deliver hello across producer and consumer")) (checked (parseInstructions "Reconcile schema findings through the same worker session; require the exact integrated pair")) [Criterion criterion (checked (parseCriterionDescription "producer record consumed as hello")) HumanVerifiable JourneyRequired] []))
         let goal = created.objectiveId
-        forM_ names \name -> void (command goal ("adaptive-member-" <> name) (Command.GrantMember (RecordedAgent (actor name)) [Worker]))
+        forM_ fixtureWorkers \name -> void (command goal ("adaptive-member-" <> name) (Command.GrantMember (RecordedAgent (actor name)) [Worker]))
         void (command goal "adaptive-coordinator-member" (Command.GrantMember (RecordedAgent (actor "coordinator")) [Coordinator]))
         now <- getCurrentTime
         let rootId = fixtureRootId "adaptive-delivery-root"
@@ -246,6 +272,7 @@ adaptiveCase config prefix stage = withQualification config prefix \original -> 
                   changes
                     | any ((== evidenceKey) . (.input.key)) current.evidence = [P.ProposeCompletion (P.IntegratedAcceptance current.revision current.instructionsRevision current.criteriaRevision [ref | entry <- current.evidence, Attestation {artifact = ref} <- [entry.input], entry.input.key == evidenceKey] [evidenceKey] [])]
                     | null [a | a <- current.assignments, a.definition.assignmentId /= own] = placements
+                    | transferring, Just value <- consumer, value.definition.owner == actor "consumer", Just _ <- reported, Just workspace <- lookup (key "consumer") pinned.workspaces = [P.TransferAssignment (key "consumer") (agent "consumer-successor") workspace]
                     | Just value <- consumer, Just result <- reported, revisionNumber result.receipt.cursor <= 3 = [P.FollowUpContext (key "consumer") (Workers.WorkerInstruction (checked (Input.parseInstructionText "reconcile-v2: the retained producer emits version 2 at value.text; correct the consumer and commit")) current.revision value.revision current.criteriaRevision Nothing)]
                     | otherwise = [P.AwaitAssignments [own]]
                   proposal = P.Proposal V1 saved.objectiveId current.revision current.instructionsRevision current.criteriaRevision (Runtime.operationKey "decision" (Aeson.toJSON (admission.run, generation, current.revision))) (map (.input.key) current.evidence) (checked (parseCriterionDescription "Reflect on the retained producer schema finding")) (Just (checked (parseCriterionDescription "Worker local checks use different schema assumptions"))) (checked (parseCriterionDescription "Reconcile the consumer before integrating exact commits")) evidenceKey changes
@@ -259,10 +286,10 @@ adaptiveCase config prefix stage = withQualification config prefix \original -> 
                   validate = Content.ToolCall "validate" "overlay__workspace-exec__validate" (Aeson.object ["rule" .= ("validate" :: Text)])
                   commit = Content.ToolCall "commit" "overlay__workspace-git__commit" (Aeson.toJSON (GitCommitRequest repo.base (workspaceCoordinate "feat: deliver bounded schema fixture")))
                   changes
-                    | name == "consumer" && correcting = [replace "contract.json" "{\"version\":1,\"path\":[\"text\"]}\n" "{\"version\":2,\"path\":[\"value\",\"text\"]}\n"]
+                    | name `elem` ["consumer", "consumer-successor"] && correcting = [replace "contract.json" "{\"version\":1,\"path\":[\"text\"]}\n" "{\"version\":2,\"path\":[\"value\",\"text\"]}\n"]
                     | otherwise = [replace (if "-review" `Text.isSuffixOf` name then "review.txt" else "delivery.txt") "pending\n" "done\n"]
               unless (all (not . (.isError)) results) (fail "adaptive workspace tool refused")
-              pure (json (Aeson.object ["finding" .= ("producer version 2 at value.text; consumer local sample is obsolete" :: Text), "results" .= results]), if null results then changes <> [validate] <> [commit | name /= "consumer" || correcting] else [])
+              pure (json (Aeson.object ["finding" .= ("producer version 2 at value.text; consumer local sample is obsolete" :: Text), "results" .= results]), if null results then changes <> [validate] <> [commit | name `notElem` ["consumer", "consumer-successor"] || correcting] else [])
         let usage = Usage.zeroUsage & #availability .~ Just (Usage.UsageAvailability Set.empty False Set.empty) & #cost . #basis .~ Cost.providerReportedBasis
             message = response & #message . #content .~ Vector.fromList (if null calls then [Content.AssistantText (Content.TextContent output)] else map Content.AssistantToolCall calls)
             answer = if null calls then message else message & #message . #stopReason .~ ToolUse
@@ -325,9 +352,13 @@ adaptiveCase config prefix stage = withQualification config prefix \original -> 
       counts <- run env (runTransaction (Tx.statement () (preparable "SELECT (SELECT count(*) FROM shikigami.worker_sessions), (SELECT count(*) FROM shikigami.worker_session_messages), (SELECT count(*) FROM shikigami.worker_session_results)" E.noParams (D.singleRow ((,,) <$> D.column (D.nonNullable D.int8) <*> D.column (D.nonNullable D.int8) <*> D.column (D.nonNullable D.int8))))))
       unless (counts == (4, 5, 5)) (fail "native recovery duplicated a worker, followup or result")
       calls <- Text.lines . Encoding.decodeUtf8 <$> Bytes.readFile (prefix </> "adaptive-provider-calls")
-      unless (all (\name -> length (filter (== name) calls) == if name == "consumer" then 4 else 2) names) (fail "native worker provider calls repeated or omitted completed turns")
+      unless (all (\name -> length (filter (== name) calls) == if name == "consumer" && not transferring then 4 else 2) fixtureWorkers) (fail "native worker provider calls repeated or omitted completed turns")
       integrated <- right . Aeson.eitherDecodeStrict @Aeson.Value =<< Bytes.readFile (prefix </> "adaptive-integrated.json")
-      Lazy.writeFile (prefix </> "adaptive-evidence.json") (Aeson.encode (Aeson.object ["format" .= (1 :: Int), "objective" .= saved.objectiveId, "status" .= accepted.status, "root" .= rootUsage, "integrated" .= integrated, "reportedResults" .= accepted.reportedResults, "sessionMessageResultCounts" .= counts, "providerCalls" .= Map.fromList [(name, length (filter (== name) calls)) | name <- "adaptive" : names]]))
+      ownership <- if transferring then right . Aeson.eitherDecodeStrict @Aeson.Value =<< Bytes.readFile (prefix </> "adaptive-ownership-crashed.json") else pure Aeson.Null
+      when transferring do
+        assignment <- maybe (fail "accepted consumer missing") pure (find ((== key "consumer") . (.definition.assignmentId)) accepted.assignments)
+        unless (assignment.definition.owner == actor "consumer-successor") (fail "successor did not own the accepted consumer artifact")
+      Lazy.writeFile (prefix </> "adaptive-evidence.json") (Aeson.encode (Aeson.object ["format" .= (if transferring then 2 else 1 :: Int), "ownership" .= ownership, "objective" .= saved.objectiveId, "status" .= accepted.status, "root" .= rootUsage, "integrated" .= integrated, "reportedResults" .= accepted.reportedResults, "sessionMessageResultCounts" .= counts, "providerCalls" .= Map.fromList [(name, length (filter (== name) calls)) | name <- "adaptive" : fixtureWorkers]]))
       putStrLn "PASS native adaptive two-repository delivery closes only against the exact integrated journey"
 
 -- Native integration targets are separate configured workspaces under the same

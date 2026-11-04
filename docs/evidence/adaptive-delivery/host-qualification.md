@@ -72,3 +72,13 @@ remain unqualified until the Linux runner actually executes them. Shell syntax
 checks pass. The result cut follows the atomic result/wake owner transaction
 and checks that its receipt cursor remains unconsumed, as clarified in
 [ADR 0061](../../adr/0061-continuing-sessions-own-ordered-assignments-and-retained-receipts.md).
+
+The optional native transfer extension compiles through
+`cabal build workspace-linux-fixture`, and all 46 Python qualification cases
+pass. These include the action-denial positive controls, exact unconsumed
+result receipts, refusal of version 1 evidence for a selected transfer trial,
+and rejection of a transfer cut after local establishment or without the two
+required write denials. The clean `64d9e4f4` Linux runtime has now built; its
+baseline coupled trial is running. The transfer extension still needs its own
+immutable runtime and actual execution. These are preparation facts, not new
+native acceptance claims.

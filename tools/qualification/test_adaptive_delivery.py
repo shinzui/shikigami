@@ -89,7 +89,8 @@ class AdaptiveDeliveryTests(unittest.TestCase):
             path = Path(raw) / "config.yaml"
             for changes in [{"mode": "live"}, {"format": True}, {"max_model_attempts": True}, {"timeout_seconds": 0},
                             {"timeout_seconds": 3601}, {"credentials": {"secret": "PRIVATE_MARKER"}},
-                            {"repositories": ["/user/repo"]}, {"runtime": "/user/executable"}]:
+                            {"repositories": ["/user/repo"]}, {"runtime": "/user/executable"},
+                            {"scenario": "unqualified"}, {"scenario": True}]:
                 path.write_text(json.dumps(baseline | changes))
                 with self.subTest(changes=changes), self.assertRaises(ValueError):
                     driver.load_config(path, "fixture")
@@ -212,8 +213,14 @@ class AdaptiveDeliveryTests(unittest.TestCase):
             "format": 1, "adaptation_commit_restart": {"exitCode": 86, "markerObserved": True},
             "committed_boundary_restarts": {
                 "outcome": {"signal": 9, "controllerStoppedBeforeSnapshot": True, "records": [{"operationId": "tool-outcome"}]},
-                "result": {"signal": 9, "controllerStoppedBeforeSnapshot": True, "records": [{"assignmentId": "worker-result"}]},
-                "followup": {"signal": 9, "controllerStoppedBeforeSnapshot": True, "records": [{"operationId": "accepted-followup"}]}},
+                "result": {"signal": 9, "controllerStoppedBeforeSnapshot": True,
+                           "records": [{"assignmentId": "worker-result", "sessionId": "session", "consumedCursor": 2,
+                                        "receipt": {"assignmentId": "worker-result", "sessionId": "session", "cursor": 3}}]},
+                "followup": {"signal": 9, "controllerStoppedBeforeSnapshot": True,
+                             "records": [{"operationId": "accepted-followup", "sequence": 1}]}},
+            "action_denial": {"exitCode": 1, "noProviderCalls": True,
+                              "authorized": {"tag": "EventsIntegratedReply", "contents": {"tag": "EventsCaughtUp", "contents": 3}},
+                              "restored": {"tag": "EventsIntegratedReply", "contents": {"tag": "EventsCaughtUp", "contents": 3}}},
             "terminal_replay": {"sameEvidence": True, "providerCallsBefore": "a" * 64,
                                 "providerCallsAfter": "a" * 64}}))
         (archives / "manifest.json").write_text(json.dumps({"format": 1, "artifacts": inventory}))
@@ -304,6 +311,71 @@ class AdaptiveDeliveryTests(unittest.TestCase):
                 artifact.write_text(json.dumps(value))
                 with self.assertRaisesRegex(ValueError, "restart records invalid"):
                     driver.native_evidence(path, starts)
+
+    def test_native_authority_refusal_requires_the_same_command_to_pass_with_authority(self):
+        with tempfile.TemporaryDirectory() as raw, tempfile.TemporaryDirectory(
+                prefix="shikigami-workspace-run.", dir="/tmp") as native:
+            path = Path(raw)
+            starts, _, _, _ = self.native_artifacts(path, Path(native))
+            artifact = Path(native) / "evidence/adaptive-recovery.json"
+            value = json.loads(artifact.read_text())
+            value["action_denial"]["restored"] = {"tag": "EventsUnavailable"}
+            artifact.write_text(json.dumps(value))
+            with self.assertRaisesRegex(ValueError, "identical authorized controls"):
+                driver.native_evidence(path, starts)
+
+    def test_native_result_cut_must_precede_its_consumer_integration(self):
+        with tempfile.TemporaryDirectory() as raw, tempfile.TemporaryDirectory(
+                prefix="shikigami-workspace-run.", dir="/tmp") as native:
+            path = Path(raw)
+            starts, _, _, _ = self.native_artifacts(path, Path(native))
+            artifact = Path(native) / "evidence/adaptive-recovery.json"
+            value = json.loads(artifact.read_text())
+            value["committed_boundary_restarts"]["result"]["records"][0]["consumedCursor"] = 3
+            artifact.write_text(json.dumps(value))
+            with self.assertRaisesRegex(ValueError, "unconsumed exact receipt"):
+                driver.native_evidence(path, starts)
+
+    def test_transfer_selection_cannot_be_satisfied_by_a_legacy_runtime(self):
+        config = json.loads((driver.FIXTURE / "fixture.yaml").read_text()) | {
+            "scenario": "transfer", "runtime": "/nix/store/" + "a" * 32 + "-fixture"}
+        with tempfile.TemporaryDirectory() as raw, \
+                patch.object(driver.shutil, "which", return_value="available"), \
+                patch.object(driver, "run_case", return_value={"state": "passed"}) as run, \
+                patch.object(driver, "native_evidence", return_value={"format": 1, "status": "Completed"}):
+            manifest = driver.qualify(Path(raw), config, "fixture")
+            self.assertEqual(manifest["state"], "failed")
+            self.assertIn("--adaptive-transfer-only", run.call_args.args[2])
+
+    def test_native_ownership_cut_requires_a_fenced_pending_session_and_real_successor(self):
+        with tempfile.TemporaryDirectory() as raw, tempfile.TemporaryDirectory(
+                prefix="shikigami-workspace-run.", dir="/tmp") as native:
+            path = Path(raw)
+            starts, value, artifact, _ = self.native_artifacts(path, Path(native))
+            workspace = {"provider": "native-workspace", "resource": "retained-workspace"}
+            value["format"] = 2
+            value["providerCalls"].update(consumer=2, **{"consumer-successor": 2})
+            value["ownership"] = {
+                "intent": {"oldOwner": "original", "newOwner": "successor", "oldEpoch": 0, "newEpoch": 1,
+                           "workspace": workspace, "objective": "objective", "operationId": "transfer"},
+                "fence": {"workspace": workspace, "oldEpoch": 0, "newEpoch": 1},
+                "receipt": {"objective": "objective", "operationId": "transfer"},
+                "sessionOwner": "original", "sessionEpoch": 0,
+                "assignment": {"definition": {"owner": "successor"}, "ownerEpoch": 1},
+                "oldWriteDenied": True, "earlySuccessorWriteDenied": True}
+            recovery_path = Path(native) / "evidence/adaptive-recovery.json"
+            recovery = json.loads(recovery_path.read_text())
+            recovery["ownership_commit_restart"] = {"exitCode": 91, "markerObserved": True}
+            recovery_path.write_text(json.dumps(recovery))
+            for changes in [{"sessionOwner": "successor"}, {"oldWriteDenied": False},
+                            {"earlySuccessorWriteDenied": False}]:
+                altered = copy.deepcopy(value)
+                altered["ownership"].update(changes)
+                artifact.write_text(json.dumps(altered))
+                with self.assertRaisesRegex(ValueError, "fenced owner and successor receipts"):
+                    driver.native_evidence(path, starts)
+            artifact.write_text(json.dumps(value))
+            self.assertEqual(driver.native_evidence(path, starts)["format"], 2)
 
     def test_missing_native_prerequisite_cannot_pass_the_fixture(self):
         config = json.loads((driver.FIXTURE / "fixture.yaml").read_text())

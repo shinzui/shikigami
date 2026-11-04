@@ -5,7 +5,7 @@ set -eEuo pipefail
 export LANG=C.UTF-8 LC_ALL=C.UTF-8
 mode=${1:-}
 runtime=${2:-}
-[[ $# == 2 && ( "$mode" == --prototype || "$mode" == --provision || "$mode" == --git || "$mode" == --workflow || "$mode" == --workflow-only || "$mode" == --workspace-gates || "$mode" == --qualify || "$mode" == --continuing-only || "$mode" == --handoff-only || "$mode" == --ownership-only || "$mode" == --adaptive-only ) && "$runtime" == /nix/store/* ]] || { echo 'Usage: run-linux.sh MODE RUNTIME'; exit 64; }
+[[ $# == 2 && ( "$mode" == --prototype || "$mode" == --provision || "$mode" == --git || "$mode" == --workflow || "$mode" == --workflow-only || "$mode" == --workspace-gates || "$mode" == --qualify || "$mode" == --continuing-only || "$mode" == --handoff-only || "$mode" == --ownership-only || "$mode" == --adaptive-only || "$mode" == --adaptive-transfer-only ) && "$runtime" == /nix/store/* ]] || { echo 'Usage: run-linux.sh MODE RUNTIME'; exit 64; }
 [[ $(uname -s) == Linux && $(id -u) == 0 && -f /run/shikigami-workspace-prototype.disposable ]] || { echo 'REFUSED: a marked disposable Linux guest running as root is required'; exit 78; }
 [[ $(ps -p 1 -o comm=) == systemd && $(stat -fc %T /sys/fs/cgroup) == cgroup2fs ]]
 sudo -n true
@@ -28,7 +28,7 @@ if [[ "$mode" == --git || "$mode" == --workflow || "$mode" == --workspace-gates 
 cleanup() {
   status=$?
   trap - EXIT ERR
-  if [[ "$mode" == --adaptive-only ]] && "$pg_started"; then
+  if [[ "$mode" == --adaptive-only || "$mode" == --adaptive-transfer-only ]] && "$pg_started"; then
     if /usr/bin/psql "$connection" -Atc "SELECT jsonb_agg(binding ORDER BY resource) FROM shikigami.workspace_bindings WHERE binding->>'repository' IN ('mori://fixture/adaptive-producer','mori://fixture/adaptive-consumer')" >"$prefix/adaptive-bindings.json" &&
       python3 -I "$repo/tests/adaptive-delivery/archive.py" --prefix "$prefix" >"$prefix/adaptive-archive.log" 2>&1; then
       :
@@ -130,11 +130,11 @@ nix --extra-experimental-features 'nix-command flakes' copy --no-check-sigs --to
 ln -s "$tool/bin/busybox" "$prefix/root/bin/env"
 cc -static -Wall -Wextra -Werror -O2 -DHOST_SECRET_PATH="\"$prefix/host-secret\"" -DSIBLING_SECRET_PATH="\"$prefix/sibling/secret\"" -o "$prefix/root/bin/probe" "$repo/tests/workspace/prototype-payload.c"
 chmod 555 "$prefix/root/bin/probe"
-if [[ "$mode" == --adaptive-only ]]; then
+if [[ "$mode" == --adaptive-only || "$mode" == --adaptive-transfer-only ]]; then
   cc -static -Wall -Wextra -Werror -O2 -o "$prefix/root/bin/adaptive-check" "$repo/tests/adaptive-delivery/validate.c"
   chmod 555 "$prefix/root/bin/adaptive-check"
 fi
-image_digest=$( { printf '%s\n' "$tool" "$guard"; sha256sum "$prefix/root/bin/probe"; if [[ "$mode" == --adaptive-only ]]; then sha256sum "$prefix/root/bin/adaptive-check"; fi; } | sha256sum | cut -d ' ' -f1)
+image_digest=$( { printf '%s\n' "$tool" "$guard"; sha256sum "$prefix/root/bin/probe"; if [[ "$mode" == --adaptive-only || "$mode" == --adaptive-transfer-only ]]; then sha256sum "$prefix/root/bin/adaptive-check"; fi; } | sha256sum | cut -d ' ' -f1)
 # The fixture HTTP issuer listens only inside this guest on loopback.
 authority_port=$(python3 - <<'PY'
 import socket
@@ -159,7 +159,7 @@ import json,sys
 from pathlib import Path
 prefix,connection,port,runtime,guard,digest,oauth_port,repo=sys.argv[1:]
 p=Path(prefix)
-(p/'directory.json').write_text(json.dumps([{'principal_id':'agent_01h000000000000000'+name,'handle':name,'lifecycle':'active','display_name':'Workspace fixture'} for name in ['triage','coordinator','successor','producer','producer-review','consumer','consumer-review']]))
+(p/'directory.json').write_text(json.dumps([{'principal_id':'agent_01h000000000000000'+name,'handle':name,'lifecycle':'active','display_name':'Workspace fixture'} for name in ['triage','coordinator','successor','producer','producer-review','consumer','consumer-review','consumer-successor']]))
 config={'database':{'connection_string':connection},'directory':{'mode':'file','file':{'path':str(p/'directory.json')},'refresh_interval_seconds':1},'workspace':{'supervisor':{'socketPath':str(p/'rpc/supervisor.sock'),'users':[0],'workers':4,'timeoutSeconds':5}},'authorization':{'actions':{'mode':'kikan','kikan_en':{'base_url':f'http://127.0.0.1:{oauth_port}'},'shomei':{'base_url':f'http://127.0.0.1:{oauth_port}','client_id':'fixture'},'en':{'issuer_public_keys':(p/'issuer-public.txt').read_text(),'schema_hashes':'workspace-fixture-schema'},'caller_id':'workspace-fixture'}},'credentials':{'authorization':{'actions':{'shomei':{'client_secret':'fixture-secret'}}}}}
 config['agents']={'directory':str(Path(repo)/'agents')}
 (p/'config.json').write_text(json.dumps(config))
@@ -197,10 +197,13 @@ for _ in {1..200}; do
   sleep 0.1
 done
 jq -Rse 'split("\n") | any(.[]; try (fromjson | .event=="workspace.supervisor.started") catch false)' "$prefix/supervisor.log" >/dev/null
-if [[ "$mode" == --adaptive-only ]]; then
+if [[ "$mode" == --adaptive-only || "$mode" == --adaptive-transfer-only ]]; then
+  adaptive_suffix=
+  if [[ "$mode" == --adaptive-transfer-only ]]; then adaptive_suffix=-transfer; fi
+  adaptive() { "$prototype" adaptive "$config" "$prefix" "$1$adaptive_suffix"; }
   python3 -I "$repo/tests/adaptive-delivery/prepare.py" --directory "$prefix/adaptive-repositories" >"$prefix/adaptive-seeds.json"
-  "$prototype" adaptive "$config" "$prefix" admit >"$prefix/adaptive-admit.log" 2>&1
-  if "$prototype" adaptive "$config" "$prefix" crash >"$prefix/adaptive-crash.log" 2>&1; then
+  adaptive admit >"$prefix/adaptive-admit.log" 2>&1
+  if adaptive crash >"$prefix/adaptive-crash.log" 2>&1; then
     crash_status=0
   else
     crash_status=$?
@@ -212,7 +215,7 @@ if [[ "$mode" == --adaptive-only ]]; then
   adaptive_restart_after() {
     local boundary=$1 query=$2 unit="$task-adaptive-$1.service"
     local end=$((SECONDS + 180)) observed=false
-    systemd-run --quiet --unit="$unit" -p Type=exec -p Restart=no -p RemainAfterExit=yes -p KillMode=control-group -p UMask=0077 -p "StandardOutput=file:$prefix/adaptive-$boundary.log" -p "StandardError=file:$prefix/adaptive-$boundary.log" -- "$prototype" adaptive "$config" "$prefix" drive
+    systemd-run --quiet --unit="$unit" -p Type=exec -p Restart=no -p RemainAfterExit=yes -p KillMode=control-group -p UMask=0077 -p "StandardOutput=file:$prefix/adaptive-$boundary.log" -p "StandardError=file:$prefix/adaptive-$boundary.log" -- "$prototype" adaptive "$config" "$prefix" "drive$adaptive_suffix"
     while (( SECONDS < end )); do
       /usr/bin/psql "$connection" -Atc "$query" >"$prefix/adaptive-$boundary.json"
       if jq -e 'length>0' "$prefix/adaptive-$boundary.json" >/dev/null; then
@@ -241,13 +244,34 @@ if [[ "$mode" == --adaptive-only ]]; then
   }
   adaptive_restart_after outcome "SELECT jsonb_agg(jsonb_build_object('operationId',operation_id,'executionId',execution_id,'fingerprint',state->'fingerprint','outcome',state->'outcome') ORDER BY operation_id) FROM shikigami.execution_transcript_operations WHERE execution_id IN (SELECT execution_id FROM shikigami.executions WHERE binding->>'rootId' IN (SELECT binding->>'rootId' FROM shikigami.worker_sessions)) AND state->'specification'->>'kind'='ToolOperation' AND state->'outcome' IS NOT NULL AND state->'outcome'<>'null'::jsonb"
   adaptive_restart_after result "SELECT jsonb_agg(jsonb_build_object('sessionId',r.session_id,'assignmentId',r.assignment_id,'receipt',r.state,'consumedCursor',s.state->'consumedCursor') ORDER BY r.assignment_id) FROM shikigami.worker_session_results r JOIN shikigami.worker_sessions s USING(session_id) WHERE (s.state->>'consumedCursor')::bigint < (r.state->>'cursor')::bigint"
+  if [[ "$mode" == --adaptive-transfer-only ]]; then
+    if adaptive ownership-crash >"$prefix/adaptive-ownership-crash.log" 2>&1; then
+      ownership_status=0
+    else
+      ownership_status=$?
+    fi
+    [[ "$ownership_status" == 91 && -f "$prefix/adaptive-ownership-crashed.json" ]]
+  fi
   adaptive_restart_after followup "SELECT jsonb_agg(jsonb_build_object('sessionId',session_id,'assignmentId',assignment_id,'operationId',operation_id,'sequence',sequence) ORDER BY assignment_id) FROM shikigami.worker_session_messages WHERE sequence>0"
-  "$prototype" adaptive "$config" "$prefix" drive >"$prefix/adaptive-drive.log" 2>&1
+  adaptive drive >"$prefix/adaptive-drive.log" 2>&1
   cat "$prefix/adaptive-admit.log" "$prefix/adaptive-drive.log"
   jq -e '.format==1 and .status=="Completed" and (.integrated.repositories | length)==2' "$prefix/adaptive-evidence.json" >/dev/null
   cp "$prefix/adaptive-evidence.json" "$prefix/adaptive-first-evidence.json"
   cp "$prefix/adaptive-provider-calls" "$prefix/adaptive-first-provider-calls"
-  "$prototype" adaptive "$config" "$prefix" drive >"$prefix/adaptive-replay.log" 2>&1
+  probe_session=$(/usr/bin/psql "$connection" -Atc "SELECT session_id FROM shikigami.worker_sessions WHERE (state->>'consumedCursor')::bigint=(state->>'eventCursor')::bigint ORDER BY session_id LIMIT 1")
+  [[ -n "$probe_session" ]]
+  "$runtime/bin/shikigami" --config "$config" workers integrate "$probe_session" --operation adaptive-authority-check >"$prefix/adaptive-authorized-control.json" 2>"$prefix/adaptive-authorized-control.log"
+  printf 'deny\n' >"$prefix/deny-authority"
+  if "$runtime/bin/shikigami" --config "$config" workers integrate "$probe_session" --operation adaptive-authority-check >"$prefix/adaptive-denied-control.log" 2>&1; then
+    echo 'FAIL revoked authority allowed a protected accepted-session command'
+    exit 1
+  else
+    denial_status=$?
+  fi
+  [[ "$denial_status" == 1 ]]
+  rm -f "$prefix/deny-authority"
+  "$runtime/bin/shikigami" --config "$config" workers integrate "$probe_session" --operation adaptive-authority-check >"$prefix/adaptive-restored-control.json" 2>"$prefix/adaptive-restored-control.log"
+  adaptive drive >"$prefix/adaptive-replay.log" 2>&1
   python3 - "$prefix" <<'REPLAY'
 import hashlib,json,sys
 from pathlib import Path
@@ -256,6 +280,9 @@ first=json.loads((p/'adaptive-first-evidence.json').read_text())
 replayed=json.loads((p/'adaptive-evidence.json').read_text())
 before=(p/'adaptive-first-provider-calls').read_bytes()
 after=(p/'adaptive-provider-calls').read_bytes()
+authorized=json.loads((p/'adaptive-authorized-control.json').read_text())
+restored=json.loads((p/'adaptive-restored-control.json').read_text())
+assert authorized==restored, 'restored authorization changed the accepted control response'
 assert first==replayed, 'terminal replay changed accepted evidence or root usage'
 assert before==after, 'terminal replay repeated provider work'
 assert (p/'adaptive-crashed').read_text()=='1\n'
@@ -264,6 +291,8 @@ assert (p/'adaptive-crashed').read_text()=='1\n'
     'adaptation_commit_restart':{'exitCode':86,'markerObserved':True},
     'committed_boundary_restarts':{name:{'signal':9,'controllerStoppedBeforeSnapshot':True,'records':json.loads((p/f'adaptive-{name}.json').read_text())}
                                     for name in ['outcome','result','followup']},
+    'action_denial':{'exitCode':1,'authorized':authorized,'restored':restored,'noProviderCalls':True},
+    'ownership_commit_restart':({'exitCode':91,'markerObserved':True} if first['format']==2 else None),
     'terminal_replay':{'sameEvidence':True,'providerCallsBefore':hashlib.sha256(before).hexdigest(),
                        'providerCallsAfter':hashlib.sha256(after).hexdigest()}
 },indent=2)+'\n')

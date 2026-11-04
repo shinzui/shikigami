@@ -123,6 +123,25 @@ The complete coupled fault/refusal matrix in milestone 2 remains a
 separate acceptance gate. Native compilation alone proves none of these runtime
 claims. The driver retains that gate as blocked until the full matrix exists.
 
+The separately selected `scenario: "transfer"` configuration invokes
+`run-apple.sh --adaptive-transfer-only` and requires a runtime containing that
+fixture extension. It admits `consumer-successor`, transfers the idle consumer
+through the real private-socket fence and objective ownership providers, and
+exits 91 after objective ownership commits while the session still names the
+old owner. At that cut both an old-owner write admission and an unestablished
+successor write admission must refuse. A reconstructed controller must establish
+the same successor and finish the correction in the retained workspace. Its
+version 2 evidence includes the exact intent, fence, ownership receipt and
+pending session coordinates. The baseline runtime's version 1 evidence cannot
+satisfy this selected transfer scenario. This extension compiles locally and
+has not yet been runtime-qualified.
+
+The runner also compares a successful caught-up `workers integrate` command
+with its exact retry after restoring authority, while requiring that command to
+fail with exit 1 during authority denial. The final provider-call bytes must
+remain unchanged. This is the disposable issuer's deterministic authorization
+control, not production authority or live-model evidence.
+
 Before the guest is destroyed, `archive.py` exports bounded local Git bundles
 from its authoritative fixture workspace bindings. A successful run must retain
 all four worker commits and both combined commits. A failed run preserves the
