@@ -50,7 +50,8 @@ corrected seed proves fixture mechanics only.
 The qualification driver accepts JSON-form YAML without an additional Python
 dependency. `fixture.yaml` admits only the two identities, a 1,800-second
 driver timeout and 48 actual model attempts. As shipped it has no machine-specific
-runtime path, so this command demonstrates the mechanics and returns blocked:
+runtime path, so this command demonstrates the mechanics and returns blocked.
+Its default `scenario: "transfer"` selects the full recovery/refusal matrix:
 
 ```bash
 python3 tools/qualification/adaptive-delivery.py --mode fixture \
@@ -76,9 +77,11 @@ nix develop --no-write-lock-file -c cabal run workspace-linux-fixture -- adaptiv
 The actual Linux fixture uses the existing disposable Apple-container runner:
 
 ```bash
-bash tests/workspace/run-apple.sh --adaptive-only
+bash tests/workspace/run-apple.sh --adaptive-transfer-only
 ```
 
+For a reduced baseline, use `--adaptive-only` and `scenario: "baseline"`; it
+retains a blocked full-matrix gate even after its baseline passes.
 An optional second argument selects an explicitly built Nix runtime output;
 the driver requires that output as `runtime` in a private copy of `fixture.yaml`.
 Compile the runtime before bounded objective admission; a cold build must not
@@ -119,10 +122,10 @@ faults. Result and wake publication share one owner transaction; the result cut
 precedes consumer integration, rather than inventing an unpublished-wake gap.
 A final completed-run replay must preserve the entire evidence object and the
 provider-call bytes. Each cut retains private receipt metadata in
-`adaptive-recovery.json`. These probes still require their first Linux run.
-The complete coupled fault/refusal matrix in milestone 2 remains a
-separate acceptance gate. Native compilation alone proves none of these runtime
-claims. The driver retains that gate as blocked until the full matrix exists.
+`adaptive-recovery.json`. The clean `39ef7263` runtime passes this native
+baseline; see [the retained facts](../../docs/evidence/adaptive-delivery/baseline-native-facts.json).
+The full scenario additionally requires all ownership, unknown-effect and
+refusal proofs below before the fixture verdict can pass.
 
 The separately selected `scenario: "transfer"` configuration invokes
 `run-apple.sh --adaptive-transfer-only` and requires a runtime containing that
@@ -134,8 +137,9 @@ successor write admission must refuse. A reconstructed controller must establish
 the same successor and finish the correction in the retained workspace. Its
 version 2 evidence includes the exact intent, fence, ownership receipt and
 pending session coordinates. The baseline runtime's version 1 evidence cannot
-satisfy this selected transfer scenario. This extension compiles locally and
-has not yet been runtime-qualified.
+satisfy this selected transfer scenario. The corrected `5ee0dd83` native matrix
+passes, and its unchanged retained artifacts pass independent host verification;
+see [the qualification report](../../docs/evidence/adaptive-delivery/native-qualification.md).
 
 It also loses the consumer's reply after a real accepted edit, pauses the
 independent receipt publisher, waits for the original attempt's expiry and

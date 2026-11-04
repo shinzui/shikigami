@@ -318,7 +318,11 @@ assert (p/'adaptive-crashed').read_text()=='1\n'
                        'providerCallsAfter':hashlib.sha256(after).hexdigest()}
 },indent=2)+'\n')
 REPLAY
-  echo 'Native adaptive two-repository qualification passed; live trial and the complete coupled fault matrix remain separate gates.'
+  if [[ "$mode" == --adaptive-transfer-only ]]; then
+    echo 'Native adaptive two-repository recovery/refusal qualification passed; live trial remains separate.'
+  else
+    echo 'Native adaptive two-repository baseline passed; full recovery/refusal matrix and live trial remain separate.'
+  fi
   exit 0
 fi
 prepare() {

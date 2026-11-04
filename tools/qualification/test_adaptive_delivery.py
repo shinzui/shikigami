@@ -418,7 +418,7 @@ class AdaptiveDeliveryTests(unittest.TestCase):
         return {"rootId": "same-root", "objective": "objective", "ownership": {"intent": {
                     "newOwner": "successor", "newEpoch": 1, "sessionId": "consumer-session", "workspace": workspace}}, "completionHold": {
                     "rootId": "same-root", "objective": "objective", "validProposal": True,
-                    "unchangedObjective": True, "refusal": "ObjectiveUnresolved", "activeAtCut": 1, "unknownAtCut": 1,
+                    "unchangedObjective": True, "refusal": {"tag": "ObjectiveUnresolved"}, "activeAtCut": 1, "unknownAtCut": 1,
                     "scope": "resource admission only; no external dispatch"}, "unknown": {
                     "reference": reference, "phase": "AttemptCommitted", "outcome": "outcome-ref", "lateReceipt": "receipt-ref",
                     "observed": {"rootId": "same-root", "reference": reference,
@@ -468,6 +468,7 @@ class AdaptiveDeliveryTests(unittest.TestCase):
                      lambda v: v["targetRefusal"].update(sessionsAtCut=1),
                      lambda v: v["completionHold"].update(validProposal=False),
                      lambda v: v["completionHold"].update(refusal="ObjectiveInvalidEvidence"),
+                     lambda v: v["completionHold"].update(refusal={"tag": "ObjectiveInvalidEvidence"}),
                      lambda v: v.update(resumedProcessDefault="original"),
                      lambda v: v["providerCalls"].update({"forbidden-process-default": 1})]
         for mutate in mutations:
@@ -481,6 +482,19 @@ class AdaptiveDeliveryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as raw, patch.object(driver, "run_case", return_value={"state": "blocked"}):
             manifest = driver.qualify(Path(raw), config, "fixture")
             self.assertNotEqual(manifest["state"], "passed")
+
+    def test_only_the_verified_full_matrix_can_pass_the_fixture_verdict(self):
+        config = json.loads((driver.FIXTURE / "fixture.yaml").read_text()) | {
+            "runtime": "/nix/store/" + "a" * 32 + "-fixture"}
+        for scenario, version, expected in [("baseline", 1, "blocked"), ("transfer", 2, "passed")]:
+            with self.subTest(scenario=scenario), tempfile.TemporaryDirectory() as raw, \
+                    patch.object(driver.shutil, "which", return_value="available"), \
+                    patch.object(driver, "run_case", return_value={"state": "passed"}), \
+                    patch.object(driver, "native_evidence", return_value={"format": version, "status": "Completed"}):
+                manifest = driver.qualify(Path(raw), config | {"scenario": scenario}, "fixture")
+                self.assertEqual(manifest["state"], expected)
+                if expected == "passed":
+                    self.assertIn("live model/production-authority", manifest["limitations"][0])
 
 
 if __name__ == "__main__":

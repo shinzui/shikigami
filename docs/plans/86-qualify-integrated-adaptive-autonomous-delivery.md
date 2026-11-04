@@ -241,6 +241,18 @@ The ownership-transition cut continues to use the live private socket. The
 superseded `b88fd025` build was stopped before completion to include this
 correction; the next candidate remains required.
 
+The corrected `5ee0dd83` native full matrix passes in 451.725 seconds, including
+the unknown original edit/late receipt, real ownership cut, successor correction,
+valid-proposal completion hold, reservation and refusal controls, and unchanged
+terminal replay. The integration wake errors are absent. The host parser first
+rejected the valid completion refusal because `ObjectiveError` encodes nullary
+constructors as tagged objects. After correcting that codec expectation, an
+independent recheck of the unchanged retained evidence restores all six bundles,
+recomputes both trees and passes the exact-pair journey. The full fixture now
+requires version 2 evidence before returning passed; a clean driver rerun is
+pending before closing milestone 2. The default fixture configuration selects
+that full scenario. Live provider scope/configuration remains separate.
+
 ## Surprises & Discoveries
 
 

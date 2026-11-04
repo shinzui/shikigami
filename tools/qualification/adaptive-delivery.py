@@ -368,7 +368,7 @@ def validate_transfer_probes(value, recovery):
     completion = value["completionHold"]
     if (completion["rootId"] != root or completion["objective"] != value["objective"]
             or completion["validProposal"] is not True or completion["unchangedObjective"] is not True
-            or completion["refusal"] != "ObjectiveUnresolved"
+            or completion["refusal"] != {"tag": "ObjectiveUnresolved"}
             or any(type(completion[field]) is not int or completion[field] <= 0
                    for field in ["activeAtCut", "unknownAtCut"])
             or completion["scope"] != "resource admission only; no external dispatch"):
@@ -446,14 +446,19 @@ def qualify(directory, config, mode):
                     manifest["native"] = native_evidence(directory, manifest["repositories"])
                     if config.get("scenario") == "transfer" and manifest["native"]["format"] != 2:
                         raise ValueError("selected runtime did not exercise native transfer qualification")
+                    if config.get("scenario") == "transfer":
+                        manifest["state"] = "passed"
+                        manifest["limitations"].append(
+                            "Scripted models and disposable authorization issuer; the live model/production-authority gate remains separate")
+                    else:
+                        manifest["limitations"].append(
+                            "The complete coupled fault/refusal matrix remains required before fixture qualification passes")
                 else:
                     manifest["state"] = case["state"]
-                manifest["limitations"].append(
-                    "The complete coupled fault/refusal matrix remains required before fixture qualification passes")
     except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
         # Configuration or exception representations can contain private values.
         manifest["state"] = "failed"
-        manifest["limitations"].append("fixture preparation failed; no native delivery is claimed")
+        manifest["limitations"].append("qualification did not produce verified complete evidence")
     manifest["finished_at"] = stamp()
     return manifest
 
