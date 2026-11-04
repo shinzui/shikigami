@@ -5,6 +5,7 @@
 module Shikigami.Decision.Execution
   ( decisionExecutionId,
     admitDecisionExecution,
+    admitBoundedDecisionExecution,
     executeDecisionWork,
   )
 where
@@ -12,6 +13,7 @@ where
 import Data.Aeson (Value)
 import Data.Bifunctor (first)
 import Data.IORef (newIORef, readIORef, writeIORef)
+import Data.Time (getCurrentTime)
 import Effectful (Eff)
 import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.App (AppEffects)
@@ -36,7 +38,13 @@ decisionExecutionId = executionIdFor . assignmentIdFor . ("typed-decision:" <>) 
 -- | Accepted state wins before consulting mutable program/catalog bindings.
 -- The trusted loader is reached only for an unaccepted snapshot.
 admitDecisionExecution :: ExecutionRuntime -> AgentIdentity -> PreparedDecision -> (IO (Either ExecutionError (ExecutionSnapshot, Value))) -> IO (Either ExecutionError ExecutionStart)
-admitDecisionExecution runtime identity prepared load = do
+admitDecisionExecution = admitDecisionExecutionWith Nothing
+
+admitBoundedDecisionExecution :: DecisionWorkLimits -> ExecutionRuntime -> AgentIdentity -> PreparedDecision -> IO (Either ExecutionError (ExecutionSnapshot, Value)) -> IO (Either ExecutionError ExecutionStart)
+admitBoundedDecisionExecution = admitDecisionExecutionWith . Just
+
+admitDecisionExecutionWith :: Maybe DecisionWorkLimits -> ExecutionRuntime -> AgentIdentity -> PreparedDecision -> IO (Either ExecutionError (ExecutionSnapshot, Value)) -> IO (Either ExecutionError ExecutionStart)
+admitDecisionExecutionWith limits runtime identity prepared load = do
   existing <- owned (Store.inspectExecution execution)
   case existing of
     Left err -> pure (Left err)
@@ -72,7 +80,7 @@ admitDecisionExecution runtime identity prepared load = do
                 Left _ -> pure (Left (ExecutionPolicyRefused "fresh typed decision authority refused"))
                 Right () -> owned (Store.admitExecution snapshot)
               case admitted of
-                Left ExecutionIdentityConflict -> admitDecisionExecution runtime identity prepared load
+                Left ExecutionIdentityConflict -> admitDecisionExecutionWith limits runtime identity prepared load
                 Left err -> pure (Left err)
                 Right _ -> do
                   access <- owned (Store.authorizeReplay execution snapshot.identity (runtime.replayAuthority snapshot.identity))
@@ -85,7 +93,7 @@ admitDecisionExecution runtime identity prepared load = do
     owned = runExecutionStore runtime
     accept access snapshot state parameters = do
       let spec = OperationSpec (operationIdFor execution initialRevision) TypedDecision RepeatableObservation (executionCoordinate "typed-decision") (executionDigestFor "shikigami.harness-policy/1" (toJSON snapshot.policy)) (executionDigestFor "shikigami.typed-decision-scope/1" (toJSON prepared)) Nothing
-      accepted <- owned (Store.acceptOperation access state.revision spec (toJSON (DecisionWork prepared parameters)))
+      accepted <- owned (Store.acceptOperation access state.revision spec (toJSON (maybe (DecisionWork prepared parameters) (BoundedDecisionWork prepared parameters) limits)))
       pure (ExecutionStart execution <$ accepted)
 
 -- | Invoked exclusively inside an admitted executor claim. Every real call,
@@ -93,11 +101,21 @@ admitDecisionExecution runtime identity prepared load = do
 -- admission. Parallel nodes serialize under the wrapper's single permit.
 executeDecisionWork :: DecisionEvidenceStore -> (ExecutionSnapshot -> DecisionRuntime) -> ExecutionSnapshot -> DecisionWork -> IO (Either Text ()) -> IO (Either ExecutionError DecisionOutcome)
 executeDecisionWork evidence runtimeFor snapshot work authorize = do
-  let runtime = runtimeFor snapshot
-      failure = decisionFailure ContractMismatch "accepted typed decision contract differs"
+  let base = runtimeFor snapshot
+      runtime = case work of
+        DecisionWork {} -> base
+        BoundedDecisionWork {limits} -> base {timeoutMicros = min base.timeoutMicros limits.timeout, callLimit = min base.callLimit limits.calls}
   if work.prepared.model /= snapshot.selection.descriptor || work.prepared.policy /= snapshot.selection.profile
     then pure (Left OperationConflict)
     else do
+      deadline <- decisionDeadline evidence snapshot.sanctionedProfile snapshot.selection
+      now <- getCurrentTime
+      case deadline >>= (\cutoff -> boundDecisionTimeout runtime.timeoutMicros cutoff now) of
+        Left _ -> pure (Left (ExecutionPolicyRefused "typed decision deadline reached"))
+        Right timeout -> execute runtime {timeoutMicros = timeout}
+  where
+    execute runtime = do
+      let failure = decisionFailure ContractMismatch "accepted typed decision contract differs"
       answers <- newIORef []
       result <- withPreparedProgram runtime.programs work.prepared \registered input ->
         if registeredParameterState registered /= work.parameterState

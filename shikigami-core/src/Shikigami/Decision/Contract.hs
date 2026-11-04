@@ -119,6 +119,13 @@ parseDecisionTimeout value
 decisionTimeoutMicros :: DecisionTimeout -> Int
 decisionTimeoutMicros (DecisionTimeout value) = value
 
+instance ToJSON DecisionTimeout where
+  toJSON = toJSON . decisionTimeoutMicros
+  toEncoding = toEncoding . decisionTimeoutMicros
+
+instance FromJSON DecisionTimeout where
+  parseJSON value = parseJSON value >>= either (fail . Text.unpack) pure . parseDecisionTimeout
+
 newtype ProgramIdentity (scope :: Symbol) = ProgramIdentity Text
   deriving stock (Eq, Ord, Show)
 

@@ -45,7 +45,7 @@ objectiveServer env caller = ObjectiveApi {create, list, inspect, history, comma
       | otherwise = run (Owner.createObjectiveWithDisposition host body.operationKey Nothing body.request) <&> either createError (\(fresh, receipt) -> if fresh then Created (receiptView receipt) else Replayed (receiptView receipt))
     inspect raw after requested = case (O.parseObjectiveId raw, pageSize requested) of
       (Left _, _) -> pure (ReadMissing missing)
-      (Right objective, Right limit) | fromMaybe 0 after >= 0 && fromMaybe 0 after <= 10000 -> run (Owner.readObjective host objective) <&> either readError (Found . View.objectiveViewPage (fromMaybe 0 after) limit)
+      (Right objective, Right limit) | fromMaybe 0 after >= 0 && fromMaybe 0 after <= 10000 -> run (Owner.inspectObjective host objective (fromMaybe 0 after) limit) <&> either readError Found
       _ -> pure (ReadInvalid invalid)
     list after requested = case (traverse O.parseObjectiveId after, pageSize requested) of
       (Right cursor, Right limit) -> run (Owner.listObjectives host cursor (limit + 1)) <&> either listError (\rows -> let page = take limit rows in Listed (ObjectivePage (map View.objectiveView page) (if length rows > limit then O.objectiveIdText . (.objectiveId) <$> listToMaybe (reverse page) else Nothing)))

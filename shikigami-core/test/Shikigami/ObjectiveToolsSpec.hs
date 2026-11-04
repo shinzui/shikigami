@@ -57,8 +57,12 @@ tests =
         let existing = scope & #target .~ Just identifier & #creationPolicy .~ Nothing & #permissions .~ [Scope.InspectObjectives, Scope.ApplyObjectiveCommands]
         assertBool "creation request is advertised only by the creator scope" ("CreateObjective" `Text.isInfixOf` Text.pack (show (Tools.inputSchema scope)))
         assertBool "ordinary scope keeps its original menu" (not ("CreateObjective" `Text.isInfixOf` Text.pack (show (Tools.inputSchema existing)))),
+      testCase "historical inspection values decode without adaptive metadata" do
+        let view = ObjectiveView (objectiveIdText identifier) "title" "goal" "Open" 0 0 0 0 0 0 [] [] [] [] [] Nothing Nothing
+            historical = case toJSON view of Aeson.Object fields -> Aeson.Object (KeyMap.delete "adaptive" fields); value -> value
+        Aeson.fromJSON historical @?= Aeson.Success view,
       testCase "model replies are bounded and unknown versions cannot replay" do
-        let view = ObjectiveView (objectiveIdText identifier) "title" (Text.replicate 17000 "x") "Open" 0 0 0 0 0 0 [] [] [] [] [] Nothing
+        let view = ObjectiveView (objectiveIdText identifier) "title" (Text.replicate 17000 "x") "Open" 0 0 0 0 0 0 [] [] [] [] [] Nothing Nothing
             reply = Operation.Reply V1 (Operation.ObjectiveInspected view)
         assertBool "oversized metadata is not returned to a model" (isLeft (Operation.bounded (Right reply)))
         assertBool "unknown reply codec refused" (isLeft (resultEither (Aeson.fromJSON (replace "format" (Aeson.Number 2) (toJSON reply)) :: Aeson.Result Operation.Reply))),

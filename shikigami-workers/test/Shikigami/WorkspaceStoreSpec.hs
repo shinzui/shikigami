@@ -51,7 +51,20 @@ tests :: DatabaseFixture -> TestTree
 tests fixture =
   testGroup
     "workspace store and allocation"
-    [ testCase "concurrent reservation and lost response recover one immutable binding" $ withFixture fixture \env source root repo -> do
+    [ testCase "transfer discovery requires one ready workspace at the current owner, epoch and root" $ withFixture fixture \env _ root repo -> do
+        let session = workerSessionId "session"
+            discover = run env (sessionWorkspaceTx session request.rootId request.owner request.epoch)
+        discover >>= (@?= Right Nothing)
+        (binding, _) <- right =<< run env (reserveWorkspaceTx root request repo)
+        discover >>= (@?= Right Nothing)
+        allocateWorkspace root binding Reserved >>= (@?= Right ())
+        run env (markWorkspaceReadyTx binding) >>= (@?= Right ())
+        discover >>= (@?= Right (Just binding.workspace))
+        run env (sessionWorkspaceTx session request.rootId request.owner (fixtureRevision 1)) >>= (@?= Right Nothing)
+        run env (sessionWorkspaceTx session (fixtureRootId "wrong-root") request.owner request.epoch) >>= (@?= Left WorkspaceBindingConflict)
+        _ <- right =<< run env (reserveWorkspaceTx root (request & #assignment .~ Just (session, fixtureAssignmentId "second")) repo)
+        discover >>= (@?= Right Nothing),
+      testCase "concurrent reservation and lost response recover one immutable binding" $ withFixture fixture \env source root repo -> do
         (a, b) <- concurrently (run env (reserveWorkspaceTx root request repo)) (run env (reserveWorkspaceTx root request repo))
         first <- right a
         b @?= Right first

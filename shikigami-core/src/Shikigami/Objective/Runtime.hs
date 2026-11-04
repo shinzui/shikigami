@@ -13,6 +13,7 @@ module Shikigami.Objective.Runtime
     authorizeScope,
     validateRetainedScope,
     rootCutoff,
+    authorizeWorkerExecution,
   )
 where
 
@@ -40,6 +41,7 @@ import Shikigami.Execution.Identity (ExecutionRootId)
 import Shikigami.Execution.Resources qualified as Resources
 import Shikigami.Execution.ResourcesStore qualified as Roots
 import Shikigami.Execution.Selection (ExecutionSelection (..))
+import Shikigami.Execution.Transcript (ExecutionSnapshot (..))
 import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Objective.Association qualified as Association
 import Shikigami.Objective.Capability qualified as Capability
@@ -56,14 +58,52 @@ import Shikigami.WorkerSession.Capability qualified as Worker
 import Shikigami.WorkerSession.Handoff (TransferServices (..))
 import Shikigami.WorkerSession.Store qualified as Sessions
 import Shikigami.WorkerSession.Transfer qualified as Transfer
-import Shikigami.WorkerSession.Types (SessionBinding (..))
-import Shikigami.WorkerSession.Workflow (SessionRuntime (..))
+import Shikigami.WorkerSession.Types (MessageReceipt (..), SessionBinding (..), SessionState (..))
+import Shikigami.WorkerSession.Workflow (ChildObjectiveHost (..), SessionRuntime (..))
 
 coordinationHost :: AppEnv -> ObjectiveSettings -> Directory.DirectoryHandle -> ActionAuthorizer -> [AgentDecl] -> DelegationBudget -> Maybe Transfer.WorkspaceProvider -> Worker.CoordinationHost
 coordinationHost env settings directory actions agents budget workspaces = Worker.CoordinationHost services authority
   where
     host = objectiveHost settings directory actions
-    sessions = SessionRuntime env agents directory (Directory.identityLifecycleAdmission directory) (Just (\actor -> checkpointProvider env actor (host actor))) (Just (\actor -> checkpointRejection env actor (host actor)))
+    sessions = AssociatedSessionRuntime env agents directory (Directory.identityLifecycleAdmission directory) (Just (\actor -> checkpointProvider env actor (host actor))) (Just (\actor -> checkpointRejection env actor (host actor))) (ChildObjectiveHost associateChild)
+    -- The native running message, not its prompt, supplies the objective selector.
+    -- Recheck it under the same owner lock as membership and association writes.
+    associateChild parent child session assignment childRun = do
+      attempted <- runAppIO env do
+        source <- runTransaction (Sessions.readChildSourceTx session assignment childRun)
+        case source of
+          Left _ -> pure (Left ObjectiveDenied)
+          Right (_, binding, _) -> do
+            resolved <- Capability.resolveAssignment (host parent) binding.objective
+            access <- liftIO (Capability.admitObjectiveAction (host parent) "associate-worker-child" (toJSON (session, assignment, childRun.unWorkflowId)))
+            case (resolved, access) of
+              (Right reference, Right permit) -> do
+                checked <- Goals.coordinationQuery permit reference.objectiveId \goal -> do
+                  fresh <- Sessions.readChildSourceTx session assignment childRun
+                  case fresh of
+                    Right (state, actual, message)
+                      | actual == binding,
+                        actual.parentIdentity == parent,
+                        state.owner == child,
+                        Goals.mayCoordinate permit goal,
+                        goal.status == Open,
+                        Just ownedAssignment <- find ((== reference.assignmentId) . (.definition.assignmentId)) goal.assignments,
+                        ownedAssignment.definition.owner == child,
+                        ownedAssignment.ownerEpoch == message.epoch,
+                        ownedAssignment.definition.state `notElem` [Done, Withdrawn],
+                        ownedAssignment.definition.rootId == Just actual.rootId,
+                        maybe True (== session) ownedAssignment.definition.sessionId -> do
+                          previous <- Association.lookupRunTx childRun
+                          case previous of
+                            Right Nothing -> Association.admitRunTx Association.NewRun settings (RecordedAgent parent) child childRun reference <&> either (const (Left ObjectiveDenied)) (const (Right reference))
+                            Right (Just retained) | retained == reference -> pure (Right retained)
+                            _ -> pure (Left ObjectiveDenied)
+                    _ -> pure (Left ObjectiveDenied)
+                pure (checked >>= id)
+              _ -> pure (Left ObjectiveDenied)
+      pure case attempted of
+        Right (Right reference) -> Right reference
+        _ -> Left "Native worker child association is unavailable or unauthorized"
     authority = coordinationAuthority env settings directory actions agents budget
     -- The callback selects authority from the retained session owner. An actor
     -- carried in a submitted intent cannot select another authenticated host.
@@ -226,3 +266,33 @@ trySync action =
   try action >>= \case
     Left err | Just (_ :: SomeAsyncException) <- fromException err -> throwIO err
     answer -> pure answer
+
+-- An accepted worker snapshot retains its menu, but each real call still needs
+-- its exact live native message, owner epoch, objective membership and root.
+-- HTTP/non-worker runs keep their existing authority path.
+authorizeWorkerExecution :: AppEnv -> Maybe ObjectiveRuntime -> ExecutionSnapshot -> IO (Either Text ())
+authorizeWorkerExecution env configured snapshot = do
+  attempted <- runAppIO env (runTransaction (Sessions.childSourceTx snapshot.runId))
+  let source = either (const (Left ())) (either (const (Left ())) Right) attempted
+  case source of
+    Right Nothing -> pure (Right ())
+    Left _ -> pure (Left "Native worker source is unavailable or fenced")
+    Right (Just (_, binding, _)) -> do
+      attemptedReference <- runAppIO env (runTransaction (Association.lookupRunTx snapshot.runId))
+      let reference = either (const (Left ())) (either (const (Left ())) Right) attemptedReference
+      case (reference, configured) of
+        (Right (Just reference), Just runtime) -> do
+          access <- Capability.admitObjectiveAction (hostFor runtime snapshot.identity) "worker-execution" (toJSON (snapshot.executionId, snapshot.selection.assignmentId))
+          case access of
+            Left _ -> pure (Left "Current worker objective authority refused")
+            Right access -> do
+              checked <- owned runtime $ Goals.coordinationQuery access reference.objectiveId \goal -> do
+                actual <- Sessions.childSourceTx snapshot.runId
+                pure do
+                  (state, native, _) <- either (const (Left ObjectiveDenied)) (maybe (Left ObjectiveDenied) Right) actual
+                  unless (native == binding && native.objective == Goals.referenceFor reference.objectiveId reference.assignmentId && state.owner == snapshot.identity && Just native.rootId == snapshot.selection.rootId && goal.status == Open) (Left ObjectiveDenied)
+                  assignment <- maybe (Left ObjectiveMissing) Right (find ((== reference.assignmentId) . (.definition.assignmentId)) goal.assignments)
+                  unless (assignment.definition.owner == snapshot.identity && assignment.ownerEpoch == state.epoch && assignment.definition.state `notElem` [Done, Withdrawn] && assignment.definition.rootId == snapshot.selection.rootId && any (\member -> member.principal == RecordedAgent snapshot.identity && any (`elem` member.roles) [Owner, Coordinator, Worker]) goal.members) (Left ObjectiveDenied)
+              pure (either (const (Left "Current native worker fence refused")) (either (const (Left "Current native worker fence refused")) (const (Right ()))) checked)
+        (Right Nothing, _) | isNothing snapshot.objectiveScope -> pure (Right ())
+        _ -> pure (Left "Native worker objective association is unavailable")

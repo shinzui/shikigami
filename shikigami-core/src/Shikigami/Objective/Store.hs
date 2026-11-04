@@ -10,6 +10,7 @@ module Shikigami.Objective.Store
     listObjectives,
     history,
     read,
+    inspect,
     readVersion,
     resolveAssignment,
     currentCheckpoint,
@@ -75,17 +76,19 @@ import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Effect.Resource (KirokuStoreResource)
 import Kiroku.Store.Error (StoreError)
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..), DelegationBudgetId)
+import Shikigami.Agent.Name (agentNameText)
 import Shikigami.Agent.Principal (AgentIdentity, identityText, principalText)
 import Shikigami.App (CommandEffects, commandOptions)
 import Shikigami.Coordination.Proposal qualified as Adaptive
 import Shikigami.Coordination.Sql qualified as AdaptiveSql
 import Shikigami.Coordination.Validate qualified as Adaptive
+import Shikigami.Coordination.Wake qualified as AdaptiveWake
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Delegation.BudgetStore qualified as Budgets
 import Shikigami.Execution.AssignmentKey (assignmentIdFor, conversationAssignmentIdFor)
 import Shikigami.Execution.Coordinate (ExecutionDigest, executionDigestText)
 import Shikigami.Execution.Counter (noAttempts)
-import Shikigami.Execution.Identity (OperationId, operationIdText)
+import Shikigami.Execution.Identity (OperationId, executionRootIdText, operationIdText)
 import Shikigami.Execution.Progress (noPendingReceipts)
 import Shikigami.Execution.Resources qualified as Resources
 import Shikigami.Execution.ResourcesStore qualified as Roots
@@ -98,6 +101,7 @@ import Shikigami.Objective.Catalog (withLiveObjective, withLiveObjectiveTurn)
 import Shikigami.Objective.Command
 import Shikigami.Objective.Conversation qualified as Conversation
 import Shikigami.Objective.Inspection (HistoryEntry (..))
+import Shikigami.Objective.Inspection qualified as View
 import Shikigami.Objective.Reference (ObjectiveAssociation (..))
 import Shikigami.Objective.Tracker.Publication qualified as Tracker
 import Shikigami.Objective.Tracker.Sql qualified as TrackerSql
@@ -182,6 +186,7 @@ authorized access objective mutation = canRead access objective && (administrate
       Internal (IngestCheckpoint _ _ _ _) -> manage
       Internal ProjectCheckpoint {} -> manage
       Internal RetainCoordination {} -> manage
+      Internal RetainAdaptiveCoordination {} -> manage
       Internal ApplyAdaptiveDecision {} -> manage
       Internal TransferSessionOwnership {} -> manage
       Internal TransferOwnership {} -> manage
@@ -196,6 +201,24 @@ read access objective = protected do
   current <- locked objective
   checkAccess access current
   pure current
+
+-- One owner lock binds every metadata page to the same current objective.
+inspect :: (ObjectiveEffects es) => Access -> ObjectiveId -> Int -> Int -> Eff es (Either ObjectiveError View.ObjectiveView)
+inspect access objective after limit
+  | after < 0 || after > 10000 || limit < 1 || limit > 100 = pure (Left (ObjectiveInvalid "invalid inspection page"))
+  | otherwise = protected do
+      current <- locked objective
+      checkAccess access current
+      retained <- AdaptiveSql.readArrangement objective >>= require
+      decisions <- AdaptiveSql.readDecisions objective after (limit + 1) >>= require
+      observations <- AdaptiveSql.readObservations objective after (limit + 1) >>= require
+      resources <- forM (nub (mapMaybe (.definition.rootId) current.assignments)) \root -> do
+        actual <- Roots.inspectRootTx root >>= either (const (abort ObjectiveUnavailable)) pure
+        pure (View.ResourceView (executionRootIdText root) actual)
+      let placements = fromMaybe [] retained
+          graph = [View.PlacementView (objectiveAssignmentIdText assignment.definition.assignmentId) (agentNameText placement.target) (objectiveAssignmentIdText <$> placement.parent) (map objectiveAssignmentIdText assignment.definition.dependencies) ((.value) <$> assignment.definition.sessionId) | assignment <- current.assignments, placement <- placements, placement.assignment.assignmentId == assignment.definition.assignmentId]
+          page = View.AdaptiveView (take limit (drop after graph)) (map View.decisionView (take limit decisions)) (take limit (drop after resources)) (map (\(operation, kind, revision, status, refusal) -> View.AdaptiveObservationView operation kind revision status refusal) (take limit observations)) (if length decisions > limit || length observations > limit || length graph > after + limit || length resources > after + limit then Just (after + limit) else Nothing)
+      pure (View.objectiveViewPage after limit current & #adaptive .~ if null placements && null observations then Nothing else Just page)
 
 readVersion :: (ObjectiveEffects es) => Access -> WS.ObjectiveRef -> Eff es (Either ObjectiveError CP.ObjectiveVersion)
 readVersion access reference = protected do
@@ -524,6 +547,7 @@ executeWithTrackerCommit access identifier expected operation mutation trackerCo
             Left err -> pure (Left err)
             Right (Left outcome) -> pure outcome
             Right (Right before) -> do
+              notify <- AdaptiveWake.prepareCheckpointWakes identifier >>= either (throwIO . Abort) pure
               let nextRevision = advanceRevision before.revision
                   command = G.ApplyObjectiveTransition (G.ApplyObjectiveTransitionData identifier (fromInteger (revisionNumber before.revision)) (fromInteger (revisionNumber nextRevision)) (mutationFingerprintText fingerprint))
               applied <- persistWithTracker
@@ -544,6 +568,11 @@ executeWithTrackerCommit access identifier expected operation mutation trackerCo
                   now <- Tx.statement () currentTime
                   next <- prepareTransition now access expected mutation current >>= require
                   case mutation of
+                    Internal (RetainAdaptiveCoordination _ origin _ scope) -> do
+                      root <- maybe (abort ObjectiveDenied) pure scope.run.rootId
+                      budget <- maybe (abort ObjectiveDenied) pure scope.context.delegationBudgetId
+                      let seed = if budget == coordinatorBudgetId identifier scope.run.identity then Just (origin.runId, scope.context.budgetLimit) else Nothing
+                      Budgets.enrollDelegationBudgetTx root budget seed now >>= either (const (abort ObjectiveDenied)) pure
                     Internal (RetainCoordination _ scope) -> do
                       root <- maybe (abort ObjectiveDenied) pure scope.run.rootId
                       budget <- maybe (abort ObjectiveDenied) pure scope.context.delegationBudgetId
@@ -554,11 +583,15 @@ executeWithTrackerCommit access identifier expected operation mutation trackerCo
                       digest = objectivePayloadDigest payload
                       receipt = Receipt identifier operation fingerprint next.revision digest
                   saveSnapshot next
+                  notify next.revision
                   writePayload identifier (objectivePayloadDigestText digest) payload
                   case mutation of
                     Internal (ApplyAdaptiveDecision decision) -> AdaptiveSql.saveDecision decision receipt
                     Internal (IngestCheckpoint assignment intent _ _) -> Tx.statement ((objectiveIdText identifier), (objectiveAssignmentIdText assignment), intent.sessionId.value, fromInteger (revisionNumber intent.throughCursor)) saveCursor
                     Internal (ProjectCheckpoint assignment intent) -> Tx.statement ((objectiveIdText identifier), (objectiveAssignmentIdText assignment), intent.sessionId.value, fromInteger (revisionNumber intent.throughCursor)) saveCursor
+                    Internal (RetainAdaptiveCoordination _ _ _ scope) -> do
+                      let fingerprint = executionDigestText (Coordination.scopeFingerprint scope)
+                      Tx.statement (fingerprint, objectiveIdText identifier, scope) insertScope
                     Internal (RetainCoordination _ scope) -> do
                       let fingerprint = executionDigestText (Coordination.scopeFingerprint scope)
                       Tx.statement (fingerprint, objectiveIdText identifier, scope) insertScope
@@ -675,7 +708,7 @@ validateTransition _now access expected mutation current = do
         BindConversation conversation -> editable >> (if validKey (conversationRefText conversation) then Right current else Left (ObjectiveInvalid "invalid conversation"))
         LinkExternal reference -> editable >> pure (current & #external %~ (\refs -> nub (refs <> [reference])))
       Internal (ApplyAdaptiveDecision decision) -> do
-        unless (decision.format == V1 && decision.validatorVersion == "shikigami.adaptive-validator/2" && decision.proposal.checkpointRevision == expected && decision.checkpointDigest == Adaptive.checkpointDigest current && access.actor == RecordedAgent decision.policy.identity) (Left ObjectiveConflict)
+        unless (decision.format == V1 && decision.validatorVersion == "shikigami.adaptive-validator/3" && decision.proposal.checkpointRevision == expected && decision.checkpointDigest == Adaptive.checkpointDigest current && access.actor == RecordedAgent decision.policy.identity) (Left ObjectiveConflict)
         changed <- validateTransition _now access expected (Public (SetAssignments (map (.assignment) decision.arrangement))) current
         foldM
           ( \value operation -> case operation.change of
@@ -687,6 +720,10 @@ validateTransition _now access expected mutation current = do
           decision.operations
         where
           reset value = value & #revision .~ current.revision
+      Internal (RetainAdaptiveCoordination key origin _ scope) -> do
+        unless (origin.identity == scope.run.identity && origin.sessionId == scope.run.sessionId && origin.rootId == scope.run.rootId && origin.permittedAliases == scope.run.permittedAliases) (Left ObjectiveDenied)
+        retained <- validateTransition _now access expected (Internal (RetainCoordination key scope)) current
+        pure (retained & #revision .~ current.revision)
       Internal (RetainCoordination key scope) -> do
         unless (scope.parentScope == coordinatorParentScope current.objectiveId scope.run.identity) (Left ObjectiveDenied)
         unless (access.actor == RecordedAgent scope.run.identity && scope.format == V1 && scope.context.identity == scope.run.identity && scope.context.sessionId == Just scope.run.sessionId && scope.context.executionRootId == scope.run.rootId && scope.context.executionPermissions == scope.run.permittedAliases && isJust scope.context.delegationBudgetId) (Left ObjectiveDenied)
@@ -756,12 +793,17 @@ prepareTransition now access expected mutation current = do
       actual <- require (Adaptive.validateProposal now decision.policy previous current decision.proposal)
       unless (actual == decision) (abort ObjectiveConflict)
     _ -> pure ()
+  let bindScope key scope = do
+        rootId <- maybe (abort ObjectiveDenied) pure scope.run.rootId
+        root <- Roots.inspectRootTx rootId >>= either (const (abort ObjectiveUnavailable)) pure
+        either (const (abort ObjectiveDenied)) pure (Resources.checkRoot now root.revision root)
+        pure (Just (key, scope, rootId, root.envelope.cutoff))
   bounded <- case mutation of
-    Internal (RetainCoordination key scope) -> do
-      rootId <- maybe (abort ObjectiveDenied) pure scope.run.rootId
-      root <- Roots.inspectRootTx rootId >>= either (const (abort ObjectiveUnavailable)) pure
-      either (const (abort ObjectiveDenied)) pure (Resources.checkRoot now root.revision root)
-      pure (Just (key, scope, rootId, root.envelope.cutoff))
+    Internal (RetainAdaptiveCoordination key _ decisionKey scope) -> do
+      decision <- AdaptiveSql.readDecision current.objectiveId decisionKey >>= require >>= maybe (abort ObjectiveMissing) pure
+      unless (decision.policy.identity == scope.run.identity && Just decision.policy.rootId == scope.run.rootId && all (\slot -> any (\placement -> isNothing placement.parent && placement.target == slot.target && placement.assignment.owner == slot.identity && referenceFor current.objectiveId placement.assignment.assignmentId == slot.objective) decision.arrangement) scope.workers) (abort ObjectiveDenied)
+      bindScope key scope
+    Internal (RetainCoordination key scope) -> bindScope key scope
     _ -> pure Nothing
   reports <- case mutation of
     Internal (ProjectCheckpoint key intent) -> traverse (reportedResult key intent) [receipt | WS.EventReceipt {event = WS.ResultAvailable receipt} <- intent.events]
@@ -809,7 +851,10 @@ validateSettledSources :: Objective -> Transaction ()
 validateSettledSources objective = do
   forM_ (nub (mapMaybe (.definition.rootId) objective.assignments)) \rootId -> do
     root <- Roots.inspectRootTx rootId >>= either (const (abort ObjectiveUnavailable)) pure
-    unless (root.unknown == noAttempts) (abort ObjectiveUnresolved)
+    unless (root.active == noAttempts && root.unknown == noAttempts) (abort ObjectiveUnresolved)
+    executions <- Execution.rootExecutionsSettledTx rootId >>= either (const (abort ObjectiveUnavailable)) pure
+    sessions <- Sessions.rootSessionsSettledTx rootId >>= either (const (abort ObjectiveUnavailable)) pure
+    unless (executions && sessions) (abort ObjectiveUnresolved)
   let creator = versionedDigest "shikigami.objective-creator/1" (toJSON objective.owner)
   created <- readRow (objectiveIdText objective.objectiveId, creator) selectCreatedById >>= maybe (abort ObjectiveUnavailable) pure
   case fst created of
@@ -833,7 +878,7 @@ validateSettledSources objective = do
       retained <- Execution.inspectExecutionTx execution >>= either (const (abort ObjectiveUnavailable)) pure
       case retained of
         Nothing -> when required (abort ObjectiveUnavailable)
-        Just (state, _) -> unless (state.pendingReceipts == noPendingReceipts && state.phase /= Execution.Unresolved) (abort ObjectiveUnresolved)
+        Just (state, _) -> unless (state.pendingReceipts == noPendingReceipts && state.phase `elem` [Execution.Succeeded, Execution.Failed, Execution.Cancelled]) (abort ObjectiveUnresolved)
     conversationExecution run turn = do
       message <- maybe (abort ObjectiveUnavailable) pure (Text.stripPrefix "danwa:user:" (turnReferenceText turn))
       when (Text.null message) (abort ObjectiveUnavailable)

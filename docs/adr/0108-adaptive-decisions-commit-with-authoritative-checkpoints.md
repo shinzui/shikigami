@@ -81,3 +81,11 @@ An absent projected reference is not proof that the assignment is unfenced.
 Metadata-only progress and exact evidence recording do not reserve fresh model
 work; proposed execution checks its minimum model, tool and descendant costs
 without copying or mutating the root's counters.
+
+Validator version 3 binds a previously unbound, sessionless coordinator entry to
+its admitted root and cutoff before validating a fresh arrangement. Integration
+marks the addressed assignment done only in the same owner transaction as source
+verification and evidence retention. A sessionless coordinator entry can become
+done with an exact integrated completion proposal; all non-coordinator work still
+has to satisfy the same current artifact/criterion/journey predicate. Versions 1
+and 2 remain retained decoders, with no revalidation of committed manifests.

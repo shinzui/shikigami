@@ -15,6 +15,7 @@ where
 import Data.Aeson (Value)
 import Data.Aeson qualified as Aeson
 import Data.Generics.Labels ()
+import Data.Text qualified as Text
 import Effectful (Eff)
 import Keiro.Workflow.Types (WorkflowId (..))
 import Kioku.Id (SessionId)
@@ -137,7 +138,7 @@ admitSkillExecutionWithAdmissions loadWorkspace loadObjectives runtime describe 
                       Right () -> do
                         authority <- runtime.authorize initial
                         case authority of
-                          Left _ -> pure (Left (ExecutionPolicyRefused "fresh assignment authority refused"))
+                          Left detail -> pure (Left (ExecutionPolicyRefused ("fresh assignment authority refused: " <> Text.take 256 detail)))
                           Right () -> do
                             described <- timeout (max 1 (min 30 (floor (durationTime runtime.timeoutSeconds))) * 1000000) (describe initial)
                             let menu = fromMaybe (Left (ExecutionPolicyRefused "tool menu description exceeded its admission deadline")) described

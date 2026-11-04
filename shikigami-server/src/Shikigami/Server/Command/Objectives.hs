@@ -19,7 +19,6 @@ import Shikigami.Migrations (verifyShikigamiMigrations)
 import Shikigami.Objective.Capability qualified as Owner
 import Shikigami.Objective.Command (Command)
 import Shikigami.Objective.Handler (historyView, objectiveHost, receiptView)
-import Shikigami.Objective.Inspection (objectiveViewPage)
 import Shikigami.Objective.Types
 import Shikigami.Prelude
 import Shikigami.Runtime (registerRuntimeCatalog, runtimeConnectionSettings)
@@ -35,7 +34,7 @@ runObjectivesInspect :: Text -> Int -> Int -> Bool -> AppConfig -> IO ()
 runObjectivesInspect raw after limit _json config = do
   unless (after >= 0 && after <= 10000 && limit >= 1 && limit <= 100) (die "invalid objective page bounds")
   objective <- checked (parseObjectiveId raw)
-  withObjectives config \host -> fmap (fmap (objectiveViewPage after limit)) (Owner.readObjective host objective)
+  withObjectives config \host -> Owner.inspectObjective host objective after limit
 
 runObjectivesHistory :: Text -> Maybe Integer -> Int -> Bool -> AppConfig -> IO ()
 runObjectivesHistory raw after limit _json config = do

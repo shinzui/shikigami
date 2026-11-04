@@ -1,18 +1,29 @@
-module Shikigami.ExecutionCapacitySpec (tests, capacityClaimProcess) where
+module Shikigami.ExecutionCapacitySpec (tests, capacityClaimProcess, rootCapacityClaimProcess) where
 
+import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async (concurrently)
 import Control.Concurrent.MVar
 import Data.Aeson qualified as Aeson
 import Data.Either (rights)
 import Data.Generics.Labels ()
+import Data.Map.Strict qualified as Map
 import Data.Text qualified as Text
-import Data.Time (getCurrentTime)
+import Data.Time (addUTCTime, getCurrentTime)
 import Hasql.Transaction (Transaction)
+import Hasql.Transaction qualified as Tx
 import Kiroku.Store.Connection (defaultConnectionSettings)
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.App (AppEnv (..), noopTracer, runAppIO)
 import Shikigami.Execution.Capacity
 import Shikigami.Execution.Claim
+import Shikigami.Execution.Coordinate (executionCoordinate)
+import Shikigami.Execution.Counter (noAttempts)
+import Shikigami.Execution.Counter qualified
+import Shikigami.Execution.Identity qualified
+import Shikigami.Execution.Quantity (oneAmount, zeroAmount)
+import Shikigami.Execution.Resources qualified as R
+import Shikigami.Execution.ResourcesStore qualified as Roots
+import Shikigami.Fixture.ExecutionIdentity
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Shikigami.Prelude
 import Shikigami.StateRevision
@@ -101,6 +112,7 @@ tests fixture =
         snapshot <- right =<< run b inspectTx
         snapshot.active @?= 1,
       testCase "two separate runtime processes share one physical admission slot" (processRace fixture),
+      testCase "two processes cannot spend a root last slot even with spare global capacity" (processRaceWithRoot True fixture),
       testCase "a permit changes owner only under an explicit expected former claim" $ withCapacity fixture \a _ -> do
         register a "root" "attempt"
         claim a "attempt" "old" Nothing >>= (@?= True)
@@ -158,12 +170,15 @@ capacityClaimProcess ticket = do
   if accepted then settle env ticket ("process:" <> ticket) else pure ()
 
 processRace :: DatabaseFixture -> IO ()
-processRace fixture = withShikigamiFreshDatabase fixture \connection -> do
+processRace = processRaceWithRoot False
+
+processRaceWithRoot :: Bool -> DatabaseFixture -> IO ()
+processRaceWithRoot rootBound fixture = withShikigamiFreshDatabase fixture \connection -> do
   tracer <- noopTracer
   executable <- getExecutablePath
   let env = AppEnv (defaultConnectionSettings connection) tracer Nothing Nothing
       child ticket =
-        (proc executable ["--capacity-claim", ticket])
+        (proc executable [if rootBound then "--root-capacity-claim" else "--capacity-claim", ticket])
           { env = Just [("SHIKIGAMI_CAPACITY_CONNECTION", Text.unpack connection)],
             std_in = CreatePipe,
             std_out = CreatePipe,
@@ -171,6 +186,14 @@ processRace fixture = withShikigamiFreshDatabase fixture \connection -> do
           }
   register env "root-a" "a"
   register env "root-b" "b"
+  when rootBound do
+    configure env 2
+    now <- getCurrentTime
+    let limits = Map.insert R.ActiveWork (R.Limited oneAmount) (Map.fromList [(dimension, R.ExplicitlyUnbounded) | dimension <- [minBound .. maxBound]])
+    _ <- right =<< run env (Roots.enrollRootTx processRoot (R.Envelope limits (addUTCTime 60 now)))
+    state <- right =<< run env (Roots.inspectRootTx processRoot)
+    _ <- right =<< run env (Roots.reserveOperationsTx processRoot state.revision [R.OperationRequest (fixtureOperationId ("root-race:" <> ticket)) Nothing R.ModelOperation Map.empty (executionCoordinate "root-race/1") | ticket <- ["a", "b"]] now)
+    pure ()
   completed <- timeout 10000000 $
     withCreateProcess (child "a") \aIn aOut _ aProcess ->
       withCreateProcess (child "b") \bIn bOut _ bProcess -> case (aIn, aOut, bIn, bOut) of
@@ -183,7 +206,12 @@ processRace fixture = withShikigamiFreshDatabase fixture \connection -> do
           hPutStrLn bInput "go"
           answers <- sequence [hGetLine aOutput, hGetLine bOutput]
           length (filter (== "granted") answers) @?= 1
-          length (filter (== "deferred") answers) @?= 1
+          length (filter (== (if rootBound then "root-exhausted" else "deferred")) answers) @?= 1
+          when rootBound do
+            capacityLimit <$> ((.maximum) <$> (right =<< run env inspectTx)) >>= (@?= 2)
+            root <- right =<< run env (Roots.inspectRootTx processRoot)
+            root.active @?= either (error . show) id (Shikigami.Execution.Counter.parseAttemptCount 1)
+            Map.lookup R.ModelAttempts root.usage.held @?= Just oneAmount
           current <- right =<< run env inspectTx
           current.active @?= 1
           hPutStrLn aInput "stop"
@@ -192,5 +220,49 @@ processRace fixture = withShikigamiFreshDatabase fixture \connection -> do
           waitForProcess bProcess >>= (@?= ExitSuccess)
           final <- right =<< run env inspectTx
           final.active @?= 0
+          when rootBound do
+            root <- right =<< run env (Roots.inspectRootTx processRoot)
+            root.active @?= noAttempts
+            root.unknown @?= noAttempts
+            Map.lookup R.ModelAttempts root.usage.settled @?= Just oneAmount
         _ -> assertFailure "capacity fixture did not acquire its private pipes"
   case completed of Just () -> pure (); Nothing -> assertFailure "capacity process race exceeded its bounded deadline"
+
+processRoot :: Shikigami.Execution.Identity.ExecutionRootId
+processRoot = fixtureRootId "cross-process-root-last-slot"
+
+rootCapacityClaimProcess :: Text -> IO ()
+rootCapacityClaimProcess ticket = do
+  hSetBuffering stdout LineBuffering
+  connection <- Text.pack <$> getEnv "SHIKIGAMI_CAPACITY_CONNECTION"
+  tracer <- noopTracer
+  let env = AppEnv (defaultConnectionSettings connection) tracer Nothing Nothing
+      attempt = fixtureAttemptId ("root-race:" <> ticket)
+      begin remaining = do
+        now <- getCurrentTime
+        answer <-
+          right =<< run env do
+            root <- Roots.inspectRootTx processRoot
+            case root of
+              Left err -> pure (Left (Text.pack (show err)))
+              Right state -> do
+                begun <- Roots.beginAttemptTx processRoot state.revision (R.AttemptRequest attempt (fixtureOperationId ("root-race:" <> ticket)) (Map.fromList [(R.ActiveWork, oneAmount), (R.ModelAttempts, oneAmount), (R.Tokens, zeroAmount), (R.CostMicroUsd, zeroAmount)]) R.EnforcedCeiling) now
+                case begun of
+                  Left (R.ResourceExhausted R.ActiveWork) -> pure (Right "root-exhausted")
+                  Left err -> Tx.condemn >> pure (Left (Text.pack (show err)))
+                  Right _ ->
+                    admitTx ticket (owner ("process:" <> ticket)) Nothing >>= \case
+                      Right True -> pure (Right "granted")
+                      Right False -> Tx.condemn >> pure (Right "retry")
+                      Left err -> Tx.condemn >> pure (Left (Text.pack (show err)))
+        if answer == "retry" && remaining > (0 :: Int) then threadDelay 10000 >> begin (remaining - 1) else pure answer
+  putStrLn "ready"
+  _ <- getLine
+  answer <- begin 100
+  putStrLn (Text.unpack answer)
+  _ <- getLine
+  if answer == "granted"
+    then do
+      _ <- right =<< run env (Roots.settleAttemptTx processRoot attempt (R.KnownUsage (Map.fromList [(R.Tokens, zeroAmount), (R.CostMicroUsd, zeroAmount)])))
+      settle env ticket ("process:" <> ticket)
+    else right =<< run env (releaseTx ticket Nothing)

@@ -1,5 +1,6 @@
 module Shikigami.AdaptiveProposalSpec (tests) where
 
+import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.Either (isLeft)
 import Data.Generics.Labels ()
@@ -12,7 +13,7 @@ import Shikigami.Decision.ModelAlias (parseModelAlias)
 import Shikigami.Fixture.ExecutionIdentity
 import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Objective.Types
-import Shikigami.Prelude
+import Shikigami.Prelude hiding ((.=))
 import Shikigami.WorkerSession.Types qualified
 import Shikigami.Workspace.Reference (WorkspaceRef (..))
 import Shikigami.Workspace.Value (workspaceCoordinate)
@@ -57,6 +58,17 @@ tests =
         map (.assignment.state) consolidated.arrangement @?= [Withdrawn, Withdrawn, Pending]
         split <- right (validateProposal now policy [a] (objective & #assignments .~ [asAssignment a]) (proposal [SplitAssignment (key "a") [placement "one" Nothing [], placement "two" Nothing []]]))
         map (.assignment.state) split.arrangement @?= [Withdrawn, Pending, Pending],
+      testCase "replacement work cannot leave a live dependency on a withdrawn assignment" do
+        let a = placement "a" Nothing []
+            b = placement "b" Nothing [key "a"]
+            existing = objective & #assignments .~ [Assignment node.assignment initialRevision initialRevision initialRevision [] | node <- [a, b]]
+        assertBool "whole final graph refused" (isLeft (validateProposal now policy [a, b] existing (proposal [SplitAssignment (key "a") [placement "one" Nothing [], placement "two" Nothing []]]))),
+      testCase "the initial sessionless coordinator is bound to the admitted root and cutoff" do
+        let node = placement "coordinator" Nothing [] & #target .~ policy.coordinator & #assignment . #owner .~ policy.identity & #assignment . #rootId .~ Nothing & #assignment . #cutoff .~ Nothing
+            existing = objective & #assignments .~ [Assignment node.assignment initialRevision initialRevision initialRevision []]
+        accepted <- right (validateProposal now policy [node] existing (proposal [ChangeConcurrency 1]))
+        map (.assignment.rootId) accepted.arrangement @?= [Just policy.rootId]
+        map (.assignment.cutoff) accepted.arrangement @?= [Just policy.cutoff],
       testCase "stale checkpoint, instructions and criteria refuse" do
         forM_ [input & #checkpointRevision %~ advanceRevision, input & #instructionsRevision %~ advanceRevision, input & #criteriaRevision %~ advanceRevision] \value -> validate value @?= Left ObjectiveConflict,
       testCase "missing evidence, forbidden concurrency and completion without combined checks refuse" do
@@ -98,7 +110,7 @@ tests =
             existing = objective & #assignments .~ [assignment]
         currentArrangement roles (Just [node]) existing @?= Right [node],
       testCase "unknown proposal fields and arbitrary code have no decoder" do
-        let unknown = Aeson.object ["tag" Aeson..= ("RunCode" :: Text), "contents" Aeson..= ("curl secret" :: Text)]
+        let unknown = Aeson.object ["tag" .= ("RunCode" :: Text), "contents" .= ("curl secret" :: Text)]
         assertBool "closed sum" (case Aeson.fromJSON unknown :: Aeson.Result Change of Aeson.Error _ -> True; _ -> False)
         Aeson.fromJSON (toJSON input) @?= Aeson.Success input
         Aeson.fromJSON (toJSON policy) @?= Aeson.Success policy

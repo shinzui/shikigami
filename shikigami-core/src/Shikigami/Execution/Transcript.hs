@@ -29,14 +29,16 @@ import Data.Vector qualified as Vector
 import Keiki.Shape (CanonicalTypeName (..))
 import Keiro.Workflow.Types (WorkflowId (..))
 import Kioku.Id (SessionId)
+import Numeric.Natural (Natural)
 import Shikigami.Agent.Approval (ReviewRequestId)
 import Shikigami.Agent.Name (AgentName)
 import Shikigami.Agent.Principal (AgentIdentity)
+import Shikigami.Attestation.PolicyValue (Ceiling)
 import Shikigami.Attestation.Profile qualified as Profile
 import Shikigami.Attestation.Resolve (ResolvedProfile, ResolvedProfileView (..), resolvedProfileView)
 import Shikigami.Behavior.Provider.Coordinate
 import Shikigami.Capability.Overlay (ResolvedCapabilitySet)
-import Shikigami.Decision.Contract (DecisionOutcome, PreparedDecision, versionedDigest)
+import Shikigami.Decision.Contract (DecisionOutcome, DecisionTimeout, PreparedDecision, versionedDigest)
 import Shikigami.Execution.AssignmentKey (AssignmentKey)
 import Shikigami.Execution.Coordinate
 import Shikigami.Execution.Identity (OperationId, operationIdWithPrefix)
@@ -359,12 +361,39 @@ instance FromJSON ExecutionState where
 
 -- A typed program is prepared before admission. Its provider calls retain
 -- separate root receipts; the wrapper itself never bills a synthetic model call.
-data DecisionWork = DecisionWork
-  { prepared :: !PreparedDecision,
-    parameterState :: !Aeson.Value
+data DecisionWorkLimits = DecisionWorkLimits
+  { timeout :: !DecisionTimeout,
+    calls :: !(Ceiling "decision-calls" Natural)
   }
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
+
+data DecisionWork
+  = DecisionWork
+      { prepared :: !PreparedDecision,
+        parameterState :: !Aeson.Value
+      }
+  | BoundedDecisionWork
+      { prepared :: !PreparedDecision,
+        parameterState :: !Aeson.Value,
+        limits :: !DecisionWorkLimits
+      }
+  deriving stock (Eq, Show, Generic)
+
+instance ToJSON DecisionWork where
+  toJSON work =
+    Aeson.object
+      ( ["prepared" .= work.prepared, "parameterState" .= work.parameterState] <> case work of
+          BoundedDecisionWork {limits} -> ["limits" .= limits]
+          DecisionWork {} -> []
+      )
+
+instance FromJSON DecisionWork where
+  parseJSON = Aeson.withObject "typed decision work" $ \fields -> do
+    prepared <- fields .: "prepared"
+    parameters <- fields .: "parameterState"
+    limits <- fields .:? "limits"
+    pure (maybe (DecisionWork prepared parameters) (BoundedDecisionWork prepared parameters) limits)
 
 data OperationKind = ModelTurn | ToolOperation | ModelSummary | ModelRepair | TypedDecision
   deriving stock (Eq, Show, Generic)

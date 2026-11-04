@@ -30,10 +30,13 @@ import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..))
 import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Delegate (DelegationRequest (..))
 import Shikigami.Agent.Name (agentNameFromNonEmpty, agentNameText)
+import Shikigami.Coordination.Capability (AdaptiveDelivery)
+import Shikigami.Coordination.Decision (adaptiveSlots)
 import Shikigami.Decision.Contract (DecisionSlot)
 import Shikigami.Decision.ModelCatalog (slotErrors)
 import Shikigami.Duration
 import Shikigami.Flow.Acknowledgement (Acknowledgement)
+import Shikigami.Flow.AdaptiveDelivery (adaptiveDelivery)
 import Shikigami.Flow.AtRiskCustomer (atRiskCustomerFlow)
 import Shikigami.Flow.Capability (Activity, Memory, Sink)
 import Shikigami.Flow.Decision (Decision)
@@ -90,6 +93,7 @@ type FlowEffects es =
     Acknowledgement :> es,
     Delegate :> es,
     Workers :> es,
+    AdaptiveDelivery :> es,
     Objectives :> es,
     Routing :> es,
     Decision :> es,
@@ -153,6 +157,13 @@ atRiskCustomerLifecycleDiagram =
 flowRegistry :: [FlowDef]
 flowRegistry =
   [ FlowDef
+      { name = declarationCoordinate "adaptive-delivery",
+        decisionSlots = adaptiveSlots,
+        requiresDefaultModel = DefaultModelOptional,
+        lifecycle = LifecycleDiagram "flowchart LR\n Checkpoint --> Decision --> Validate --> Commands --> Findings --> Checkpoint\n Validate --> ExactCompletionProposal" [],
+        run = adaptiveDelivery
+      },
+    FlowDef
       { name = declarationCoordinate "objective-example",
         decisionSlots = [],
         requiresDefaultModel = DefaultModelOptional,

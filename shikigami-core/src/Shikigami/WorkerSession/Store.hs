@@ -13,6 +13,7 @@ module Shikigami.WorkerSession.Store
     authorizeSession,
     inspectSession,
     rootSessionsTerminalTx,
+    rootSessionsSettledTx,
     inspectSessionPage,
     loadAdmission,
     readInstruction,
@@ -28,6 +29,9 @@ module Shikigami.WorkerSession.Store
     recordResult,
     readResult,
     readResultSourceTx,
+    readChildSourceTx,
+    childSourceTx,
+    childCatalogTx,
     readEvents,
     consumeEventsWith,
     prepareCheckpoint,
@@ -75,12 +79,13 @@ import Keiro.Command (CommandError (..))
 import Keiro.Projection (ProjectionCommandOutcome (..), runCommandWithCatalogProjections)
 import Keiro.ReadModel (runQuery)
 import Keiro.Stream qualified as Stream
-import Keiro.Workflow (JournalAppendOutcome (..), WorkflowId (..), WorkflowJournalEvent (..), WorkflowName (..), awakeableStepPrefix, currentGeneration, prepareJournalAppend)
+import Keiro.Workflow (JournalAppendOutcome (..), StepName (..), WorkflowId (..), WorkflowJournalEvent (..), WorkflowName (..), awakeableStepPrefix, currentGeneration, prepareJournalAppend)
 import Keiro.Workflow.Awakeable (awakeableIdText, awakeableIdToUuid)
 import Keiro.Workflow.Awakeable.Schema (AwakeableRow (..), AwakeableStatus (Completed, Pending), completeAwakeableTx, lookupAwakeable, lookupAwakeableStatusTx)
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Effect.Resource (KirokuStoreResource)
 import Kiroku.Store.Error (StoreError)
+import Shikigami.Agent.Decl (AgentDecl)
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..), assertMayDelegate, checkCycle, checkDepth)
 import Shikigami.Agent.Name (AgentName)
 import Shikigami.Agent.Principal (AgentIdentity, identityText)
@@ -107,6 +112,7 @@ import Shikigami.WorkerSession.Types
 import Shikigami.WorkerSessionLifecycle.Generated.Domain qualified as Generated
 import Shikigami.WorkerSessionLifecycle.Generated.EventStream (workerSessionLifecycleCategory, workerSessionLifecycleEventStream)
 import Shikigami.WorkerSessionLookup.Generated.ReadModel (workerSessionLookupReadModel)
+import Shikigami.Workflow.Versioning (prepareAdmittedInput)
 import Shikigami.Workspace.Value (workspaceCoordinateText)
 
 type SessionReadEffects es = (IOE :> es, Store :> es, Error StoreError :> es)
@@ -213,7 +219,7 @@ ensureSessionDriver :: (SessionReadEffects es) => SessionAccess -> Eff es (Eithe
 ensureSessionDriver access@(SessionAccess session _ _) = guarded do
   now <- liftIO getCurrentTime
   let input = Aeson.object ["sessionId" .= session]
-  append <- prepareJournalAppend sessionWorkflowName (sessionWorkflowId session) 0 (StepRecorded "ingest-session" input now)
+  append <- prepareAdmittedInput sessionWorkflowName (sessionWorkflowId session) (StepName "ingest-session") input
   protected do
     (state, binding) <- getSession session
     checkAccess access state binding
@@ -254,6 +260,25 @@ rootSessionsTerminalTx root = do
       unless (state.sessionId.value == identifier && binding.sessionId == state.sessionId) (Left ())
       let terminal = allTerminal && (binding.rootId /= root || state.phase `elem` [Failed, Cancelled])
       terminal `seq` pure terminal
+
+-- | An idle mailbox can still contain queued work. All native messages and
+-- checkpoint cursors must be settled before its root can close an objective.
+rootSessionsSettledTx :: ExecutionRootId -> Transaction (Either SessionError Bool)
+rootSessionsSettledTx root = do
+  rows <- Tx.statement root (preparable "SELECT state,binding FROM shikigami.worker_sessions WHERE binding->'rootId'=$1" jsonParam (D.rowList ((\state binding -> (,) <$> state <*> binding) <$> jsonRow @SessionState <*> jsonRow @SessionBinding)))
+  let decoded = either (const (Left SessionBindingConflict)) Right (sequence rows)
+  checked <- case decoded of
+    Left err -> pure (Left err)
+    Right sessions -> do
+      values <- forM sessions \(state, binding) -> do
+        messages <- Tx.statement state.sessionId.value (preparable "SELECT state FROM shikigami.worker_session_messages WHERE session_id=$1" textParam (D.rowList (jsonRow @MessageReceipt)))
+        pure do
+          decodedMessages <- either (const (Left SessionBindingConflict)) Right (sequence messages)
+          unless (binding.sessionId == state.sessionId && binding.rootId == root) (Left SessionBindingConflict)
+          pure (state.phase `elem` [Idle, Failed, Cancelled] && isNothing state.activeAssignment && isNothing state.checkpointIntent && state.consumedCursor == state.eventCursor && all (\message -> message.phase == AssignmentFinished) decodedMessages)
+      pure (and <$> sequence values)
+  when (case checked of Left _ -> True; _ -> False) Tx.condemn
+  pure checked
 
 inspectSessionPage :: (SessionReadEffects es) => WorkerSessionId -> MessagePosition -> Int -> Eff es (Either SessionError (Maybe SessionInspection))
 inspectSessionPage session after limit
@@ -497,6 +522,50 @@ readResultSourceTx session assignment = do
   when (case checked of Left _ -> True; Right _ -> False) Tx.condemn
   pure checked
 
+-- | A composing objective owner calls this under its goal lock. Only the exact
+-- running native message may supply an association to its already-derived child.
+readChildSourceTx :: WorkerSessionId -> AssignmentId -> WorkflowId -> Transaction (Either SessionError (SessionState, SessionBinding, MessageReceipt))
+readChildSourceTx session assignment child = do
+  stored <- Tx.statement session.value selectSession
+  message <- Tx.statement (session.value, assignment.value) selectMessage
+  let checked = case (stored, message) of
+        (Just (Right (state, binding)), Just (Right receipt))
+          | state.sessionId == session,
+            state.phase == Active,
+            state.activeAssignment == Just assignment,
+            receipt.assignmentId == assignment,
+            receipt.phase == Running,
+            receipt.epoch == state.epoch,
+            receipt.childWorkflowId == Just child ->
+              Right (state, binding, receipt)
+        _ -> Left SessionBindingConflict
+  when (case checked of Left _ -> True; _ -> False) Tx.condemn
+  pure checked
+
+-- Only native relational source coordinates may locate a child association.
+childSourceTx :: WorkflowId -> Transaction (Either SessionError (Maybe (SessionState, SessionBinding, MessageReceipt)))
+childSourceTx child = do
+  sources <- Tx.statement child.unWorkflowId (preparable "SELECT session_id,assignment_id FROM shikigami.worker_session_messages WHERE state->>'childWorkflowId'=$1 LIMIT 2" textParam (D.rowList ((,) <$> D.column (D.nonNullable D.text) <*> D.column (D.nonNullable D.text))))
+  case sources of
+    [] -> pure (Right Nothing)
+    [(session, assignment)] -> case (Aeson.fromJSON (toJSON session), parseAssignmentId assignment) of
+      (Aeson.Success nativeSession, Right nativeAssignment) -> fmap Just <$> readChildSourceTx nativeSession nativeAssignment child
+      _ -> Tx.condemn >> pure (Left SessionBindingConflict)
+    _ -> Tx.condemn >> pure (Left SessionBindingConflict)
+
+-- Protected source admission supplies the immutable declaration universe.
+childCatalogTx :: WorkflowId -> Transaction (Either SessionError [AgentDecl])
+childCatalogTx child = do
+  source <- childSourceTx child
+  case source of
+    Left err -> pure (Left err)
+    Right Nothing -> pure (Right [])
+    Right (Just (state, binding, _)) -> do
+      saved <- readPayloadChecked @SessionAdmission state.sessionId "session-admission" binding.admission
+      let checked = admissionCatalog <$> saved
+      when (case checked of Left _ -> True; _ -> False) Tx.condemn
+      pure checked
+
 readEvents :: (SessionReadEffects es) => SessionAccess -> StateRevision "worker-event" -> Int -> Eff es (Either SessionError [EventReceipt])
 readEvents access@(SessionAccess session _ _) after limit
   | revisionNumber after > 100000 || limit < 1 || limit > 100 = pure (Left (SessionInputRefused "invalid event cursor or page limit"))
@@ -682,15 +751,16 @@ prepareListenerNotification session listener = do
     then pure (pure ())
     else do
       _ <- validateListener listener
+      let hint = case listener of CheckpointSessionListener {} -> toJSON True; _ -> toJSON session
       now <- liftIO getCurrentTime
-      append <- prepareJournalAppend listener.ownerName listener.ownerId (workflowGenerationInt listener.generation) (StepRecorded (awakeableStepPrefix <> awakeableIdText listener.token) (toJSON session) now)
+      append <- prepareJournalAppend listener.ownerName listener.ownerId (workflowGenerationInt listener.generation) (StepRecorded (awakeableStepPrefix <> awakeableIdText listener.token) hint now)
       pure do
-        transitioned <- completeAwakeableTx (awakeableIdToUuid listener.token) (toJSON session) now
+        transitioned <- completeAwakeableTx (awakeableIdToUuid listener.token) hint now
         status <- lookupAwakeableStatusTx (awakeableIdToUuid listener.token)
         when (transitioned || status == Just Completed) do
           append >>= \case
             JournalAppendConflict {} -> abort SessionStorageUnavailable
-            JournalAlreadyPresent stored | stored /= toJSON session -> abort SessionStorageUnavailable
+            JournalAlreadyPresent stored | stored /= hint -> abort SessionStorageUnavailable
             _ -> pure ()
 
 requestTransfer :: (SessionEffects es) => SessionAccess -> StateRevision "worker-session" -> StateRevision "worker-owner" -> OperationId -> ObjectiveVersion -> WorkspaceRef -> AgentName -> AgentIdentity -> Eff es (Either SessionError (Admission, TransferIntent))

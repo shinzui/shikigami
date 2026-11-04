@@ -40,6 +40,7 @@ import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (ResolvedAgentIdentity (CompatibilityAgent), compatibilityIdentity)
 import Shikigami.App (AppEnv (..), noopTracer, runAppIO)
 import Shikigami.Behavior.Run (newBehaviorEnv)
+import Shikigami.Coordination.Capability qualified as Adaptive
 import Shikigami.Directory (disabledDirectoryHandle)
 import Shikigami.Duration (parseDuration)
 import Shikigami.Flow (FlowDef (..), FlowEffects, FlowRuntime (..), atRiskCustomerLifecycleDiagram, flowDeclarationErrors, flowRegistry, lookupFlow, registeredFlowNames)
@@ -107,7 +108,7 @@ tests databaseFixture =
       testCase "a Flow behavior naming an unregistered flow is a declaration error" do
         assertEqual
           "unknown flow is refused, and the message names what is registered"
-          ["unknown flow no-such-flow; registered flows: objective-example, shikumi-decision-example, shikumi-judgment-example, at-risk-customer, delegation-proof, architecture-practice-router, opentelemetry-practice-review"]
+          ["unknown flow no-such-flow; registered flows: adaptive-delivery, objective-example, shikumi-decision-example, shikumi-judgment-example, at-risk-customer, delegation-proof, architecture-practice-router, opentelemetry-practice-review"]
           (flowDeclarationErrors (flowBehaviorAgent (Flow {name = declarationCoordinate ("no-such-flow")})))
         assertEqual
           "a registered flow is accepted"
@@ -555,6 +556,7 @@ runFlowBody appEnv runtime flowAgent FlowDef {run} workflowId input =
         ( runActivity sampleActivity
             . runMemory memoryEnv
             . runSink sinkEnv
+            . Adaptive.runAdaptiveDeliveryDisabled
             . FlowDecision.runDecisionDisabled
             . FlowDelegate.runDelegate delegateEnv
             . FlowObjectives.runObjectives Nothing (Right Nothing)

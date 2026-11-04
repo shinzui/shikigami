@@ -1721,8 +1721,8 @@ tests databaseFixture =
 
                 let registry = Registry.workflowRegistry deps (testConversationEnv appEnv behaviorEnv [conversationDecl])
                 assertEqual
-                  "production registry covers all five families"
-                  ["shikigami.agent-run", "shikigami.approval", "shikigami.danwa-conversation", "shikigami.execution", "shikigami.worker-session"]
+                  "production registry covers all six families"
+                  ["shikigami.adaptive-delivery", "shikigami.agent-run", "shikigami.approval", "shikigami.danwa-conversation", "shikigami.execution", "shikigami.worker-session"]
                   (map unWorkflowName (Map.keys registry))
                 driveApprovalChildToPark appEnv deps
                 pending <- runAppIO appEnv countPendingAwakeables

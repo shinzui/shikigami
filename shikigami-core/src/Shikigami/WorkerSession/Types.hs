@@ -9,9 +9,6 @@ import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.List (nub)
 import Data.Text qualified as Text
-import Data.UUID qualified as UUID
-import Data.UUID.V5 qualified as UUID
-import Keiki.Shape (CanonicalTypeName (..))
 import Keiro.Workflow.Awakeable (AwakeableId)
 import Keiro.Workflow.Types (WorkflowId (..), WorkflowName (..), mkWorkflowId)
 import Shikigami.Agent.Decl (AgentDecl (..))
@@ -19,7 +16,6 @@ import Shikigami.Agent.Delegate.Context (DelegateCtx (..), assertMayDelegate, ch
 import Shikigami.Agent.Delegate.Depth (depthInt)
 import Shikigami.Agent.Name (AgentName, agentNameText)
 import Shikigami.Agent.Principal (AgentIdentity (..), identityText)
-import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Decision.ModelAlias (ModelAlias)
 import Shikigami.Execution.Identity (ExecutionRootId, OperationId)
 import Shikigami.Execution.Request (ExecutionRequest)
@@ -40,25 +36,49 @@ data SessionScope = SessionScope {parent :: !(WorkerCoordinate "parent-scope"), 
 
 -- Frozen delegation authority is protected input, not an executable grant.
 -- The runtime still checks current lifecycle, root and exact external actions.
-data SessionAdmission = SessionAdmission
-  { format :: !(FormatVersion "session-admission"),
-    scope :: !SessionScope,
-    objective :: !ObjectiveRef,
-    delegator :: !AgentDecl,
-    context :: !DelegateCtx,
-    worker :: !AgentName,
-    identity :: !AgentIdentity,
-    maximumAssignments :: !MaximumAssignments,
-    mailboxLimit :: !MailboxLimit
-  }
+data SessionAdmission
+  = SessionAdmission
+      { format :: !(FormatVersion "session-admission"),
+        scope :: !(SessionScope),
+        objective :: !(ObjectiveRef),
+        delegator :: !(AgentDecl),
+        context :: !(DelegateCtx),
+        worker :: !(AgentName),
+        identity :: !(AgentIdentity),
+        maximumAssignments :: !(MaximumAssignments),
+        mailboxLimit :: !(MailboxLimit)
+      }
+  | PinnedSessionAdmission
+      { format :: !(FormatVersion "session-admission"),
+        scope :: !(SessionScope),
+        objective :: !(ObjectiveRef),
+        delegator :: !(AgentDecl),
+        context :: !(DelegateCtx),
+        worker :: !(AgentName),
+        identity :: !(AgentIdentity),
+        maximumAssignments :: !(MaximumAssignments),
+        mailboxLimit :: !(MailboxLimit),
+        catalog :: !([AgentDecl])
+      }
   deriving stock (Eq, Generic)
-  deriving anyclass (ToJSON)
+
+admissionCatalog :: SessionAdmission -> [AgentDecl]
+admissionCatalog SessionAdmission {} = []
+admissionCatalog PinnedSessionAdmission {catalog} = catalog
+
+instance ToJSON SessionAdmission where
+  toJSON value =
+    Aeson.object
+      (["format" .= value.format, "scope" .= value.scope, "objective" .= value.objective, "delegator" .= value.delegator, "context" .= value.context, "worker" .= value.worker, "identity" .= value.identity, "maximumAssignments" .= value.maximumAssignments, "mailboxLimit" .= value.mailboxLimit] <> ["catalog" .= admissionCatalog value | not (null (admissionCatalog value))])
 
 instance Show SessionAdmission where show _ = "SessionAdmission <protected>"
 
 instance FromJSON SessionAdmission where
-  parseJSON value = do
-    admission <- Aeson.genericParseJSON Aeson.defaultOptions value
+  parseJSON = Aeson.withObject "SessionAdmission" \fields -> do
+    catalog <- fields .:? "catalog" .!= []
+    unless (length catalog <= 129 && length (nub (map (.name) catalog)) == length catalog) (fail "invalid pinned worker catalog")
+    let constructor = if null catalog then SessionAdmission else \format scope objective delegator context worker identity maximumAssignments mailboxLimit -> PinnedSessionAdmission format scope objective delegator context worker identity maximumAssignments mailboxLimit catalog
+    admission <- constructor <$> fields .: "format" <*> fields .: "scope" <*> fields .: "objective" <*> fields .: "delegator" <*> fields .: "context" <*> fields .: "worker" <*> fields .: "identity" <*> fields .: "maximumAssignments" <*> fields .: "mailboxLimit"
     either (fail . show) (const (pure admission)) (validateAdmission admission)
 
 data SessionBinding = SessionBinding
@@ -110,30 +130,42 @@ instance FromJSON SessionState where
     unless (state.format == V1 && state.consumedCursor <= state.eventCursor && revisionNumber state.eventCursor <= 100000 && revisionNumber state.nextSequence <= 10000 && length state.listeners <= 32) (fail "unsupported worker session state")
     pure state
 
-data SessionListener = SessionListener
-  { token :: !AwakeableId,
-    generation :: !WorkflowGeneration,
-    ownerName :: !WorkflowName,
-    ownerId :: !WorkflowId,
-    after :: !(StateRevision "worker-event")
-  }
+data SessionListener
+  = SessionListener
+      { token :: !AwakeableId,
+        generation :: !WorkflowGeneration,
+        ownerName :: !WorkflowName,
+        ownerId :: !WorkflowId,
+        after :: !(StateRevision "worker-event")
+      }
+  | CheckpointSessionListener
+      { token :: !AwakeableId,
+        generation :: !WorkflowGeneration,
+        ownerName :: !WorkflowName,
+        ownerId :: !WorkflowId,
+        after :: !(StateRevision "worker-event")
+      }
   deriving stock (Eq, Generic)
 
--- Runtime-owned identities stay native through the owner checks. The retained
--- JSON is the existing text adapter, including historical spellings.
+-- Historical listeners retain their exact wire representation and session hint.
+-- Adaptive listeners share one Boolean hint with the objective and cutoff owners.
 instance ToJSON SessionListener where
-  toJSON SessionListener {token, generation, ownerName, ownerId, after} =
+  toJSON listener =
     Aeson.object
-      [ "token" .= token,
-        "generation" .= generation,
-        "ownerName" .= ownerName.unWorkflowName,
-        "ownerId" .= ownerId.unWorkflowId,
-        "after" .= after
-      ]
+      ( [ "token" .= listener.token,
+          "generation" .= listener.generation,
+          "ownerName" .= listener.ownerName.unWorkflowName,
+          "ownerId" .= listener.ownerId.unWorkflowId,
+          "after" .= listener.after
+        ]
+          <> case listener of CheckpointSessionListener {} -> ["checkpointHint" .= True]; _ -> []
+      )
 
 instance FromJSON SessionListener where
-  parseJSON = Aeson.withObject "SessionListener" \fields ->
-    SessionListener
+  parseJSON = Aeson.withObject "SessionListener" \fields -> do
+    checkpoint <- fields .:? "checkpointHint" .!= False
+    let constructor = if checkpoint then CheckpointSessionListener else SessionListener
+    constructor
       <$> fields .: "token"
       <*> fields .: "generation"
       <*> (WorkflowName <$> fields .: "ownerName")
@@ -344,6 +376,7 @@ assignmentIdFor session sequence operation = assignmentIdForDigest (toJSON (sess
 validateAdmission :: SessionAdmission -> Either SessionError ()
 validateAdmission admission = do
   unless (admission.identity /= admission.context.identity) (Left SessionOwnerRefused)
+  unless (null (admissionCatalog admission) || (length (admissionCatalog admission) <= 129 && admission.delegator `elem` admissionCatalog admission && admission.worker `elem` map (.name) (admissionCatalog admission))) (Left SessionOwnerRefused)
   unless (admission.format == V1) (Left (SessionInputRefused "invalid session bounds"))
   unless (all validKey [workerCoordinateText admission.scope.parent, workerCoordinateText admission.scope.workerKey, workerCoordinateText admission.objective.provider, workerCoordinateText admission.objective.key, agentNameText admission.worker, agentNameText admission.delegator.name]) (Left (SessionInputRefused "invalid session scope or objective reference"))
   unless (isJust admission.context.executionRootId && isJust admission.context.sessionId) (Left (SessionInputRefused "continuing work requires an admitted root and parent memory session"))

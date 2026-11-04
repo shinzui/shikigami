@@ -1,6 +1,13 @@
 # Bundle Update Log
 
+## 2026-11-04
+* **Update**: FRIC-53 resolved: Resolve fresh external ingestion patch loss for delegated, session and adaptive native children without rewriting historical snapshots.
+* **Update**: FRIC-52 resolved: Resolve the child association gap through the native owner and qualify pinned descendant admission.
+* **Update**: FRIC-51 accepted: Document and accept the qualified local test concurrency; the bounded suites pass.
+
 ## 2026-11-03
+* **Addition**: FRIC-53 records detour interface friction with mori://shinzui/shikigami: External native ingestion bypasses fresh workflow patch snapshots
+* **Addition**: FRIC-52 records detour interface friction with mori://shinzui/shikigami: Continuing-worker child admission drops its objective association
 * **Addition**: FRIC-51 records detour tooling friction with mori://shinzui/shikigami: Default parallel test execution exhausts PostgreSQL clients and fixture deadlines
 * **Update**: FRIC-50 resolved: Status set to resolved.
 * **Addition**: FRIC-50 records detour environment friction with mori://shinzui/shikigami: Native operator qualification omitted its manifest directory

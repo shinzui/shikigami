@@ -528,6 +528,7 @@ computed label families; a duplicated line-number census quickly becomes stale.
 | `shikigami.approval` | [Approval](../domain/shikigami/approval.keiro) | [Approval facts](../shikigami-core/src/Shikigami/Approval/Generated/WorkflowFacts.hs) | [Approval/Workflow.hs](../shikigami-core/src/Shikigami/Agent/Approval/Workflow.hs) |
 | `shikigami.execution` | [Execution driver](../domain/shikigami/execution-driver.keiro) | [ExecutionDriver facts](../shikigami-core/src/Shikigami/ExecutionDriver/Generated/WorkflowFacts.hs) | [Execution/Driver.hs](../shikigami-core/src/Shikigami/Execution/Driver.hs) |
 | `shikigami.worker-session` | [Continuing worker](../domain/shikigami/continuing-worker.keiro) | [ContinuingWorker facts](../shikigami-core/src/Shikigami/ContinuingWorker/Generated/WorkflowFacts.hs) | [WorkerSession/Workflow.hs](../shikigami-core/src/Shikigami/WorkerSession/Workflow.hs) |
+| `shikigami.adaptive-delivery` | [Adaptive delivery](../domain/shikigami/adaptive-delivery.keiro) | [AdaptiveDelivery facts](../shikigami-core/src/Shikigami/AdaptiveDelivery/Generated/WorkflowFacts.hs) | [Coordination/Workflow.hs](../shikigami-core/src/Shikigami/Coordination/Workflow.hs) |
 
 The approval child journals `ingest-approval`, `notify`, and its `decision` wait.
 All agent runs use this child. Plan 65 removed the unused pre-release approval
@@ -644,6 +645,33 @@ requests retain their original path. The normal configured parent/child upgrade
 passes the complete native process/Git/workflow gate. Roll forward across this
 patch; handoff and integration qualification remain separate gates in
 [Plan 96](plans/96-provide-governed-mutable-repository-workspaces-for-durable-agents.md).
+
+Adaptive delivery uses compatible evolution, independently of the earlier
+first-release exceptions. AgentRun's `shikigami-adaptive-delivery-v1` guards the
+new `adaptive-admission` step and native child. An old patch snapshot retains
+the original Flow interpreter. The new family restores its seed first, carries
+accepted decision/command and session references, and rotates at bounded
+decision, dispatch and observation boundaries. Its typed decisions use the
+accepted submit/observe interpreter; existing synchronous Decision result steps
+and codecs keep their original path.
+
+ContinuingWorker's `shikigami-worker-objective-children-v1` guards
+`associate-assignment-child`. The true branch retains the exact child objective
+association before ingestion; the false branch preserves historical child
+admission. Optional pinned catalog fields keep old scope/session JSON readable.
+The existing `lookup-agent` result label and codec remain unchanged; a fresh
+native child obtains its declaration from that retained catalog.
+
+External native producers use `Workflow.Versioning.prepareAdmittedInput` (or
+`admitWorkflowInput`) to commit the deployment patch snapshot with generation
+zero's first input. Bare ingestion would make a fresh journal look historical
+before its runner can record patches. Existing input or patch snapshots always
+win, including an empty old patch set; terminal unadmitted generations cannot
+gain input or patches. Source owners compose the prepared transaction with their
+own authority check under the same public lifecycle/ingestion locks. New session,
+adaptive and delegated child admissions use this boundary. It does not migrate
+an existing journal to a new branch. See
+[ADR 0111](adr/0111-adaptive-delivery-carries-native-admission-and-reference-only-seeds.md).
 
 ## Undeclarable label families
 

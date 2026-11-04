@@ -31,6 +31,7 @@ import Shikigami.Objective.Types
 import Shikigami.Prelude
 import Shikigami.WorkerSession.Capability qualified as Worker
 import Shikigami.WorkerSession.Input qualified as Input
+import Shikigami.WorkerSession.Store qualified as Sessions
 
 objectiveHost :: ObjectiveSettings -> Directory.DirectoryHandle -> ActionAuthorizer -> AgentIdentity -> Capability.ObjectiveHost
 objectiveHost settings directory actions identity = Capability.ObjectiveHost settings authenticate actions (\_ _ -> pure (Left ObjectiveDenied)) (\_ _ -> pure (Left ObjectiveDenied)) (\_ -> pure (Left ObjectiveInvalidEvidence))
@@ -77,8 +78,10 @@ coordinationAuthority env settings directory actions declarations budget = Worke
           current <- Capability.readObjective admittedHost association.objectiveId
           case (source, current) of
             (Right accepted, Right objective) | accepted.job.objective == Just association -> do
-              slots <- liftIO (traverse (slotFor objective accepted) (filter ((/= association.assignmentId) . (.definition.assignmentId)) objective.assignments))
-              case sequence slots >>= buildScope accepted . catMaybes of
+              pinned <- runTransaction (Sessions.childCatalogTx run.runId)
+              let catalog = either (const []) id pinned
+              slots <- liftIO (traverse (slotFor catalog objective accepted) (filter ((/= association.assignmentId) . (.definition.assignmentId)) objective.assignments))
+              case either (const (Left "native catalog unavailable")) (const (sequence slots >>= buildScope catalog accepted . catMaybes)) pinned of
                 Left _ -> pure (Left ObjectiveDenied)
                 Right scope -> do
                   let operation = operationIdWithPrefix ('c' :| "oordination-admit:") (versionedDigest "shikigami.objective-coordination-admission/1" (toJSON (run.runId.unWorkflowId, run.identity)))
@@ -98,10 +101,10 @@ coordinationAuthority env settings directory actions declarations budget = Worke
             (Left _, _) -> pure (Left ObjectiveDenied)
             (_, Left err) -> pure (Left err)
             _ -> pure (Left ObjectiveDenied)
-    slotFor objective accepted assignment
+    slotFor catalog objective accepted assignment
       | assignment.definition.state `elem` [Done, Withdrawn] = pure (Right Nothing)
       | otherwise = do
-          candidates <- forM (filter (\decl -> decl.name `elem` accepted.agent.delegates && agentEnabled decl.enabled) declarations) \decl -> do
+          candidates <- forM (filter (\decl -> decl.name `elem` accepted.agent.delegates && agentEnabled decl.enabled) (if null catalog then declarations else catalog)) \decl -> do
             identity <- Directory.identityAdmission directory ((.principal) <$> decl.identity) decl.name
             pure ((decl.name,) <$> identity)
           let targets = [(name, identity) | Right (name, identity) <- candidates, identity == assignment.definition.owner]
@@ -110,7 +113,7 @@ coordinationAuthority env settings directory actions declarations budget = Worke
             [(name, identity)] | member -> Right (Just (Worker.WorkerSlot (Input.workerCoordinate (objectiveAssignmentIdText assignment.definition.assignmentId)) name identity (Store.referenceFor objective.objectiveId assignment.definition.assignmentId) assignment.definition.sessionId))
             [] -> Right Nothing
             _ -> Left "ambiguous worker identity"
-    buildScope accepted workers = do
+    buildScope catalog accepted workers = do
       let run = accepted.run
           job = accepted.job
           agent = accepted.agent
@@ -123,4 +126,4 @@ coordinationAuthority env settings directory actions declarations budget = Worke
       association <- maybe (Left "accepted run has no objective") Right job.objective
       let context = DelegateCtx (fromMaybe initialDepth job.delegationDepth) run.identity (Just run.sessionId) job.parentSessionId job.parentRunWorkflowId (if null job.lineage then [job.agentName] else job.lineage) run.permittedAliases run.rootId (Just (fromMaybe (Store.coordinatorBudgetId association.objectiveId run.identity) job.delegationBudgetId)) limit
           parent = Store.coordinatorParentScope association.objectiveId run.identity
-      pure (Worker.CoordinationScope V1 run parent agent context workers maximumSessions maximumAssignments mailbox)
+      pure (if null catalog then Worker.CoordinationScope V1 run parent agent context workers maximumSessions maximumAssignments mailbox else Worker.PinnedCoordinationScope V1 run parent agent context workers maximumSessions maximumAssignments mailbox catalog)

@@ -32,16 +32,30 @@ module Shikigami.Workflow.Versioning
     shikigamiWorkflowResumeOptions,
     shikigamiWorkflowResumeOptionsWith,
     terminalWorkflowRetention,
+    prepareAdmittedInput,
+    admitWorkflowInput,
   )
 where
 
+import Control.Exception (throw)
 import Control.Lens ((&), (.~))
+import Control.Monad (when)
+import Data.Aeson (Value, toJSON)
 import Data.Generics.Labels ()
+import Data.Maybe (isNothing)
 import Data.Set (Set)
-import Data.Time (NominalDiffTime)
-import Keiro.Workflow (PatchId, WorkflowRunOptions (..), defaultWorkflowRunOptions)
+import Data.Set qualified as Set
+import Data.Time (NominalDiffTime, getCurrentTime)
+import Effectful (Eff, IOE, liftIO, (:>))
+import Hasql.Transaction (Transaction)
+import Hasql.Transaction qualified as Tx
+import Keiro.Workflow (JournalAppendOutcome (..), PatchId (..), StepName (..), WorkflowError (WorkflowJournalAppendError), WorkflowId (..), WorkflowJournalEvent (..), WorkflowName (..), WorkflowRunOptions (..), defaultWorkflowRunOptions, patchSetStepName, prepareJournalAppend)
 import Keiro.Workflow.Gc (WorkflowGcPolicy (..))
 import Keiro.Workflow.Resume (WorkflowResumeOptions (..), defaultWorkflowResumeOptions)
+import Keiro.Workflow.Schema (lockWorkflowStepTx, lookupStepResultTx, workflowLifecycleMarkersTx, workflowStepLockKey)
+import Kiroku.Store.Effect (Store)
+import Kiroku.Store.Transaction (runTransaction)
+import Shikigami.AdaptiveDelivery.Generated.WorkflowRuntime qualified as Adaptive
 import Shikigami.AgentRun.Generated.WorkflowRuntime qualified as AgentRun
 import Shikigami.App (AppEnv (..))
 import Shikigami.Approval.Generated.WorkflowRuntime qualified as Approval
@@ -74,6 +88,7 @@ shikigamiActivePatches =
     <> DanwaConversation.declaredPatches
     <> Execution.declaredPatches
     <> ContinuingWorker.declaredPatches
+    <> Adaptive.declaredPatches
 
 -- | The options every first run of a Shikigami workflow uses.
 shikigamiWorkflowRunOptions :: AppEnv -> WorkflowRunOptions
@@ -101,3 +116,35 @@ shikigamiWorkflowResumeOptionsWith limits appEnv timeout =
 -- Evidence streams/rows and sink receipts have separate ownership and survive.
 terminalWorkflowRetention :: WorkflowGcPolicy
 terminalWorkflowRetention = WorkflowGcPolicy {retention = 90 * 86400, batchSize = 100}
+
+-- External ingestion precedes the runner's fresh-journal check. Atomically seed
+-- only an unadmitted generation; an existing input or patch set is historical.
+-- Taking the public ingestion lock also arbitrates a concurrent old producer.
+prepareAdmittedInput :: (IOE :> es) => WorkflowName -> WorkflowId -> StepName -> Value -> Eff es (Transaction JournalAppendOutcome)
+prepareAdmittedInput name identity label value = do
+  now <- liftIO getCurrentTime
+  snapshot <- prepareJournalAppend name identity 0 (StepRecorded patchSetStepName (toJSON (map unPatchId (Set.toList shikigamiActivePatches))) now)
+  ingestion <- prepareJournalAppend name identity 0 (StepRecorded label.unStepName value now)
+  pure do
+    -- Same lifecycle lock used by the public journal's terminal writers.
+    lockWorkflowStepTx (workflowStepLockKey identity.unWorkflowId name.unWorkflowName 0 "__keiro_lifecycle__")
+    lockWorkflowStepTx (workflowStepLockKey identity.unWorkflowId name.unWorkflowName 0 label.unStepName)
+    original <- lookupStepResultTx identity.unWorkflowId name.unWorkflowName 0 label.unStepName
+    patches <- lookupStepResultTx identity.unWorkflowId name.unWorkflowName 0 patchSetStepName
+    markers <- workflowLifecycleMarkersTx identity.unWorkflowId name.unWorkflowName 0
+    when (isNothing original && not (null markers)) (Tx.condemn >> throw (WorkflowJournalAppendError "an unadmitted terminal workflow cannot gain input"))
+    when (isNothing original && isNothing patches) do
+      snapshot >>= \case
+        JournalAppended {} -> pure ()
+        JournalAlreadyPresent {} -> pure ()
+        _ -> Tx.condemn >> throw (WorkflowJournalAppendError "native input patch snapshot could not commit")
+    ingestion
+
+admitWorkflowInput :: (IOE :> es, Store :> es) => WorkflowName -> WorkflowId -> StepName -> Value -> Eff es ()
+admitWorkflowInput name identity label value = do
+  prepared <- prepareAdmittedInput name identity label value
+  outcome <- runTransaction prepared
+  case outcome of
+    JournalAppended {} -> pure ()
+    JournalAlreadyPresent {} -> pure ()
+    _ -> throw (WorkflowJournalAppendError "native workflow input could not commit")

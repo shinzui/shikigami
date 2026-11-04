@@ -1,14 +1,24 @@
+{-# LANGUAGE DataKinds #-}
+
 module Shikigami.AdaptiveDeliverySpec (tests) where
 
 import Control.Concurrent.Async (concurrently)
+import Data.Aeson qualified as Aeson
+import Data.ByteString.Lazy qualified as Lazy
 import Data.Either (isLeft, rights)
 import Data.Generics.Labels ()
 import Data.IORef
+import Data.Text qualified as Text
+import Data.Text.Encoding qualified as Text
+import Data.Time (addUTCTime)
 import Effectful (Eff)
 import Hasql.Decoders qualified as D
 import Hasql.Encoders qualified as E
 import Hasql.Statement (preparable)
 import Hasql.Transaction qualified as Tx
+import Keiro.Timer qualified as Timer
+import Keiro.Workflow qualified as Workflow
+import Keiro.Workflow.Awakeable (awakeableNamed)
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Action.Authorization (allowAllActionAuthorizerForTests)
 import Shikigami.Agent.Decl (AgentDecl (..))
@@ -19,6 +29,7 @@ import Shikigami.App (AppEffects, AppEnv, runAppIO)
 import Shikigami.Coordination.Checkpoint qualified as CP
 import Shikigami.Coordination.Proposal qualified as P
 import Shikigami.Coordination.Validate (validateProposal)
+import Shikigami.Coordination.Wake qualified as Wake
 import Shikigami.Execution.Quantity (zeroAmount)
 import Shikigami.Execution.Resources qualified
 import Shikigami.Execution.ResourcesStore qualified as Roots
@@ -28,6 +39,7 @@ import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
 import Shikigami.Objective.Capability qualified as O
 import Shikigami.Objective.Command
+import Shikigami.Objective.Inspection qualified as View
 import Shikigami.Objective.Store qualified as ObjectiveStore
 import Shikigami.Objective.Types
 import Shikigami.Prelude
@@ -42,7 +54,48 @@ tests :: DatabaseFixture -> TestTree
 tests fixture =
   testGroup
     "AdaptiveDelivery"
-    [ testCase "production checkpoint commits graph and executable manifest together; restart reads the committed decision before fresh policy" $
+    [ testCase "objective inspection binds decision history, current references, root usage and coarse refusals without protected instructions" $
+        withCheckpoint fixture $ \env host provider _ objective proposal _ -> do
+          _ <- right =<< provider.accept proposal
+          current <- right =<< readObjective env host objective
+          let refused = proposal & #checkpointRevision .~ current.revision & #operationId .~ fixtureOperationId "inspect-refusal" & #changes .~ [P.ChangeConcurrency 999]
+          assertBool "invalid bounded proposal refused" . isLeft =<< provider.accept refused
+          inspected <- right =<< run env (O.inspectObjective host objective 0 20)
+          adaptive <- maybe (assertFailure "adaptive metadata missing") pure inspected.adaptive
+          length adaptive.graph @?= 1
+          length adaptive.decisions @?= 1
+          length adaptive.resources @?= 1
+          length adaptive.observations @?= 1
+          (head adaptive.decisions).validator @?= "shikigami.adaptive-validator/3"
+          (head adaptive.observations).refusal @?= Just "InvalidProposal"
+          let rendered = Text.decodeUtf8 (Lazy.toStrict (Aeson.encode inspected))
+          assertBool "protected assignment and objective instructions excluded" (all (\private -> not (private `Text.isInfixOf` rendered)) ["bounded work", "deliver exactly"])
+          _ <- right =<< run env (O.executeCommand ownerHost objective current.revision (fixtureOperationId "inspect-revoked") (RevokeMember (RecordedAgent proposalOwner)))
+          run env (O.inspectObjective host objective 0 20) >>= (@?= Left ObjectiveDenied),
+      testCase "checkpoint publications converge on one generation-owned hint without losing either objective write" $
+        withCheckpoint fixture $ \env host provider _ objective proposal _ -> do
+          let watcher = checkpointWatcher env host objective proposal.checkpointRevision (pure ())
+          run env (Workflow.runWorkflow (Workflow.WorkflowName "adaptive-wake") (Workflow.WorkflowId "coordinator-wake") watcher) >>= (@?= Workflow.Suspended)
+          _ <- right =<< provider.accept proposal
+          current <- right =<< readObjective env host objective
+          _ <- right =<< run env (O.executeCommand host objective current.revision (fixtureOperationId "second-checkpoint-wake") (SetNextAction []))
+          run env (Workflow.runWorkflow (Workflow.WorkflowName "adaptive-wake") (Workflow.WorkflowId "coordinator-wake") watcher) >>= (@?= Workflow.Completed True),
+      testCase "checkpoint subscription catches an update committed between observation and registration" $
+        withCheckpoint fixture $ \env host provider _ objective proposal _ -> do
+          let watcher = checkpointWatcher env host objective proposal.checkpointRevision (void (provider.accept proposal >>= right))
+          run env (Workflow.runWorkflow (Workflow.WorkflowName "adaptive-wake") (Workflow.WorkflowId "coordinator-catchup") watcher) >>= (@?= Workflow.Completed True),
+      testCase "the finite cutoff timer wakes the same listener without a model or objective mutation" $
+        withCheckpoint fixture $ \env host _ _ objective proposal _ -> do
+          let watcher = checkpointWatcher env host objective proposal.checkpointRevision (pure ())
+          run env (Workflow.runWorkflow (Workflow.WorkflowName "adaptive-wake") (Workflow.WorkflowId "coordinator-cutoff") watcher) >>= (@?= Workflow.Suspended)
+          now <- getCurrentTime
+          timer <- run env (Timer.claimDueTimer (addUTCTime 120 now)) >>= maybe (assertFailure "missing finite cutoff") pure
+          fired <- run env (Wake.cutoffFireAction timer)
+          assertBool "cutoff published the wake" (isJust fired)
+          run env (Workflow.runWorkflow (Workflow.WorkflowName "adaptive-wake") (Workflow.WorkflowId "coordinator-cutoff") watcher) >>= (@?= Workflow.Completed True)
+          current <- right =<< readObjective env host objective
+          current.revision @?= proposal.checkpointRevision,
+      testCase "production checkpoint commits graph and executable manifest together; restart reads the committed decision before fresh policy" $
         withCheckpoint fixture \env host provider policy objective proposal _ -> do
           originalRoot <- right =<< run env (Roots.inspectRoot policy.rootId)
           decision <- right =<< provider.accept proposal
@@ -65,6 +118,7 @@ tests fixture =
               restore = preparable "UPDATE shikigami.adaptive_decisions SET manifest=$1" (E.param (E.nonNullable E.jsonb)) D.noResult
           run env (runTransaction (Tx.statement () corrupt))
           provider.observe objective proposal.operationId >>= (@?= Left ObjectiveUnavailable)
+          run env (O.inspectObjective ownerHost objective 0 20) >>= (@?= Left ObjectiveUnavailable)
           provider.accept proposal >>= (@?= Left ObjectiveUnavailable)
           run env (runTransaction (Tx.statement (toJSON accepted) restore))
           provider.observe objective proposal.operationId >>= (@?= Right (Just accepted)),
@@ -186,3 +240,28 @@ checked = either (error . show) id
 
 readObjective :: AppEnv -> O.ObjectiveHost -> ObjectiveId -> IO (Either ObjectiveError Objective)
 readObjective env host objective = run env (O.readObjective host objective)
+
+-- One static wait; all checkpoint sources publish the identical Boolean hint.
+checkpointWatcher :: AppEnv -> O.ObjectiveHost -> ObjectiveId -> StateRevision "objective" -> IO () -> Eff (Workflow.Workflow : AppEffects) Bool
+checkpointWatcher _env host objective after beforeRegister = do
+  (token, await) <- awakeableNamed (Workflow.StepName "adaptive-checkpoint-change")
+  (name, owner) <- Workflow.currentWorkflow
+  generation <- Workflow.currentRunGeneration
+  let listener = Wake.Listener objective name owner generation token after
+  _ <- Workflow.step (Workflow.StepName "adaptive-subscribe") $ do
+    liftIO beforeRegister
+    Wake.validateListener listener >>= either (liftIO . assertFailure . show) pure
+    notify <- Wake.prepareListener listener
+    access <- liftIO (O.admitObjectiveAction host "adaptive-subscribe" (toJSON objective)) >>= either (liftIO . assertFailure . show) pure
+    registered <- ObjectiveStore.coordinationQuery access objective $ \current ->
+      if ObjectiveStore.mayCoordinate access current
+        then do
+          registered <- Wake.registerTx listener current.revision notify
+          now <- Tx.statement () (preparable "SELECT clock_timestamp()" E.noParams (D.singleRow (D.column (D.nonNullable D.timestamptz))))
+          case registered of
+            Right () -> void (Timer.scheduleTimerOnceTx (Wake.cutoffRequest listener (addUTCTime 60 now)))
+            _ -> pure ()
+          pure registered
+        else pure (Left ObjectiveDenied)
+    either (liftIO . assertFailure . show) pure (registered >>= id)
+  await

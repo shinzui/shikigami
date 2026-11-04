@@ -2,6 +2,8 @@
 -- authoritative mailbox, rather than replay-local state, selects accepted work.
 module Shikigami.WorkerSession.Workflow
   ( SessionRuntime (..),
+    ChildObjectiveHost (..),
+    childObjectiveHost,
     WorkerSessionStart (..),
     WorkerSessionSeed (..),
     WorkerSessionClosed (..),
@@ -25,6 +27,7 @@ import Data.Text qualified as Text
 import Effectful (Eff, IOE, raise, (:>))
 import Effectful.Exception (throwIO, trySync)
 import Keiro.Workflow (StepName (..), Workflow, WorkflowId (..), WorkflowJournalEvent (..), WorkflowName (..), appendJournalEntry, continueAsNew, currentRunGeneration, currentWorkflow, loadStepIndex, restoreSeed, step)
+import Keiro.Workflow qualified as Workflow
 import Keiro.Workflow.Awakeable (cancelAwakeable)
 import Keiro.Workflow.Child (ChildHandle (..), WorkflowChildCancelled, WorkflowChildFailed, awaitChild)
 import Keiro.Workflow.Child qualified as Child
@@ -32,8 +35,8 @@ import Keiro.Workflow.Child.Schema (ChildRow (..), lookupChild)
 import Keiro.Workflow.Child.Schema qualified as ChildSchema
 import Keiro.Workflow.Resume (WorkflowDef (..), WorkflowRegistry)
 import Shikigami.Agent.Decl (AgentDecl)
-import Shikigami.Agent.Delegate (Delegated (..), delegateAssignment)
-import Shikigami.Agent.Delegate.Context (DelegateCtx (..), DelegationError)
+import Shikigami.Agent.Delegate (Delegated (..), delegateAssignment, delegateAssociatedAssignment)
+import Shikigami.Agent.Delegate.Context (DelegateCtx (..), DelegationError (..))
 import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.Agent.Run (AgentRunResult (..))
 import Shikigami.Agent.RunFailure (AgentRunFailure)
@@ -46,6 +49,7 @@ import Shikigami.Execution.SelectionRuntime qualified as Selection
 import Shikigami.Execution.Store qualified as Execution
 import Shikigami.Execution.Transcript (executionIdFor)
 import Shikigami.FormatVersion (FormatVersion (V1))
+import Shikigami.Objective.Reference (ObjectiveAssociation)
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.WorkerSession.Checkpoint (CheckpointIntent, CheckpointProvider (..), ObjectiveVersion (..))
 import Shikigami.WorkerSession.CheckpointAuthority (RejectionAuthority)
@@ -53,16 +57,35 @@ import Shikigami.WorkerSession.Identity
 import Shikigami.WorkerSession.Input
 import Shikigami.WorkerSession.Store qualified as Store
 import Shikigami.WorkerSession.Types
+import Shikigami.Workflow.Versioning (admitWorkflowInput)
 
-data SessionRuntime = SessionRuntime
-  { appEnv :: !AppEnv,
-    agents :: ![AgentDecl],
-    directory :: !DirectoryHandle,
-    authorize :: !(AgentIdentity -> IO (Either Text ())),
-    checkpoints :: !(Maybe (AgentIdentity -> CheckpointProvider)),
-    rejections :: !(Maybe (AgentIdentity -> CheckpointIntent -> IO (Either Text RejectionAuthority)))
+data ChildObjectiveHost = ChildObjectiveHost
+  { admit :: !(AgentIdentity -> AgentIdentity -> WorkerSessionId -> AssignmentId -> WorkflowId -> IO (Either Text ObjectiveAssociation))
   }
+
+data SessionRuntime
+  = SessionRuntime
+      { appEnv :: !AppEnv,
+        agents :: ![AgentDecl],
+        directory :: !DirectoryHandle,
+        authorize :: !(AgentIdentity -> IO (Either Text ())),
+        checkpoints :: !(Maybe (AgentIdentity -> CheckpointProvider)),
+        rejections :: !(Maybe (AgentIdentity -> CheckpointIntent -> IO (Either Text RejectionAuthority)))
+      }
+  | AssociatedSessionRuntime
+      { appEnv :: !AppEnv,
+        agents :: ![AgentDecl],
+        directory :: !DirectoryHandle,
+        authorize :: !(AgentIdentity -> IO (Either Text ())),
+        checkpoints :: !(Maybe (AgentIdentity -> CheckpointProvider)),
+        rejections :: !(Maybe (AgentIdentity -> CheckpointIntent -> IO (Either Text RejectionAuthority))),
+        childObjectives :: !ChildObjectiveHost
+      }
   deriving stock (Generic)
+
+childObjectiveHost :: SessionRuntime -> Maybe ChildObjectiveHost
+childObjectiveHost SessionRuntime {} = Nothing
+childObjectiveHost AssociatedSessionRuntime {childObjectives} = Just childObjectives
 
 newtype WorkerSessionStart = WorkerSessionStart {sessionId :: (WorkerSessionId)}
   deriving stock (Eq, Show, Generic)
@@ -89,7 +112,7 @@ ensureSession :: WorkerSessionId -> Eff (Workflow : AppEffects) ()
 ensureSession session = do
   _ <- Child.spawnChild Generated.workflowName (sessionWorkflowId session) (pure (WorkerSessionClosed session Failed))
   now <- liftIO getCurrentTime
-  appendJournalEntry Generated.workflowName (sessionWorkflowId session) (StepRecorded "ingest-session" (toJSON (WorkerSessionStart session)) now)
+  admitWorkflowInput Generated.workflowName (sessionWorkflowId session) (StepName "ingest-session") (toJSON (WorkerSessionStart session))
 
 sessionAccess :: SessionRuntime -> WorkerSessionId -> Eff AppEffects (Either SessionError Store.SessionAccess)
 sessionAccess runtime session = do
@@ -159,7 +182,17 @@ sessionWorkflow runtime initial = do
             (existing, Nothing) -> existing
             (Just existing, Just additional) -> Just (filter (`elem` existing) additional)
           context = admission.context & #executionPermissions .~ permissions
-      spawned <- trySync (delegateAssignment state.owner instruction.selection runtime.agents runtime.directory admission.delegator context (assignmentDelegationKey message.assignmentId) (fromMaybe admission.worker state.worker) (Aeson.object ["instruction" .= instruction.text, "assignmentId" .= message.assignmentId, "objective" .= admission.objective, "retainedFindings" .= findings]))
+      useAssociated <- Workflow.patch (Workflow.PatchId "shikigami-worker-objective-children-v1")
+      reference <- case (useAssociated, childObjectiveHost runtime) of
+        (True, Just host) -> do
+          associated <- step (StepName "associate-assignment-child") (liftIO (host.admit admission.context.identity state.owner accepted.sessionId message.assignmentId childId))
+          either (throwIO . DelegationIdentityRefused) (pure . Just) associated
+        _ -> pure Nothing
+      let delegateChild = case reference of
+            Nothing -> delegateAssignment
+            Just objective -> delegateAssociatedAssignment objective
+      let declarations = if null (admissionCatalog admission) then runtime.agents else admissionCatalog admission
+      spawned <- trySync (delegateChild state.owner instruction.selection declarations runtime.directory admission.delegator context (assignmentDelegationKey message.assignmentId) (fromMaybe admission.worker state.worker) (Aeson.object ["instruction" .= instruction.text, "assignmentId" .= message.assignmentId, "objective" .= admission.objective, "retainedFindings" .= findings]))
       case spawned of
         Right (Delegated handle) -> finish accepted message access handle
         Left err
@@ -238,4 +271,4 @@ currentAssignmentAuthority runtime admission state instruction = case runtime.ch
     pure do
       authority
       version <- snapshot
-      unless (objectiveIsActive version.active && version.owner == state.owner && version.ownerEpoch == state.epoch && Just version.rootId == admission.context.executionRootId && now < version.cutoff && version.revision == instruction.objectiveRevision && version.assignmentRevision == instruction.assignmentRevision && version.criteriaRevision == instruction.criteriaRevision) (Left "current objective assignment changed or expired")
+      unless (objectiveIsActive version.active && version.owner == state.owner && version.ownerEpoch == state.epoch && Just version.rootId == admission.context.executionRootId && now < version.cutoff && (if null (admissionCatalog admission) then version.revision == instruction.objectiveRevision else version.revision >= instruction.objectiveRevision) && version.assignmentRevision == instruction.assignmentRevision && version.criteriaRevision == instruction.criteriaRevision) (Left "current objective assignment changed or expired")

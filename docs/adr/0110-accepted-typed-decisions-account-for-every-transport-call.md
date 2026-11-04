@@ -61,3 +61,14 @@ when no typed runner is installed.
 This record covers the execution/evidence bridge. The adaptive coordinator's
 graph-to-session command protocol and exact artifact qualification remain
 separate implementation and acceptance obligations in Plan 85.
+
+## Retained limits and deadlines
+
+New bounded work retains a positive decision timeout and actual-call ceiling.
+A later runtime can narrow these values, never enlarge them. The old work
+constructor and JSON representation still decode without these optional limits.
+Each transport also uses the earlier authoritative root/selection deadline in
+its actual request timeout. A cancellation after expectation admission records
+an unknown call before unwinding; it cannot turn an admitted expectation into
+success or refund uncertain usage. Completion requires both zero active and
+zero unknown root attempts, plus terminal native source owners.

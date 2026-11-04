@@ -4,6 +4,7 @@
   "domainRoots": [
     "Action",
     "Activity",
+    "AdaptiveDelivery",
     "Agent",
     "AgentRun",
     "Approval",
@@ -12,6 +13,7 @@
     "Caller",
     "Capability",
     "ContinuingWorker",
+    "Coordination",
     "DanwaConversation",
     "Decision",
     "Delegation",

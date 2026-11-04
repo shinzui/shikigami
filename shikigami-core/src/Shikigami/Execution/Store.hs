@@ -13,6 +13,7 @@ module Shikigami.Execution.Store
     loadExecution,
     inspectExecution,
     inspectExecutionTx,
+    rootExecutionsSettledTx,
     inspectExecutionPage,
     inspectOperation,
     readReplayPayload,
@@ -260,6 +261,18 @@ inspectExecutionTx execution = do
       | state.executionId /= execution || executionIdFor binding.assignmentId /= execution -> Tx.condemn >> pure (Left CorruptReplay)
       | otherwise -> pure (Right (Just pair))
     Right Nothing -> pure (Right Nothing)
+
+-- | Completion reads the actual execution owners under the already-held root
+-- lock, including wrappers between transport calls and work not yet projected.
+rootExecutionsSettledTx :: ExecutionRootId -> Transaction (Either ExecutionError Bool)
+rootExecutionsSettledTx root = do
+  rows <- Tx.statement root (preparable "SELECT state,binding FROM shikigami.executions WHERE binding->'rootId'=$1" jsonParam (D.rowList executionRow))
+  let checked = do
+        executions <- either (const (Left CorruptReplay)) Right (sequence rows)
+        forM_ executions \(state, binding) -> unless (binding.rootId == Just root && state.executionId == executionIdFor binding.assignmentId) (Left CorruptReplay)
+        pure (all (\(state, _) -> state.phase `elem` [Succeeded, Failed, Cancelled] && state.pendingReceipts == noPendingReceipts && isNothing state.activeOperation) executions)
+  when (case checked of Left _ -> True; _ -> False) Tx.condemn
+  pure checked
 
 -- Operational JSON is assembled from typed metadata only. No payload body or
 -- wake is selected; active work stays visible even outside the history page.

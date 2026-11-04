@@ -62,12 +62,18 @@ validateProposal now policy prior objective proposal = do
   unless (length prior == length objective.assignments && length (nub (map (.assignment.assignmentId) prior)) == length prior && all (\placement -> any ((== placement.assignment.assignmentId) . (.definition.assignmentId)) objective.assignments) prior) (Left ObjectiveConflict)
   current <- forM prior \placement -> do
     assignment <- lookupAssignment placement.assignment.assignmentId
-    pure (placement {assignment = assignment.definition})
+    let draft = assignment.definition
+        bound =
+          if placement.target == policy.coordinator && draft.owner == policy.identity && isNothing draft.rootId && isNothing draft.cutoff
+            then draft & #rootId .~ Just policy.rootId & #cutoff .~ Just policy.cutoff
+            else draft
+    pure (placement {assignment = bound})
   arrangement <- foldM apply current proposal.changes
   validateGraph (map (.assignment) arrangement)
   unless (length arrangement <= policy.maximumAssignments) invalid
   forM_ arrangement \placement -> when (placement.assignment.state `notElem` [Done, Withdrawn]) do
     let draft = placement.assignment
+    unless (all (\key -> any (\dependency -> dependency.assignment.assignmentId == key && dependency.assignment.state /= Withdrawn) arrangement) draft.dependencies) invalid
     unless (draft.rootId == Just policy.rootId && maybe False (\cutoff -> now < cutoff && cutoff <= policy.cutoff) draft.cutoff) (Left ObjectiveDenied)
     target <- targetFor placement.target draft.owner
     unless (any (\member -> member.principal == RecordedAgent draft.owner && any (`elem` member.roles) [Owner, Coordinator, Worker]) objective.members) (Left ObjectiveDenied)
@@ -80,7 +86,7 @@ validateProposal now policy prior objective proposal = do
     unless (placement.target == policy.coordinator && isNothing placement.parent || parentName `elem` target.parents) (Left ObjectiveDenied)
     depth arrangement [] [] placement >>= \value -> unless (value <= policy.maximumDepth) invalid
   let operations = zipWith (\ordinal change -> ExecutableOperation (operationIdWithPrefix ('a' :| "daptive:") (versionedDigest "shikigami.adaptive-operation/1" (toJSON (proposal.operationId, ordinal :: Int)))) change) [0 ..] proposal.changes
-  pure (AcceptedDecision V1 "shikigami.adaptive-validator/2" policy proposal (checkpointDigest objective) arrangement operations)
+  pure (AcceptedDecision V1 "shikigami.adaptive-validator/3" policy proposal (checkpointDigest objective) arrangement operations)
   where
     invalid = Left (ObjectiveInvalid "invalid adaptive proposal")
     lookupAssignment key = maybe (Left ObjectiveMissing) Right (find ((== key) . (.definition.assignmentId)) objective.assignments)
@@ -134,6 +140,7 @@ validateProposal now policy prior objective proposal = do
         pure graph
       FollowUpContext key input -> instruction key input >> pure graph
       TransferAssignment key name workspace -> do
+        unless (length proposal.changes == 1) invalid
         assignment <- active key
         unless (lookup key policy.workspaces == Just workspace) (Left ObjectiveDenied)
         placement <- maybe (Left ObjectiveMissing) Right (find ((== key) . (.assignment.assignmentId)) prior)
@@ -147,9 +154,10 @@ validateProposal now policy prior objective proposal = do
         pure graph
       ChangeConcurrency bound -> unless (bound >= 1 && bound <= policy.maximumConcurrency) invalid >> pure graph
       IntegrateResult key evidence -> do
-        void (lookupAssignment key)
+        assignment <- lookupAssignment key
+        unless (assignment.definition.state /= Withdrawn) invalid
         unless (any ((== evidence.criterion) . (.key)) objective.criteria) (Left ObjectiveInvalidEvidence)
-        pure graph
+        pure [if entry.assignment.assignmentId == key then entry {assignment = entry.assignment {state = Done}} else entry | entry <- graph]
       AwaitAssignments keys -> do
         unless (not (null keys) && length keys <= 128 && length (nub keys) == length keys) invalid
         traverse_ active keys
@@ -159,8 +167,25 @@ validateProposal now policy prior objective proposal = do
         let completion = completionProposal acceptance
         -- The owner's acceptance predicate expects the proposal revision plus
         -- the one atomic proposal write. We check the same exact evidence now.
-        validateAcceptance (objective & #revision .~ advanceRevision objective.revision) completion
-        pure graph
+        -- A sessionless coordinator assignment records responsibility for the
+        -- finite delivery itself. Its completion is implied only by the same
+        -- exact integrated acceptance predicate that all other work must pass.
+        let completed =
+              [ if entry.target == policy.coordinator && entry.assignment.owner == policy.identity && isNothing entry.assignment.sessionId
+                  then entry {assignment = entry.assignment {state = Done}}
+                  else entry
+              | entry <- graph
+              ]
+            projected =
+              objective
+                & #assignments
+                %~ map
+                  ( \assignment -> case find ((== assignment.definition.assignmentId) . (.assignment.assignmentId)) completed of
+                      Just placement -> assignment & #definition .~ placement.assignment
+                      Nothing -> assignment
+                  )
+        validateAcceptance (projected & #revision .~ advanceRevision objective.revision) completion
+        pure completed
     ancestorNames seen placement
       | placement.assignment.assignmentId `elem` seen = invalid
       | otherwise = case placement.parent of

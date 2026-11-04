@@ -1,9 +1,13 @@
 -- | Bounded public metadata. Instructions and retained output stay protected.
 module Shikigami.Objective.Inspection where
 
+import Data.Aeson qualified as Aeson
+import Data.Aeson.KeyMap qualified as KeyMap
 import Shikigami.Agent.Principal (identityText)
+import Shikigami.Coordination.Proposal qualified as Adaptive
 import Shikigami.Execution.Identity (executionRootIdText, operationIdText)
 import Shikigami.Execution.Payload (payloadDigestText)
+import Shikigami.Execution.Resources qualified as Resources
 import Shikigami.Execution.Transcript (PayloadRef (..))
 import Shikigami.Objective.Types
 import Shikigami.Prelude
@@ -30,6 +34,55 @@ data ReportedResultView = ReportedResultView {assignmentId :: !Text, operationId
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
+data PlacementView = PlacementView
+  {assignmentId :: !Text, target :: !Text, parent :: !(Maybe Text), dependencies :: ![Text], sessionId :: !(Maybe Text)}
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (ToJSON, FromJSON)
+
+data AdaptiveDecisionView = AdaptiveDecisionView
+  { operationId :: !Text,
+    checkpointRevision :: !Integer,
+    validator :: !Text,
+    rationale :: !Text,
+    friction :: !(Maybe Text),
+    expectedBenefit :: !Text,
+    laterEvidence :: !Text,
+    changes :: ![Text]
+  }
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (ToJSON, FromJSON)
+
+data ResourceView = ResourceView {rootId :: !Text, state :: !Resources.Root}
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (ToJSON, FromJSON)
+
+data AdaptiveObservationView = AdaptiveObservationView {operationId :: !Text, kind :: !Text, revision :: !Integer, status :: !Text, refusal :: !(Maybe Text)}
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (ToJSON, FromJSON)
+
+data AdaptiveView = AdaptiveView
+  {graph :: ![PlacementView], decisions :: ![AdaptiveDecisionView], resources :: ![ResourceView], observations :: ![AdaptiveObservationView], next :: !(Maybe Int)}
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (ToJSON, FromJSON)
+
+decisionView :: Adaptive.AcceptedDecision -> AdaptiveDecisionView
+decisionView value = AdaptiveDecisionView (operationIdText proposal.operationId) (revisionNumber proposal.checkpointRevision) value.validatorVersion (criterionDescriptionText proposal.rationale) (criterionDescriptionText <$> proposal.friction) (criterionDescriptionText proposal.expectedBenefit) (evidenceKeyText proposal.laterEvidence) (map changeTag proposal.changes)
+  where
+    proposal = value.proposal
+    changeTag = \case
+      Adaptive.DirectWork {} -> "DirectWork"
+      Adaptive.CreateAssignment {} -> "CreateAssignment"
+      Adaptive.NarrowAssignment {} -> "NarrowAssignment"
+      Adaptive.SplitAssignment {} -> "SplitAssignment"
+      Adaptive.ConsolidateAssignments {} -> "ConsolidateAssignments"
+      Adaptive.FollowUpContext {} -> "FollowUpContext"
+      Adaptive.TransferAssignment {} -> "TransferAssignment"
+      Adaptive.EscalateModel {} -> "EscalateModel"
+      Adaptive.ChangeConcurrency {} -> "ChangeConcurrency"
+      Adaptive.IntegrateResult {} -> "IntegrateResult"
+      Adaptive.AwaitAssignments {} -> "AwaitAssignments"
+      Adaptive.ProposeCompletion {} -> "ProposeCompletion"
+
 data ObjectiveView = ObjectiveView
   { objectiveId :: !Text,
     title :: !Text,
@@ -46,10 +99,15 @@ data ObjectiveView = ObjectiveView
     evidence :: ![EvidenceView],
     reportedResults :: ![ReportedResultView],
     nextActions :: ![Text],
-    next :: !(Maybe Int)
+    next :: !(Maybe Int),
+    adaptive :: !(Maybe AdaptiveView)
   }
   deriving stock (Eq, Show, Generic)
-  deriving anyclass (ToJSON, FromJSON)
+  deriving anyclass (ToJSON)
+
+instance FromJSON ObjectiveView where
+  parseJSON = Aeson.withObject "ObjectiveView" \fields ->
+    Aeson.genericParseJSON Aeson.defaultOptions (Aeson.Object (if KeyMap.member "adaptive" fields then fields else KeyMap.insert "adaptive" Aeson.Null fields))
 
 objectiveView :: Objective -> ObjectiveView
 objectiveView = objectiveViewPage 0 20
@@ -74,6 +132,7 @@ objectiveViewPage after limit objective =
       evidence = map evidenceView (page objective.evidence),
       reportedResults = map resultView (page objective.reportedResults),
       nextActions = map nextActionText (page objective.nextActions),
+      adaptive = Nothing,
       next = if any (> after + limit) [length objective.criteria, length objective.assignments, length objective.evidence, length objective.reportedResults, length objective.nextActions] then Just (after + limit) else Nothing
     }
   where

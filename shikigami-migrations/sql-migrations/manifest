@@ -37,3 +37,5 @@
 0038-adaptive-coordination-decisions.sql
 0039-shared-execution-capacity.sql
 0040-decision-root-accounting.sql
+0041-adaptive-checkpoint-wakes.sql
+0042-adaptive-delivery-observations.sql

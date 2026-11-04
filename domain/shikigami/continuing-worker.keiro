@@ -13,5 +13,8 @@ workflow ContinuingWorker
     step observe-session -> SessionState
     step select-assignment -> SessionAction
     step record-assignment-result -> ResultReceipt
+    patch shikigami-worker-objective-children-v1 {
+      step associate-assignment-child -> ObjectiveAssociationOutcome
+    }
     child agent-run id input via assignmentChildWorkflowIdV2 -> AgentRunOutcome
     continueAsNew WorkerSessionSeed

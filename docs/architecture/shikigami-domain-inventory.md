@@ -4,9 +4,9 @@ This census was refreshed on 2026-10-30 under
 [MasterPlan 16](../masterplans/16-upgrade-shikigami-to-keiro-0-22-and-retire-superseded-runtime-workarounds.md)
 and [plan 93](../plans/93-adopt-guarded-catalog-commands-and-qualify-current-dsl-consumer-contracts.md).
 A declaration counts only when production executes its generated contract (ADR-1).
-The workspace has ten explicit Language 6 members: agent-run, approval,
+The workspace has twelve explicit Language 6 members: agent-run, approval,
 conversation, execution-driver, execution, RunEvidence, run-jobs, worker-session,
-continuing-worker and objective. Four aggregates own catalogs and query models.
+continuing-worker, adaptive-delivery, objective and objective-tracker. Four aggregates own catalogs and query models.
 Keiro/DSL 0.22 is released; Language 6 remains the opt-in candidate language.
 
 ## Workflows and identities
@@ -21,6 +21,7 @@ Paths in this section are relative to `shikigami-core/src/`.
 | Delegated runs | `Shikigami/Agent/Delegate.hs` and `Shikigami/Agent/Delegate/Context.hs` | Deterministic UUIDv5 child identities and reservation ledger are technical deduplication identities. Preserve their derivation; do not relabel them TypeID-v7. |
 | `shikigami.execution` | `domain/shikigami/execution-driver.keiro`; `Shikigami/Execution/Driver.hs`; generated ExecutionDriver runtime | Transcript and selection workflow tests cover bounded generations, accepted-reference queue repair, protected replay, Approval, cancellation and parent completion after provider retirement. |
 | `shikigami.worker-session` | `domain/shikigami/continuing-worker.keiro`; `Shikigami/WorkerSession/Workflow.hs`; generated ContinuingWorker runtime | Session suites cover one assignment per generation, durable idle wakes, original governed child mappings, missing-input repair and retained result acknowledgement after handoff. |
+| `shikigami.adaptive-delivery` | `domain/shikigami/adaptive-delivery.keiro`; `Shikigami/Coordination/Workflow.hs`; generated AdaptiveDelivery runtime | AdaptiveWorkflowSpec covers accepted typed decisions, finding-driven follow-up, pinned local descendants, direct work, model escalation and retained same-session handoff. WorkflowInputSpec preserves atomic fresh ingestion and historical patch branches. |
 | Workflow options | `Shikigami/Workflow/Versioning.hs` | One options constructor derives active patches from generated declarations. Preserve it even with an empty patch set; retain synthetic old/new workflow tests. |
 | Flow capabilities | `Shikigami/Flow/Capability.hs`, `Shikigami/Flow/Routing.hs`, `Shikigami/Flow/AtRiskCustomer.hs` | Journaled memory, routing decisions, approvals and sink labels execute within agent-run. The model-driven router is a Flow capability, not a Keiro process/router node. |
 

@@ -5,9 +5,10 @@ module Shikigami.Objective.Command where
 import Data.Aeson qualified as Aeson
 import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.Coordination.Proposal (AcceptedDecision (..), Change (IntegrateResult), ExecutableOperation (..))
+import Shikigami.Execution.Identity qualified
 import Shikigami.Objective.Types
 import Shikigami.Prelude
-import Shikigami.WorkerSession.Capability (CoordinationScope)
+import Shikigami.WorkerSession.Capability (CoordinationScope, CoordinatorRun)
 import Shikigami.WorkerSession.Checkpoint (CheckpointIntent)
 import Shikigami.WorkerSession.Transfer (FenceProof, TransferIntent)
 
@@ -41,6 +42,7 @@ data InternalCommand
   | IngestCheckpoint !ObjectiveAssignmentId !CheckpointIntent ![EvidenceInput] ![UnresolvedOperation]
   | ProjectCheckpoint !ObjectiveAssignmentId !CheckpointIntent
   | RetainCoordination !ObjectiveAssignmentId !CoordinationScope
+  | RetainAdaptiveCoordination !ObjectiveAssignmentId !CoordinatorRun !Shikigami.Execution.Identity.OperationId !CoordinationScope
   | TransferSessionOwnership !ObjectiveAssignmentId !TransferIntent !FenceProof
   | TransferOwnership !ObjectiveAssignmentId !(StateRevision "worker-owner") !AgentIdentity
   deriving stock (Eq, Show, Generic)
@@ -71,6 +73,7 @@ commandTag = \case
   Internal IngestCheckpoint {} -> "ingest-checkpoint"
   Internal ProjectCheckpoint {} -> "project-checkpoint"
   Internal RetainCoordination {} -> "retain-coordination"
+  Internal RetainAdaptiveCoordination {} -> "retain-adaptive-coordination"
   Internal TransferSessionOwnership {} -> "transfer-session-ownership"
   Internal TransferOwnership {} -> "transfer-ownership"
 

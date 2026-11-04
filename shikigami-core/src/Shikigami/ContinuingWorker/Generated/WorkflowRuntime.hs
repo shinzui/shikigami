@@ -40,7 +40,7 @@ awaitLabels :: [Text]
 awaitLabels = ["session-changed"]
 
 declaredPatches :: Set PatchId
-declaredPatches = Set.fromList []
+declaredPatches = Set.fromList [PatchId "shikigami-worker-objective-children-v1"]
 
 -- The journal keys the runtime records patch decisions under.
 declaredPatchStepNames :: [Text]

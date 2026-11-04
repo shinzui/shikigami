@@ -1,6 +1,7 @@
 module Main (main) where
 
 import Shikigami.AdaptiveDeliverySpec qualified as AdaptiveDeliverySpec
+import Shikigami.AdaptiveWorkflowSpec qualified as AdaptiveWorkflowSpec
 import Shikigami.AgentRun.LedgerSpec qualified as LedgerSpec
 import Shikigami.AgentWorkflowSpec qualified as AgentWorkflowSpec
 import Shikigami.AppSpec qualified as AppSpec
@@ -31,6 +32,7 @@ import Shikigami.WorkerSessionCapabilitySpec qualified as WorkerSessionCapabilit
 import Shikigami.WorkerSessionHandoffSpec qualified as WorkerSessionHandoffSpec
 import Shikigami.WorkerSessionSpec qualified as WorkerSessionSpec
 import Shikigami.WorkerSessionStoreSpec qualified as WorkerSessionStoreSpec
+import Shikigami.WorkflowInputSpec qualified as WorkflowInputSpec
 import Shikigami.WorkflowVersioningSpec qualified as WorkflowVersioningSpec
 import Shikigami.WorkspaceProcessProfileStoreSpec qualified as WorkspaceProcessProfileStoreSpec
 import Shikigami.WorkspaceTransferSpec qualified as WorkspaceTransferSpec
@@ -52,6 +54,8 @@ suite = withShikigamiMigratedSuite \databaseFixture ->
         "shikigami postgres"
         [ AppSpec.tests databaseFixture,
           AdaptiveDeliverySpec.tests databaseFixture,
+          AdaptiveWorkflowSpec.tests databaseFixture,
+          WorkflowInputSpec.tests databaseFixture,
           ObjectiveStoreSpec.tests databaseFixture,
           ObjectiveTrackerStoreSpec.tests databaseFixture,
           ObjectiveCheckpointSpec.tests databaseFixture,

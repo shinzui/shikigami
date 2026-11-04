@@ -4,6 +4,7 @@ module Shikigami.Decision.Evidence
   ( DecisionEvidenceStore,
     postgresDecisionEvidenceStore,
     ensureInvocation,
+    decisionEvidenceTransaction,
     decisionCallHooks,
     decisionCallHooksWithAccounting,
     DecisionEvidenceReport (..),
@@ -512,3 +513,8 @@ whenTooManyInvocations :: [a] -> Either DecisionFailure ()
 whenTooManyInvocations rows
   | length rows > 10000 = refuse CallLimitExceeded "decision invocation report capacity exceeded"
   | otherwise = Right ()
+
+-- | Root accounting composes through the same process-owned pool and refusal
+-- boundary; credentials and protected provider content never leave this owner.
+decisionEvidenceTransaction :: DecisionEvidenceStore -> Tx.Transaction (Either DecisionFailure a) -> IO (Either DecisionFailure a)
+decisionEvidenceTransaction = transaction

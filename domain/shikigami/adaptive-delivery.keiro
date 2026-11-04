@@ -1,0 +1,36 @@
+language keiro-dsl 6
+context shikigami
+layout collocated
+
+workflow AdaptiveDelivery
+  name "shikigami.adaptive-delivery"
+  in AdaptiveAdmission
+  out AdaptiveDeliveryResult
+  id from input via admittedAdaptiveWorkflowId
+  body
+    step ingest-adaptive -> AdaptiveAdmission
+    step adaptive-checkpoint -> AdaptiveCheckpoint
+    step adaptive-events -> AdaptiveEvents
+    step adaptive-findings-checkpoint -> AdaptiveCheckpoint
+    step decision-prepare-adapt -> PreparedDecisionResolution
+    step decision-submit-adapt -> ExecutionAdmissionResult
+    child decision-execution id input via executionWorkflowId -> ExecutionDriverResult
+    step decision-result-adapt -> DecisionOutcome
+    step adaptive-validation -> AdaptiveDecisionResolution
+    step adaptive-load-decision -> AdaptiveDecisionResolution
+    step adaptive-scope -> AdaptiveScopeResolution
+    step adaptive-dispatch-checkpoint -> AdaptiveCheckpoint
+    step adaptive-find -> WorkerCommandResult
+    step adaptive-intent -> AdaptiveCommandIntent
+    step adaptive-dispatch -> WorkerCommandResult
+    step adaptive-transfer-ready -> Bool
+    step adaptive-handoff -> WorkerCommandResult
+    step adaptive-ready -> AdaptiveReadyAssignments
+    step adaptive-direct-admit -> ExecutionAdmissionResult
+    child direct-execution id input via executionWorkflowId -> ExecutionDriverResult
+    step adaptive-direct-result -> AdaptiveDirectResult
+    step adaptive-direct-progress -> ObjectiveReceiptResolution
+    await checkpoint-change -> Bool
+    step adaptive-subscribe -> AdaptiveSubscriptionResolution
+    step adaptive-terminal -> AdaptiveTerminalResolution
+    continueAsNew AdaptiveSeed

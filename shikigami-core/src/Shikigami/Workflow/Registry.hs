@@ -6,6 +6,7 @@ import Keiro.Workflow.Resume (WorkflowRegistry)
 import Shikigami.Agent.Conversation qualified as Conversation
 import Shikigami.Agent.Workflow qualified as Agent
 import Shikigami.App (AppEffects)
+import Shikigami.Coordination.Workflow qualified as Adaptive
 import Shikigami.Execution.Driver qualified as Execution
 import Shikigami.WorkerSession.Workflow qualified as WorkerSession
 
@@ -16,4 +17,5 @@ workflowRegistry agents conversations =
   Agent.agentRunRegistry agents
     `Map.union` Conversation.conversationRegistry conversations
     `Map.union` Execution.executionRegistry (Agent.executionRuntime agents)
+    `Map.union` Adaptive.registry (Agent.adaptiveRuntime agents)
     `Map.union` WorkerSession.sessionRegistry (Agent.workerSessionRuntime agents)

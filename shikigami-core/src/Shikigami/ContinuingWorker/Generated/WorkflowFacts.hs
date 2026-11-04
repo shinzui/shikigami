@@ -20,9 +20,9 @@ workflowFacts =
     { name = "shikigami.worker-session"
     , idVia = "sessionWorkflowId"
     , idField = "sessionId"
-    , body = ["step:ingest-session", "await:session-changed", "step:observe-session", "step:select-assignment", "step:record-assignment-result", "child:agent-run", "continueAsNew:WorkerSessionSeed"]
+    , body = ["step:ingest-session", "await:session-changed", "step:observe-session", "step:select-assignment", "step:record-assignment-result", "patch:shikigami-worker-objective-children-v1(step:associate-assignment-child)", "child:agent-run", "continueAsNew:WorkerSessionSeed"]
     , awaitLabels = ["session-changed"]
-    , patchIds = []
+    , patchIds = ["shikigami-worker-objective-children-v1"]
     }
 
 -- | Base-library projection used by the service-level conformance facade.

@@ -19,7 +19,7 @@ import Shikigami.Execution.Identity (OperationId)
 import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Objective.Command (Command)
 import Shikigami.Objective.HttpEnvelope qualified as HttpEnvelope
-import Shikigami.Objective.Inspection (AssignmentView, CriterionView, EvidenceView, ObjectiveView, ReportedResultView)
+import Shikigami.Objective.Inspection (AdaptiveDecisionView, AdaptiveObservationView, AdaptiveView, AssignmentView, CriterionView, EvidenceView, ObjectiveView, PlacementView, ReportedResultView, ResourceView)
 import Shikigami.Objective.Schema (commandSchema, createSchema)
 import Shikigami.Objective.Tracker.Api (TrackerApi)
 import Shikigami.Objective.Types (CreateRequest, StateRevision)
@@ -81,6 +81,38 @@ instance ToSchema CriterionView where declareNamedSchema = genericDeclareNamedSc
 instance ToSchema EvidenceView where declareNamedSchema = genericDeclareNamedSchema (fromAesonOptions defaultOptions)
 
 instance ToSchema ReportedResultView where declareNamedSchema = genericDeclareNamedSchema (fromAesonOptions defaultOptions)
+
+instance ToSchema PlacementView where declareNamedSchema = genericDeclareNamedSchema (fromAesonOptions defaultOptions)
+
+instance ToSchema AdaptiveDecisionView where declareNamedSchema = genericDeclareNamedSchema (fromAesonOptions defaultOptions)
+
+instance ToSchema AdaptiveObservationView where declareNamedSchema = genericDeclareNamedSchema (fromAesonOptions defaultOptions)
+
+instance ToSchema AdaptiveView where declareNamedSchema = genericDeclareNamedSchema (fromAesonOptions defaultOptions)
+
+instance ToSchema ResourceView where
+  declareNamedSchema _ = pure (NamedSchema (Just "ResourceView") (schemaValue resourceSchema))
+    where
+      object fields = Aeson.object ["type" .= ("object" :: Text), "properties" .= Aeson.object fields, "required" .= map fst fields]
+      integer = Aeson.object ["type" .= ("integer" :: Text), "minimum" .= (0 :: Int), "maximum" .= (9223372036854775807 :: Integer)]
+      quantities = Aeson.object ["type" .= ("object" :: Text), "additionalProperties" .= integer]
+      limit = Aeson.object ["oneOf" .= [object ["tag" .= Aeson.object ["type" .= ("string" :: Text), "enum" .= ["ExplicitlyUnbounded" :: Text]]], object ["tag" .= Aeson.object ["type" .= ("string" :: Text), "enum" .= ["Limited" :: Text]], "contents" .= integer]]]
+      resourceSchema =
+        object
+          [ "rootId" .= Aeson.object ["type" .= ("string" :: Text)],
+            "state"
+              .= object
+                [ "envelope" .= object ["limits" .= Aeson.object ["type" .= ("object" :: Text), "additionalProperties" .= limit], "cutoff" .= Aeson.object ["type" .= ("string" :: Text), "format" .= ("date-time" :: Text)]],
+                  "revision" .= integer,
+                  "cancelled" .= Aeson.object ["type" .= ("boolean" :: Text)],
+                  "activeLimit" .= Aeson.object ["type" .= ("integer" :: Text), "minimum" .= (0 :: Int), "nullable" .= True],
+                  "overage" .= Aeson.object ["type" .= ("boolean" :: Text)],
+                  "active" .= integer,
+                  "unknown" .= integer,
+                  "known" .= quantities,
+                  "usage" .= object ["settled" .= quantities, "held" .= quantities]
+                ]
+          ]
 
 instance ToSchema ObjectiveView where declareNamedSchema = genericDeclareNamedSchema (fromAesonOptions defaultOptions)
 

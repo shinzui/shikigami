@@ -4,6 +4,7 @@ module Shikigami.DecisionExecutionSpec (tests) where
 
 import Baikai.Options (emptyOptions)
 import Baikai.Provider.Registry (ApiProvider (..), newProviderRegistryFrom)
+import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async (wait, withAsync)
 import Control.Concurrent.MVar (newEmptyMVar, putMVar, readMVar, takeMVar)
 import Control.Monad (void)
@@ -27,6 +28,7 @@ import Shikigami.App (AppEnv (..))
 import Shikigami.Attestation.PolicyValue (mkCeiling)
 import Shikigami.Behavior.Run (BehaviorEnv (..))
 import Shikigami.Behavior.StubProvider (stubModel)
+import Shikigami.Decision.Accounting (boundDecisionTimeout)
 import Shikigami.Decision.Contract
 import Shikigami.Decision.Evidence
 import Shikigami.Decision.Execution
@@ -45,6 +47,7 @@ import Shikigami.Execution.ResourcesStore qualified as Roots
 import Shikigami.Execution.Selection
 import Shikigami.Execution.SelectionRuntime (SelectionRuntime (..))
 import Shikigami.Execution.Start qualified as Start
+import Shikigami.Execution.Store qualified as Store
 import Shikigami.Execution.Timer (observationFireAction)
 import Shikigami.Execution.Transcript
 import Shikigami.ExecutionDriver.Generated.WorkflowRuntime qualified as Generated
@@ -68,7 +71,37 @@ tests :: DatabaseFixture -> TestTree
 tests fixture =
   testGroup
     "DecisionExecution"
-    [ testCase "two internal calls settle the shared root; restart reuses accepted work and committed result" $
+    [ testCase "retained decision limits narrow a later runtime and actual options obey the absolute cutoff" $
+        withDecision fixture id $ \env snapshot executor runtime evidence prepared load count _ -> do
+          now <- getCurrentTime
+          let limits = DecisionWorkLimits (rightPure (parseDecisionTimeout 1000000)) (rightPure (mkCeiling 1))
+          boundDecisionTimeout runtime.timeoutMicros (Just (addUTCTime 0.01 now)) now @?= Right (rightPure (parseDecisionTimeout 10000))
+          either (\err -> failureCode err @?= CallLimitExceeded) (const (assertFailure "expired cutoff admitted")) (boundDecisionTimeout runtime.timeoutMicros (Just now) now)
+          start <- right =<< admitBoundedDecisionExecution limits executor snapshot.identity prepared load
+          prepare env executor start
+          reference <- pendingReference env snapshot
+          Executor.executeAcceptedAttemptWithDecision (executeDecisionWork evidence (const runtime)) executor snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
+          result <- pumpDriver env executor snapshot 5
+          outcome <- decode =<< right =<< Start.readExecutionResult executor snapshot.identity result
+          either (\err -> failureCode err @?= CallLimitExceeded) (const (assertFailure "retained actual-call limit expanded")) outcome.result
+          readIORef count >>= (@?= 1),
+      testCase "a retained short timeout releases runtime occupancy and keeps actual root spending unknown" $
+        withDecision fixture id $ \env snapshot executor runtime evidence prepared load _ _ -> do
+          let limits = DecisionWorkLimits (rightPure (parseDecisionTimeout 50000)) (rightPure (mkCeiling 64))
+              delayed provider = provider & #complete .~ (\model context options -> threadDelay 1000000 >> provider.complete model context options)
+              later = runtime & #providers .~ map delayed runtime.providers
+          start <- right =<< admitBoundedDecisionExecution limits executor snapshot.identity prepared load
+          prepare env executor start
+          reference <- pendingReference env snapshot
+          Executor.executeAcceptedAttemptWithDecision (executeDecisionWork evidence (const later)) executor snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
+          native <- right =<< run env (Store.inspectExecution snapshot.executionId)
+          maybe (assertFailure "missing typed execution") (\(state, _, _) -> state.phase @?= Unresolved) native
+          cap <- right =<< run env (runTransaction Capacity.inspectTx)
+          cap.active @?= 0
+          root <- right =<< run env (Roots.inspectRoot (maybe (error "root") id snapshot.selection.rootId))
+          Shikigami.Execution.Counter.attemptNumber root.active @?= 1
+          Shikigami.Execution.Counter.attemptNumber root.unknown @?= 1,
+      testCase "two internal calls settle the shared root; restart reuses accepted work and committed result" $
         withDecision fixture id $ \env snapshot executor runtime evidence prepared load count _ -> do
           start <- right =<< admitDecisionExecution executor snapshot.identity prepared load
           -- A crash after acceptance must not consult live registration/catalog.

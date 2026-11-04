@@ -9,6 +9,7 @@
 module Shikigami.Agent.Workflow
   ( AgentRunDeps (..),
     executionRuntime,
+    adaptiveRuntime,
     executeAcceptedOperation,
     workerSessionRuntime,
     AgentRunFailure (..),
@@ -82,6 +83,7 @@ import Kioku.Session qualified as Session
 import Kioku.Session.Domain (CompleteSessionData (..), FailSessionData (..), StartSessionData (..))
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Error (StoreError)
+import Kiroku.Store.Transaction (runTransaction)
 import OpenTelemetry.Trace.Core qualified as Otel
 import Shibuya.Telemetry.Effect (SpanArguments, SpanKind (..), Tracing, addAttribute, withSpan')
 import Shikigami.Action.Authorization (ActionAuthorizer)
@@ -126,6 +128,9 @@ import Shikigami.Capability.Provider
     durableAdapterInstalled,
     withCapabilityOverlays,
   )
+import Shikigami.Coordination.Capability qualified as Adaptive
+import Shikigami.Coordination.DecisionAuthority qualified as AdaptiveAuthority
+import Shikigami.Coordination.Runtime qualified as AdaptiveRuntime
 import Shikigami.Decision.Contract (renderDecisionFailure)
 import Shikigami.Decision.Contract qualified as DecisionContract
 import Shikigami.Decision.Evidence qualified as DecisionEvidence
@@ -194,6 +199,7 @@ import Shikigami.Sink.Permission (SinkKind, sinkKindText)
 import Shikigami.Telemetry.TraceContext qualified as TraceContext
 import Shikigami.WorkerSession.Capability qualified as WorkerCapability
 import Shikigami.WorkerSession.Handoff qualified as WorkerHandoff
+import Shikigami.WorkerSession.Store qualified as WorkerStore
 import Shikigami.WorkerSession.Tools qualified as WorkerTools
 import Shikigami.WorkerSession.Workflow qualified as WorkerSession
 import Shikigami.Workflow.Versioning (shikigamiWorkflowRunOptions)
@@ -331,7 +337,15 @@ validateExecutionRoot job = case job.executionRootId of
 
 runAdmittedAgent :: AgentRunDeps -> RunJob -> Eff (Workflow : AppEffects) (Either AgentRunFailure AgentRunResult)
 runAdmittedAgent deps job = do
-  mDecl <- runStep deps (StepName "lookup-agent") (pure (find ((== (agentNameText ((.agentName) job))) . agentDeclName) ((.agents) deps)))
+  mDecl <- runStep deps (StepName "lookup-agent") do
+    -- Same step and result codec. Only new native pinned admissions supply a
+    -- catalog; historical/unassociated runs retain their original lookup.
+    catalog <- runTransaction (WorkerStore.childCatalogTx (runJobWorkflowId job))
+    declarations <- case catalog of
+      Right [] -> pure deps.agents
+      Right pinned -> pure pinned
+      Left _ -> liftIO (throwIO (TransientBehaviorFailure "native worker catalog is unavailable or fenced"))
+    pure (find ((== agentNameText job.agentName) . agentDeclName) declarations)
   case mDecl of
     Nothing -> pure (Left (PermanentAgentRunFailure ("unknown agent " <> (agentNameText ((.agentName) job)))))
     Just decl -> runResolvedAgent deps job decl
@@ -522,7 +536,14 @@ executionRuntime deps =
       timeoutSeconds = deps.runTimeout
     }
   where
-    authority (snapshot :: Execution.ExecutionSnapshot) = SelectionRuntime.currentExecutionAuthority (Directory.identityLifecycleAdmission (depsDirectory deps) snapshot.identity) snapshot.sanctionedProfile deps.resolveRunProfile
+    authority (snapshot :: Execution.ExecutionSnapshot) = do
+      base <- SelectionRuntime.currentExecutionAuthority (Directory.identityLifecycleAdmission (depsDirectory deps) snapshot.identity) snapshot.sanctionedProfile deps.resolveRunProfile
+      worker <- case base of
+        Right () -> Objectives.authorizeWorkerExecution deps.appEnv deps.objectives snapshot
+        _ -> pure base
+      case worker of
+        Right () -> AdaptiveAuthority.authorizeRun deps.appEnv (adaptiveRuntime deps) snapshot
+        _ -> pure worker
 
 -- Typed decisions are queue work, never a long workflow step. This compatible
 -- executor entry point keeps the original runtime constructor for other callers.
@@ -545,7 +566,37 @@ executeAcceptedOperation deps identity reference =
                   timeoutMicros = either (error . show) id (DecisionContract.parseDecisionTimeout (max 1 (floor (durationTime deps.runTimeout * 1000000)))),
                   callLimit = either (error . show) id (DecisionLimits.mkCeiling 64)
                 }
-        DecisionExecution.executeDecisionWork evidence (const runtime) snapshot work authorize
+        case adaptiveRuntime deps of
+          Nothing -> pure (Left (Execution.ExecutionPolicyRefused "adaptive decision authority is unavailable"))
+          Just adaptive ->
+            let fresh =
+                  authorize >>= \case
+                    Left err -> pure (Left err)
+                    Right () -> AdaptiveAuthority.authorize adaptive snapshot work
+             in DecisionExecution.executeDecisionWork evidence (const runtime) snapshot work fresh
+
+-- New workflow families share the production owners and providers. Missing
+-- services refuse admission; no fixture backend is installed implicitly.
+adaptiveRuntime :: AgentRunDeps -> Maybe AdaptiveRuntime.Runtime
+adaptiveRuntime deps = do
+  objectives <- deps.objectives
+  workers <- deps.coordination
+  pool <- deps.deliveryPool
+  timeout <- either (const Nothing) Just (DecisionContract.parseDecisionTimeout (max 1 (floor (durationTime deps.runTimeout * 1000000))))
+  pure
+    AdaptiveRuntime.Runtime
+      { objectives,
+        workers,
+        execution = executionRuntime deps,
+        decisions = deps.decisions,
+        behavior = deps.behaviorEnv,
+        evidence = DecisionEvidence.postgresDecisionEvidenceStore pool,
+        routing = deps.routing,
+        timeout,
+        budget = deps.delegationBudget,
+        beforeStep = deps.hooks.beforeStepBody,
+        afterStep = deps.hooks.afterStepBody
+      }
 
 executionTools :: AgentRunDeps -> ExecutionTools.NativeToolFactory
 -- Accepted execution bindings determine which coordination scope is reacquired.
@@ -1116,6 +1167,7 @@ runFlowBehavior deps activeBehaviorEnv resolvedProfile approvalPolicyForRun reco
               . FlowCapability.runSink sinkEnv
               . FlowDelegate.runDelegate delegateEnv
               . FlowWorkers.runWorkers deps.coordination deps.actionAuthorizer coordinator coordinationPolicy
+              . Adaptive.runAdaptiveDelivery (adaptiveRuntime deps) coordinator resolvedProfile (Harness.narrowHarnessPolicy deps.harness decl.harness)
               . FlowObjectives.runObjectives deps.objectives objectivePolicy
               . FlowRouting.runRouting routingEnv
               . decisionInterpreter

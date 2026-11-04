@@ -42,13 +42,14 @@ import Shikigami.Agent.Decl (AgentDecl)
 import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.Attestation.PolicyValue (mkCeiling)
 import Shikigami.Attestation.Resolve (ResolvedProfile)
+import Shikigami.Behavior.Error (TransientBehaviorFailure (..))
 import Shikigami.Decision.Contract
 import Shikigami.Decision.Evidence
 import Shikigami.Decision.ModelCatalog
 import Shikigami.Execution.Driver qualified as Accepted
 import Shikigami.Execution.Executor (ExecutionRuntime)
 import Shikigami.Execution.Start qualified as Accepted
-import Shikigami.Execution.Transcript (ExecutionError)
+import Shikigami.Execution.Transcript (ExecutionError (ExecutionStorageUnavailable, ProjectionUnavailable))
 import Shikigami.Flow.Routing (RoutingRuntime (..))
 import Shikigami.Log.Correlation (runCorrelationId)
 import Shikigami.Program.Decision
@@ -202,11 +203,16 @@ runDecisionUsing env accepted policy action = do
           outcome <- case accepted of
             Just host -> do
               submitted <- journal env (StepName "decision-submit-adapt") do
-                liftIO
-                  ( host.admit prepared do
-                      registered <- either (Exception.throwIO . DecisionAbort) pure (lookupProgram env.services.programs =<< (resolveProgramRef env.services.programs prepared.program :: Either DecisionFailure (DecisionProgramRef i o)))
-                      pure (registeredParameterState registered)
-                  )
+                value <-
+                  liftIO
+                    ( host.admit prepared do
+                        registered <- either (Exception.throwIO . DecisionAbort) pure (lookupProgram env.services.programs =<< (resolveProgramRef env.services.programs prepared.program :: Either DecisionFailure (DecisionProgramRef i o)))
+                        pure (registeredParameterState registered)
+                    )
+                case value of
+                  Left ExecutionStorageUnavailable -> throwIO (TransientBehaviorFailure "typed decision acknowledgement unavailable")
+                  Left ProjectionUnavailable -> throwIO (TransientBehaviorFailure "typed decision projection unavailable")
+                  _ -> pure value
               start <- either (const (throwIO (DecisionAbort (decisionFailure EvidenceFailure "typed decision admission refused")))) pure submitted
               completed <- Accepted.requestExecution host.execution start
               journal env resultName do

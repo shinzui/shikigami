@@ -70,3 +70,13 @@ original codecs and fingerprints.
 Protected evidence stays with its original owner; metadata references confer no
 read or mutation permission. Worker result success records an observation. It
 cannot replace verifier-backed automatic checks or explicit integrated acceptance.
+
+Adaptive delivery adds optional `adaptive` metadata to objective inspection.
+Its `graph` supplies target, parent, dependency and session references; `decisions`
+supplies accepted operation keys, validator version, rationale, friction,
+expected benefit, later-evidence key and closed change tags. `resources` comes
+from the actual root owner, including held usage and uncertainty. `observations`
+contains coarse refusal and terminal status codes. None includes protected
+instruction text, provider parameters, credentials or result bodies. The metadata
+is read under the same objective lock and current membership check. Page using
+`adaptive.next` as well as the ordinary `next`, restarting on revision changes.

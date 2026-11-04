@@ -33,6 +33,7 @@ import Shikigami.Attestation.Resolve (ResolvedProfile, resolvedProfileFor)
 import Shikigami.Behavior.Provider.Call (providerCallFor)
 import Shikigami.Behavior.Provider.Coordinate qualified as Coordinate
 import Shikigami.Behavior.StubProvider (stubModel)
+import Shikigami.Coordination.Decision (adaptiveSlots)
 import Shikigami.Decision.Contract
 import Shikigami.Decision.ModelAlias qualified as Alias
 import Shikigami.Decision.ModelCatalog
@@ -93,7 +94,8 @@ tests =
         assertBool "duplicate slot labels" (not (null (slotErrors registry declaration [slot, slot])))
         assertBool "unknown contract" (not (null (slotErrors (mustRight (programRegistry [])) declaration [slot])))
         assertBool "undeclared alias" (not (null (slotErrors registry ((declaration & #decisionModels .~ ([]))) [slot])))
-        assertBool "existing flows have empty inventories" (all (\flow -> flow.name `elem` map declarationCoordinate ["shikumi-decision-example", "shikumi-judgment-example"] || null flow.decisionSlots) flowRegistry),
+        assertBool "other flows have empty inventories" (all (\flow -> flow.name `elem` map declarationCoordinate ["adaptive-delivery", "shikumi-decision-example", "shikumi-judgment-example"] || null flow.decisionSlots) flowRegistry)
+        map (.decisionSlots) (filter (\flow -> flow.name == declarationCoordinate "adaptive-delivery") flowRegistry) @?= [adaptiveSlots],
       testCase "historical declaration JSON defaults to no permission and keeps its bytes" do
         declaration <- mustRight <$> loadAgent "../agents/heartbeat.dhall"
         case toJSON declaration of

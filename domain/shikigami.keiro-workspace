@@ -2,6 +2,7 @@ service shikigami
 runtime-package shikigami-core
 layout collocated
 spec shikigami/agent-run.keiro
+spec shikigami/adaptive-delivery.keiro
 spec shikigami/approval.keiro
 spec shikigami/conversation.keiro
 spec shikigami/run-evidence.keiro

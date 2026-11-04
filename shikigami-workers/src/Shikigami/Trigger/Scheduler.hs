@@ -36,6 +36,7 @@ import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Name (AgentName, agentNameText)
 import Shikigami.Agent.Principal (AgentIdentity (..), compatibilityIdentity, mkAgentPrincipal)
 import Shikigami.App (AppEnv (..))
+import Shikigami.Coordination.Wake qualified as AdaptiveWake
 import Shikigami.Directory qualified as Directory
 import Shikigami.Directory.Store (RunSkip (..), SkipStage (TriggerStage), recordRunSkip, reportedPrincipalClaim)
 import Shikigami.Execution.Timer qualified as ExecutionTimer
@@ -215,6 +216,7 @@ shikigamiTimerFallback env now row@TimerRow {payload = timerPayload, timerId = T
   case timerPayloadKind timerPayload of
     Just kind
       | kind == scheduleTimerKind -> scheduleFireAction env now row
+      | kind == AdaptiveWake.cutoffTimerKind -> AdaptiveWake.cutoffFireAction row
       | kind == ExecutionTimer.observationTimerKind -> ExecutionTimer.observationFireAction row
       | kind == Approval.approvalTimeoutKind -> Approval.approvalTimeoutFireAction row
       | kind == Conversation.conversationIdleTimeoutKind -> Conversation.conversationIdleTimeoutFireAction row

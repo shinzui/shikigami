@@ -9,6 +9,7 @@ module Shikigami.Agent.Delegate
     DelegationBatchFailure (..),
     delegate,
     delegateAssignment,
+    delegateAssociatedAssignment,
     delegateBatch,
     preflightDelegationBatch,
     awaitDelegated,
@@ -32,7 +33,7 @@ import Data.UUID qualified as UUID
 import Data.UUID.V5 qualified as UUID.V5
 import Effectful (Eff, IOE, (:>))
 import Effectful.Exception (catchSync, throwIO, trySync)
-import Keiro.Workflow (StepName (..), Workflow, WorkflowId (..), WorkflowJournalEvent (..), appendJournalEntry, currentWorkflow)
+import Keiro.Workflow (Workflow, WorkflowId (..), currentWorkflow)
 import Keiro.Workflow.Child (ChildHandle, WorkflowChildCancelled (..), WorkflowChildFailed (..), awaitChild, cancelChild, spawnChild)
 import Kiroku.Store.Effect (Store)
 import Numeric.Natural (Natural)
@@ -60,9 +61,11 @@ import Shikigami.Delegation.BudgetStore
 import Shikigami.Directory (DirectoryHandle)
 import Shikigami.Directory qualified as Directory
 import Shikigami.Execution.Request (ExecutionRequest)
+import Shikigami.Objective.Reference (ObjectiveAssociation)
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.Router.Catalog (CandidateAvailability (..), CandidateCatalog (..), CandidateEntry (..), ExclusionReason)
 import Shikigami.Router.SelectionLimit (selectionLimitNatural)
+import Shikigami.Workflow.Versioning (admitWorkflowInput)
 
 -- | A pending delegated child run. The phantom @a@ is the value expected from
 -- the child's behavior output.
@@ -125,7 +128,15 @@ delegateAssignment identity request = delegateWith (Just identity) request
 delegateWith ::
   (Workflow :> es, Store :> es, IOE :> es) =>
   Maybe AgentIdentity -> Maybe ExecutionRequest -> [AgentDecl] -> DirectoryHandle -> AgentDecl -> DelegateCtx -> DeclarationCoordinate "delegation-key" -> AgentName -> Aeson.Value -> Eff es (Delegated Aeson.Value)
-delegateWith expectedIdentity executionRequest declarations directory decl ctx delegationKey childAgent payload = do
+delegateWith = delegateWithObjective Nothing
+
+-- | A continuing-session owner supplies the association after verified native
+-- child admission. Prompt JSON never selects this authority.
+delegateAssociatedAssignment :: (Workflow :> es, Store :> es, IOE :> es) => ObjectiveAssociation -> AgentIdentity -> Maybe ExecutionRequest -> [AgentDecl] -> DirectoryHandle -> AgentDecl -> DelegateCtx -> DeclarationCoordinate "delegation-key" -> AgentName -> Aeson.Value -> Eff es (Delegated Aeson.Value)
+delegateAssociatedAssignment reference identity request = delegateWithObjective (Just reference) (Just identity) request
+
+delegateWithObjective :: (Workflow :> es, Store :> es, IOE :> es) => Maybe ObjectiveAssociation -> Maybe AgentIdentity -> Maybe ExecutionRequest -> [AgentDecl] -> DirectoryHandle -> AgentDecl -> DelegateCtx -> DeclarationCoordinate "delegation-key" -> AgentName -> Aeson.Value -> Eff es (Delegated Aeson.Value)
+delegateWithObjective objective expectedIdentity executionRequest declarations directory decl ctx delegationKey childAgent payload = do
   either throwIO pure (assertMayDelegate decl childAgent)
   either throwIO pure (checkCycle ctx childAgent)
   childCtx <- either throwIO pure (checkDepth ctx)
@@ -174,7 +185,7 @@ delegateWith expectedIdentity executionRequest declarations directory decl ctx d
           { agentName = childAgent,
             identity = childIdentity,
             triggerKind = TriggeredByDelegation,
-            objective = Nothing,
+            objective,
             routeKind = AgentWorkflowRoute,
             occurredAt = now,
             triggerPayload = payload,
@@ -193,14 +204,7 @@ delegateWith expectedIdentity executionRequest declarations directory decl ctx d
       agentRunWorkflowName
       childWorkflowId
       (pure (Left (PermanentAgentRunFailure "delegated child is driven from the agent-run registry")))
-  appendJournalEntry
-    agentRunWorkflowName
-    childWorkflowId
-    StepRecorded
-      { stepName = unStepName ingestJobStepName,
-        result = Aeson.toJSON childJob,
-        recordedAt = now
-      }
+  admitWorkflowInput agentRunWorkflowName childWorkflowId ingestJobStepName (Aeson.toJSON childJob)
   pure (Delegated handle)
   where
     toSingle DelegationBatchExhausted = DelegationSlotsExhausted

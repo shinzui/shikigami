@@ -3,7 +3,7 @@
 
 -- | Reserve before filesystem effects. Matching duplicate requests converge;
 -- reservation metadata remains immutable after the workspace becomes ready.
-module Shikigami.Workspace.Store (inspectWorkspaceBindingsTx, workspaceEffectsSettledTx, workspaceRefForAssignment, reserveWorkspaceTx, inspectWorkspaceTx, markWorkspaceReadyTx, checkWorkspaceOwnerTx, checkWorkspaceOperationTx, reserveWorkspaceEffectTx, recordWorkspaceReceiptTx, freezeWorkspaceTx, registerFileTx, registerFileForOwnerTx, inspectRegisteredFileTx, inspectFilePageTx, WorkspaceControl (..), FreezeState (..), workspaceFrozen, inspectWorkspaceControlTx) where
+module Shikigami.Workspace.Store (sessionWorkspaceTx, inspectWorkspaceBindingsTx, workspaceEffectsSettledTx, workspaceRefForAssignment, reserveWorkspaceTx, inspectWorkspaceTx, markWorkspaceReadyTx, checkWorkspaceOwnerTx, checkWorkspaceOperationTx, reserveWorkspaceEffectTx, recordWorkspaceReceiptTx, freezeWorkspaceTx, registerFileTx, registerFileForOwnerTx, inspectRegisteredFileTx, inspectFilePageTx, WorkspaceControl (..), FreezeState (..), workspaceFrozen, inspectWorkspaceControlTx) where
 
 import Contravariant.Extras (contrazip2, contrazip3, contrazip4)
 import Data.Aeson qualified as Aeson
@@ -18,7 +18,7 @@ import Hasql.Transaction qualified as Tx
 import Keiro.Workflow.Types (WorkflowId (..))
 import Shikigami.Agent.Principal (AgentIdentity, identityText)
 import Shikigami.Decision.Contract (versionedDigest)
-import Shikigami.Execution.Identity (OperationId, executionRootIdText, operationIdText, parseOperationId)
+import Shikigami.Execution.Identity (ExecutionRootId, OperationId, executionRootIdText, operationIdText, parseOperationId)
 import Shikigami.Execution.Runner (OperationContext (..))
 import Shikigami.Prelude
 import Shikigami.StateRevision
@@ -94,6 +94,28 @@ checkedBinding :: WorkspaceRef -> (WorkspaceBinding, AllocationState) -> Either 
 checkedBinding ref pair@(binding, _)
   | binding.workspace == ref && workspaceRefForKey (workspaceOriginKey (maybe (toJSON binding.request.runId.unWorkflowId) toJSON binding.request.assignment)) == ref && validWorkspaceRequest (workspaceLocatorPath binding.storageRoot) binding.request = Right pair
   | otherwise = Left "workspace address or request mismatch"
+
+-- A session with several workspace origins needs an explicit broader fencing
+-- protocol. Never guess which one a transfer may fence. The caller holds the
+-- objective lock and supplies its exact current owner/epoch/root.
+sessionWorkspaceTx :: WorkerSessionId -> ExecutionRootId -> AgentIdentity -> StateRevision "worker-owner" -> Transaction (Either WorkspaceError (Maybe WorkspaceRef))
+sessionWorkspaceTx session root owner epoch = do
+  rows <- Tx.statement session.value (preparable "SELECT resource,binding,state,workspace_id FROM shikigami.workspace_bindings WHERE binding->'request'->'assignment'->>0=$1 ORDER BY resource LIMIT 2" (E.param (E.nonNullable E.text)) (D.rowList ((,) <$> D.column (D.nonNullable D.text) <*> bindingRow)))
+  case rows of
+    [] -> pure (Right Nothing)
+    [(resource, parsed)] -> case parsed >>= checkedBinding (WorkspaceRef (workspaceCoordinate "shikigami.workspace/1") (workspaceCoordinate resource)) of
+      Right (binding, Ready)
+        | binding.request.rootId == root,
+          Just (actual, _) <- binding.request.assignment,
+          actual == session -> do
+            control <- inspectWorkspaceControlTx binding
+            pure $ case control of
+              Left err -> Left err
+              Right (Just current) | current.owner == owner && current.epoch == epoch && current.frozen == AdmissionOpen -> Right (Just binding.workspace)
+              _ -> Right Nothing
+      Right (_, Reserved) -> pure (Right Nothing)
+      _ -> Tx.condemn >> pure (Left WorkspaceBindingConflict)
+    _ -> pure (Right Nothing)
 
 -- | Keep the original bounded page while decoding attribution before filtering
 -- by storage root. Unreadable attribution refuses; it cannot hide a member.

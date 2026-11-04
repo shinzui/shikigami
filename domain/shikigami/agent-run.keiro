@@ -34,6 +34,10 @@ workflow AgentRun
       step decision-prepare-judge -> PreparedDecisionResolution
       step decision-result-judge -> DecisionOutcome
     }
+    patch shikigami-adaptive-delivery-v1 {
+      step adaptive-admission -> AdaptiveAdmissionResolution
+      child adaptive-delivery id input via admittedAdaptiveWorkflowId -> AdaptiveDeliveryResult
+    }
     step route-catalog-architecture-practice -> CandidateCatalog
     step worker-coordination-policy -> CoordinationPolicyResolution
     patch shikigami-objective-tracking-v1 {

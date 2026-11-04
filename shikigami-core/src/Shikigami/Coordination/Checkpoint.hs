@@ -5,6 +5,8 @@
 -- recomputed against a later checkpoint. Current authority still gates reads.
 module Shikigami.Coordination.Checkpoint (Checkpoint (..), Provider (..), checkpointProvider) where
 
+import Data.Aeson ((.!=), (.:), (.:?))
+import Data.Aeson qualified as Aeson
 import Data.Generics.Labels ()
 import Effectful (Eff)
 import Hasql.Transaction (Transaction)
@@ -18,13 +20,18 @@ import Shikigami.Objective.Command (InternalCommand (ApplyAdaptiveDecision))
 import Shikigami.Objective.Store qualified as Store
 import Shikigami.Objective.Types
 import Shikigami.Prelude
+import Shikigami.Workspace.Reference (WorkspaceRef)
 
 data Checkpoint = Checkpoint
   { objective :: !Objective,
-    arrangement :: ![Placement]
+    arrangement :: ![Placement],
+    workspaces :: ![(ObjectiveAssignmentId, WorkspaceRef)]
   }
   deriving stock (Eq, Show, Generic)
-  deriving anyclass (ToJSON, FromJSON)
+  deriving anyclass (ToJSON)
+
+instance FromJSON Checkpoint where
+  parseJSON = Aeson.withObject "AdaptiveCheckpoint" \fields -> Checkpoint <$> fields .: "objective" <*> fields .: "arrangement" <*> (fields .:? "workspaces" .!= [])
 
 data Provider = Provider
   { current :: !(ObjectiveId -> IO (Either ObjectiveError Checkpoint)),
@@ -57,7 +64,7 @@ checkpointProvider env supplied policy fresh = Provider current observe accept
       pure do
         previous <- retained
         arrangement <- currentArrangement policy previous value
-        Right (Checkpoint value arrangement)
+        Right (Checkpoint value arrangement policy.workspaces)
     observe objective operation = query objective \_ -> Sql.readDecision objective operation
     verify actor command = case command of
       ApplyAdaptiveDecision decision | actor == RecordedAgent policy.identity && decision.policy == policy -> fresh
@@ -73,7 +80,22 @@ checkpointProvider env supplied policy fresh = Provider current observe accept
           checkpoint <- current proposal.objectiveId
           now <- getCurrentTime
           case available >> (checkpoint >>= \value -> validateProposal now policy value.arrangement value.objective proposal) of
-            Left err -> pure (Left err)
+            Left err -> do
+              when (err /= ObjectiveUnavailable) $ void $ query proposal.objectiveId \_ -> do
+                Sql.saveObservation proposal.objectiveId proposal.operationId "refusal" proposal.checkpointRevision "Refused" (Just (refusalCode err))
+                pure (Right ())
+              pure (Left err)
             Right decision -> do
               receipt <- owned (Owner.executeInternal host proposal.objectiveId proposal.checkpointRevision proposal.operationId (ApplyAdaptiveDecision decision))
               pure (decision <$ receipt)
+
+-- Keep protected diagnostics and untrusted text out of public metadata.
+refusalCode :: ObjectiveError -> Text
+refusalCode = \case
+  ObjectiveMissing -> "Missing"
+  ObjectiveDenied -> "Denied"
+  ObjectiveConflict -> "Conflict"
+  ObjectiveInvalid _ -> "InvalidProposal"
+  ObjectiveInvalidEvidence -> "InvalidEvidence"
+  ObjectiveUnavailable -> "Unavailable"
+  ObjectiveUnresolved -> "Unresolved"

@@ -52,6 +52,11 @@ provenance:
       at: 2026-11-03T19:11:01Z
       mode: "update"
       note: "Reconcile EP-4 consumer acceptance and the EP-5 start gate with plan 84 closeout evidence."
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-11-04T00:08:01Z
+      mode: "implement"
+      note: "Record EP-5 adaptive delivery implementation, shared admission fixes and qualification boundary."
 ---
 
 # Deliver adaptive autonomous objectives with durable workers
@@ -98,7 +103,7 @@ Relevant local decisions consulted include [ADR 0007](../adr/0007-a-resolved-pro
 | EP-2 | Pin governed execution settings for agent assignments | [docs/plans/82-pin-governed-execution-settings-for-agent-assignments.md](../plans/82-pin-governed-execution-settings-for-agent-assignments.md) | EP-1; external plan 73 | None | Complete |
 | EP-3 | Recover durable model and tool turns with composed policies | [docs/plans/83-recover-durable-model-and-tool-turns-with-composed-policies.md](../plans/83-recover-durable-model-and-tool-turns-with-composed-policies.md) | EP-1, EP-2 | None | Complete |
 | EP-4 | Coordinate continuing worker sessions and fenced handoffs | [docs/plans/84-coordinate-continuing-worker-sessions-and-fenced-handoffs.md](../plans/84-coordinate-continuing-worker-sessions-and-fenced-handoffs.md) | EP-1, EP-2, EP-3; IR-11/joint provider boundary qualified by plan 96; IR-13 provider qualified by plan 99; full consumer acceptance qualified by plan 84 | None | Complete |
-| EP-5 | Adapt durable delivery through validated coordinator decisions | [docs/plans/85-adapt-durable-delivery-through-validated-coordinator-decisions.md](../plans/85-adapt-durable-delivery-through-validated-coordinator-decisions.md) | EP-4; external plan 76; completion gate IR-13 provider | None | Not Started |
+| EP-5 | Adapt durable delivery through validated coordinator decisions | [docs/plans/85-adapt-durable-delivery-through-validated-coordinator-decisions.md](../plans/85-adapt-durable-delivery-through-validated-coordinator-decisions.md) | EP-4; external plan 76; completion gate IR-13 provider | None | In Progress |
 | EP-6 | Qualify integrated adaptive autonomous delivery | [docs/plans/86-qualify-integrated-adaptive-autonomous-delivery.md](../plans/86-qualify-integrated-adaptive-autonomous-delivery.md) | EP-5; IR-11 and IR-13 providers before milestones 2–3 | None | Not Started |
 | EP-7 | Supervise recurring objectives from current durable checkpoints | [docs/plans/87-supervise-recurring-objectives-from-current-durable-checkpoints.md](../plans/87-supervise-recurring-objectives-from-current-durable-checkpoints.md) | EP-5; completion gate IR-13 provider | EP-6 fixture reuse | Not Started |
 
@@ -161,7 +166,8 @@ follow-up/compaction/replay case and actual operator recovery against the real
 workspace/objective providers. See its [acceptance matrix](../evidence/plan-84/acceptance.md)
 and [results](../evidence/plan-84/acceptance.json). IR-14 acceptance 8 is established
 for this consumer and retains its integrated UC-1 recheck in EP-6. EP-5's hard
-start prerequisites are satisfied; its adaptive implementation has not started.
+start prerequisites are satisfied; its adaptive coordinator, accepted decision
+accounting and shared capacity are implemented and in final qualification.
 EP-6 and EP-7 continue to wait for EP-5. The initiative remains in progress.
 
 Historical checkpoints below describe their named revisions and earlier gates.
@@ -219,6 +225,17 @@ acceptance review; EP-5 still requires the whole EP-4. No child status or hard
 dependency edge changes. EP-6 retains adaptive and live coding acceptance.
 
 ## Surprises & Discoveries
+
+EP-5's full native hierarchy exposed two shared producer gaps: continuing-worker
+children needed their verified objective association (FRIC-52), and externally
+ingested fresh journals needed the deployment patch snapshot atomically with
+their first input (FRIC-53). The fixes retain existing inputs/patch sets and pin
+descendant catalogs. EP-6 and EP-7 should consume these admitted producers rather
+than append bare fresh input or reconstruct authority from trigger JSON.
+[ADR 0111](../adr/0111-adaptive-delivery-carries-native-admission-and-reference-only-seeds.md)
+records the boundary. Root resource accounting remains separate from physical
+executor occupancy; an acknowledged local stop can free runtime capacity while
+uncertain billing remains held at the root.
 
 
 EP-1 established an application-owned v2 run-input codec because the generated queue requires every structural field. Future selection and execution metadata must retain the v1/v2 decoder paths rather than adding undeclared required fields. [ADR 0051](../adr/0051-resource-roots-own-conservative-reservations-and-actual-attempts.md) records the shared identity, atomicity, retention and rollout contract; FRIC-9 in `docs/friction-log/` records the queue-interface detour. Resource inspection reports unknown attempts and exclusive allocation holds without reading operation histories.

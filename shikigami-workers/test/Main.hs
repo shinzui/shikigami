@@ -36,6 +36,7 @@ main :: IO ()
 main = do
   arguments <- getArgs
   case arguments of
+    ["--root-capacity-claim", ticket] -> ExecutionCapacitySpec.rootCapacityClaimProcess (Text.pack ticket)
     ["--capacity-claim", ticket] -> ExecutionCapacitySpec.capacityClaimProcess (Text.pack ticket)
     _ -> suite
 

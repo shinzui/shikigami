@@ -14,6 +14,7 @@ module Shikigami.WorkerSession.Capability
     WorkerInstruction (..),
     WorkerReply (..),
     scopeFingerprint,
+    scopeCatalog,
     resolveGrant,
     executeCommand,
     grantFingerprint,
@@ -23,7 +24,7 @@ module Shikigami.WorkerSession.Capability
   )
 where
 
-import Data.Aeson ((.:), (.:?), (.=))
+import Data.Aeson ((.!=), (.:), (.:?), (.=))
 import Data.Aeson qualified as Aeson
 import Data.ByteString.Lazy qualified as Lazy
 import Data.Generics.Labels ()
@@ -89,19 +90,47 @@ data WorkerSlot = WorkerSlot
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
-data CoordinationScope = CoordinationScope
-  { format :: !(FormatVersion "coordination-scope"),
-    run :: !CoordinatorRun,
-    parentScope :: !(WorkerCoordinate "parent-scope"),
-    agent :: !AgentDecl,
-    context :: !DelegateCtx,
-    workers :: ![WorkerSlot],
-    maximumSessions :: !MaximumSessions,
-    maximumAssignments :: !MaximumAssignments,
-    mailboxLimit :: !MailboxLimit
-  }
+data CoordinationScope
+  = CoordinationScope
+      { format :: !(FormatVersion "coordination-scope"),
+        run :: !(CoordinatorRun),
+        parentScope :: !(WorkerCoordinate "parent-scope"),
+        agent :: !(AgentDecl),
+        context :: !(DelegateCtx),
+        workers :: !([WorkerSlot]),
+        maximumSessions :: !(MaximumSessions),
+        maximumAssignments :: !(MaximumAssignments),
+        mailboxLimit :: !(MailboxLimit)
+      }
+  | PinnedCoordinationScope
+      { format :: !(FormatVersion "coordination-scope"),
+        run :: !(CoordinatorRun),
+        parentScope :: !(WorkerCoordinate "parent-scope"),
+        agent :: !(AgentDecl),
+        context :: !(DelegateCtx),
+        workers :: !([WorkerSlot]),
+        maximumSessions :: !(MaximumSessions),
+        maximumAssignments :: !(MaximumAssignments),
+        mailboxLimit :: !(MailboxLimit),
+        catalog :: !([AgentDecl])
+      }
   deriving stock (Eq, Generic)
-  deriving anyclass (ToJSON, FromJSON)
+
+scopeCatalog :: CoordinationScope -> [AgentDecl]
+scopeCatalog CoordinationScope {} = []
+scopeCatalog PinnedCoordinationScope {catalog} = catalog
+
+instance ToJSON CoordinationScope where
+  toJSON value =
+    Aeson.object
+      (["format" .= value.format, "run" .= value.run, "parentScope" .= value.parentScope, "agent" .= value.agent, "context" .= value.context, "workers" .= value.workers, "maximumSessions" .= value.maximumSessions, "maximumAssignments" .= value.maximumAssignments, "mailboxLimit" .= value.mailboxLimit] <> ["catalog" .= scopeCatalog value | not (null (scopeCatalog value))])
+
+instance FromJSON CoordinationScope where
+  parseJSON = Aeson.withObject "CoordinationScope" \fields -> do
+    catalog <- fields .:? "catalog" .!= []
+    unless (length catalog <= 129 && length (nub (map (.name) catalog)) == length catalog) (fail "invalid pinned coordination catalog")
+    let constructor = if null catalog then CoordinationScope else \format run parentScope agent context workers maximumSessions maximumAssignments mailboxLimit -> PinnedCoordinationScope format run parentScope agent context workers maximumSessions maximumAssignments mailboxLimit catalog
+    constructor <$> fields .: "format" <*> fields .: "run" <*> fields .: "parentScope" <*> fields .: "agent" <*> fields .: "context" <*> fields .: "workers" <*> fields .: "maximumSessions" <*> fields .: "maximumAssignments" <*> fields .: "mailboxLimit"
 
 instance Show CoordinationScope where show _ = "CoordinationScope <protected>"
 
@@ -323,7 +352,11 @@ executeAdmittedCommand host authorizer (CoordinationGrant scope) operation comma
     message kind draft = Instruction V1 kind draft.text draft.objectiveRevision draft.assignmentRevision draft.criteriaRevision draft.selection
 
 sessionAdmission :: CoordinationScope -> WorkerSlot -> SessionAdmission
-sessionAdmission scope slot = SessionAdmission V1 (SessionScope scope.parentScope slot.workerKey) slot.objective scope.agent scope.context slot.target slot.identity scope.maximumAssignments scope.mailboxLimit
+sessionAdmission scope slot =
+  let value = SessionAdmission V1 (SessionScope scope.parentScope slot.workerKey) slot.objective scope.agent scope.context slot.target slot.identity scope.maximumAssignments scope.mailboxLimit
+   in case scopeCatalog scope of
+        [] -> value
+        catalog -> PinnedSessionAdmission value.format value.scope value.objective value.delegator value.context value.worker value.identity value.maximumAssignments value.mailboxLimit catalog
 
 matchesScope :: CoordinationScope -> WorkerSlot -> SessionBinding -> Bool
 matchesScope scope slot binding = binding.parentIdentity == scope.run.identity && Just binding.rootId == scope.run.rootId && binding.scope == SessionScope scope.parentScope slot.workerKey && binding.objective == slot.objective

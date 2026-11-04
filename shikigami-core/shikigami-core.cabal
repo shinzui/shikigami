@@ -41,6 +41,8 @@ library
     Shikigami.Action.Authorization.Config
     Shikigami.Activity
     Shikigami.Activity.Coordinate
+    Shikigami.AdaptiveDelivery.Generated.WorkflowFacts
+    Shikigami.AdaptiveDelivery.Generated.WorkflowRuntime
     Shikigami.Agent.Approval
     Shikigami.Agent.Approval.Notification
     Shikigami.Agent.Approval.Workflow
@@ -97,10 +99,20 @@ library
     Shikigami.Capability.Overlay
     Shikigami.Capability.Provider
     Shikigami.Capability.Tools
+    Shikigami.Coordination.Capability
     Shikigami.Coordination.Checkpoint
+    Shikigami.Coordination.Commands
+    Shikigami.Coordination.Decision
+    Shikigami.Coordination.DecisionAuthority
+    Shikigami.Coordination.Direct
+    Shikigami.Coordination.Identity
     Shikigami.Coordination.Proposal
+    Shikigami.Coordination.Runtime
     Shikigami.Coordination.Sql
+    Shikigami.Coordination.Types
     Shikigami.Coordination.Validate
+    Shikigami.Coordination.Wake
+    Shikigami.Coordination.Workflow
     Shikigami.Decision.Accounting
     Shikigami.Decision.Answer
     Shikigami.Decision.Contract
@@ -154,6 +166,7 @@ library
     Shikigami.ExecutionLifecycle.Generated.EventStream
     Shikigami.Flow
     Shikigami.Flow.Acknowledgement
+    Shikigami.Flow.AdaptiveDelivery
     Shikigami.Flow.AtRiskCustomer
     Shikigami.Flow.Capability
     Shikigami.Flow.Decision
@@ -648,6 +661,7 @@ test-suite shikigami-core-postgres-test
   main-is: Main.hs
   other-modules:
     Shikigami.AdaptiveDeliverySpec
+    Shikigami.AdaptiveWorkflowSpec
     Shikigami.AgentRun.LedgerSpec
     Shikigami.AgentWorkflowSpec
     Shikigami.AppSpec
@@ -682,6 +696,7 @@ test-suite shikigami-core-postgres-test
     Shikigami.WorkerSessionHandoffSpec
     Shikigami.WorkerSessionSpec
     Shikigami.WorkerSessionStoreSpec
+    Shikigami.WorkflowInputSpec
     Shikigami.WorkflowVersioningSpec
     Shikigami.WorkspaceProcessProfileStoreSpec
     Shikigami.WorkspaceTransferSpec

@@ -16,6 +16,7 @@ import Shikigami.ObjectiveTrackerLookup.Generated.ReadModelHarness qualified as 
 import Shikigami.ObjectiveTurnLookup.Generated.ReadModelHarness qualified as ObjectiveTurnLookup
 import Shikigami.RunEvidenceLookup.Generated.ReadModelHarness qualified as RunEvidenceLookup
 import Shikigami.WorkerSessionLookup.Generated.ReadModelHarness qualified as WorkerSessionLookup
+import Shikigami.AdaptiveDelivery.Generated.WorkflowFacts qualified as AdaptiveDelivery
 import Shikigami.AgentRun.Generated.WorkflowFacts qualified as AgentRun
 import Shikigami.Approval.Generated.WorkflowFacts qualified as Approval
 import Shikigami.ContinuingWorker.Generated.WorkflowFacts qualified as ContinuingWorker
@@ -44,6 +45,7 @@ serviceConformanceFacts =
     [ ("mapped-surface/workqueue-payload/workqueue:run_jobs/RunRouteKind/workqueue run_jobs payload .routeKind : RunRouteKind", "consumer-build:workqueue:run_jobs,workqueue-history:run_jobs")
     , ("mapped-surface/workqueue-payload/workqueue:run_jobs/RunTriggerKind/workqueue run_jobs payload .triggerKind : RunTriggerKind", "consumer-build:workqueue:run_jobs,workqueue-history:run_jobs")
     ]
+    <> [("workflow/AdaptiveDelivery/" <> fact, value) | (fact, value) <- AdaptiveDelivery.workflowFactValues]
     <> [("workflow/AgentRun/" <> fact, value) | (fact, value) <- AgentRun.workflowFactValues]
     <> [("workflow/Approval/" <> fact, value) | (fact, value) <- Approval.workflowFactValues]
     <> [("workflow/ContinuingWorker/" <> fact, value) | (fact, value) <- ContinuingWorker.workflowFactValues]

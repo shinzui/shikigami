@@ -10,6 +10,7 @@ module Shikigami.Objective.Capability
     listObjectives,
     readHistory,
     readObjective,
+    inspectObjective,
     readObjectiveVersion,
     resolveAssignment,
     readCheckpointVersion,
@@ -44,7 +45,7 @@ import Shikigami.Execution.Identity (OperationId)
 import Shikigami.Objective.Authority (Access (..))
 import Shikigami.Objective.Command
 import Shikigami.Objective.Conversation qualified as Conversation
-import Shikigami.Objective.Inspection (HistoryEntry)
+import Shikigami.Objective.Inspection (HistoryEntry, ObjectiveView)
 import Shikigami.Objective.Reference (ObjectiveAssociation)
 import Shikigami.Objective.Store qualified as Store
 import Shikigami.Objective.Types
@@ -116,6 +117,11 @@ readObjective :: (Store.ObjectiveEffects es) => ObjectiveHost -> ObjectiveId -> 
 readObjective host objective = do
   grant <- liftIO (admitObjectiveAction host "read" (toJSON objective))
   either (pure . Left) (\access -> Store.read access objective) grant
+
+inspectObjective :: (Store.ObjectiveEffects es) => ObjectiveHost -> ObjectiveId -> Int -> Int -> Eff es (Either ObjectiveError ObjectiveView)
+inspectObjective host objective after limit = do
+  grant <- liftIO (admitObjectiveAction host "inspect" (toJSON (objective, after, limit)))
+  either (pure . Left) (\access -> Store.inspect access objective after limit) grant
 
 readObjectiveVersion :: (Store.ObjectiveEffects es) => ObjectiveHost -> WS.ObjectiveRef -> Eff es (Either ObjectiveError CP.ObjectiveVersion)
 readObjectiveVersion host reference = do
