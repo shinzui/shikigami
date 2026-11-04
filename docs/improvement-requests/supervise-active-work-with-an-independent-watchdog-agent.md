@@ -7,7 +7,8 @@ generated:
   by: process:claude-code
   at: "2026-11-04T04:09:59Z"
 requestId: IR-19
-status: proposed
+status: accepted
+targetPlan: docs/masterplans/19-supervise-active-work-with-an-independent-watchdog-agent.md
 origin: mori://shinzui/shikigami
 ---
 
@@ -15,10 +16,26 @@ origin: mori://shinzui/shikigami
 
 ## Status
 
-**Proposed; no implementation plan selected.** This request adopts the watchdog element of
-DeepSeek Harness's "Exploring Super-agent Design" notes (1 November 2026), read from a
-summary diagram rather than the source text. Those notes describe a design and prototype,
-so they motivate this request but do not establish its contract.
+**Accepted; implementation planned but not started.**
+[MasterPlan 19](../masterplans/19-supervise-active-work-with-an-independent-watchdog-agent.md)
+coordinates this request through five child plans: lock-free bounded observation under a
+watchdog grant ([plan 109](../plans/109-observe-active-work-through-bounded-lock-free-reads-under-a-watchdog-grant.md)),
+deterministic stuck classification with episode coalescing
+([plan 110](../plans/110-classify-stuck-work-deterministically-and-coalesce-findings-into-episodes.md)),
+a registered typed drift decision ([plan 111](../plans/111-assess-drift-with-a-registered-typed-decision-over-bounded-evidence.md)),
+the scheduled Flow agent with its own principal, allowance and sinks
+([plan 112](../plans/112-run-the-watchdog-as-a-scheduled-flow-agent-with-its-own-principal-allowance-and-sinks.md)),
+and operator observability with the integrated acceptance runner that closes this request
+([plan 113](../plans/113-make-the-watchdog-observable-and-qualify-ir-19.md)). No child has
+started. The MasterPlan records why staleness is measured against the watchdog's own sweep
+marks rather than owner timestamps, why observation is a read-only grant served by lock-free
+owner reads, and why the watchdog is a Flow inside the agent run with no intervention
+authority.
+
+This request adopts the watchdog element of DeepSeek Harness's "Exploring Super-agent
+Design" notes (1 November 2026), read from a summary diagram rather than the source text.
+Those notes describe a design and prototype, so they motivate this request but do not
+establish its contract.
 
 ## Problem and current coverage
 
