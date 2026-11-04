@@ -1,5 +1,10 @@
 # Bundle Update Log
 
+## 2026-11-04
+* **Addition**: IR-19 requests an independent watchdog agent that reports stuck or drifting work from authoritative state and holds no intervention authority of its own.
+* **Addition**: IR-20 requests enrolled outbound machine daemons for durable workspace operations, with each machine's local policy as the enforcement point against a compromised central runtime.
+* **Addition**: IR-21 requests a governed path from observed activity to proposed objectives, with autonomous admission only under an explicit, bounded and revocable standing policy.
+
 ## 2026-11-03
 * **Completion**: Complete IR-15 under plan 84: all six consumer cases, continuing followup compaction/replay and real native operator handoff recovery are qualified. IR-14 acceptance 8 is established for the continuing consumer; its integrated UC-1 recheck remains in plan 86. Retain the separate plan 85/86/87 gates.
 
