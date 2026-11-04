@@ -1,0 +1,73 @@
+{
+  "format": 1,
+  "mode": "live",
+  "state": "blocked",
+  "started_at": "2026-11-04T08:30:12.821974+00:00",
+  "scope": "finite isolated fixture; local edits/tests only; no recurrence or publication",
+  "cases": [
+    {
+      "case": "producer-local",
+      "started_at": "2026-11-04T08:30:12.945621+00:00",
+      "log": "producer-local.log",
+      "expected_exit": 0,
+      "exit_code": 0,
+      "state": "passed",
+      "finished_at": "2026-11-04T08:30:12.961718+00:00",
+      "elapsed_seconds": 0.016
+    },
+    {
+      "case": "consumer-local",
+      "started_at": "2026-11-04T08:30:12.961771+00:00",
+      "log": "consumer-local.log",
+      "expected_exit": 0,
+      "exit_code": 0,
+      "state": "passed",
+      "finished_at": "2026-11-04T08:30:12.978124+00:00",
+      "elapsed_seconds": 0.016
+    },
+    {
+      "case": "initial-combined-refusal",
+      "started_at": "2026-11-04T08:30:12.978223+00:00",
+      "log": "initial-combined-refusal.log",
+      "expected_exit": 1,
+      "exit_code": 1,
+      "state": "passed",
+      "finished_at": "2026-11-04T08:30:13.004949+00:00",
+      "elapsed_seconds": 0.027
+    }
+  ],
+  "limitations": [
+    "An explicitly supplied live provider configuration, fresh authorization and enforceable limits are required"
+  ],
+  "repositories": [
+    {
+      "identity": "mori://fixture/adaptive-producer",
+      "base": "02dd5ee5e300a00f187d455f5f9edf9d58279c9f",
+      "tree": "de975070714af54cda16b0e90508dcd29b44f4be",
+      "files": {
+        "AGENTS.md": "13c3270462c0c83e5a263327a5f05c5196a04f813ec336674f6f52ae9c167d06",
+        "delivery.txt": "52d26753462488ad21852bc6718e21b84835f53765304d0a1e1b89d05a2a71b1",
+        "local_check.py": "39832d8dfa41a7f7ab80591edd5cc166bf3f3efb32e41a097851d4323d708740",
+        "record.json": "0d80a43539692e8c63d4c207816e2aedae29b74bbc32d0cb4bbc27c3a4cd2222",
+        "review.txt": "52d26753462488ad21852bc6718e21b84835f53765304d0a1e1b89d05a2a71b1"
+      }
+    },
+    {
+      "identity": "mori://fixture/adaptive-consumer",
+      "base": "5040a3c99659fba0355324811a666884c0297217",
+      "tree": "b9f280df0ae47379916ae088fe55b66acd06b0cb",
+      "files": {
+        "AGENTS.md": "8e4fa17955ae19b24faf18d2f090beef8798c1ac47b090ccc583b70c5690c2dd",
+        "contract.json": "4abdb7da6226beb325bc9c8fb50544670955275e3ecd2a7a7b1eb875837c929c",
+        "delivery.txt": "52d26753462488ad21852bc6718e21b84835f53765304d0a1e1b89d05a2a71b1",
+        "local_check.py": "8757040ea54d143dac6277ca93976301d20b34becbd95a1839c7cc6f08a5e993",
+        "review.txt": "52d26753462488ad21852bc6718e21b84835f53765304d0a1e1b89d05a2a71b1"
+      }
+    }
+  ],
+  "runtime": "/nix/store/l1vpalr63dqjbwkisp7s6xhg237lz31x-shikigami-workspace-prototype-0.1.0.0-5ee0dd8",
+  "scenario": "transfer",
+  "source_revision": "805b34f66cf946241b7c88c3203c0d5b66070da2",
+  "source_dirty": false,
+  "finished_at": "2026-11-04T08:30:13.005018+00:00"
+}

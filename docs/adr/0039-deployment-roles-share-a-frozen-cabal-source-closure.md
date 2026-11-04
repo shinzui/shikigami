@@ -27,6 +27,22 @@ An unpublished Kikan-En contract/client source is explicitly archived from a cle
 commit and checksum-verified. Its archive is an immutable source pin; it does not
 establish that the commit or package is available from a public registry.
 
+Native workspace qualification reuses a Nix-built dependency tree from the same
+frozen solve. Its cache inputs include the application/fixture Cabal manifests,
+exact dependency sources, descriptor bytes, flags and toolchain. Cabal builds
+that layer with `--only-dependencies`. Each prototype replaces all application
+sources, restores original dependency descriptors, and reruns the same cohort
+verification and component restriction before compiling. Haskell fixture edits
+reuse the dependency derivation; manifest changes invalidate it. This introduces
+no second package solve.
+
+The prototype selects the CLI, migration runner, workspace collector, supervisor
+and fixture executables used by the native runner. Production assembly retains
+the full runtime targets. Run prototype builds serially on the configured shared
+builder: overlapping application builds exhausted its available temporary and
+installation disk space during Plan 86. Retain the actual immutable runtime
+output with every trial.
+
 ## Alternatives rejected
 
 Building the root cannot represent the seven-package graph. Solving each role
@@ -38,8 +54,9 @@ cohort migration.
 ## Consequences
 
 Role discovery and dependency identity become explicit. A cold build compiles the
-whole closure, so caching is less granular than separate dependency derivations.
-Future cache decomposition must preserve the selected sources and components.
+whole production closure. The qualification dependency layer avoids repeating
+that dependency compilation, while application compilation remains monolithic.
+Further cache decomposition must preserve the selected sources and components.
 Package evaluation does not prove compilation, outside-checkout startup, actual
 service authorization or production readiness; each requires separate evidence.
 
@@ -48,3 +65,5 @@ service authorization or production readiness; each requires separate evidence.
 - [Plan 31](../plans/31-deployable-service-stack-process-compose-packaging-and-configuration.md)
 - [Plan 79](../plans/79-qualify-local-agent-execution-and-prioritize-production-readiness.md)
 - [Readiness report](../evidence/local-qualification/readiness.md)
+- [Plan 86](../plans/86-qualify-integrated-adaptive-autonomous-delivery.md)
+- [Adaptive native qualification](../evidence/adaptive-delivery/native-qualification.md)

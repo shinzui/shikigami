@@ -138,7 +138,7 @@ the same successor and finish the correction in the retained workspace. Its
 version 2 evidence includes the exact intent, fence, ownership receipt and
 pending session coordinates. The baseline runtime's version 1 evidence cannot
 satisfy this selected transfer scenario. The corrected `5ee0dd83` native matrix
-passes, and its unchanged retained artifacts pass independent host verification;
+passes with the clean `805b34f6` host driver, and its retained artifacts pass independent host verification;
 see [the qualification report](../../docs/evidence/adaptive-delivery/native-qualification.md).
 
 It also loses the consumer's reply after a real accepted edit, pauses the

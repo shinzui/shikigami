@@ -55,203 +55,74 @@ Prove [UC-1](../use-cases/adaptive-autonomous-delivery.md) finite delivery with 
 
 ## Progress
 
-
 Implementation began on 2026-11-04 UTC at baseline
 `05e2a3d94deeb0dd1d92c16e8403707dc9bb7c99`, on the existing branch.
 
-- [x] Milestone 1 (2026-11-04): Reproducible two-repository finite fixture, bounded driver, 49 host controls and native objective admission; see the baseline evidence below.
-- [ ] Milestone 2: Native adaptive integration, exact combined artifacts and deterministic recovery/refusal evidence through real providers.
-- [ ] Milestone 3: Explicitly configured bounded live coding trial, published evidence and corresponding coverage updates.
+- [x] Milestone 1 (2026-11-04): Reproducible two-repository fixture, bounded driver, 50 host controls and native objective admission.
+- [x] Milestone 2 (2026-11-04): Full native integration/recovery/refusal matrix, exact returned artifacts and a passing driver command.
+- [ ] Milestone 3: Explicitly configured actual-model/production-authority trial, published live evidence and corresponding coverage updates.
 
-Prerequisite update (2026-10-30):
-[plan 96](96-provide-governed-mutable-repository-workspaces-for-durable-agents.md)
-owns the installed configured workspace providers and the gated
-`workspace.integrate:1` artifact planner. The latter consumes exact retained
-worker commits under one execution root in a third workspace; edits, validation
-and commit remain separately accepted effects. Its complete workspace-owned
-native matrix passes 22 cases, with
-[exact artifact and validation evidence](../evidence/plan-96/native-workspace-facts.json);
-real ownership and accepted successor qualification remain open. This plan
-retains its adaptive coordinator, objective completion and UC-1 acceptance
-gates. Plan 85
-and the real IR-13 provider still gate this plan's live milestones.
+Plans 85, 96 and 99 are complete. They supply the native adaptive controller,
+configured transfer-aware workspace provider and real objective/checkpoint owner.
+Their component evidence establishes prerequisites; this plan's joined fixture
+now supplies its own repository, durability and exact-artifact evidence.
 
-2026-11-02 prerequisites accepted: plan 99 supplies the real objective owner,
-and plan 96's runtime `d38d2793` passes the complete 25-case native workspace
-matrix. The [joint provider evidence](../evidence/plan-96/joint-native-qualification.json) retains exact
-artifacts, real ownership recovery, successor effects and process fences.
-At that checkpoint this plan remained Not Started and still required plan 85, adaptive coordinator
-acceptance, integrated objective completion and the bounded live coding trial.
-These provider facts do not complete UC-1 or its two-repository trial.
+The clean final driver source is `805b34f6`, selecting immutable Linux runtime
+`5ee0dd83`. Its full fixture command exits zero with `state: passed`; the native
+phase takes 449.866 seconds. [Final native facts](../evidence/adaptive-delivery/native-facts.json)
+retain exact source/runtime identities, artifacts, resource accounting, provider
+bindings, owner epochs and recovery receipts. The two exact integrated trees
+pass their native validations and the returned-pair journey after independent
+restoration of all six Git bundles and recomputation from both worker pairs.
+Four sessions retain five messages/results. Seven adaptive calls and two calls
+for each of the five worker roles survive reconstruction without repetition.
+Root accounting ends with no active or unknown work.
 
-2026-11-04 refresh: plan 85 is complete, with five native adaptive Flow cases,
-accepted typed decisions, shared executor capacity and real objective acceptance.
-Its [acceptance report](../evidence/plan-85/acceptance.md) explicitly uses key-free
-providers, a protocol fence fixture and owner-supplied synthetic artifacts. It
-does not supply this plan's real two-repository consumer or live coding trial.
-The installed workspace/ownership path passes the 25-case native matrix in plan
-96. All start gates are satisfied; private live configuration remains an
-operator-supplied prerequisite of milestone 3 only.
+The full matrix covers adaptive-validation acknowledgement loss, committed tool
+outcome, unconsumed atomic result/wake, accepted follow-up, objective ownership
+commit before local successor establishment, and a lost real mutable-edit reply.
+The original edit's independent late receipt reconciles its held root. During
+uncertainty, the concrete production workspace owner admits an original-owner
+control and refuses the eventual successor; fresh authority, real OS locks and
+an unchanged root hold prevent service unavailability from satisfying that
+probe. The later ownership cut uses the live private socket. A separate valid
+integrated proposal refuses completion with `ObjectiveUnresolved` during an
+accounting-only hold, then retries the exact acceptance after reconciliation.
+Same-root last-slot reservations, foreign alias, undeclared target, action
+authority and process-default drift controls also pass. Terminal replay preserves
+all evidence, worker selection tuples and actual-call receipts.
 
-Implementation checkpoint `f468b6b9` supplies deterministic producer/consumer
-Git seeds, a separately executable failing-then-corrected journey, the bounded
-driver and eight argument/manifest controls. All 29 qualification-tool cases
-pass, the five existing native adaptive PostgreSQL regressions pass, and
-`nix develop --no-write-lock-file -c cabal build workspace-linux-fixture` passes.
-`tests/workspace/prototype/Adaptive.hs` is the new coupled consumer; its
-`--adaptive-only` Apple runner is not yet runtime-qualified. The driver therefore
-retains a blocked gate, and no milestone or request is marked complete from
-these compiler and fixture-mechanics results.
+All 50 qualification-tool tests pass. The [host report](../evidence/adaptive-delivery/host-qualification.md)
+retains the earlier full build and 1,674 requested Haskell suite cases; production
+workflow bodies, domain contracts and migrations have not changed in this plan.
+The [native report](../evidence/adaptive-delivery/native-qualification.md) records
+both passing complete native runs, the reduced baseline, and earlier failed
+attempts. Those failures include an invalid initial root/cutoff pair, an
+incorrect expectation that active work must reject a queued transfer request,
+and a host parser expecting the wrong objective-error JSON encoding. The
+corrected complete run above exercises the final interpretation and verdict.
+Integration-helper receipt wakeups now receive their two known starts through
+the normal execution driver; the earlier unseeded wake retries are absent.
 
-The [host qualification report](../evidence/adaptive-delivery/host-qualification.md)
-records the full build, 1,674 requested Haskell suite cases and 36 Python tool
-cases, including fifteen new adaptive controls. An actual Git bundle restores
-the exact returned commit/tree and bytes in a fresh repository after removing
-access to its original source path. The guest's cleanup now archives its four
-worker commits and two integrated commits before disposal; failed runs retain
-available HEADs as forensic evidence without settling unknown effects. Native
-runtime evidence is still required before accepting these joined paths.
+Prototype preparation reuses the same frozen dependency solve and verifier
+through `shikigami-qualification-dependencies`. Haskell fixture edits reuse its
+Nix derivation; manifest edits invalidate it. Runtime assembly replaces current
+application sources and rechecks original descriptor bytes before compiling.
+The prototype selects the five executables consumed by the Linux runner and
+runs serially to bound shared-builder disk demand. Production assembly retains
+its full targets. [ADR 0039](../adr/0039-deployment-roles-share-a-frozen-cabal-source-closure.md)
+records this qualified cache boundary. FRIC-54, FRIC-55 and FRIC-56 in
+`docs/friction-log/` retain the rebuild/interruption costs.
 
-2026-11-04 resumed qualification: all 40 Python qualification cases pass,
-including independent restoration of all six returned Git artifacts, direct-base
-parent and object checks, recomputation of both worker-pair integration trees,
-and the exact returned-pair journey. Four new negative controls refuse non-Git
-bytes with matching hashes, a substituted tree, an omitted worker change and a
-stale consumer schema with a falsely green reported journey. The driver records
-the selected runtime output. The container service was restarted successfully;
-the clean `64d9e4f4` Linux runtime is building through the configured builder.
-These host controls do not yet qualify the coupled native execution or close
-any milestone.
+The [live missing-configuration control](../evidence/adaptive-delivery/live-blocked-control.json)
+returns blocked/exit 2 without model work. No live adapter/configuration is
+selected. The operator has been asked to choose the existing guarded API path
+or explicitly expand scope to qualify Codex CLI execution first. The installed
+CLI's authenticated foreground path does not establish durable response
+qualification, and external executor plan 78 remains excluded until scope is
+changed. Production authorization and approved live limits have not been
+supplied. Fixture models and the disposable issuer do not close UC-1/IR-16.
 
-The resumed runner also now stages controller cgroup death after a committed
-tool outcome, an unconsumed worker result and an accepted follow-up. It stops
-the controller, rechecks the owner record and requires SIGKILL before proceeding
-with a newly constructed process. A final completed-run replay compares the
-entire native evidence and provider-call bytes. These joined probes are awaiting
-their first Linux execution; shell syntax and host manifest controls alone are
-not their acceptance. FRIC-56 in `docs/friction-log/` records this session's
-whole-cohort native rebuild delay.
-
-The clean `64d9e4f4` runtime built successfully and its first coupled baseline
-trial has started. In parallel, the optional `scenario: "transfer"` fixture
-extension compiles locally and the full Python qualification suite passes 46
-cases. The extension wires the real private-socket workspace fence into the
-native coordination host, admits a consumer successor, and injects exit 91
-after the objective owner commits but before local session establishment. It
-requires both old and premature successor writes to refuse at that cut and
-retains the exact provider receipts in version 2 evidence. Its later native
-build and runtime qualification remain required; version 1 evidence cannot
-satisfy that selected scenario. The new deterministic action-denial control also
-requires identical passing protected commands before and after authority
-restoration, without another provider call. No milestone is accepted yet.
-
-The [first native attempt](../evidence/adaptive-delivery/native-qualification.md)
-on `64d9e4f4` failed during fixture objective setup after both native provisioning
-controls passed. Its initial assignment supplied a root without a cutoff, which
-the real objective graph validator correctly rejects. The corrected shared
-initial assignment is unbound until native admission and passes
-`cabal run workspace-linux-fixture -- adaptive-contract`. A queued `2dce160d`
-runtime containing the same defect was stopped before completion. The corrected
-immutable runtime and both coupled scenarios must still run; no recovery or
-delivery success is inferred from this failed attempt. Empty binding archives
-now emit JSON `[]`, and future failures retain command errors and bounded
-objective/receipt diagnostics.
-
-The fixture-only Nix path now has a reusable frozen dependency derivation,
-`shikigami-qualification-dependencies`. It builds the same verified Cabal cohort
-with `--only-dependencies`, retains the build tree, and lets each prototype
-candidate replace all application/fixture sources and recheck original
-descriptor bytes before building. The dependency build passes. Source-isolated
-evaluation proves Haskell changes reuse its derivation while Cabal manifest
-changes invalidate it. End-to-end runtime reuse remains to be qualified; the
-production runtime retains its original build path.
-
-The compiled transfer scenario now also loses a real consumer edit reply,
-pauses the independent receipt publisher, observes the expired attempt's held
-root and denied successor writes/completion, and requires recovery of that original
-independent receipt. It races two local reservation clients at the same root's
-last active slot without external dispatch, checks a foreign worker alias and
-an undeclared target before dispatch, and changes the process default after
-suspension while retaining admitted aliases. These probes still await native
-execution. Their implementation is not acceptance evidence.
-
-All 48 Python qualification cases now pass, including rejection of substituted
-unknown-attempt coordinates, missing late receipts, a foreign root, duplicate
-reservation winners and dispatched forbidden selections. The compiled fixture
-also isolates the completion resource gate after a valid integrated proposal:
-a local accounting-only unknown hold must yield `ObjectiveUnresolved` without
-changing the proposal, then the exact acceptance operation retries after
-reconciliation. This supplements the actual lost mutable-edit probe; it is not
-reported as another external effect. Terminal replay now inspects the completed
-objective directly. The immutable `e6ec2d77` candidate is building; these latest
-fixture changes require the subsequent candidate and native evidence.
-
-The 49-case host suite additionally checks credential-free worker selection
-descriptors and terminal actual-call receipts against the admitted role, root,
-binding version and provider dispatch counters. The runner reads those owner
-records before and after terminal replay and requires equality. These joined
-facts await native execution along with the candidate runtimes.
-
-The `e6ec2d77` candidate compiled all application/fixture targets but failed
-installation with `No space left on device`. The overlapping `3b33ab55` build
-also retained a compiler temporary-file write error from that disk-full period.
-No new native trial ran from either candidate. The superseded task runtime was
-removed only from the remote builder, preserving its local output and evidence.
-Prototype assembly now selects the five executables used by the existing Linux
-runner instead of building and copying every application executable. Production
-assembly and the frozen dependency derivation retain their original targets;
-the latter's derivation is unchanged. The replacement prototype runs alone to
-bound temporary and installation disk demand.
-
-The clean `39ef7263` reduced runtime builds successfully and its native baseline
-passes in 324.755 seconds. The objective completed only against both exact
-integrated repositories. Four retained sessions produced five messages/results;
-worker dispatches were 2/2/4/2 and six adaptive decisions, with no active/unknown
-root work at acceptance. Controller reconstruction passed at adaptive validation,
-tool outcome, unconsumed result and accepted follow-up. Identical protected
-commands passed before/after authority denial, and completed replay preserved
-evidence, selections and actual-call receipts. All six returned bundles restored
-independently, both worker-pair trees recomputed exactly, and the returned-pair
-journey passed. [Baseline facts](../evidence/adaptive-delivery/baseline-native-facts.json)
-retain exact artifact identities and receipts. Two manually driven integration
-execution wakeups retried without initial driver starts; their accepted effects
-and final resource settlement are retained, and that fixture noise remains to
-be resolved. Milestone 1 is complete; the full transfer/refusal scenario is
-running and milestone 2 remains open. The driver correctly reports blocked
-until that additional gate passes. No live acceptance is claimed.
-
-The first full transfer attempt failed at the unknown-effect assertion: the
-worker owner correctly accepts a queued handoff while work is active; this
-neither establishes the successor nor admits its writes. The probe had
-incorrectly required refusal of that request. It now directly checks the real
-concrete successor write owner while the root retains uncertainty, without
-creating an unrelated handoff. [Partial facts](../evidence/adaptive-delivery/transfer-attempt-facts.json)
-retain the passed root race, alias and target controls, with the failed gate
-explicit. The fixture also supplies the two known manually driven integration
-starts to the normal execution driver, allowing their receipt wakes to observe
-terminal execution state instead of retrying without a seed. The corrections
-compile; a new immutable runtime and full native scenario remain required.
-
-The unknown probe keeps the independent publisher paused, which also pauses
-its RPC listener. It therefore invokes the identical production workspace owner
-in the controller process with real directory authority, fresh authorization,
-retained policy lookup and OS locks, and requires an admitted original-owner
-control plus unchanged root hold. A socket timeout cannot satisfy that proof.
-The ownership-transition cut continues to use the live private socket. The
-superseded `b88fd025` build was stopped before completion to include this
-correction; the next candidate remains required.
-
-The corrected `5ee0dd83` native full matrix passes in 451.725 seconds, including
-the unknown original edit/late receipt, real ownership cut, successor correction,
-valid-proposal completion hold, reservation and refusal controls, and unchanged
-terminal replay. The integration wake errors are absent. The host parser first
-rejected the valid completion refusal because `ObjectiveError` encodes nullary
-constructors as tagged objects. After correcting that codec expectation, an
-independent recheck of the unchanged retained evidence restores all six bundles,
-recomputes both trees and passes the exact-pair journey. The full fixture now
-requires version 2 evidence before returning passed; a clean driver rerun is
-pending before closing milestone 2. The default fixture configuration selects
-that full scenario. Live provider scope/configuration remains separate.
 
 ## Surprises & Discoveries
 
@@ -312,7 +183,25 @@ authorization or production runtime contracts.
 ## Outcomes & Retrospective
 
 
-To be filled during implementation. Do not claim request completion until every acceptance case below, including stated external integration gates, has evidence.
+Milestones 1 and 2 are delivered with a reproducible, passing full fixture and
+independently returned exact artifacts. Milestone 3 remains open pending the live
+provider path and private production configuration; no request/use-case status
+has been marked complete.
+
+Qualification must observe the owner's actual boundaries: result/wake
+publication is atomic, a queued handoff is not successor establishment, and a
+paused service cannot supply a meaningful refusal without a positive control.
+Accepted integration tools also need an admitted initial execution start when
+their receipt wakeups are consumed by the native driver. The final matrix and
+its independent artifact checks exercise these corrections.
+
+The frozen dependency cache and reduced serial prototype assembly mitigate the
+rebuild costs recorded in FRIC-54–56. These entries remain logged; final friction
+triage belongs to completion of the remaining live milestone.
+[ADR 0039](../adr/0039-deployment-roles-share-a-frozen-cabal-source-closure.md)
+retains the cache/assembly decision and
+[ADR 0061](../adr/0061-continuing-sessions-own-ordered-assignments-and-retained-receipts.md)
+retains the atomic result/wake contract.
 
 
 ## Context and Orientation
