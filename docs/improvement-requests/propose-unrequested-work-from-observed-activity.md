@@ -2,12 +2,13 @@
 type: Improvement Request
 title: Propose unrequested work from observed activity
 description: Let an agent notice actionable work nobody asked it to do and propose a governed objective, starting it only under an explicit, bounded and revocable standing policy.
-timestamp: "2026-11-04T04:09:59Z"
+timestamp: "2026-11-04T18:45:00Z"
 generated:
   by: process:claude-code
   at: "2026-11-04T04:09:59Z"
 requestId: IR-21
-status: proposed
+status: accepted
+targetPlan: docs/masterplans/20-propose-unrequested-work-from-observed-activity-under-governed-standing-policies.md
 origin: mori://shinzui/shikigami
 ---
 
@@ -15,11 +16,30 @@ origin: mori://shinzui/shikigami
 
 ## Status
 
-**Proposed; no implementation plan selected.** This request adopts the "acts without being asked"
-element of DeepSeek Harness's "Exploring Super-agent Design" notes (1 November 2026), read from a
-summary diagram rather than the source text. In their example, a user described a double-click
-bug in chat without tagging the agent, and the agent reproduced it, found the cause and opened a
-fix. This request keeps that outcome and adds the authority model the example does not address.
+**Accepted; implementation planned but not started.**
+[MasterPlan 20](../masterplans/20-propose-unrequested-work-from-observed-activity-under-governed-standing-policies.md)
+coordinates this request through five child plans: bounded observation with observer
+allowances, closed source adapters, a deterministic pre-filter and the proposal ledger
+([plan 114](../plans/114-bound-observation-with-observer-allowances-source-adapters-a-deterministic-pre-filter-and-the-proposal-ledger.md)),
+a registered typed assessment decision whose output cannot select repository, authority or
+recipient ([plan 115](../plans/115-assess-candidates-with-a-registered-typed-decision-whose-output-cannot-select-repository-authority-or-recipient.md)),
+the stream-triggered `propose-work` Flow with durable human acceptance and trusted origin
+links ([plan 116](../plans/116-propose-work-through-a-stream-triggered-flow-with-durable-human-acceptance-and-trusted-origin-links.md)),
+standing policies and autonomous admission of bounded objectives
+([plan 117](../plans/117-admit-bounded-objectives-autonomously-under-explicit-revocable-standing-policies.md)),
+and operator observability with the integrated acceptance runner that closes this request
+([plan 118](../plans/118-make-proposals-observable-to-operators-and-qualify-ir-21.md)). No child has
+started. The MasterPlan records why the pre-filter runs at the trigger and only the Flow
+calls a model, why a proposal is keyed by observer principal and source subject, why model
+output is validated into a sealed assessment that cannot express authority, why standing
+policies are revocable durable rows read fresh at every admission, and why admitted work is
+an independent coordinator run with its own resource root.
+
+This request adopts the "acts without being asked" element of DeepSeek Harness's "Exploring
+Super-agent Design" notes (1 November 2026), read from a summary diagram rather than the
+source text. In their example, a user described a double-click bug in chat without tagging
+the agent, and the agent reproduced it, found the cause and opened a fix. This request keeps
+that outcome and adds the authority model the example does not address.
 
 ## Problem and current coverage
 

@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-11-04
+* **Accept**: Accept IR-21 under MasterPlan 20 with child plans 114–118: bounded observation with observer allowances, source adapters, a deterministic pre-filter and the proposal ledger; a registered typed assessment decision whose output cannot select repository, authority or recipient; the stream-triggered proposing Flow with durable human acceptance; standing policies with autonomous admission of bounded objectives; and operator observability with the integrated acceptance runner.
 * **Accept**: Accept IR-19 under MasterPlan 19 with child plans 109–113: lock-free bounded observation under a watchdog grant, deterministic stuck classification with episode coalescing, a registered typed drift decision, the scheduled Flow agent with its own principal, allowance and sinks, and operator observability with the integrated acceptance runner.
 * **Addition**: IR-19 requests an independent watchdog agent that reports stuck or drifting work from authoritative state and holds no intervention authority of its own.
 * **Addition**: IR-20 requests enrolled outbound machine daemons for durable workspace operations, with each machine's local policy as the enforcement point against a compromised central runtime.
