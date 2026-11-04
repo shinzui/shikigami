@@ -86,6 +86,10 @@ let
       ghc-options: "-DGIT_HASH=\"${effectiveRev}\""
   '');
   applicationPackages = builtins.filter (name: lib.hasPrefix "shikigami-" name) packageNames;
+  prototypeExecutables = [ "shikigami" "shikigami-migrate" "shikigami-workspace-collector" "shikigami-workspace-supervisor" ];
+  buildTargets =
+    if workspaceFixture == null || dependenciesOnly then applicationPackages ++ lib.optional (workspaceFixture != null) "workspace-linux-fixture"
+    else map (name: "exe:${name}") (prototypeExecutables ++ [ "shikigami-workspace-prototype" ]);
 in
 assert lock.compiler == "ghc-9.12.4";
 assert builtins.length applicationPackages == 7;
@@ -138,7 +142,7 @@ pkgs.stdenv.mkDerivation {
   '';
   buildPhase = ''
     runHook preBuild
-    cabal build --offline ${lib.optionalString dependenciesOnly "--only-dependencies"} -j"$NIX_BUILD_CORES" ${lib.concatStringsSep " " applicationPackages} ${lib.optionalString (workspaceFixture != null) "workspace-linux-fixture"}
+    cabal build --offline ${lib.optionalString dependenciesOnly "--only-dependencies"} -j"$NIX_BUILD_CORES" ${lib.concatStringsSep " " buildTargets}
     runHook postBuild
   '';
   installPhase =
@@ -152,10 +156,10 @@ pkgs.stdenv.mkDerivation {
       runHook preInstall
       mkdir -p "$out/bin" "$out/share/shikigami"
       ln -s ${deadlineGuard}/bin/shikigami-workspace-deadline "$out/bin/shikigami-workspace-deadline"
-      for executable in shikigami shikigami-server shikigami-worker shikigami-migrate \
+      for executable in ${if workspaceFixture != null then lib.concatStringsSep " " prototypeExecutables else ''shikigami shikigami-server shikigami-worker shikigami-migrate \
         shikigami-scheduler shikigami-consume-stream shikigami-consume-events \
         shikigami-agent-run shikigami-run-behavior shikigami-agent-launch shikigami-openapi shikigami-client \
-        shikigami-workspace-collector shikigami-workspace-supervisor; do
+        shikigami-workspace-collector shikigami-workspace-supervisor''}; do
         cp "$(cabal list-bin --offline exe:$executable)" "$out/bin/$executable"
         case "$executable" in
           shikigami-openapi|shikigami-workspace-collector|shikigami-workspace-supervisor) ;;

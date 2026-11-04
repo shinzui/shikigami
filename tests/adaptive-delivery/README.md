@@ -204,3 +204,8 @@ replaces application sources, restores original dependency descriptors, reruns
 the cohort verifier/restriction and builds the selected application/fixture
 source. Production runtime assembly retains its existing path. This avoids a
 second dependency solve and does not turn cache construction into runtime proof.
+Prototype assembly selects only the CLI, migration runner, workspace collector,
+workspace supervisor and fixture executables used by `run-linux.sh`. The full
+production assembly is separate. Run prototype builds serially on the configured
+builder: overlapping monolithic application builds exhausted its available disk
+during Plan 86 qualification.

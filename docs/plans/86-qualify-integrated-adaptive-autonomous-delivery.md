@@ -192,6 +192,17 @@ binding version and provider dispatch counters. The runner reads those owner
 records before and after terminal replay and requires equality. These joined
 facts await native execution along with the candidate runtimes.
 
+The `e6ec2d77` candidate compiled all application/fixture targets but failed
+installation with `No space left on device`. The overlapping `3b33ab55` build
+also retained a compiler temporary-file write error from that disk-full period.
+No new native trial ran from either candidate. The superseded task runtime was
+removed only from the remote builder, preserving its local output and evidence.
+Prototype assembly now selects the five executables used by the existing Linux
+runner instead of building and copying every application executable. Production
+assembly and the frozen dependency derivation retain their original targets;
+the latter's derivation is unchanged. The replacement prototype runs alone to
+bound temporary and installation disk demand.
+
 ## Surprises & Discoveries
 
 
