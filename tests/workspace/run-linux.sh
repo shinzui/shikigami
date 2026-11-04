@@ -28,6 +28,14 @@ if [[ "$mode" == --git || "$mode" == --workflow || "$mode" == --workspace-gates 
 cleanup() {
   status=$?
   trap - EXIT ERR
+  if [[ "$mode" == --adaptive-only ]] && "$pg_started"; then
+    if /usr/bin/psql "$connection" -Atc "SELECT jsonb_agg(binding ORDER BY resource) FROM shikigami.workspace_bindings WHERE binding->>'repository' IN ('mori://fixture/adaptive-producer','mori://fixture/adaptive-consumer')" >"$prefix/adaptive-bindings.json" &&
+      python3 -I "$repo/tests/adaptive-delivery/archive.py" --prefix "$prefix" >"$prefix/adaptive-archive.log" 2>&1; then
+      :
+    elif [[ "$status" == 0 ]]; then
+      status=1
+    fi
+  fi
   systemctl stop "$socket" "$service" "$authority" "$oauth" >/dev/null 2>&1 || true
   systemctl stop "$task-continuing.service" >/dev/null 2>&1 || true
   if [[ -f "$prefix/continuing-status.json" ]]; then

@@ -98,6 +98,15 @@ pass, the five existing native adaptive PostgreSQL regressions pass, and
 retains a blocked gate, and no milestone or request is marked complete from
 these compiler and fixture-mechanics results.
 
+The [host qualification report](../evidence/adaptive-delivery/host-qualification.md)
+records the full build, 1,674 requested Haskell suite cases and 35 Python tool
+cases, including fourteen new adaptive controls. An actual Git bundle restores
+the exact returned commit/tree and bytes in a fresh repository after removing
+access to its original source path. The guest's cleanup now archives its four
+worker commits and two integrated commits before disposal; failed runs retain
+available HEADs as forensic evidence without settling unknown effects. Native
+runtime evidence is still required before accepting these joined paths.
+
 ## Surprises & Discoveries
 
 

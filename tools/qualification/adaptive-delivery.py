@@ -2,6 +2,7 @@
 """Bounded finite delivery qualification; absent native/live proof stays blocked."""
 import argparse
 from datetime import datetime, timezone
+import hashlib
 import importlib.util
 import json
 import os
@@ -163,6 +164,32 @@ def native_evidence(directory, repositories):
             raise ValueError("native exact artifact or validation evidence is incomplete")
     if value["integrated"]["journey"]["exitCode"] != 0:
         raise ValueError("combined journey failed")
+    archives = path.parent / "adaptive-artifacts"
+    inventory = archives / "manifest.json"
+    if inventory.is_symlink() or not inventory.is_file() or inventory.stat().st_size > 65536:
+        raise ValueError("bounded Git artifact inventory missing")
+    captured = json.loads(inventory.read_text())
+    required = {(entry["repository"], revision) for entry in combined
+                for revision in [entry["combined"]["result"], *[worker["revision"] for worker in entry["workers"]]]}
+    records = captured["artifacts"]
+    if (captured["format"] != 1 or len(records) != 6
+            or {(entry["repository"], entry["head"]) for entry in records} != required
+            or len({entry["bundle"] for entry in records}) != 6):
+        raise ValueError("not every exact native Git artifact was retained")
+    target = directory / "git-artifacts"
+    target.mkdir(mode=0o700, exist_ok=True)
+    for entry in records:
+        if not re.fullmatch(r"workspace-[0-5]\.bundle", entry["bundle"]) or entry["base"] != starts[entry["repository"]]:
+            raise ValueError("Git artifact identity differs")
+        bundle = archives / entry["bundle"]
+        if bundle.is_symlink() or not bundle.is_file() or not 0 < bundle.stat().st_size <= 1048576:
+            raise ValueError("Git artifact is not a bounded regular file")
+        content = bundle.read_bytes()
+        if hashlib.sha256(content).hexdigest() != entry["sha256"]:
+            raise ValueError("Git artifact bytes differ from the retained commitment")
+        (target / entry["bundle"]).write_bytes(content)
+    (target / "manifest.json").write_text(json.dumps(captured, indent=2) + "\n")
+    value["git_artifacts"] = captured
     shutil.copyfile(path, directory / "native-evidence.json")
     return value
 

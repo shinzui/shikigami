@@ -101,6 +101,15 @@ database. The complete coupled fault/refusal matrix in milestone 2 remains a
 separate acceptance gate. Native compilation alone proves none of these runtime
 claims. The driver retains that gate as blocked until the full matrix exists.
 
+Before the guest is destroyed, `archive.py` exports bounded local Git bundles
+from its authoritative fixture workspace bindings. A successful run must retain
+all four worker commits and both combined commits. A failed run preserves the
+available HEADs as forensic artifacts without declaring unknown effects settled.
+The private evidence directory contains `adaptive-artifacts/manifest.json` and
+the bundles; use `git bundle list-heads FILE` or clone a bundle into a fresh
+directory for inspection. This archival read is performed by the trusted fixture
+controller and is not agent publication authority.
+
 `--mode live` currently returns blocked. No private live provider configuration
 has been supplied and no live adapter is selected. Live acceptance additionally
 requires an actual model-driven coding path, production authorization, explicit

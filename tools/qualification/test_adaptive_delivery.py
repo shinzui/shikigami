@@ -1,6 +1,7 @@
 import importlib.util
 import copy
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -12,9 +13,38 @@ HERE = Path(__file__).resolve().parent
 spec = importlib.util.spec_from_file_location("adaptive_delivery", HERE / "adaptive-delivery.py")
 driver = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(driver)
+archive_spec = importlib.util.spec_from_file_location("adaptive_archive", driver.FIXTURE / "archive.py")
+archive = importlib.util.module_from_spec(archive_spec)
+archive_spec.loader.exec_module(archive)
 
 
 class AdaptiveDeliveryTests(unittest.TestCase):
+    def test_git_bundle_restores_the_exact_returned_tree_after_source_removal(self):
+        with tempfile.TemporaryDirectory() as raw:
+            path = Path(raw)
+            sources = path / "sources"
+            seeds = driver.prepare.prepare(sources)
+            producer = sources / "producer"
+            (producer / "delivery.txt").write_text("done\n")
+            driver.prepare.git(producer, "add", "--", "delivery.txt")
+            driver.prepare.git(producer, "commit", "-m", "feat: bounded fixture change")
+            tree = driver.prepare.git(producer, "rev-parse", "HEAD^{tree}")
+            target = path / "returned.bundle"
+            env = {"PATH": os.environ["PATH"], "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": os.devnull}
+            head, digest = archive.bundle(producer / ".git", target, env)
+            self.assertNotEqual(head, seeds[0]["base"])
+            self.assertEqual(digest, driver.hashlib.sha256(target.read_bytes()).hexdigest())
+            # Rename rather than delete: restoration has only the returned bundle.
+            producer.rename(path / "unavailable-source")
+            restored = path / "restored"
+            restored.mkdir()
+            driver.prepare.git(restored, "init")
+            driver.prepare.git(restored, "fetch", str(target), "HEAD")
+            driver.prepare.git(restored, "checkout", "--detach", "FETCH_HEAD")
+            self.assertEqual(driver.prepare.git(restored, "rev-parse", "HEAD"), head)
+            self.assertEqual(driver.prepare.git(restored, "rev-parse", "HEAD^{tree}"), tree)
+            self.assertEqual((restored / "delivery.txt").read_text(), "done\n")
+
     def test_seeds_are_deterministic_and_sources_stay_clean(self):
         with tempfile.TemporaryDirectory() as raw:
             parent = Path(raw)
@@ -137,7 +167,7 @@ class AdaptiveDeliveryTests(unittest.TestCase):
                                    for name in ["producer", "producer-review", "consumer", "consumer-review"]},
                  "integrated": {"journey": {"exitCode": 0}, "repositories": [
                      {"repository": repo["identity"], "base": repo["base"],
-                      "workers": [{"operationId": f"worker-{index}", "base": repo["base"], "revision": "3" * 40}
+                      "workers": [{"operationId": f"worker-{index}", "base": repo["base"], "revision": str(index + 6) * 40}
                                   for index in [0, 1]],
                       "combined": {"parent": repo["base"], "tree": "4" * 40, "result": "5" * 40},
                       "validation": {"exitCode": 0, "termination": "ProcessExited", "descendantsEmpty": True,
@@ -150,6 +180,17 @@ class AdaptiveDeliveryTests(unittest.TestCase):
             evidence.mkdir()
             artifact = evidence / "adaptive-evidence.json"
             artifact.write_text(json.dumps(value))
+            archives = evidence / "adaptive-artifacts"
+            archives.mkdir()
+            inventory = []
+            for repo in value["integrated"]["repositories"]:
+                for head in [repo["combined"]["result"], *[worker["revision"] for worker in repo["workers"]]]:
+                    name = f"workspace-{len(inventory)}.bundle"
+                    content = name.encode()
+                    (archives / name).write_bytes(content)
+                    inventory.append({"repository": repo["repository"], "base": repo["base"], "head": head,
+                                      "bundle": name, "sha256": driver.hashlib.sha256(content).hexdigest()})
+            (archives / "manifest.json").write_text(json.dumps({"format": 1, "artifacts": inventory}))
             self.assertEqual(driver.native_evidence(path, starts)["status"], "Completed")
             mutations = [lambda v: v["root"].update(unknown=1),
                          lambda v: v["integrated"]["repositories"][0].update(base="0" * 40),
