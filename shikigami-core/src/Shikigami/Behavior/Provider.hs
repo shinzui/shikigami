@@ -70,7 +70,6 @@ import Data.Aeson qualified as Aeson
 import Data.Generics.Labels ()
 import Data.Set qualified as Set
 import Data.Text (Text)
-import Handan.Runtime (newRuntime)
 import Shikigami.App.Config (ProviderSelection (..), SecretText, lookupAnthropicModel, revealSecretText)
 import Shikigami.Attestation.Resolve (ResolvedProfile)
 import Shikigami.Behavior.Compatibility
@@ -79,6 +78,7 @@ import Shikigami.Behavior.Run (BehaviorEnv (..), defaultToolTurnLimit)
 import Shikigami.Behavior.StubProvider (registerStubProvider, stubModel)
 import Shikigami.Decision.ModelCatalog (ModelBinding, bindingCredential, bindingModel, bindingOptions, revealCredential)
 import Shikigami.Log qualified as Log
+import Shikigami.Program.Runtime (newProgramRuntime)
 import Shikumi.Tool (mkRegistry)
 
 -- | Refuse a behavior environment before it can build or dispatch a provider
@@ -138,7 +138,7 @@ newBehaviorEnvFor logger selection traceSink = do
     [ "provider" .= providerTag selection,
       "detail" .= describeProviderSelection selection
     ]
-  runtime <- newRuntime
+  runtime <- newProgramRuntime
   registerStubProvider
   case selection of
     UseStub ->

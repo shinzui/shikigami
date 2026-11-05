@@ -365,7 +365,7 @@ tests fixture =
           output <- assertCompleted =<< Agent.runAgentRunWorkflow (deps app store behavior handler services) request
           assertBool "pending state retains original full result" ("original investigation" `Text.isInfixOf` Text.pack (show output) && "0.91" `Text.isInfixOf` Text.pack (show output))
           observed >>= (\calls -> length calls @?= 3)
-          -- Qualify the alternative on the actual Handan path with identical
+          -- Qualify the alternative on the actual Shikumi path with identical
           -- input and provider response. Only pure postprocessing differs.
           (comparison, _) <- scriptedProvider Investigate returned
           contexts <- newIORef []

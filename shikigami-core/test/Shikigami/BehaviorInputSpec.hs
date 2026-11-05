@@ -12,7 +12,7 @@
 -- arm's completion function is a parameter ('runSkillWith'), so a test can read
 -- the exact 'Context' that would have gone to a model without a key, a network,
 -- or a registered provider; the program arm's task is an ordinary value, so a
--- test can read the exact argument map a dispatch built. Whether a model then
+-- test can read the original input supplied to its parser. Whether a model then
 -- makes good use of the context is not something a test can assert.
 module Shikigami.BehaviorInputSpec (tests) where
 
@@ -24,16 +24,11 @@ import Baikai.Options (emptyOptions)
 import Baikai.Response (emptyResponse)
 import Data.Aeson (Value, object, (.=))
 import Data.IORef (IORef, newIORef, readIORef, writeIORef)
-import Data.Map.Strict (Map)
-import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Time (UTCTime (..), fromGregorian)
 import Data.Vector qualified as V
-import Handan.Contract (Envelope (..), Kind (Effect), Status (Ok))
-import Handan.Runtime (newRuntime)
-import Handan.Task (EvalHandle, Task (..), TaskKind (KEffect))
 import Kioku.Api.Types (MemoryRecord (..))
 import Shikigami.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
 import Shikigami.Activity.Coordinate
@@ -42,11 +37,15 @@ import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (ResolvedAgentIdentity (CompatibilityAgent))
 import Shikigami.Agent.Run (recallQuery)
-import Shikigami.Behavior.Input (BehaviorInput (..), triggerOnly)
-import Shikigami.Behavior.Run (defaultToolTurnLimit, newBehaviorEnv, programArgs, runBehavior, runProgramTask)
+import Shikigami.Behavior.Error (RunError (..))
+import Shikigami.Behavior.Input (BehaviorInput (..), memoryContentText, triggerOnly)
+import Shikigami.Behavior.Run (defaultToolTurnLimit, newBehaviorEnv, runBehavior, runProgramTask)
 import Shikigami.Behavior.Skill (SkillDir (..), runSkillWith)
 import Shikigami.Flow.AtRiskCustomer (RiskLevel (..), RiskVerdict (..), classifyRisk)
 import Shikigami.Memory.Scope (agentScope)
+import Shikigami.Program.Registry (codeResearcherTask, webResearcherTask)
+import Shikigami.Program.Runtime (newProgramRuntime)
+import Shikigami.Program.Task (ProgramTask (..))
 import Shikigami.Trigger.Schedule (cronExpressionClaim, parseCron)
 import Shikumi.Tool (mkRegistry)
 import System.Directory (doesFileExist)
@@ -213,25 +212,67 @@ programArgumentTests :: TestTree
 programArgumentTests =
   testGroup
     "the program arm's task receives the payload and prior learnings"
-    [ testCase "the argument map carries both, as JSON text" do
-        let args = programArgs BehaviorInput {payload = samplePayload, recalled = [priorLearning]}
-        Map.lookup "payload" args @?= Just "{\"text\":\"customer says cancel\"}"
-        Map.lookup "prior" args @?= Just ("[\"" <> priorContent <> "\"]"),
-      testCase "an empty recall is an empty list, not a missing key" do
-        let args = programArgs (triggerOnly samplePayload)
-        Map.lookup "prior" args @?= Just "[]",
-      -- The map above is only worth building if handan's parse seam sees it.
-      -- Before this plan every task was handed an empty map.
-      testCase "a real dispatch hands that map to the task's parser" do
-        runtime <- newRuntime
-        seen <- newIORef Map.empty
+    [ testCase "a real dispatch parses the original payload and recalled learnings" do
+        runtime <- newProgramRuntime
+        seen <- newIORef Nothing
         let input = BehaviorInput {payload = samplePayload, recalled = [priorLearning]}
-        result <- runProgramTask runtime (echoArgsTask seen) input
-        case result of
-          Left err -> assertFailure ("the echo task should succeed, got " <> show err)
-          Right _ -> pure ()
-        args <- readIORef seen
-        args @?= programArgs input,
+        result <- runProgramTask runtime (echoInputTask seen) input
+        result @?= Right samplePayload
+        captured <- readIORef seen
+        case captured of
+          Nothing -> assertFailure "the task did not receive parsed input"
+          Just actual -> do
+            actual.payload @?= samplePayload
+            map memoryContentText actual.recalled @?= [priorContent],
+      testCase "an empty recall reaches the parser as an empty list" do
+        runtime <- newProgramRuntime
+        seen <- newIORef Nothing
+        _ <- runProgramTask runtime (echoInputTask seen) (triggerOnly samplePayload)
+        captured <- readIORef seen
+        fmap (map memoryContentText . (.recalled)) captured @?= Just [],
+      testCase "parse rejection is an input failure and does not execute" do
+        runtime <- newProgramRuntime
+        let task =
+              ProgramTask
+                { name = "reject-input",
+                  parse = \_ -> Left "invalid payload" :: Either Text (),
+                  run = \_ () -> assertFailure "rejected input executed"
+                }
+        result <- runProgramTask runtime task (triggerOnly samplePayload)
+        result @?= Left (ProgramInputFailed "invalid payload"),
+      testCase "execution failure retains its runtime error" do
+        runtime <- newProgramRuntime
+        let task =
+              ProgramTask
+                { name = "fail-runtime",
+                  parse = \_ -> Right (),
+                  run = \_ () -> pure (Left (ProgramRuntimeFailed "execution failed"))
+                }
+        result <- runProgramTask runtime task (triggerOnly samplePayload)
+        result @?= Left (ProgramRuntimeFailed "execution failed"),
+      testCase "the fixed researcher findings retain their JSON" do
+        runtime <- newProgramRuntime
+        web <- runProgramTask runtime webResearcherTask (triggerOnly samplePayload)
+        web
+          @?= Right
+            ( object
+                [ "agent" .= ("web-researcher" :: Text),
+                  "finding" .= ("Web sources indicate durable workflow delegation should journal child waits." :: Text)
+                ]
+            )
+        code <- runProgramTask runtime codeResearcherTask (triggerOnly samplePayload)
+        code
+          @?= Right
+            ( object
+                [ "agent" .= ("code-researcher" :: Text),
+                  "finding" .= ("The code path should spawn child workflows before awaiting their results." :: Text)
+                ]
+            ),
+      testCase "an unknown task retains its lookup failure" do
+        env <- newBehaviorEnv
+        let decl = heartbeatDecl {behavior = ShikumiProgram (declarationCoordinate "missing-task") False Nothing Nothing}
+        result <- runBehavior env decl (triggerOnly samplePayload)
+        result @?= Left (UnknownTask "missing-task"),
       -- End to end through the declaration union, on the shipped stub program:
       -- the heartbeat agent's digest now shows what triggered it.
       testCase "the shipped noop-summary program echoes the payload it was given" do
@@ -248,29 +289,15 @@ programArgumentTests =
                 ]
     ]
 
--- | A task that records the argument map it was parsed from and returns nothing
--- of interest. Constructed here rather than registered, so the production
--- registry stays the catalog of programs shikigami actually runs.
-echoArgsTask :: IORef (Map Text Text) -> Task
-echoArgsTask seen =
-  Task
-    { taskName = "echo-args",
-      taskKind = KEffect,
-      taskSummary = "Test fixture: records the argument map it was given.",
-      taskParse = \args -> Right args,
-      taskRun = \_rt (args :: Map Text Text) -> do
-        writeIORef seen args
-        pure
-          Envelope
-            { program = "echo-args",
-              kind = Effect,
-              status = Ok,
-              verdict = Nothing,
-              artifacts = [],
-              trace = Nothing,
-              message = "echo-args ok"
-            },
-      taskEval = Nothing :: Maybe (EvalHandle (Map Text Text) (Map Text Text))
+-- | Keep the parsed input observable without adding a production task.
+echoInputTask :: IORef (Maybe BehaviorInput) -> ProgramTask
+echoInputTask seen =
+  ProgramTask
+    { name = "echo-input",
+      parse = Right,
+      run = \_rt input -> do
+        writeIORef seen (Just input)
+        pure (Right input.payload)
     }
 
 -- ── Fixtures ────────────────────────────────────────────────────────────────

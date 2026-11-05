@@ -16,7 +16,7 @@ identity  = under whose authority it acts
 memory    = what it carries forward across runs
 ```
 
-For synchronous agents, Dhall names a registered `shikumi` / `handan` program
+For synchronous agents, Dhall names a registered `shikumi` program
 or a `baikai` skill. The schema also accepts `Deterministic` rules, but the
 current runner rejects that arm as unsupported. For lifecycle-backed work, Dhall
 names a compiled Haskell `FlowDef`; the Haskell flow owns the durable control flow, journaled
@@ -51,7 +51,7 @@ profile and validation commands.
 
 - Loads and validates typed Dhall agent declarations from `agents/*.dhall`.
 - Supports schedule, activity-stream, and addressed-event triggers.
-- Runs registered `shikumi` / `handan` programs, `baikai` skills, and
+- Runs registered `shikumi` programs, `baikai` skills, and
   durable Haskell `Flow` behaviors on `keiro`.
 - Dispatches permission-gated sinks such as Kawa digests, Kizashi signals, Rei
   actions, and Danwa conversations.

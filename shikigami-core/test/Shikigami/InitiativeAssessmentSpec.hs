@@ -16,7 +16,6 @@ import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Time (UTCTime (..), fromGregorian)
 import Data.Vector qualified as Vector
-import Handan.Runtime (Runtime (..))
 import Keiro.Workflow (StepName (..))
 import Keiro.Workflow.Types (WorkflowId (..))
 import Shikigami.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
@@ -37,6 +36,7 @@ import Shikigami.Program.Decision.Examples (parseModelConfidence)
 import Shikigami.Program.Decision.Initiative
 import Shikigami.Program.Decision.Registry (decisionCodecs, decisionPrograms)
 import Shikigami.Program.DecisionRunner
+import Shikigami.Program.Runtime (ProgramRuntime (..))
 import Shikigami.Repository (RepositoryId, repositoryId)
 import Shikumi.LLM (defaultLLMConfig)
 import Shikumi.Schema (toSchema)
@@ -151,7 +151,7 @@ refusedBecause candidate output rule = case validateAssessment candidate catalog
   Left failure -> renderDecisionFailure failure @?= renderDecisionFailure (decisionFailure OutputValidationFailure rule)
   other -> assertFailure (Text.unpack rule <> ": " <> show other)
 
--- | The real Handan and Shikumi dispatch path, without a workflow.
+-- | The real Shikumi dispatch path, without a workflow.
 assessThroughStub :: Candidate -> IO (Either DecisionFailure Verdict)
 assessThroughStub candidate = do
   empty <- newProviderRegistryFrom []
@@ -171,7 +171,7 @@ assessThroughStub candidate = do
           Nothing
       environment =
         DecisionRuntime
-          { runtime = Runtime (defaultLLMConfig empty) (stubModel & #modelId .~ "stub-propose"),
+          { runtime = ProgramRuntime (defaultLLMConfig empty) (stubModel & #modelId .~ "stub-propose"),
             programs = decisionPrograms,
             catalog = either (error . show) id (modelCatalog [binding]),
             profile = Nothing,

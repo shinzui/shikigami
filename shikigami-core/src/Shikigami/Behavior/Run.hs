@@ -1,6 +1,6 @@
 -- | The behavior runner: dispatch a loaded 'AgentDecl' on its behavior union and
 -- return the behavior's output as a JSON value. The @ShikumiProgram@ arm runs a
--- registered @handan@ task; the @Skill@ arm runs a baikai completion. Both run
+-- registered Shikumi task; the @Skill@ arm runs a baikai completion. Both run
 -- deterministically with stubs (no model key). EP-5's worker calls 'runBehavior'; the
 -- sinks (EP-3) consume its output value.
 module Shikigami.Behavior.Run
@@ -11,7 +11,6 @@ module Shikigami.Behavior.Run
     defaultToolTurnLimit,
     newBehaviorEnv,
     newBehaviorEnvWithTraceSink,
-    programArgs,
     runBehavior,
     completeBehaviorRequest,
     runBehaviorAttempt,
@@ -19,7 +18,7 @@ module Shikigami.Behavior.Run
     -- retryable action without registering a process-global model provider.
     runBehaviorAttemptWith,
     -- | Exported for "Shikigami.BehaviorInputSpec", which runs a locally
-    -- constructed task to observe the argument map a real dispatch builds.
+    -- constructed task to observe the input a real dispatch supplies.
     runProgramTask,
     triggerOnly,
     withCapabilityTools,
@@ -35,23 +34,15 @@ import Baikai.Trace (TraceSink)
 import Baikai.Trace qualified as BaikaiTrace
 import Control.Exception (throwIO)
 import Control.Lens ((&), (.~))
-import Data.Aeson (Value, toJSON)
-import Data.Aeson qualified as Aeson
-import Data.Aeson.Text (encodeToLazyText)
+import Data.Aeson (Value)
 import Data.Generics.Labels ()
-import Data.Map (Map)
-import Data.Map qualified as Map
 import Data.Maybe (fromMaybe)
 import Data.Set (Set)
 import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as Text
-import Data.Text.Lazy qualified as TL
 import Data.Time (NominalDiffTime, nominalDiffTimeToSeconds)
 import GHC.Generics (Generic)
-import Handan.Contract (Envelope (..), Status (ErrorS))
-import Handan.Runtime (Runtime, newRuntime)
-import Handan.Task (Task (..))
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..))
 import Shikigami.Agent.DeclarationValue
 import Shikigami.Behavior.Error
@@ -62,16 +53,18 @@ import Shikigami.Behavior.Error
     classifyRunError,
     renderRunError,
   )
-import Shikigami.Behavior.Input (BehaviorInput (..), memoryContentText, triggerOnly)
+import Shikigami.Behavior.Input (BehaviorInput (..), triggerOnly)
 import Shikigami.Behavior.Skill (SkillDir (..), ToolTurnLimit, parseToolTurnLimit, runSkillWith)
 import Shikigami.Behavior.StubProvider (registerStubProvider, stubModel)
 import Shikigami.Capability.Overlay (CapabilityId, ResolvedCapabilitySet, resolvedCapabilities)
 import Shikigami.Capability.Overlay qualified as Overlay
 import Shikigami.Program.Registry (lookupTask)
+import Shikigami.Program.Runtime (ProgramRuntime, newProgramRuntime)
+import Shikigami.Program.Task (ProgramTask (..))
 import Shikumi.Tool (ToolRegistry, mkRegistry)
 import System.Timeout (timeout)
 
--- | What 'runBehavior' needs to run either arm: a handan 'Runtime' (built once),
+-- | What 'runBehavior' needs to run either arm: a 'ProgramRuntime' (built once),
 -- the model the skill arm dispatches with, and the per-call options that model is
 -- dispatched under. Built once at worker startup.
 --
@@ -83,7 +76,7 @@ import System.Timeout (timeout)
 -- empty, and a second credential path outside Settei is exactly what this avoids.
 -- The value is never logged, encoded, or journaled.
 data BehaviorEnv = BehaviorEnv
-  { runtime :: !Runtime,
+  { runtime :: !ProgramRuntime,
     model :: !Model,
     options :: !Options,
     traceSink :: !(Maybe TraceSink),
@@ -111,7 +104,7 @@ defaultToolTurnLimit = either (error . show) id (parseToolTurnLimit 8)
 behaviorModelId :: BehaviorEnv -> Text
 behaviorModelId BehaviorEnv {model} = modelId model
 
--- | Build a deterministic stub environment: construct the handan 'Runtime' and
+-- | Build a deterministic stub environment: construct the 'ProgramRuntime' and
 -- register the stub baikai provider so the skill arm runs without a key.
 --
 -- This is the /test/ constructor, and it is stub-only by design — it is what
@@ -126,7 +119,7 @@ newBehaviorEnv =
 -- | 'newBehaviorEnv' with a trace sink attached. Stub-only for the same reason.
 newBehaviorEnvWithTraceSink :: Maybe TraceSink -> IO BehaviorEnv
 newBehaviorEnvWithTraceSink traceSink = do
-  rt <- newRuntime
+  rt <- newProgramRuntime
   registerStubProvider
   pure
     BehaviorEnv
@@ -227,40 +220,12 @@ timeoutMicroseconds duration =
         )
     )
 
--- | Run a program task: parse its input from the argument map, run it, and
--- extract the @Envelope@'s verdict as the output value.
-runProgramTask :: Runtime -> Task -> BehaviorInput -> IO (Either RunError Value)
-runProgramTask rt (Task {taskParse = parse, taskRun = run}) input =
-  case parse (programArgs input) of
+-- | Parse the original behavior input, then execute the typed task.
+runProgramTask :: ProgramRuntime -> ProgramTask -> BehaviorInput -> IO (Either RunError Value)
+runProgramTask rt (ProgramTask {parse, run}) input =
+  case parse input of
     Left err -> pure (Left (ProgramInputFailed err))
-    Right parsed -> envelopeToResult <$> run rt parsed
-
--- | The behavior's input as handan's argument map — the program arm's equivalent
--- of the skill arm's user message.
---
--- handan's parse seam is @taskParse :: ArgMap -> Either Text i@ over
--- @Map Text Text@, so both values travel as compact JSON text under fixed keys.
--- A task that does not care about either key ignores it, which is why this is
--- safe for every task already registered; a task that does care reads
--- @payload@ or @prior@. Previously this was @Map.empty@, so a program could not
--- see what triggered it no matter what it asked for.
-programArgs :: BehaviorInput -> Map Text Text
-programArgs BehaviorInput {payload, recalled} =
-  Map.fromList
-    [ ("payload", compactJson payload),
-      ("prior", compactJson (toJSON (memoryContentText <$> recalled)))
-    ]
-
-compactJson :: Value -> Text
-compactJson = TL.toStrict . encodeToLazyText
-
--- | Map a handan 'Envelope' to the runner's result: an @ErrorS@ status is a failure;
--- otherwise the verdict (or @null@ if a pure effect produced none) is the output.
-envelopeToResult :: Envelope -> Either RunError Value
-envelopeToResult (Envelope {status = st, verdict = v, message = msg}) =
-  case st of
-    ErrorS -> Left (ProgramRuntimeFailed msg)
-    _ -> Right (maybe Aeson.Null id v)
+    Right parsed -> run rt parsed
 
 completeBehaviorRequest :: BehaviorEnv -> Model -> Context -> Options -> IO Response
 completeBehaviorRequest env = case env.traceSink of

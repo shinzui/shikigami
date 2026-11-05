@@ -18,7 +18,8 @@ previous runtime closure while advancing Baikai core to 0.10.0.0, vendors to
 0.4.2.1 and trace 0.3.2.0, and
 Kioku API/core/migrations to 0.12.0.2. TypeSafe 0.1.0.1 is a direct consumer
 dependency. Effectful 2.7.1.0/core 2.7.1.2 and strict-mutable-base 2.0.0.0
-complete the solve; Keiro stays at 0.22 and the Handan source pin stays unchanged.
+complete the solve; Keiro stays at 0.22. Plan 124 removes the Handan source pin
+and uses Shikigami's local Shikumi execution adapter without changing this cohort.
 No new `allow-newer` exception is added.
 
 The real complete-call and durable queue/restart consumer checks pass; see
@@ -199,7 +200,6 @@ referring to them from anywhere durable.
 | `settei*` | `mori://shinzui/settei` |
 | `servant-health` | `mori://shinzui/servant-health` |
 | `ephemeral-pg` | `mori://shinzui/ephemeral-pg` |
-| `handan-core` | `mori://shinzui/handan` |
 | `kafka-effectful` | `mori://shinzui/kafka-effectful` |
 | `danwa*` | `mori://shinzui/danwa` |
 | `kikan-en-contract`, `kikan-en-client` | `mori://shinzui/kikan-en` |
@@ -363,7 +363,6 @@ were excluded by keiro 0.11's own bounds and are admissible under keiro 0.13.
 
 | Package | Reason | Retires when |
 |---|---|---|
-| `handan-core` | No Hackage release. Typed-program runtime behind `Shikigami.Behavior.Run` and `Shikigami.Program.Registry`. | Handan publishes. |
 | `danwa-core`, `danwa-api`, `danwa-client` | No Hackage release. Conversation substrate behind the `DanwaConversation` sink. | Danwa publishes. |
 | `en-core`, `en-biscuit` | En has no upstream tag or Hackage release. The exact commit `51edaab17473f7b9310f8802ccffd23bac5e4a9e` supplies the generic proof verifier used by the Kikan client. | En publishes a compatible release. |
 | `shomei-core`, `shomei-jwt`, `shomei-servant`, `shomei-client` | Shomei's 0.1.0.0 source tags resolve to exact commit `65551cb120336b53695c0dd30ebe0e473d6efcb2`, but the packages are not on Hackage. | Shomei publishes those packages. |

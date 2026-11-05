@@ -11,7 +11,6 @@ import Data.IORef
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as TE
-import Handan.Runtime (Runtime (..))
 import Keiro.Workflow.Types (WorkflowId (..))
 import Network.HTTP.Types (mkStatus)
 import Network.Wai qualified as Wai
@@ -28,6 +27,7 @@ import Shikigami.Log.Correlation (runCorrelationId)
 import Shikigami.Program.Decision
 import Shikigami.Program.Decision.JudgmentExample
 import Shikigami.Program.DecisionRunner
+import Shikigami.Program.Runtime (ProgramRuntime (..))
 import Shikumi.LLM (defaultLLMConfig)
 
 -- Only public synthetic data is retained by this local server.
@@ -85,7 +85,7 @@ fixtureRuntime catalog hooks = do
       binding = mustRight (pinnedBinding catalog prepared.model)
   pure
     DecisionRuntime
-      { runtime = Runtime (defaultLLMConfig registry) (bindingModel binding),
+      { runtime = ProgramRuntime (defaultLLMConfig registry) (bindingModel binding),
         programs = mustRight (programRegistry [SomeProgram judgmentProgram]),
         catalog,
         profile = Nothing,

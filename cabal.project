@@ -376,14 +376,6 @@ constraints:
   zlib ==0.7.1.1
 
 -- ── Dependencies with no Hackage release ───────────────────────────────────
--- handan — typed-program runtime used by the behavior runner. Bumped to the
--- commit that compiles against shikumi 0.3 / shikumi-trace 0.2.
-source-repository-package
-  type: git
-  location: https://github.com/shinzui/handan.git
-  tag: 8e98b0a955f908f70657c04f384b6286e4967422
-  subdir: handan-core
-
 -- danwa — conversation substrate client behind the DanwaConversation sink.
 source-repository-package
   type: git

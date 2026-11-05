@@ -4,17 +4,19 @@ Date: 2026-10-25
 
 Status: accepted
 
+Updated: 2026-11-05 (Plan 124: local Shikumi execution adapter)
+
 ## Context
 
 One Shikumi program can call a provider several times and retry internally.
-Wrapping an entire invocation misses those attempt boundaries. Handan also has a
+Wrapping an entire invocation misses those attempt boundaries. The local program runtime also has a
 process-default model, while a decision must use the exact pinned model and
 credential selected for that invocation. Provider evidence and persistence have
 different failure semantics from optional telemetry.
 
 ## Decision
 
-`Shikigami.Program.DecisionRunner` derives an invocation-local Handan runtime
+`Shikigami.Program.DecisionRunner` derives an invocation-local `Shikigami.Program.Runtime.ProgramRuntime`
 from the existing runtime configuration, retaining its retry, budget and rate
 policies. A private Baikai registry contains one wrapper around the selected
 first-class provider. No invocation changes a process-global handler or model.
@@ -50,9 +52,10 @@ uncertain accounting write.
 
 ## Consequences
 
-The adapter qualifies the project's selected Shikumi 0.4.0.0, Baikai 0.7.2.0 and
-pinned Handan revision through actual Predict and streaming paths with fake
-providers. Newer released dependencies do not require a migration of the
+Shikigami owns the interpreter composition in `Shikigami.Program.Runtime`; complete
+and streaming calls share routing, resilient dispatch, concurrency and error
+handlers. The selected Shikumi 0.5.1.0 and Baikai 0.10.0.0 execute actual Predict
+and streaming paths with fake providers. Newer released dependencies do not require a migration of the
 Flow-facing contract. Future upgrades must preserve these preflight, terminal
 and cancellation guarantees.
 
@@ -64,6 +67,7 @@ policy failures return bounded decision failures.
 
 ## References
 
+- [Plan 124](../plans/124-remove-handan-by-owning-the-shikumi-execution-adapter-in-shikigami.md)
 - [Plan 74](../plans/74-run-shikumi-decisions-through-governed-provider-calls.md)
 - [ADR 0041](0041-durable-decisions-bind-program-state-and-preserve-committed-outcomes.md)
 - [ADR 0042](0042-decision-admission-intersects-operator-agent-and-pinned-profile-authority.md)

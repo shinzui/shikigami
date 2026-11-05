@@ -1,6 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 
--- | Invocation-local Handan adapter. The wrapper sits below Shikumi retries:
+-- | Invocation-local Shikumi adapter. The wrapper sits below Shikumi retries:
 -- every transport attempt is admitted and durably accounted for independently.
 module Shikigami.Program.DecisionRunner
   ( DecisionRuntime (..),
@@ -42,11 +42,7 @@ import Data.Map.Strict qualified as Map
 import Data.Maybe (catMaybes, isJust)
 import Data.Text (Text)
 import Data.Typeable (Typeable)
-import Effectful (liftIO, runEff)
-import Effectful.Concurrent (runConcurrent)
-import Effectful.Error.Static (runErrorNoCallStack)
 import GHC.Generics (Generic)
-import Handan.Runtime (Runtime (..), runProgramWith)
 import Numeric.Natural (Natural)
 import Shikigami.Attestation.Evidence (configureEvidenceCall)
 import Shikigami.Attestation.PolicyValue
@@ -62,16 +58,16 @@ import Shikigami.Decision.ModelCatalog
 import Shikigami.Decision.StubProvider (decisionStubProvider)
 import Shikigami.Log.Correlation (callCorrelationId)
 import Shikigami.Program.Decision
+import Shikigami.Program.Runtime (ProgramRuntime (..), runProgramWith, streamProgramWith)
 import Shikumi.Error qualified as Shikumi
 import Shikumi.LLM qualified as LLM
-import Shikumi.Routing (routeLLM, runRouting)
 import Shikumi.Stream qualified as ShikumiStream
 import Streamly.Data.Stream qualified as Stream
 import System.Timeout (timeout)
 
 -- No Show or JSON: the catalog contains process-local secret bindings.
 data DecisionRuntime = DecisionRuntime
-  { runtime :: !Runtime,
+  { runtime :: !ProgramRuntime,
     programs :: !ProgramRegistry,
     catalog :: !ModelCatalog,
     profile :: !(Maybe ResolvedProfile),
@@ -233,24 +229,16 @@ runWith accounting execution env prepared ref input = do
                 Nothing -> finish token CallFailed Nothing >> throwIO err
           wrapper = (handler & #complete .~ (complete) & #stream .~ (stream))
       privateRegistry <- newProviderRegistryFrom [wrapper]
-      let config = env.runtime.runtimeConfig
+      let config = env.runtime.config
           retry = config.retryPolicy
           maxAttempts = maybe retry.maxAttempts (maybe retry.maxAttempts (fromInteger . min (toInteger retry.maxAttempts) . (+ 1) . toInteger . ceilingValue) . (\p -> (resolvedProfileView p).profile.limits.maxRetries)) env.profile
           invocation =
             env.runtime
-              { runtimeDefaultModel = selected,
-                runtimeConfig = config {LLM.registry = privateRegistry, LLM.retryPolicy = retry {LLM.maxAttempts = max 1 maxAttempts}}
-              }
+              & #defaultModel .~ selected
+              & #config .~ (config {LLM.registry = privateRegistry, LLM.retryPolicy = retry {LLM.maxAttempts = max 1 maxAttempts}})
       let run = case execution of
             CompleteDecision -> runProgramWith invocation (executable registered) checked
-            StreamDecision observe ->
-              runEff
-                . runErrorNoCallStack @Shikumi.ShikumiError
-                . runConcurrent
-                . runRouting selected
-                . LLM.runLLMResilient invocation.runtimeConfig
-                . routeLLM
-                $ ShikumiStream.streamProgram (executable registered) checked (liftIO . observe)
+            StreamDecision observe -> streamProgramWith invocation (executable registered) checked observe
       result <- timeout (decisionTimeoutMicros env.timeoutMicros) run
       case result of
         Nothing -> throwIO (TransientBehaviorFailure "decision provider attempt timed out")

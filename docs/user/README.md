@@ -3,7 +3,7 @@ type: "Navigation"
 title: "Shikigami — User Guide"
 description: "Find the right guide for declaring, running, and operating Shikigami agents."
 docId: "DOC-1"
-timestamp: "2026-11-02T09:53:52Z"
+timestamp: "2026-11-05T13:11:17Z"
 tags: ["navigation", "agents"]
 generated:
   by: process:shikigami-user-docs-okf-migration
@@ -88,7 +88,7 @@ Agent declarations (agents/*.dhall, schema/Agent.dhall)
   ▼
 Trigger fires  ──  Schedule (cron) │ Stream (activity.v1 match) │ Event (public integration event)
   ▼
-Behavior runs  ──  Registered shikumi program (handan) │ Skill (baikai) │ Flow (keiro)
+Behavior runs  ──  Registered shikumi program (local Shikumi adapter) │ Skill (baikai) │ Flow (keiro)
   ▼
 Sinks dispatch ──  KawaDigest │ KizashiSignal │ ReiAction │ DanwaConversation │ ChannelEgress (permission-gated)
   ▼

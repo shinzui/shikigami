@@ -270,6 +270,8 @@ library
     Shikigami.Program.Decision.Registry
     Shikigami.Program.DecisionRunner
     Shikigami.Program.Registry
+    Shikigami.Program.Runtime
+    Shikigami.Program.Task
     Shikigami.Repository
     Shikigami.Router.Catalog
     Shikigami.Router.Decision
@@ -455,7 +457,6 @@ library
     filepath >=1.4,
     generic-lens >=2.2,
     githash ==0.1.7.0,
-    handan-core,
     hasql,
     hasql-dynamic-statements,
     hasql-pool,
@@ -629,7 +630,6 @@ test-suite shikigami-core-test
     en-core,
     filepath,
     generic-lens,
-    handan-core,
     hasql,
     hasql-pool,
     hasql-transaction,
@@ -746,7 +746,6 @@ test-suite shikigami-core-postgres-test
     effectful,
     filepath,
     generic-lens,
-    handan-core,
     hasql,
     hasql-pool,
     hasql-transaction,

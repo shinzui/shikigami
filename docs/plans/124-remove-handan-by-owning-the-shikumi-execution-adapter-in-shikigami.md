@@ -9,6 +9,12 @@ provenance:
     model: "gpt-6.1-sol"
     harness: "codex-cli"
     at: 2026-11-05T13:01:31Z
+  revisions:
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-11-05T13:07:55Z
+      mode: "implement"
+      note: "Implement local Shikumi runtime and task catalog, remove Handan, and qualify preserved behavior"
 ---
 
 # Remove Handan by owning the Shikumi execution adapter in Shikigami
@@ -44,15 +50,28 @@ qualification work in [plan 80](80-configure-model-providers-and-agent-launches-
 - [ ] M2: Registered behaviors use a minimal local task interface; source, component dependencies, the committed solve, and frozen packaging inputs no longer require Handan.
 - [ ] M3: Behavioral regression, durable replay, workflow conformance, and immutable role builds pass, and current documentation describes direct Shikumi execution.
 
-Planning baseline: inspected on 2026-11-05 at `cc7433ec`. Implementation has not
-started. This is a standalone plan; it has no MasterPlan prerequisite. Reconcile
+Implementation baseline: `ef6e11b804b9738f65ad87fde05e4be7eec9dc19` on
+2026-11-05 (the planning inspection was `cc7433ec`). This is a standalone plan; it has no MasterPlan prerequisite. Reconcile
 concurrent edits to the decision runner and dependency cohort before proceeding.
+
+Source checkpoint: the shared local runtime, minimal task interface, dependency
+removal and ownership documentation are implemented. All 19 governed runner
+tests, 50 qualification-tool tests and Haskell conventions pass. Full structured
+judgment, isolated solve, replay, workflow gate and role-build acceptance remain.
 
 
 ## Surprises & Discoveries
 
 
-(None yet.)
+2026-11-05: `agents/README.md` does not exist; detector guidance is in
+`agents/detectors/README.md` and current user guides. ADRs use the established
+filesystem format; `mori.dhall` declares no profiled ADR bundle.
+
+2026-11-05: Concurrent work changed the Biscuit source pin, metadata and cohort
+while this implementation was running. The source checkpoint stages only Handan
+removal from shared files and preserves those other edits. Reconcile the
+committed cohort before final isolation/export; unrelated drift must be traced
+to that independent update rather than attributed to this refactor.
 
 
 ## Decision Log

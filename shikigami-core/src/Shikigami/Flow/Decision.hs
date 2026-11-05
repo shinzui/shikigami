@@ -40,7 +40,6 @@ import Effectful (Dispatch (Dynamic), DispatchOf, Eff, Effect, IOE, liftIO, (:>)
 import Effectful.Dispatch.Dynamic (interpret, send)
 import Effectful.Exception (throwIO)
 import GHC.Generics (Generic)
-import Handan.Runtime (Runtime)
 import Keiro.Workflow (StepName (..), Workflow, WorkflowId (..), currentRunGeneration, currentWorkflow, step)
 import Keiro.Workflow qualified as Workflow
 import Kiroku.Store.Effect (Store)
@@ -65,6 +64,7 @@ import Shikigami.Program.Decision
 import Shikigami.Program.Decision.Initiative (AssessmentInput, AssessmentOutput, assessmentProgram)
 import Shikigami.Program.Decision.Registry (decisionCodecs, decisionPrograms)
 import Shikigami.Program.DecisionRunner
+import Shikigami.Program.Runtime (ProgramRuntime)
 import Shikigami.Router.Catalog (CandidateCatalog)
 import Shikigami.Router.Decision (RouteDecision, validateRouteDecision)
 import Shikigami.Router.Declaration (RouterDeclarationView (policy), validateRouterDeclaration, validatedRouterDeclaration)
@@ -132,7 +132,7 @@ data DecisionEnv = DecisionEnv
   { agent :: !AgentDecl,
     inventory :: ![DecisionSlot],
     services :: !DecisionServices,
-    runtime :: !Runtime,
+    runtime :: !ProgramRuntime,
     profile :: !(Maybe ResolvedProfile),
     evidence :: !DecisionEvidenceStore,
     routing :: !RoutingRuntime,

@@ -50,7 +50,7 @@ behavior:
       timeout_ms: 30000
 ```
 
-The private decision stub returns typed JSON through actual Handan/Shikumi
+The private decision stub returns typed JSON through actual Shikumi
 dispatch. Triage selects investigation; both investigation nodes use
 `stub-investigate`. Its evidence claims requested identity only. It does not
 claim an independently observed remote model.

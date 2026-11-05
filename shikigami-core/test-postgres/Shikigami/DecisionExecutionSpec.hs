@@ -17,7 +17,6 @@ import Data.Map.Strict qualified as Map
 import Data.Maybe (isJust)
 import Data.Text (Text)
 import Data.Time (addUTCTime, getCurrentTime)
-import Handan.Runtime (Runtime (..))
 import Keiro.Timer qualified as Timer
 import Keiro.Workflow (StepName (..), WorkflowId (..), WorkflowName (..), WorkflowOutcome (..), runWorkflow, step)
 import Keiro.Workflow.Child (runChildWorkflow)
@@ -60,6 +59,7 @@ import Shikigami.Prelude ((&), (.~))
 import Shikigami.Program.Decision
 import Shikigami.Program.Decision.Examples
 import Shikigami.Program.DecisionRunner
+import Shikigami.Program.Runtime (ProgramRuntime (..))
 import Shikigami.RouterWorkflowSpec qualified as Fixture
 import Shikigami.Trigger.Enqueue (ensureRunQueue)
 import Shikigami.Workflow.Versioning (shikigamiWorkflowRunOptions)

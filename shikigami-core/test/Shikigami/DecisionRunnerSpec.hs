@@ -38,7 +38,6 @@ import Data.Text.Encoding qualified as TE
 import Data.Time (UTCTime (..), fromGregorian, getCurrentTime)
 import Data.Vector qualified as V
 import GHC.Generics (Generic)
-import Handan.Runtime (Runtime (..))
 import Keiro.Workflow.Types (WorkflowId (..))
 import Network.HTTP.Types (status200)
 import Network.Wai qualified as Wai
@@ -64,6 +63,7 @@ import Shikigami.Prelude ((&), (.~))
 import Shikigami.Program.Decision
 import Shikigami.Program.Decision.Examples qualified as Examples
 import Shikigami.Program.DecisionRunner
+import Shikigami.Program.Runtime (ProgramRuntime (..))
 import Shikumi.Adapter (ToPrompt)
 import Shikumi.LLM (defaultLLMConfig)
 import Shikumi.LLM qualified as LLM
@@ -161,7 +161,7 @@ environment registered handler hooks = do
   let config = defaultLLMConfig empty
   pure
     DecisionRuntime
-      { runtime = Runtime (config {LLM.retryPolicy = config.retryPolicy {LLM.baseDelayMs = 0, LLM.maxDelayMs = 0}}) anthropic_claude_haiku_4_5,
+      { runtime = ProgramRuntime (config {LLM.retryPolicy = config.retryPolicy {LLM.baseDelayMs = 0, LLM.maxDelayMs = 0}}) anthropic_claude_haiku_4_5,
         programs = mustRight (programRegistry [SomeProgram registered]),
         catalog = mustRight (modelCatalog [bindingA, bindingB]),
         profile = Nothing,

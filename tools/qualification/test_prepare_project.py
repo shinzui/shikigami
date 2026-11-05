@@ -22,9 +22,9 @@ index-state: 2026-09-21T20:25:14Z
 constraints: keiro-dsl ==0.18.0.0
 source-repository-package
   type: git
-  location: https://github.com/shinzui/handan.git
-  tag: 8e98b0a955f908f70657c04f384b6286e4967422
-  subdir: handan-core
+  location: https://example.com/fixture-dependency.git
+  tag: 0123456789abcdef0123456789abcdef01234567
+  subdir: fixture-dependency-core
 package blake3
   flags: -avx512 -avx2
 allow-newer:

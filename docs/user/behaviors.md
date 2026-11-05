@@ -3,6 +3,7 @@ type: "Reference"
 title: "Behaviors — what an agent does"
 description: "Compare deterministic, ShikumiProgram, Skill, CoordinatingSkill, and Flow behavior declarations."
 docId: "DOC-5"
+timestamp: "2026-11-05T13:11:17Z"
 tags: ["behaviors"]
 generated:
   by: process:shikigami-user-docs-okf-migration
@@ -30,7 +31,7 @@ let Behavior =
 | Arm | Runs via | Needs a model key? | Use for |
 | --- | --- | --- | --- |
 | **Deterministic** | schema only; runner returns `UnsupportedBehavior` | — | reserved rule declaration |
-| **ShikumiProgram** | `mori://shinzui/handan` + `mori://shinzui/shikumi` | Only when the program calls a model | typed, structured, evaluable pipelines |
+| **ShikumiProgram** | `mori://shinzui/shikumi` | Only when the program calls a model | typed, structured, evaluable pipelines |
 | **Skill** | `mori://shinzui/baikai` | Only when the skill calls a model | "follow these instructions, maybe call these tools" |
 | **CoordinatingSkill** | admitted durable execution | When the selected provider requires one | instructions controlling a bounded set of continuing workers |
 | **Flow** | `mori://shinzui/keiro` durable workflow | Only if the flow body calls a model | lifecycle-backed work that can park, resume, and escalate |
@@ -59,14 +60,14 @@ rule logic as a registered program or compiled Flow until this arm has a runner.
 ```dhall
 behavior =
   A.Behavior.ShikumiProgram
-    { task = "noop-summary"      -- a registered handan/shikumi task
+    { task = "noop-summary"      -- a registered Shikumi task
     , preferEnrichment = False   -- schema metadata; task must implement this
     , grounding = None Text      -- schema metadata; task must implement this
     , enabledBy = None Text      -- schema metadata; not an enforced gate
     }
 ```
 
-Names a typed task in the program registry, run through `mori://shinzui/handan` over a
+Names a typed task in the program registry, run by Shikigami's local execution adapter over a
 `mori://shinzui/shikumi` `Program`. This is the path for **structured, typed, evaluable** work —
 schemas, validation, ensembles, an eval harness. Fields:
 

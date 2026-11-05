@@ -3,6 +3,7 @@ type: "Guide"
 title: "Typed decisions in Flows"
 description: "Configure model aliases, run the typed decision example, and preserve governed results and attempt evidence on replay."
 docId: "DOC-15"
+timestamp: "2026-11-05T13:11:17Z"
 tags: ["flows", "decisions", "models"]
 generated:
   by: process:shikigami-documentation-refresh
@@ -65,7 +66,7 @@ cabal run shikigami-worker -- --config decision-models.yaml
 ```
 
 Set that directory in both terminals. The private deterministic stub exercises
-actual Handan/Shikumi dispatch and returns typed JSON. Its investigation branch
+actual Shikumi dispatch and returns typed JSON. Its investigation branch
 records one triage call and two investigation calls under distinct model
 descriptors. This proves the local dispatch path; its requested-model evidence
 does not identify an independently observed remote model.

@@ -4,6 +4,8 @@ Date: 2026-10-25
 
 Status: accepted
 
+Updated: 2026-11-05 (Plan 124: local Shikumi execution adapter)
+
 ## Context
 
 Triage can commit before investigation has prepared. A deployment in that gap
@@ -60,7 +62,7 @@ Workers and one-off durable runs share decision-service construction. Operators
 must retain exact pending bindings/state or accept a bounded refusal, and retain
 codecs for historical completed journals. Roll forward across patch introduction.
 
-The PostgreSQL acceptance suite drives actual Handan/Shikumi and migrated workflow
+The PostgreSQL acceptance suite drives actual Shikumi and migrated workflow
 journals. It proves two model IDs and three internal attempts, completed replay
 with removed executables and credentials, original pending version retention,
 missing-state refusal, local derivation with identical provider requests,

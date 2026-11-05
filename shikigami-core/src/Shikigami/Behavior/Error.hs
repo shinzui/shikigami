@@ -31,7 +31,7 @@ data RunError
     UnknownTask !Text
   | -- | The program rejected its deterministic argument map.
     ProgramInputFailed !Text
-  | -- | handan/shikumi failed while running an already-parsed program.
+  | -- | Shikumi failed while running an already-parsed program.
     ProgramRuntimeFailed !Text
   | -- | SKILL.md was missing or its frontmatter was malformed.
     SkillLoadFailed !Text

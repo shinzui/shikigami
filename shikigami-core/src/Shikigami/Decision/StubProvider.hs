@@ -1,4 +1,4 @@
--- | Key-free decision fixtures use the real Handan/Shikumi dispatch path. The
+-- | Key-free decision fixtures use the real Shikumi dispatch path. The
 -- honest evidence strength is requested-only: no remote model serves this API.
 module Shikigami.Decision.StubProvider (decisionStubProvider) where
 

@@ -4,6 +4,8 @@ Date: 2026-10-21
 
 Status: accepted
 
+Updated: 2026-11-05 (Plan 124: local Shikumi execution adapter)
+
 
 ## Context
 
@@ -28,7 +30,7 @@ executable decision.
 ## Decision
 
 Shikigami owns the Flow-facing static-slot/model-alias/typed-input interface and
-versioned validated result. Shikumi and Handan API adaptation stays inside the
+versioned validated result. Shikumi API adaptation stays inside the
 program registry and runner. This isolates dependency changes; it does not
 promise that upstream APIs never change. [Shikumi MP-12](mori://shinzui/shikumi/masterplans/12-support-typesafe-jev-and-probability-backed-decision-outputs) is a coordination
 dependency, with Jev, probability-backed types and calibration outside MP-13's
@@ -139,7 +141,7 @@ a reused immutable registration key.
 
 ## Durable integration evidence
 
-The PostgreSQL DecisionWorkflowSpec runs actual Handan/Shikumi in a durable
+The PostgreSQL DecisionWorkflowSpec runs actual Shikumi in a durable
 agent-run workflow. Versioned registrations with identical provider requests and
 responses but different pure local derivation produce different fresh results.
 An already committed original result retains every field, including confidence,

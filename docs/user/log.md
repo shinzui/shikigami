@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-11-05
+* **Correction**: Plan 124: describe registered programs and typed decisions through the Shikigami-owned Shikumi execution adapter in DOC-1, DOC-5 and DOC-15.
+
 ## 2026-11-04
 * **Addition**: Add the unrequested-work guide for what a person sees when an agent proposes work nobody asked for.
 * **Correction**: Give the adaptive-delivery guide the frontmatter the profile requires, so the bundle validates.
