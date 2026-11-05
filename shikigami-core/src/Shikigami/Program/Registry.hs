@@ -25,8 +25,8 @@ import Shikigami.Program.Runtime (runProgramWith)
 import Shikigami.Program.Task (ProgramTask (..))
 import Shikumi.Program (Program, embed)
 
--- | Every program shikigami knows about. EP-6's detectors append their tasks here;
--- for this plan it is just the deterministic stub.
+-- | Tasks dispatched by the ShikumiProgram behavior. Typed durable decisions
+-- have their own registry in Shikigami.Program.Decision.Registry.
 programRegistry :: [ProgramTask]
 programRegistry = [noopSummaryTask, webResearcherTask, codeResearcherTask]
 

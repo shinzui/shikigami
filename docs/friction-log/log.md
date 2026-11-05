@@ -1,6 +1,8 @@
 # Bundle Update Log
 
 ## 2026-11-05
+* **Addition**: FRIC-62 records detour tooling friction with mori://shinzui/shikigami: Workspace prototype fixtures omit the initiative dependency
+* **Addition**: FRIC-61 records detour environment friction with mori://shinzui/shikigami: Concurrent dependency edits invalidate ambient qualification
 * **Update**: FRIC-59 accepted: Status set to accepted.
 * **Update**: FRIC-58 resolved: Status set to resolved.
 * **Update**: FRIC-57 accepted: Status set to accepted.

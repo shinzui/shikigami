@@ -46,7 +46,7 @@ qualification work in [plan 80](80-configure-model-providers-and-agent-launches-
 ## Progress
 
 
-- [ ] M1: A Shikigami-owned Shikumi runtime executes complete and streaming decisions with the existing selection, retry, terminal-evidence, and cancellation behavior.
+- [x] M1 (2026-11-05): The shared local runtime executes complete and streaming decisions; all 19 governed runner cases and all 742 core pure tests pass, including complete/stream structured judgments, model selection, retries, terminal callbacks and cancellation.
 - [ ] M2: Registered behaviors use a minimal local task interface; source, component dependencies, the committed solve, and frozen packaging inputs no longer require Handan.
 - [ ] M3: Behavioral regression, durable replay, workflow conformance, and immutable role builds pass, and current documentation describes direct Shikumi execution.
 
@@ -56,8 +56,11 @@ concurrent edits to the decision runner and dependency cohort before proceeding.
 
 Source checkpoint: the shared local runtime, minimal task interface, dependency
 removal and ownership documentation are implemented. All 19 governed runner
-tests, 50 qualification-tool tests and Haskell conventions pass. Full structured
-judgment, isolated solve, replay, workflow gate and role-build acceptance remain.
+tests, all 742 core pure tests, 50 qualification-tool tests, strict user-guide
+validation and Haskell conventions pass. The fresh isolated solve removes
+`handan-core`, `shikumi-eval`, `shikumi-trace-otel`, `tasty` and `tasty-golden`
+from the production closure with no added packages or remaining-version changes.
+The isolated build/suites, replay, workflow gate and role builds remain.
 
 
 ## Surprises & Discoveries
@@ -68,10 +71,18 @@ judgment, isolated solve, replay, workflow gate and role-build acceptance remain
 filesystem format; `mori.dhall` declares no profiled ADR bundle.
 
 2026-11-05: Concurrent work changed the Biscuit source pin, metadata and cohort
-while this implementation was running. The source checkpoint stages only Handan
+while this implementation was running (FRIC-61 in `docs/friction-log/`). The source checkpoint stages only Handan
 removal from shared files and preserves those other edits. Reconcile the
 committed cohort before final isolation/export; unrelated drift must be traced
 to that independent update rather than attributed to this refactor.
+
+
+2026-11-05: The first isolated all-components build found workspace prototype
+fixtures left behind by the initiative implementation: two `AgentRunDeps`
+constructors lacked the required `initiatives` seed. They now use the existing
+`disabledInitiatives`, matching the other fixtures (FRIC-62 in
+`docs/friction-log/`). This repairs the required build without adding initiative
+behavior or changing production workflow bodies.
 
 
 ## Decision Log
