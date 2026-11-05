@@ -159,6 +159,7 @@ import Shikigami.Flow.Acknowledgement
 import Shikigami.Flow.Capability qualified as FlowCapability
 import Shikigami.Flow.Decision qualified as FlowDecision
 import Shikigami.Flow.Delegate qualified as FlowDelegate
+import Shikigami.Flow.Initiative qualified as FlowInitiative
 import Shikigami.Flow.Objectives qualified as FlowObjectives
 import Shikigami.Flow.Routing (RoutingRuntime)
 import Shikigami.Flow.Routing qualified as FlowRouting
@@ -219,6 +220,9 @@ data AgentRunDeps = AgentRunDeps
     -- | No production scope/provider is selected until IR-11/IR-13 deliver it.
     coordination :: !(Maybe WorkerCapability.CoordinationHost),
     objectives :: !(Maybe Objectives.ObjectiveRuntime),
+    -- | Observer allowances and the repositories a proposal may be offered. Only
+    -- what a run's @initiative-open@ step journals crosses a journal boundary.
+    initiatives :: !FlowInitiative.InitiativeSeed,
     agents :: ![AgentDecl],
     kizashi :: !KizashiConfig,
     kawa :: !KawaConfig,
@@ -1138,7 +1142,20 @@ runFlowBehavior deps activeBehaviorEnv resolvedProfile approvalPolicyForRun reco
                   Left Objective.ObjectiveUnavailable -> throwIO (TransientBehaviorFailure "objective authority unavailable")
                   value -> pure value
           else pure (Right Nothing)
-      let decisionTimeout = DecisionContract.parseDecisionTimeout (floor (durationTime (depsRunTimeout deps) * 1000000))
+      useInitiative <- Workflow.patch (Workflow.PatchId "shikigami-initiative-v1")
+      let initiativeInterpreter :: (Workflow :> es, Store :> es, IOE :> es) => Eff (FlowInitiative.Initiative : es) a -> Eff es a
+          initiativeInterpreter
+            | useInitiative =
+                FlowInitiative.runInitiative
+                  FlowInitiative.InitiativeRuntime
+                    { seed = deps.initiatives,
+                      identity = job.identity,
+                      activity = activityFromJob job,
+                      agent = decl.name,
+                      run = childWorkflowId
+                    }
+            | otherwise = FlowInitiative.unavailableInitiative
+          decisionTimeout = DecisionContract.parseDecisionTimeout (floor (durationTime (depsRunTimeout deps) * 1000000))
           attentionInterpreter = PracticeReviewAttention.runPracticeReviewAttentionAtomic practiceReviewAttentionEnv
           decisionInterpreter action
             | null flow.decisionSlots = FlowDecision.runDecisionDisabled action
@@ -1170,6 +1187,7 @@ runFlowBehavior deps activeBehaviorEnv resolvedProfile approvalPolicyForRun reco
               . FlowWorkers.runWorkers deps.coordination deps.actionAuthorizer coordinator coordinationPolicy
               . Adaptive.runAdaptiveDelivery (adaptiveRuntime deps) coordinator resolvedProfile (Harness.narrowHarnessPolicy deps.harness decl.harness)
               . FlowObjectives.runObjectives deps.objectives objectivePolicy
+              . initiativeInterpreter
               . FlowRouting.runRouting routingEnv
               . decisionInterpreter
               . acknowledgementInterpreter

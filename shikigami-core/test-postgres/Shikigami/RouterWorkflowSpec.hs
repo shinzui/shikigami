@@ -60,6 +60,7 @@ import Shikigami.Duration (parseDuration)
 import Shikigami.Execution.Policy.Types qualified as Harness
 import Shikigami.Fixture.SinkHttp (testSinkHttp)
 import Shikigami.Flow.Decision qualified as FlowDecision
+import Shikigami.Flow.Initiative qualified as FlowInitiative
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Log qualified as Log
@@ -347,6 +348,7 @@ routerDeps appEnv behaviorEnv routing agents =
       AgentWorkflow.capabilities = CapabilityProvider.emptyCapabilityRuntime,
       AgentWorkflow.coordination = Nothing,
       AgentWorkflow.objectives = Nothing,
+      AgentWorkflow.initiatives = FlowInitiative.disabledInitiatives,
       AgentWorkflow.workspace = Nothing,
       AgentWorkflow.agents,
       AgentWorkflow.kizashi = KizashiConfig {baseUrl = "http://localhost:1", defaultRecipient = (declarationCoordinate "recipient")},

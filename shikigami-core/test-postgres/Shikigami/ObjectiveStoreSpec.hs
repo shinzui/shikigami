@@ -32,6 +32,7 @@ import Kiroku.Store.Transaction (runTransaction)
 import Kiroku.Store.Types qualified as StoreTypes
 import Pgmq qualified
 import Shikigami.Action.Authorization (allowAllActionAuthorizerForTests, denyAllActionAuthorizer)
+import Shikigami.Activity.Coordinate (activityCoordinate)
 import Shikigami.Agent.Conversation.SessionIndex qualified as ConversationIndex
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
 import Shikigami.Agent.Name (AgentName, mkAgentName)
@@ -148,6 +149,15 @@ tests fixture =
           count env "shikigami.objectives" >>= (@?= 1)
           replaceJson env "UPDATE shikigami.objective_origins SET receipt=$1" (toJSON receipt)
           run env (O.lookupCreatedObjective creator operation origin) >>= (@?= Right (Just receipt)),
+      testCase "a document cannot claim its objective came from an unrequested proposal" $
+        withObjective fixture \env _ objective -> do
+          let reference = either (error . show) id (parseProposalRef "shikigami_proposal_01h455vb4pex5vsknk084sn02q")
+              observed = ObservedSource (activityCoordinate "fixture/chat") (activityCoordinate "chat") (activityCoordinate "thread-1")
+              claimed = UnrequestedProposal reference observed
+              forged = request & #external .~ [claimed]
+          run env (O.createObjective ownerHost (fixtureOperationId "forged") Nothing forged) >>= (@?= Left (ObjectiveInvalid "an unrequested-proposal link requires a Flow origin"))
+          run env (O.executeCommand ownerHost objective (revision 0) (fixtureOperationId "forged-link") (LinkExternal claimed)) >>= (@?= Left (ObjectiveInvalid "an unrequested-proposal link is set only at creation"))
+          count env "shikigami.objectives" >>= (@?= 1),
       testCase "malformed creation fingerprint cannot allocate a replacement objective" $
         withObjective fixture \env _ objective -> do
           let recover = O.createObjective ownerHost (fixtureOperationId "create") Nothing request

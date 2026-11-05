@@ -48,7 +48,7 @@ data Criterion = Criterion {key :: !CriterionKey, description :: !CriterionDescr
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
-data ExternalReference = ReiIntention !IntentionRef | ExecPlan !ExecPlanRef | ProtocolTask !ProtocolTaskRef
+data ExternalReference = ReiIntention !IntentionRef | ExecPlan !ExecPlanRef | ProtocolTask !ProtocolTaskRef | UnrequestedProposal !ProposalRef !ObservedSource
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 

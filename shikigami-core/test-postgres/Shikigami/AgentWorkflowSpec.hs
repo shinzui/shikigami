@@ -123,6 +123,7 @@ import Shikigami.Fixture.ExecutionIdentity (fixtureRootId)
 import Shikigami.Fixture.KawaStub (kawaDoorwayApplication)
 import Shikigami.Fixture.SinkHttp (testSinkHttp, testSinkHttpFor)
 import Shikigami.Flow.Decision qualified as FlowDecision
+import Shikigami.Flow.Initiative qualified as FlowInitiative
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Integration.Danwa (AddressedMessage (..), addressedMessageEventType)
 import Shikigami.Log qualified as Log
@@ -2000,6 +2001,7 @@ testDepsWithAgents appEnv behaviorEnv hooks agentDecls =
       capabilities = CapabilityProvider.emptyCapabilityRuntime,
       coordination = Nothing,
       objectives = Nothing,
+      initiatives = FlowInitiative.disabledInitiatives,
       workspace = Nothing,
       agents = agentDecls,
       kizashi = KizashiConfig {baseUrl = "http://localhost:1", defaultRecipient = (declarationCoordinate "recipient")},
@@ -2037,6 +2039,7 @@ testDepsWithApprovalAndDeadline appEnv behaviorEnv hooks approval deadline =
       capabilities = CapabilityProvider.emptyCapabilityRuntime,
       coordination = Nothing,
       objectives = Nothing,
+      initiatives = FlowInitiative.disabledInitiatives,
       workspace = Nothing,
       agents = [decl],
       kizashi = KizashiConfig {baseUrl = "http://localhost:1", defaultRecipient = (declarationCoordinate "recipient")},

@@ -224,11 +224,13 @@ test-suite shikigami-workers-test
     Shikigami.AgentRun.StatusSpec
     Shikigami.ExecutionCapacitySpec
     Shikigami.Fixture.ExecutionIdentity
+    Shikigami.Fixture.Proposing
     Shikigami.Health.SupervisionSpec
     Shikigami.Health.WorkerSpec
     Shikigami.Inspection.ConsumerSpec
     Shikigami.Integration.ConsumerRuntimeSpec
     Shikigami.ObjectiveTrackerWorkerSpec
+    Shikigami.ProposeWorkSpec
     Shikigami.SchedulerSpec
     Shikigami.StreamInboxSpec
     Shikigami.TelemetrySpec

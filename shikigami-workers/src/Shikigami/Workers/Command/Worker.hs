@@ -31,6 +31,7 @@ import Shikigami.Duration
 import Shikigami.Execution.Capacity qualified as Capacity
 import Shikigami.Flow (flowDeclarationErrors)
 import Shikigami.Flow.Decision qualified as FlowDecision
+import Shikigami.Flow.Initiative qualified as FlowInitiative
 import Shikigami.Health.Worker (LoopName (OutboxLoop, QueueLoop, TelemetryLoop, TimerLoop), loopStaleAfter, loopStaleness, newHeartbeatsWithStaleness, serveProbesWith)
 import Shikigami.Inspection.Consumer (consumerInspection)
 import Shikigami.Inspection.Store (withObservedStore)
@@ -41,6 +42,7 @@ import Shikigami.Objective.Tracker.Runtime qualified as TrackerRuntime
 import Shikigami.Objective.Tracker.Store qualified as Tracker
 import Shikigami.Objective.Tracker.Worker (trackerLoopRegistration)
 import Shikigami.Prelude (Text)
+import Shikigami.Repository (repositoryIdText)
 import Shikigami.Runtime (registerRuntimeCatalog, runtimeConnectionSettings)
 import Shikigami.Sink (DanwaConfig (..), GrantSource (DbGrants), KanmonConfig (..), KawaConfig (..), KizashiConfig (..), ReiConfig (..))
 import Shikigami.Sink.Http (HttpLimits (..), SinkHttp, SinkHttpError, credentialsFromConfig, newSinkHttp)
@@ -49,6 +51,7 @@ import Shikigami.Telemetry (withRunTelemetry)
 import Shikigami.Workers.Config (WorkerEnv (..), directoryLoopRegistration, persistAgentLoadReport, schedulerSchedules, startProcessDirectory)
 import Shikigami.Workers.Registry (runWorkers)
 import Shikigami.Workspace.ConfiguredHost (configuredWorkspaceHostWithTransfers, configuredWorkspaceTransfers)
+import Shikigami.Workspace.Settings (WorkspaceRepository (..), WorkspaceSettings (..))
 import System.Exit qualified as Exit
 
 -- | Boot the supervised worker that drains @shikigami_run_jobs@, runs each agent
@@ -224,6 +227,14 @@ runWorkerCmdWith resumeBudget config = do
                   directory,
                   directoryRefresher,
                   objectiveSettings = config.objectiveSettings,
+                  initiatives =
+                    FlowInitiative.InitiativeSeed
+                      { settings = config.initiativeSettings,
+                        -- Identity only: a repository's source is a private locator
+                        -- and must not reach a model provider.
+                        repositories = [FlowInitiative.RepositoryOption entry.identity (repositoryIdText entry.identity) | entry <- maybe [] (.repositories) config.workspaceSettings],
+                        hooks = FlowInitiative.noInitiativeHooks
+                      },
                   trackers,
                   practiceReviewAttentionRecipients = (.practiceReviewAttentionRecipients) config
                 }

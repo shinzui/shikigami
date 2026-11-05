@@ -99,6 +99,7 @@ tests =
             NotificationsExhausted,
             AlreadyProposed proposal,
             AlreadyOwned objective,
+            OwnerUnknown,
             Suppressed instant,
             NotActionable,
             DecisionRefused OutputValidationFailure

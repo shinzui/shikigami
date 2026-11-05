@@ -59,6 +59,7 @@ import Shikigami.Execution.Store qualified as Execution
 import Shikigami.Execution.Transcript (ExecutionSnapshot (..), executionIdFor)
 import Shikigami.Fixture.ExecutionIdentity (fixtureOperationId, fixtureRootId)
 import Shikigami.Flow.Decision qualified as Decision
+import Shikigami.Flow.Initiative qualified as FlowInitiative
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Log qualified as Log
@@ -361,6 +362,7 @@ withWorkflowAuthority authorizer configure fixture use = Fixture.withFixture fix
             workspace = Just host,
             coordination = Nothing,
             objectives = Nothing,
+            initiatives = FlowInitiative.disabledInitiatives,
             agents = [declaration],
             kizashi = KizashiConfig "http://localhost:1" (declarationCoordinate "recipient"),
             kawa = KawaConfig "http://localhost:1" (activityCoordinate "fixture"),

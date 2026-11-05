@@ -171,6 +171,7 @@ library
     Shikigami.Flow.Capability
     Shikigami.Flow.Decision
     Shikigami.Flow.Delegate
+    Shikigami.Flow.Initiative
     Shikigami.Flow.Lifecycle.AtRiskCustomer
     Shikigami.Flow.ObjectiveExample
     Shikigami.Flow.Objectives
@@ -184,9 +185,11 @@ library
     Shikigami.Health.Ping
     Shikigami.Initiative.Intake
     Shikigami.Initiative.Ledger
+    Shikigami.Initiative.Notice
     Shikigami.Initiative.Prefilter
     Shikigami.Initiative.Settings
     Shikigami.Initiative.Source
+    Shikigami.Initiative.Template
     Shikigami.Initiative.Types
     Shikigami.Inspection.Aggregates
     Shikigami.Inspection.Settings

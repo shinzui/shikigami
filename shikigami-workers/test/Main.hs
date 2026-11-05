@@ -10,6 +10,7 @@ import Shikigami.Inspection.ConsumerSpec qualified as InspectionSpec
 import Shikigami.Integration.ConsumerRuntimeSpec qualified as ConsumerAppSpec
 import Shikigami.Migrations.TestSupport (withShikigamiMigratedSuite)
 import Shikigami.ObjectiveTrackerWorkerSpec qualified as ObjectiveTrackerWorkerSpec
+import Shikigami.ProposeWorkSpec qualified as ProposeWorkSpec
 import Shikigami.SchedulerSpec qualified as SchedulerSpec
 import Shikigami.StreamInboxSpec qualified as StreamInboxSpec
 import Shikigami.TelemetrySpec qualified as TelemetrySpec
@@ -73,6 +74,7 @@ suite = do
               StatusSpec.tests databaseFixture,
               SchedulerSpec.tests databaseFixture,
               StreamInboxSpec.tests databaseFixture,
+              ProposeWorkSpec.tests databaseFixture,
               TimerRecoverySpec.tests databaseFixture,
               TelemetrySpec.tests,
               SupervisionSpec.tests

@@ -6,6 +6,7 @@ module Shikigami.Flow.Acknowledgement
     Acknowledgement,
     ackFromDecision,
     awaitAck,
+    awaitAckWithin,
     awaitAcknowledgement,
     runAcknowledgement,
     runAcknowledgementWithChild,
@@ -54,6 +55,7 @@ instance Exception ApprovalAcknowledgementFailed
 -- a body that closed over them needed constructing per-run.
 data Acknowledgement :: Effect where
   AwaitAcknowledgement :: StepName -> Approval.ApprovalRequest -> Acknowledgement m Ack
+  AwaitAcknowledgementWithin :: StepName -> Duration "approval" -> Approval.ApprovalRequest -> Acknowledgement m Ack
 
 type instance DispatchOf Acknowledgement = Dynamic
 
@@ -65,6 +67,12 @@ type instance DispatchOf Acknowledgement = Dynamic
 -- at-risk flow's @await-ack@ is declared in @domain\/shikigami-agent-run.keiro@.
 awaitAck :: (Acknowledgement :> es) => StepName -> Approval.ApprovalRequest -> Eff es Ack
 awaitAck name req = send (AwaitAcknowledgement name req)
+
+-- | Park under @name@ for a deadline the caller holds rather than the run's
+-- approval policy, for a wait with its own durable expiry. The body still chooses
+-- no channel: the interpreter's policy overrides whatever the request says.
+awaitAckWithin :: (Acknowledgement :> es) => StepName -> Duration "approval" -> Approval.ApprovalRequest -> Eff es Ack
+awaitAckWithin name deadline req = send (AwaitAcknowledgementWithin name deadline req)
 
 -- | Interpret 'Acknowledgement' against the approval machinery.
 --
@@ -79,6 +87,7 @@ runAcknowledgement ::
 runAcknowledgement env deadline =
   interpret \_ -> \case
     AwaitAcknowledgement name req -> awaitAcknowledgement env name req deadline
+    AwaitAcknowledgementWithin name own req -> awaitAcknowledgement env name req own
 
 -- | Interpret a fresh run's acknowledgement as a dedicated approval child.
 -- Permanent child outcomes are thrown as a typed synchronous exception so the
@@ -93,31 +102,42 @@ runAcknowledgementWithChild ::
   Eff es a
 runAcknowledgementWithChild session channel deadline =
   interpret \_ -> \case
-    AwaitAcknowledgement (StepName name) req ->
-      ( ApprovalWorkflow.requestApproval
-          ("flow-" <> name)
-          session
-          (Approval.withApprovalChannel channel req)
-          deadline
-          >>= \case
-            ApprovalWorkflow.ApprovalResolved decision -> pure (ackFromDecision decision)
-            ApprovalWorkflow.ApprovalNotificationFailed detail ->
-              throwIO (ApprovalAcknowledgementFailed detail)
-      )
-        `catchSync` \err ->
-          case fromException err of
-            Just (WorkflowChildFailed childName childId detail) ->
-              throwIO
-                ( ApprovalAcknowledgementFailed
-                    ( "approval child "
-                        <> Text.pack (show childName)
-                        <> "/"
-                        <> Text.pack (show childId)
-                        <> " failed: "
-                        <> detail
-                    )
+    AwaitAcknowledgement name req -> viaChild session channel deadline name req
+    AwaitAcknowledgementWithin name own req -> viaChild session channel own name req
+
+viaChild ::
+  (Workflow :> es, Store :> es, IOE :> es) =>
+  SessionId ->
+  Approval.ApprovalChannel ->
+  Duration "approval" ->
+  StepName ->
+  Approval.ApprovalRequest ->
+  Eff es Ack
+viaChild session channel deadline (StepName name) req =
+  ( ApprovalWorkflow.requestApproval
+      ("flow-" <> name)
+      session
+      (Approval.withApprovalChannel channel req)
+      deadline
+      >>= \case
+        ApprovalWorkflow.ApprovalResolved decision -> pure (ackFromDecision decision)
+        ApprovalWorkflow.ApprovalNotificationFailed detail ->
+          throwIO (ApprovalAcknowledgementFailed detail)
+  )
+    `catchSync` \err ->
+      case fromException err of
+        Just (WorkflowChildFailed childName childId detail) ->
+          throwIO
+            ( ApprovalAcknowledgementFailed
+                ( "approval child "
+                    <> Text.pack (show childName)
+                    <> "/"
+                    <> Text.pack (show childId)
+                    <> " failed: "
+                    <> detail
                 )
-            Nothing -> throwIO err
+            )
+        Nothing -> throwIO err
 
 -- | The direct call the capability wraps. Still exported because
 -- 'runAcknowledgement' is not the only possible caller and because the

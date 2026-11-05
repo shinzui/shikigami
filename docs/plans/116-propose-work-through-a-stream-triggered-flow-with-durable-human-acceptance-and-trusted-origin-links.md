@@ -11,6 +11,12 @@ provenance:
     model: "claude-fable-5-1"
     harness: "claude-code"
     at: 2026-11-04T18:38:36Z
+  revisions:
+    - model: "claude-opus-5-5"
+      harness: "claude-code"
+      at: 2026-11-05T01:37:26Z
+      mode: "implement"
+      note: "Implementing the propose-work Flow, patch and human acceptance"
 ---
 
 # Propose work through a stream-triggered Flow with durable human acceptance and trusted origin links
@@ -37,7 +43,10 @@ You can see it working in `cabal test shikigami-core-postgres-test --test-option
 
 ## Surprises & Discoveries
 
-(None yet.)
+- FRIC-13's native collector crash recurred with the same signature when this plan's fixture built `AgentRunDeps` by a record literal under optimization (FRIC-60). The debug RTS reports `invalid closure, info=0x0`; the crash follows only GC timing, a major GC reproduces it at once, and it disappears when the fixture is compiled `-O0` or the record is rebuilt through its `-O0` defining module. Existing literal fixtures survive `-A64k`, a plain-function literal in this fixture does not, and the trigger is not established. The fixture and, as an unproven precaution, `Shikigami.Workers.Config` are compiled `-O0`. No test exercises the production `agentRunDeps`, so that exposure is neither shown nor ruled out.
+- The approval child is declared by the agent-run body's existing `child approval`, so `initiative-await-acceptance` is not a parent step and the patch does not list it. Its review id derives from `flow-initiative-await-acceptance`.
+- A session's idle timer is due by the time a proposal expires, and a single-claim timer worker keeps returning it when its action does not claim it. The fixture uses the same drain the scheduler uses.
+- Acceptance outlives the evaluation root's cutoff: the objective scope pins the cutoff at `objectives-policy` and only fresh membership and authority are rechecked. A case proves it.
 
 
 ## Decision Log
@@ -52,6 +61,22 @@ You can see it working in `cabal test shikigami-core-postgres-test --test-option
 
 - Decision: The proposer declares no run-end sinks; every human-visible message leaves through the approval ask or an explicit `emitSignal`.
   Rationale: The run-end `dispatch-sinks` step would send the Flow's return value after every run, including skips, and IR-21 says a skip notifies nobody.
+  Date: 2026-11-04
+
+- Decision: Every case in this plan runs in `shikigami-workers/test/Shikigami/ProposeWorkSpec.hs` from a fixture envelope through the real consumer, rather than splitting a harness half into the PostgreSQL suite.
+  Rationale: The consumer enrolls the root and candidate row the run depends on, and `Shikigami.Fixture.Proposing` is what plans 117 and 118 reuse. A second harness would prove less with more code.
+  Date: 2026-11-04
+
+- Decision: A repository's description offered to the model is its identity, not its source.
+  Rationale: `WorkspaceRepository.source` is a private locator that the configuration surface deliberately hides, and the assessment input reaches a model provider.
+  Date: 2026-11-04
+
+- Decision: `UnrequestedProposal` is settable only at creation by a Flow origin; `LinkExternal` and origin-less documents refuse it, and the public objective schema does not offer it.
+  Rationale: The request asks for a trusted origin link. An unguarded constructor would let any caller or a model tool claim provenance from observed activity.
+  Date: 2026-11-04
+
+- Decision: Skips of a candidate the run cannot resolve use a new `owner-unknown` reason.
+  Rationale: A ledger row the owner check cannot read is not evidence that nobody owns the subject, and reporting it as an exhausted window would be false.
   Date: 2026-11-04
 
 

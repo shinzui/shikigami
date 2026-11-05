@@ -1,4 +1,6 @@
 {-# LANGUAGE DataKinds #-}
+-- Constructs AgentRunDeps; see FRIC-60 and the same boundary in Shikigami.Agent.Workflow.
+{-# OPTIONS_GHC -O0 #-}
 
 -- | What every worker loop needs, and how each loop's own environment is derived
 -- from it.
@@ -63,6 +65,7 @@ import Shikigami.Duration
 import Shikigami.Execution.Capacity (RuntimeLimits)
 import Shikigami.Execution.Policy.Types (HarnessPolicy)
 import Shikigami.Flow.Decision qualified as FlowDecision
+import Shikigami.Flow.Initiative qualified as FlowInitiative
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Health.Worker (Heartbeats, LoopName (DirectoryLoop), LoopStaleness, beat, loopStaleness)
 import Shikigami.Inspection.Consumer (ConsumerInspection)
@@ -158,6 +161,7 @@ data WorkerEnv = WorkerEnv
     directory :: !DirectoryHandle,
     directoryRefresher :: !(Maybe (IO ())),
     objectiveSettings :: !ObjectiveSettings,
+    initiatives :: !FlowInitiative.InitiativeSeed,
     trackers :: !(Maybe Tracker.TrackerHost),
     practiceReviewAttentionRecipients :: !PracticeReviewCapability.AttentionRecipientMap
   }
@@ -229,6 +233,7 @@ agentRunDeps env =
       AgentWorkflow.workspace = env.workspace,
       AgentWorkflow.coordination = Just (Objectives.coordinationHost env.appEnv env.objectiveSettings env.directory env.actionAuthorizer env.agents env.delegationBudget env.workspaceTransfers),
       AgentWorkflow.objectives = Just (objectiveRuntime env),
+      AgentWorkflow.initiatives = env.initiatives,
       AgentWorkflow.agents = (.agents) env,
       AgentWorkflow.kizashi = (.kizashi) env,
       AgentWorkflow.kawa = (.kawa) env,

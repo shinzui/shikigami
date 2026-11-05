@@ -224,6 +224,8 @@ data SkipReason
   | NotificationsExhausted
   | AlreadyProposed !ProposalId
   | AlreadyOwned !ObjectiveId
+  | -- | The ledger could not answer. Not evidence that nobody owns the subject.
+    OwnerUnknown
   | Suppressed !UTCTime
   | NotActionable
   | DecisionRefused !FailureCode
@@ -244,6 +246,7 @@ skipReasonText = \case
   NotificationsExhausted -> "notifications-exhausted"
   AlreadyProposed _ -> "already-proposed"
   AlreadyOwned _ -> "already-owned"
+  OwnerUnknown -> "owner-unknown"
   Suppressed _ -> "suppressed"
   NotActionable -> "not-actionable"
   DecisionRefused _ -> "decision-refused"
@@ -274,6 +277,7 @@ instance FromJSON SkipReason where
       "notifications-exhausted" -> pure NotificationsExhausted
       "already-proposed" -> AlreadyProposed <$> fields .: "proposalId"
       "already-owned" -> AlreadyOwned <$> fields .: "objectiveId"
+      "owner-unknown" -> pure OwnerUnknown
       "suppressed" -> Suppressed <$> fields .: "until"
       "not-actionable" -> pure NotActionable
       "decision-refused" -> DecisionRefused <$> fields .: "failure"

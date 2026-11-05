@@ -65,6 +65,7 @@ import Shikigami.Flow.Capability
   )
 import Shikigami.Flow.Decision qualified as FlowDecision
 import Shikigami.Flow.Delegate qualified as FlowDelegate
+import Shikigami.Flow.Initiative qualified as FlowInitiative
 import Shikigami.Flow.Objectives qualified as FlowObjectives
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Flow.Workers qualified as FlowWorkers
@@ -560,6 +561,7 @@ runFlowBody appEnv runtime flowAgent FlowDef {run} workflowId input =
             . FlowDecision.runDecisionDisabled
             . FlowDelegate.runDelegate delegateEnv
             . FlowObjectives.runObjectives Nothing (Right Nothing)
+            . FlowInitiative.unavailableInitiative
             . FlowWorkers.runWorkers Nothing denyAllActionAuthorizer (CoordinatorRun (WorkflowId "disabled-flow-fixture") (compatibilityIdentity (fixtureAgentName flowAgent)) runtime.approval.currentSession Nothing Nothing) (Right Nothing)
             . Routing.runRouting
               Routing.RoutingEnv

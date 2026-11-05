@@ -42,6 +42,7 @@ import Shikigami.Flow.Capability (Activity, Memory, Sink)
 import Shikigami.Flow.Decision (Decision)
 import Shikigami.Flow.Delegate (Delegate)
 import Shikigami.Flow.Delegate qualified as Delegate
+import Shikigami.Flow.Initiative (Initiative, proposeWork, proposeWorkFlowName, proposeWorkSlots)
 import Shikigami.Flow.Lifecycle.AtRiskCustomer (atRiskCustomerMermaid, atRiskCustomerValidationWarnings)
 import Shikigami.Flow.ObjectiveExample (objectiveExample)
 import Shikigami.Flow.Objectives (Objectives)
@@ -95,6 +96,7 @@ type FlowEffects es =
     Workers :> es,
     AdaptiveDelivery :> es,
     Objectives :> es,
+    Initiative :> es,
     Routing :> es,
     Decision :> es,
     ExecutionContext :> es,
@@ -157,6 +159,13 @@ atRiskCustomerLifecycleDiagram =
 flowRegistry :: [FlowDef]
 flowRegistry =
   [ FlowDef
+      { name = proposeWorkFlowName,
+        decisionSlots = proposeWorkSlots,
+        requiresDefaultModel = DefaultModelOptional,
+        lifecycle = LifecycleDiagram "flowchart LR\n Observe --> Prefilter --> Assess --> Propose --> Await --> Accept" [],
+        run = proposeWork
+      },
+    FlowDef
       { name = declarationCoordinate "adaptive-delivery",
         decisionSlots = adaptiveSlots,
         requiresDefaultModel = DefaultModelOptional,

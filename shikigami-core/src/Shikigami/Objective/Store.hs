@@ -457,6 +457,16 @@ readMutationReceipt access objective expected operation mutation = protected do
   let wanted = commandFingerprint (toJSON (access.actor, objective, expected, operation, commandTag mutation, mutation))
   forM stored \(actual, outcome) -> if actual == wanted then pure outcome else abort ObjectiveConflict
 
+isUnrequestedProposal :: ExternalReference -> Bool
+isUnrequestedProposal = \case
+  UnrequestedProposal _ _ -> True
+  _ -> False
+
+isFlowOrigin :: Maybe CreationOrigin -> Bool
+isFlowOrigin = \case
+  Just FlowOrigin {} -> True
+  _ -> False
+
 create :: (ObjectiveEffects es) => Access -> OperationId -> Maybe CreationOrigin -> CreateRequest -> IO (Either ObjectiveError ()) -> Eff es (Either ObjectiveError Receipt)
 create access operation origin request verifyOrigin = fmap (fmap snd) (createWithDisposition access operation origin request verifyOrigin)
 
@@ -465,6 +475,8 @@ create access operation origin request verifyOrigin = fmap (fmap snd) (createWit
 createWithDisposition :: (ObjectiveEffects es) => Access -> OperationId -> Maybe CreationOrigin -> CreateRequest -> IO (Either ObjectiveError ()) -> Eff es (Either ObjectiveError (Bool, Receipt))
 createWithDisposition access operation origin request verifyOrigin = guarded do
   unless (validKey (operationKey operation)) (throwIO (Abort (ObjectiveInvalid "invalid operation key")))
+  -- Provenance from observed activity is minted by a Flow, never claimed by a document.
+  unless (not (any isUnrequestedProposal request.external) || isFlowOrigin origin) (throwIO (Abort (ObjectiveInvalid "an unrequested-proposal link requires a Flow origin")))
   allocated <- KindID.toText <$> KindID.genKindID @"shikigami_objective"
   identifier <- either (const (throwIO (Abort ObjectiveUnavailable))) pure (parseObjectiveId allocated)
   let creator = versionedDigest "shikigami.objective-creator/1" (toJSON access.actor)
@@ -714,7 +726,9 @@ validateTransition _now access expected mutation current = do
           unless (principal /= current.owner) (Left (ObjectiveInvalid "cannot revoke access owner"))
           pure (current & #members %~ filter ((/= principal) . (.principal)))
         BindConversation conversation -> editable >> (if validKey (conversationRefText conversation) then Right current else Left (ObjectiveInvalid "invalid conversation"))
-        LinkExternal reference -> editable >> pure (current & #external %~ (\refs -> nub (refs <> [reference])))
+        LinkExternal reference
+          | isUnrequestedProposal reference -> Left (ObjectiveInvalid "an unrequested-proposal link is set only at creation")
+          | otherwise -> editable >> pure (current & #external %~ (\refs -> nub (refs <> [reference])))
       Internal (ApplyAdaptiveDecision decision) -> do
         unless (decision.format == V1 && decision.validatorVersion == "shikigami.adaptive-validator/3" && decision.proposal.checkpointRevision == expected && decision.checkpointDigest == Adaptive.checkpointDigest current && access.actor == RecordedAgent decision.policy.identity) (Left ObjectiveConflict)
         changed <- validateTransition _now access expected (Public (SetAssignments (map (.assignment) decision.arrangement))) current

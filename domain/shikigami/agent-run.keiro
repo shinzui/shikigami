@@ -47,6 +47,15 @@ workflow AgentRun
       step objectives-example-progress -> ObjectiveReply
       step objectives-example-inspect -> ObjectiveReply
     }
+    patch shikigami-initiative-v1 {
+      step initiative-open -> InitiativeOpenResolution
+      step decision-prepare-propose -> PreparedDecisionResolution
+      step decision-result-propose -> DecisionOutcome
+      step initiative-skip -> InitiativeSkipRecord
+      step initiative-proposal -> InitiativeProposalResolution
+      step objectives-initiative-accept -> ObjectiveReply
+      step initiative-resolve -> InitiativeResolution
+    }
     step route-decision-architecture-practice -> RouteDecision
     step recall-risk-history -> RecalledLearnings
     step remember-acknowledged -> RecordedLearning

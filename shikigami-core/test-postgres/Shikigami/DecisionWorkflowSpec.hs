@@ -341,7 +341,7 @@ tests fixture =
         atRoot <- doesFileExist "domain/shikigami/agent-run.keiro"
         declared <- TextIO.readFile (if atRoot then "domain/shikigami/agent-run.keiro" else "../domain/shikigami/agent-run.keiro")
         let compiled = [slot.label | flow <- Flow.flowRegistry, slot <- flow.decisionSlots]
-        compiled @?= [mustRight (parseDecisionSlotLabel "adapt"), triageDecisionSlot, investigationDecisionSlot, judgmentDecisionSlot]
+        compiled @?= [mustRight (parseDecisionSlotLabel "propose"), mustRight (parseDecisionSlotLabel "adapt"), triageDecisionSlot, investigationDecisionSlot, judgmentDecisionSlot]
         mapM_
           ( \label -> do
               let (StepName prepare, StepName result) = Decision.decisionStepNames label
