@@ -182,7 +182,10 @@ library
     Shikigami.FormatVersion
     Shikigami.Generated.Conformance
     Shikigami.Health.Ping
+    Shikigami.Initiative.Intake
+    Shikigami.Initiative.Prefilter
     Shikigami.Initiative.Settings
+    Shikigami.Initiative.Source
     Shikigami.Initiative.Types
     Shikigami.Inspection.Aggregates
     Shikigami.Inspection.Settings
@@ -567,6 +570,7 @@ test-suite shikigami-core-test
     Shikigami.Fixture.SinkHttp
     Shikigami.Fixture.TypeSafe
     Shikigami.FormatVersionSpec
+    Shikigami.InitiativePrefilterSpec
     Shikigami.InitiativeValueSpec
     Shikigami.KanmonClientSpec
     Shikigami.KeiroSpecificationSpec

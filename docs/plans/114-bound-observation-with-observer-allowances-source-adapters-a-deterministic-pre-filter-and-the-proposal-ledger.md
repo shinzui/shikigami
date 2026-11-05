@@ -37,7 +37,7 @@ You can see it working in `cabal test shikigami-workers-test --test-options='-p 
 ## Progress
 
 - [x] Milestone 1: `Shikigami.Initiative.Types` and `Shikigami.Initiative.Settings` exist with their checked values, closed sums, allocated identities and the `initiatives` settings object; the unit suite proves parsers, codecs and settings validation; `tests/types/initiative-values.py` proves the sealed and opaque values cannot be constructed generically. Completed 2026-11-04: InitiativeValue and initiative configuration groups pass; tests/types/initiative-values.py refuses all 26 forgeries; just haskell-conventions accepts the Initiative root.
-- [ ] Milestone 2: `Shikigami.Initiative.Source` and `Shikigami.Initiative.Prefilter` turn fixture envelopes for the three source kinds into candidates or skips deterministically; property tests prove totality and that the same envelope always yields the same verdict.
+- [x] Milestone 2: `Shikigami.Initiative.Source` and `Shikigami.Initiative.Prefilter` turn fixture envelopes for the three source kinds into candidates or skips deterministically; property tests prove totality and that the same envelope always yields the same verdict. Completed 2026-11-04: InitiativePrefilter group (10 cases) passes, including determinism and totality over an edge table; no property library is a core test dependency.
 - [ ] Milestone 3: The proposal ledger migration and `Shikigami.Initiative.Ledger` exist; the stream consumer records skips and enrolls evaluation roots inside the inbox transaction; the PostgreSQL and worker suites prove atomicity, keyed convergence, owner checks and window exhaustion.
 
 
@@ -64,6 +64,14 @@ You can see it working in `cabal test shikigami-workers-test --test-options='-p 
 
 - Decision: `InitiativeSettings` carries `maximumPolicyLifetime` from the start rather than plan 117 adding it later, and it defaults to 30 days.
   Rationale: The settings object refuses unknown keys, so a later addition would be the same field with a migration of nothing; defining it with the object keeps one codec.
+  Date: 2026-11-04
+
+- Decision: `observe` takes the caller's fallback instant as its first argument, `prefilter` takes no instant, and `disposition` takes both the resolved occurrence and the receipt instant and returns the allowance in each observing case, plus `NotObserving`.
+  Rationale: The plan's `prefilter` parameter would be unused because the observed record already carries the instant, while the plan's single `disposition` instant could not supply both the evidence's occurrence and the root's receipt-relative cutoff. An old activity replayed from Kafka would otherwise enrol a root whose cutoff had already passed. `NotObserving` is what lets the consumer keep agents without an allowance byte-identical.
+  Date: 2026-11-04
+
+- Decision: Source adapters strip carriage returns and stray control characters rather than refusing the message.
+  Rationale: `parseExcerpt` refuses controls so nothing else can carry them, but channels routinely deliver `\r\n`. Refusing would turn every Windows-authored message into an `excerpt-too-short` skip.
   Date: 2026-11-04
 
 
