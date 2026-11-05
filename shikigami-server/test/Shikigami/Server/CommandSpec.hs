@@ -58,8 +58,36 @@ tests =
                 "resources",
                 "executions",
                 "workers",
-                "objectives"
+                "objectives",
+                "proposals"
               ],
+      testCase "proposals verbs parse their documented options" do
+        mapM_
+          ( \args -> case execParserPure adminPrefs adminInfo args of
+              Success (chosen, _) -> assertBool (unwords args) (not (isNothing chosen))
+              _ -> assertBool (unwords args <> " did not parse") False
+          )
+          [ ["proposals", "policy", "install", "--file", "policy.json", "--json"],
+            ["proposals", "policy", "revoke", "shikigami_standing_policy_x", "--expected-revision", "0", "--json"],
+            ["proposals", "policy", "list", "--principal", "agent_p", "--after", "x", "--limit", "5", "--json"],
+            ["proposals", "list", "--principal", "agent_p", "--status", "pending", "--after", "x", "--limit", "5", "--json"],
+            ["proposals", "inspect", "--json", "--fail-when-exhausted"],
+            ["proposals", "candidates", "--principal", "agent_p", "--since", "2026-11-04T00:00:00Z", "--after", "x", "--limit", "5", "--json"],
+            ["proposals", "admissions", "--policy", "x", "--after", "y", "--limit", "5", "--json"],
+            ["proposals", "prune", "--before", "2026-11-04T00:00:00Z", "--batch", "10", "--json"]
+          ],
+      testCase "proposals verbs refuse missing required options" do
+        mapM_
+          ( \args -> case execParserPure adminPrefs adminInfo args of
+              Failure _ -> pure ()
+              _ -> assertBool (unwords args <> " was admitted") False
+          )
+          [ ["proposals", "policy", "install"],
+            ["proposals", "policy", "revoke", "x"],
+            ["proposals", "candidates"],
+            ["proposals", "prune"],
+            ["proposals", "prune", "--before", "yesterday"]
+          ],
       testCase "executions inspect accepts bounded history pagination" do
         case execParserPure adminPrefs adminInfo ["executions", "inspect", "execution-1", "--json", "--after", "20", "--limit", "5"] of
           Success (chosen, _) -> assertBool "execution action selected" (not (isNothing chosen))

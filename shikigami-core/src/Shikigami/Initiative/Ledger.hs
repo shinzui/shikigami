@@ -22,15 +22,21 @@ module Shikigami.Initiative.Ledger
     readProposal,
     readPendingByKey,
     recordNotificationTx,
+    listProposals,
+    listCandidates,
+    ObserverUsageView (..),
+    observerUsage,
+    countPendingProposals,
+    pruneCandidatesBefore,
   )
 where
 
-import Contravariant.Extras (contrazip10, contrazip2, contrazip3, contrazip7)
+import Contravariant.Extras (contrazip10, contrazip2, contrazip3, contrazip4, contrazip7)
 import Data.Aeson qualified as Aeson
 import Data.Functor.Contravariant ((>$<))
 import Data.Int (Int64)
-import Data.Time (UTCTime, addUTCTime)
-import Effectful (Eff, IOE, (:>))
+import Data.Time (addUTCTime)
+import Effectful (Eff, (:>))
 import Hasql.Decoders qualified as D
 import Hasql.Encoders qualified as E
 import Hasql.Statement (Statement, preparable)
@@ -107,8 +113,8 @@ candidateRecordedTx observer activity =
 -- lock, so concurrent runs cannot both take the last slot and a crashed retry
 -- does not count itself.
 markEvaluationStartedTx :: AgentPrincipal -> ActivityId -> UTCTime -> Transaction ()
-markEvaluationStartedTx observer activity at =
-  Tx.statement (principalText observer, activityCoordinateText activity, at) updateEvaluated
+markEvaluationStartedTx observer activity instant =
+  Tx.statement (principalText observer, activityCoordinateText activity, instant) updateEvaluated
 
 markCandidateProposedTx :: AgentPrincipal -> ActivityId -> ProposalId -> Transaction ()
 markCandidateProposedTx observer activity proposal =
@@ -229,7 +235,7 @@ recordProposalTx proposal candidate assessment requested now expiry run = do
     subject = facts.observed.subject
     key = proposalKeyFor facts.observer subject
 
-recordProposal :: (Store :> es, IOE :> es) => ProposalId -> Candidate -> Assessment -> RequestedAuthority -> UTCTime -> Duration "initiative-proposal" -> WorkflowId -> Eff es (Either LedgerError ProposalReceipt)
+recordProposal :: (Store :> es) => ProposalId -> Candidate -> Assessment -> RequestedAuthority -> UTCTime -> Duration "initiative-proposal" -> WorkflowId -> Eff es (Either LedgerError ProposalReceipt)
 recordProposal proposal candidate assessment requested now expiry run =
   runTransaction (recordProposalTx proposal candidate assessment requested now expiry run)
 
@@ -271,7 +277,72 @@ readPendingByKey key = decodeMaybe <$> Tx.statement (proposalKeyText key) select
 
 -- | The ask left: it counts toward the observer's notification window.
 recordNotificationTx :: ProposalId -> UTCTime -> Transaction ()
-recordNotificationTx proposal at = Tx.statement (proposalIdText proposal, at) updateNotified
+recordNotificationTx proposal instant = Tx.statement (proposalIdText proposal, instant) updateNotified
+
+-- | One keyset page in proposal-id order, at most 100 rows. Lock-free.
+listProposals :: Maybe AgentPrincipal -> Maybe Text -> Maybe ProposalId -> Int -> Transaction (Either LedgerError [ProposalView])
+listProposals observer status after limit =
+  fmap (map proposalView) . traverse decodeProposal
+    <$> Tx.statement (principalText <$> observer, status, proposalIdText <$> after, pageSize limit) selectProposals
+
+-- | One keyset page of an observer's candidates in recording order.
+listCandidates :: AgentPrincipal -> Maybe UTCTime -> Maybe ActivityId -> Int -> Transaction [CandidateView]
+listCandidates observer since after limit =
+  Tx.statement (principalText observer, since, activityCoordinateText <$> after, pageSize limit) selectCandidates
+
+pageSize :: Int -> Int64
+pageSize = fromIntegral . max 1 . min 100
+
+-- | What an operator reads: counts beside limits, and an explicit exhausted state.
+-- An observer with no rows shows zero usage, so quiet is distinct from absent.
+data ObserverUsageView = ObserverUsageView
+  { observer :: !Text,
+    evaluations :: !Int,
+    evaluationsPerWindow :: !Int,
+    proposals :: !Int,
+    proposalsPerWindow :: !Int,
+    notifications :: !Int,
+    notificationsPerWindow :: !Int,
+    windowSeconds :: !Double,
+    exhausted :: ![Text]
+  }
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (ToJSON, FromJSON)
+
+-- | The same arithmetic as 'checkWindows' without taking the observer's anchor.
+observerUsage :: ObserverAllowance -> UTCTime -> Transaction ObserverUsageView
+observerUsage allowance now = do
+  let observer = principalText allowance.principal
+      since = addUTCTime (negate (durationTime allowance.window)) now
+  evaluations <- fromIntegral <$> Tx.statement (observer, since, Nothing) countEvaluations
+  proposals <- fromIntegral <$> Tx.statement (observer, since) countProposals
+  notifications <- fromIntegral <$> Tx.statement (observer, since) countNotifications
+  let evaluationsPerWindow = initiativeLimitInt allowance.evaluationsPerWindow
+      proposalsPerWindow = initiativeLimitInt allowance.proposalsPerWindow
+      notificationsPerWindow = initiativeLimitInt allowance.notificationsPerWindow
+  pure
+    ObserverUsageView
+      { observer,
+        evaluations,
+        evaluationsPerWindow,
+        proposals,
+        proposalsPerWindow,
+        notifications,
+        notificationsPerWindow,
+        windowSeconds = realToFrac (durationTime allowance.window),
+        exhausted =
+          ["evaluations" | evaluations >= evaluationsPerWindow]
+            <> ["proposals" | proposals >= proposalsPerWindow]
+            <> ["notifications" | notifications >= notificationsPerWindow]
+      }
+
+countPendingProposals :: Transaction Int
+countPendingProposals = fromIntegral <$> Tx.statement () selectPendingCount
+
+-- | Delete terminal skips older than an instant, a bounded batch at a time. It
+-- never touches an evaluating or proposed candidate, or any proposal.
+pruneCandidatesBefore :: UTCTime -> Int -> Transaction Int
+pruneCandidatesBefore before batch = fromIntegral <$> Tx.statement (before, fromIntegral (max 1 (min 10000 batch))) deleteTerminalCandidates
 
 decodeMaybe :: Maybe ProposalRow -> Either LedgerError (Maybe Proposal)
 decodeMaybe = traverse decodeProposal
@@ -504,3 +575,44 @@ updateNotified =
     "UPDATE shikigami.initiative_proposals SET notified_at=COALESCE(notified_at,$2) WHERE proposal_id=$1"
     (contrazip2 textParam instantParam)
     D.noResult
+
+selectProposals :: Statement (Maybe Text, Maybe Text, Maybe Text, Int64) [ProposalRow]
+selectProposals =
+  preparable
+    ("SELECT " <> proposalColumns <> " FROM shikigami.initiative_proposals WHERE ($1::text IS NULL OR observer=$1) AND ($2::text IS NULL OR status=$2) AND ($3::text IS NULL OR proposal_id > $3) ORDER BY proposal_id LIMIT $4")
+    (contrazip4 nullableText nullableText nullableText (E.param (E.nonNullable E.int8)))
+    (D.rowList proposalRow)
+
+selectCandidates :: Statement (Text, Maybe UTCTime, Maybe Text, Int64) [CandidateView]
+selectCandidates =
+  preparable
+    "SELECT observer,activity_id,source,subject_kind,subject_id,verdict,skip_reason,proposal_id,run_workflow_id,recorded_at FROM shikigami.initiative_candidates WHERE observer=$1 AND ($2::timestamptz IS NULL OR recorded_at >= $2) AND ($3::text IS NULL OR activity_id > $3) ORDER BY recorded_at, activity_id LIMIT $4"
+    (contrazip4 textParam (E.param (E.nullable E.timestamptz)) nullableText (E.param (E.nonNullable E.int8)))
+    ( D.rowList
+        ( CandidateView
+            <$> D.column (D.nonNullable D.text)
+            <*> D.column (D.nonNullable D.text)
+            <*> D.column (D.nullable D.text)
+            <*> D.column (D.nullable D.text)
+            <*> D.column (D.nullable D.text)
+            <*> D.column (D.nonNullable D.text)
+            <*> D.column (D.nullable D.text)
+            <*> D.column (D.nullable D.text)
+            <*> D.column (D.nullable D.text)
+            <*> D.column (D.nonNullable D.timestamptz)
+        )
+    )
+
+selectPendingCount :: Statement () Int64
+selectPendingCount =
+  preparable
+    "SELECT count(*) FROM shikigami.initiative_proposals WHERE status='pending'"
+    E.noParams
+    (D.singleRow (D.column (D.nonNullable D.int8)))
+
+deleteTerminalCandidates :: Statement (UTCTime, Int64) Int64
+deleteTerminalCandidates =
+  preparable
+    "DELETE FROM shikigami.initiative_candidates WHERE (observer,activity_id) IN (SELECT observer,activity_id FROM shikigami.initiative_candidates WHERE verdict IN ('skipped','not-actionable') AND recorded_at < $1 ORDER BY recorded_at LIMIT $2)"
+    (contrazip2 instantParam (E.param (E.nonNullable E.int8)))
+    D.rowsAffected

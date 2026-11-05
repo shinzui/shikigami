@@ -5,21 +5,26 @@
 -- because the body stays with the channel that published it.
 module Shikigami.Initiative.Notice
   ( acceptanceAsk,
+    admissionNotice,
+    noticeSink,
     nobodyRequested,
   )
 where
 
-import Data.Aeson (toJSON)
+import Data.Aeson (Value, object, toJSON, (.=))
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Time.Format.ISO8601 (iso8601Show)
-import Shikigami.Activity.Coordinate (activityCoordinateText)
+import Shikigami.Activity.Coordinate (activityCoordinate, activityCoordinateText)
 import Shikigami.Agent.Approval (ApprovalChannel (ViaKizashi), ApprovalRequest (..))
+import Shikigami.Agent.Decl (Priority (Normal), RecipientFrom (Actor), SignalType (Notification), Sink (..))
+import Shikigami.Agent.DeclarationValue (DeclarationCoordinate, parseSignalImportance)
 import Shikigami.Agent.Name (AgentName, agentNameText)
 import Shikigami.Agent.Principal (AgentPrincipal, principalText)
 import Shikigami.Execution.Coordinate (executionDigestText)
 import Shikigami.Initiative.Types
 import Shikigami.Objective.Keys (ObservedSource (..))
+import Shikigami.Objective.Types (ObjectiveId, objectiveIdText)
 
 nobodyRequested :: Text
 nobodyRequested = "Nobody requested this work."
@@ -61,3 +66,33 @@ evidenceLine evidence =
     <> Text.pack (iso8601Show evidence.occurredAt)
     <> " "
     <> executionDigestText evidence.digest
+
+-- | An admitted objective tells someone even though nobody had to answer.
+admissionNotice :: AgentName -> AgentPrincipal -> ProposalView -> ObjectiveId -> StandingPolicyId -> Value
+admissionNotice agent principal view objective policy =
+  object
+    [ "summary" .= ("Agent " <> agentNameText agent <> " (" <> principalText principal <> ") admitted unrequested work under a standing policy. " <> nobodyRequested),
+      "outcome" .= Text.take 240 view.assessment.outcome,
+      "repository" .= view.assessment.repository,
+      "actionClass" .= view.assessment.actionClass,
+      "proposal" .= view.proposalId,
+      "objective" .= objectiveIdText objective,
+      "policy" .= standingPolicyIdText policy,
+      "stop" .= ("shikigami proposals policy revoke " <> standingPolicyIdText policy <> " --expected-revision N" :: Text),
+      "cancel" .= ("shikigami objectives command " <> objectiveIdText objective :: Text)
+    ]
+
+-- | The closed form of an admission notice. Its recipient is passed explicitly,
+-- so the actor field here selects nothing.
+noticeSink :: DeclarationCoordinate "recipient" -> Sink
+noticeSink recipient =
+  KizashiSignal
+    { source = activityCoordinate "shinzui/shikigami",
+      signalType = Notification,
+      priority = Normal,
+      importance = either (error . Text.unpack) id (parseSignalImportance 60),
+      recipientFrom = Actor,
+      defaultRecipient = Just recipient,
+      intentTemplate = "Unrequested work was admitted under a standing policy. Nobody requested it.",
+      extraContextTags = ["unrequested-work"]
+    }

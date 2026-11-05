@@ -36,9 +36,9 @@ You can see it working in `cabal test shikigami-core-postgres-test --test-option
 
 ## Progress
 
-- [ ] Milestone 1: The `Initiative` capability effect and interpreter, the `propose-work` Flow, the `shikigami-initiative-v1` patch and the conformance expectations exist; `just keiro-gate` passes and a PostgreSQL run of the Flow under the harness records one candidate, one decision and one pending proposal.
-- [ ] Milestone 2: A proposal parks on the approval child with its own expiry; the rendered ask says nobody requested the work and shows the accept, reject and stop commands; approval creates one linked objective, rejection suppresses, timeout expires.
-- [ ] Milestone 3: `agents/proof/proposer.dhall` exists and validates; the owner, window, restatement, restart and planted-instruction cases pass end to end from a fixture envelope through the stream consumer; the two ADRs are written.
+- [x] Milestone 1: The `Initiative` capability effect and interpreter, the `propose-work` Flow, the `shikigami-initiative-v1` patch and the conformance expectations exist; `just keiro-gate` passes and a PostgreSQL run of the Flow under the harness records one candidate, one decision and one pending proposal. Completed 2026-11-04: ProposeWork (17 cases) through the real consumer, queue and workflow; just keiro-gate passes against 2d389403.
+- [x] Milestone 2: A proposal parks on the approval child with its own expiry; the rendered ask says nobody requested the work and shows the accept, reject and stop commands; approval creates one linked objective, rejection suppresses, timeout expires. Completed 2026-11-04: ask content, per-proposal expiry at the approval child's deadline, accepted, rejected, expired and creation-denied outcomes all pass.
+- [x] Milestone 3: `agents/proof/proposer.dhall` exists and validates; the owner, window, restatement, restart and planted-instruction cases pass end to end from a fixture envelope through the stream consumer; the two ADRs are written. Completed 2026-11-04: agents/proof/proposer.dhall validates; restatement, owner, window, planted-instruction and restart cases pass; ADRs 0112 and 0113 written.
 
 
 ## Surprises & Discoveries
@@ -82,7 +82,9 @@ You can see it working in `cabal test shikigami-core-postgres-test --test-option
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Complete. A chat envelope now becomes one proposal parked for a person, whose answer creates one linked objective, suppresses the subject, or expires it. Restatements, redelivery and restart converge, and planted instructions change nothing the Flow can act on. IR-21 acceptance 1, 2 (human half), 4 (Flow half), 6, 7 and 9 (rejection half) are proved in `ProposeWorkSpec`.
+
+Friction: FRIC-60 (collector crash when constructing `AgentRunDeps` under optimization) is unresolved and is a real risk: the fixture and `Shikigami.Workers.Config` are at `-O0` as a workaround, and no test exercises production's `agentRunDeps` construction. It deserves follow-up with FRIC-13.
 
 
 ## Context and Orientation

@@ -183,9 +183,11 @@ library
     Shikigami.FormatVersion
     Shikigami.Generated.Conformance
     Shikigami.Health.Ping
+    Shikigami.Initiative.Inspection
     Shikigami.Initiative.Intake
     Shikigami.Initiative.Ledger
     Shikigami.Initiative.Notice
+    Shikigami.Initiative.Policy
     Shikigami.Initiative.Prefilter
     Shikigami.Initiative.Settings
     Shikigami.Initiative.Source
@@ -694,7 +696,9 @@ test-suite shikigami-core-postgres-test
     Shikigami.FlowLifecycleSpec
     Shikigami.GrantStoreSpec
     Shikigami.InitiativeAssessmentSpec
+    Shikigami.InitiativeInspectionSpec
     Shikigami.InitiativeLedgerSpec
+    Shikigami.InitiativePolicySpec
     Shikigami.ObjectiveCheckpointSpec
     Shikigami.ObjectiveStoreSpec
     Shikigami.ObjectiveTrackerStoreSpec

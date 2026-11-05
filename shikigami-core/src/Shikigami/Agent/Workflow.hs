@@ -1143,6 +1143,7 @@ runFlowBehavior deps activeBehaviorEnv resolvedProfile approvalPolicyForRun reco
                   value -> pure value
           else pure (Right Nothing)
       useInitiative <- Workflow.patch (Workflow.PatchId "shikigami-initiative-v1")
+      useAdmission <- Workflow.patch (Workflow.PatchId "shikigami-initiative-admission-v1")
       let initiativeInterpreter :: (Workflow :> es, Store :> es, IOE :> es) => Eff (FlowInitiative.Initiative : es) a -> Eff es a
           initiativeInterpreter
             | useInitiative =
@@ -1152,7 +1153,11 @@ runFlowBehavior deps activeBehaviorEnv resolvedProfile approvalPolicyForRun reco
                       identity = job.identity,
                       activity = activityFromJob job,
                       agent = decl.name,
-                      run = childWorkflowId
+                      run = childWorkflowId,
+                      admission = if useAdmission then FlowInitiative.AdmissionPresent else FlowInitiative.AdmissionAbsent,
+                      directory = depsDirectory deps,
+                      declarations = deps.agents,
+                      objectiveSettings = maybe Objective.defaultObjectiveSettings (.settings) deps.objectives
                     }
             | otherwise = FlowInitiative.unavailableInitiative
           decisionTimeout = DecisionContract.parseDecisionTimeout (floor (durationTime (depsRunTimeout deps) * 1000000))

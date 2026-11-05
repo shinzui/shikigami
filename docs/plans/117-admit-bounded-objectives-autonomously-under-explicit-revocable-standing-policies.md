@@ -11,6 +11,12 @@ provenance:
     model: "claude-fable-5-1"
     harness: "claude-code"
     at: 2026-11-04T18:38:36Z
+  revisions:
+    - model: "claude-opus-5-5"
+      harness: "claude-code"
+      at: 2026-11-05T02:24:52Z
+      mode: "implement"
+      note: "Implementing standing policies, operator commands and the admission branch"
 ---
 
 # Admit bounded objectives autonomously under explicit, revocable standing policies
@@ -30,14 +36,16 @@ You can see it working in `cabal test shikigami-workers-test --test-options='-p 
 
 ## Progress
 
-- [ ] Milestone 1: The standing-policy migration, `Shikigami.Initiative.Policy` with its sealed policy, validator, store and reservation exist; PostgreSQL tests prove install validation, fresh-read revocation, expiry, window and total exhaustion and digest pinning.
-- [ ] Milestone 2: `shikigami proposals policy install|revoke|list` work as the configured local operator; `just haskell-conventions` accepts the new composition module.
-- [ ] Milestone 3: The admission branch of `propose-work` behind `shikigami-initiative-admission-v1` admits one funded, staffed, bounded objective per covered proposal, falls back to the human path when not covered, refuses fresh after revocation or expiry, and the planted-instruction and no-publication cases pass; the standing-policy ADR is written.
+- [x] Milestone 1: The standing-policy migration, `Shikigami.Initiative.Policy` with its sealed policy, validator, store and reservation exist; PostgreSQL tests prove install validation, fresh-read revocation, expiry, window and total exhaustion and digest pinning. Completed 2026-11-04: InitiativePolicy (11 cases): install refusals, digest pin, fresh-read revocation, window and total exhaustion, expiry, convergence; migration 0044 with a matching schema.
+- [x] Milestone 2: `shikigami proposals policy install|revoke|list` work as the configured local operator; `just haskell-conventions` accepts the new composition module. Completed 2026-11-04: shikigami proposals policy install, revoke and list exist; option cases pass in the server suite; just haskell-conventions accepts the module.
+- [x] Milestone 3: The admission branch of `propose-work` behind `shikigami-initiative-admission-v1` admits one funded, staffed, bounded objective per covered proposal, falls back to the human path when not covered, refuses fresh after revocation or expiry, and the planted-instruction and no-publication cases pass; the standing-policy ADR is written. Completed 2026-11-04: AdmitProposal (13 cases) from the stream consumer through admission, including the coordinator's own association; ADR 0114 written; 739 core, 604 PostgreSQL, 107 server and 37 agent cases pass, the workers suite only flaking on FRIC-59's Git case.
 
 
 ## Surprises & Discoveries
 
-(None yet.)
+- The plan omits one required step: `Objective.Runtime.runTarget` denies a run whose job names an objective unless `Association.admitRunTx NewRun` has retained that association. `initiative-launch` therefore registers it in the transaction that enqueues the job, acting for the proposer. A test that drains the coordinator found this.
+- `ActiveWork` is a concurrency gauge, not a spend, so summing it across admissions exhausted totals immediately. Totals arithmetic excludes it.
+- An admission receipt references a real proposal row, so its foreign key is what makes `AlreadyAdmitted` meaningful; a retried `initiative-admit` step reads back its own reservation instead of refusing.
 
 
 ## Decision Log
@@ -54,10 +62,26 @@ You can see it working in `cabal test shikigami-workers-test --test-options='-p 
   Rationale: Reading actual usage of admitted roots at admission time would couple the policy to accounting settlement and to unknown usage. Pure arithmetic over the policy's own rows is deterministic, bounded and honest about what was promised.
   Date: 2026-11-04
 
+- Decision: Every admission counts against totals and the window, including ones later marked refused, rather than the plan's "stage other than refused".
+  Rationale: The plan also says a reservation stays consumed when its admission fails, and the two cannot both hold. Counting all rows is the conservative reading and keeps a failing configuration from spending a total repeatedly.
+  Date: 2026-11-04
+
+- Decision: The admission patch is taken by `runFlowBehavior` and handed to the interpreter, not guarded in the Flow body, and `initiative-admit` tries the policies `initiative-open` journaled.
+  Rationale: The narrowing in `initiative-open` needs the same answer as the admission branch, so one guard must govern both. Trying journaled policies through the locked read is what produces a recorded `policy-gone` refusal when a policy disappears between covering and reserving.
+  Date: 2026-11-04
+
+- Decision: Admission notices use a new recipient-bound `emitSignalTo`, journaled as `emit-signal-<label>`.
+  Rationale: `resolveSinkRecipient` would consult the activity's actor, which is observed text. The hyphenated name is what the declaration language can spell.
+  Date: 2026-11-04
+
+- Decision: `PolicyContext.principalActive` is a predicate rather than the plan's directory snapshot, and policy identity resolution of the coordinator happens at funding.
+  Rationale: The directory's lifecycle consultation is IO. A predicate keeps `validatePolicy` pure, and a coordinator paused after reservation should refuse at funding rather than on stale data.
+  Date: 2026-11-04
+
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Complete. A covered proposal becomes one objective with one assignment, its own root, one queued coordinator run admitted to that objective, one receipt pinned to the policy's digest and one notice, with no ask. Without a policy, past exhaustion or after revocation, the proposal parks for a person with the refusal journaled. IR-21 acceptance 3, 8 (admission half), 9 (policy half) and 4 (admission half) are proved. Driving an admitted objective to completion is not claimed here.
 
 
 ## Context and Orientation

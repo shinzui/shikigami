@@ -1,0 +1,23 @@
+{
+  "principal": "agent_shikigami_proposer",
+  "sources": ["chat-fixture"],
+  "repositories": ["repo_payments"],
+  "actionClasses": ["reproduce-and-diagnose"],
+  "coordinator": "adaptive-delivery",
+  "perObjective": {
+    "ActiveWork": 2,
+    "ModelAttempts": 20,
+    "Tokens": "unbounded",
+    "CostMicroUsd": "unbounded"
+  },
+  "objectiveWindow": 86400,
+  "total": {
+    "ActiveWork": 16,
+    "ModelAttempts": 200,
+    "Tokens": "unbounded",
+    "CostMicroUsd": "unbounded"
+  },
+  "admissionsPerWindow": 4,
+  "window": 86400,
+  "expiresAt": "2036-11-04T00:00:00Z"
+}

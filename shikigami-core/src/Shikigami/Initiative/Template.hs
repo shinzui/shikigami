@@ -8,9 +8,12 @@ module Shikigami.Initiative.Template
     instructionsFor,
     actionClassInstructions,
     retainedArtifactCriterion,
+    deliverAssignment,
+    admissionRequest,
   )
 where
 
+import Data.Aeson (Value, object, (.=))
 import Data.Bifunctor (first)
 import Data.Text (Text)
 import Data.Text qualified as Text
@@ -50,6 +53,21 @@ retainedArtifactCriterion = do
   key <- parseCriterionKey "retained-artifact"
   description <- parseCriterionDescription "The result is a reviewable artifact retained in the workspace, identified by an artifact reference. Nothing was published."
   pure (Criterion key description Automatic JourneyOptional)
+
+-- | The single assignment an admitted objective is staffed with.
+deliverAssignment :: ObjectiveAssignmentId
+deliverAssignment = either (error . Text.unpack) id (parseObjectiveAssignmentId "deliver")
+
+-- | What the coordinator is asked to do: the same words a person would approve,
+-- with coordinates only.
+admissionRequest :: AgentName -> ProposalView -> ObjectiveId -> Value
+admissionRequest agent view objective =
+  object
+    [ "proposal" .= view.proposalId,
+      "objective" .= objective,
+      "actionClass" .= view.assessment.actionClass,
+      "instructions" .= either (const "") (instructionsFor agent view) (parseActionClass view.assessment.actionClass)
+    ]
 
 sourceOf :: ProposalView -> ObservedSource
 sourceOf view =

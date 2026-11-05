@@ -124,6 +124,17 @@ column	fired.signal_id	text not null
 column	fired.subject_id	text not null
 column	fired.subject_type	text not null
 column	fired.window_key	text not null
+column	initiative_admissions.coordinator_workflow_id	text
+column	initiative_admissions.objective_id	text
+column	initiative_admissions.policy_digest	text not null
+column	initiative_admissions.policy_id	text not null
+column	initiative_admissions.proposal_id	text not null
+column	initiative_admissions.refusal	text
+column	initiative_admissions.reserved	jsonb not null
+column	initiative_admissions.reserved_at	timestamp with time zone not null
+column	initiative_admissions.root_id	text
+column	initiative_admissions.stage	text not null
+column	initiative_admissions.updated_at	timestamp with time zone not null
 column	initiative_candidates.activity_id	text not null
 column	initiative_candidates.evaluated_at	timestamp with time zone
 column	initiative_candidates.observer	text not null
@@ -153,6 +164,16 @@ column	initiative_proposals.status_detail	jsonb not null
 column	initiative_proposals.subject_id	text not null
 column	initiative_proposals.subject_kind	text not null
 column	initiative_proposals.suppressed_until	timestamp with time zone
+column	initiative_standing_policies.digest	text not null
+column	initiative_standing_policies.expires_at	timestamp with time zone not null
+column	initiative_standing_policies.installed_at	timestamp with time zone not null
+column	initiative_standing_policies.installed_by	text not null
+column	initiative_standing_policies.policy	jsonb not null
+column	initiative_standing_policies.policy_id	text not null
+column	initiative_standing_policies.principal	text not null
+column	initiative_standing_policies.revision	numeric not null
+column	initiative_standing_policies.revoked_at	timestamp with time zone
+column	initiative_standing_policies.revoked_by	text
 column	objective_assignments.assignment_id	text not null
 column	objective_assignments.objective_id	text not null
 column	objective_assignments.reference_key	text not null
@@ -569,6 +590,17 @@ constraint	fired.fired_signal_id_not_null	NOT NULL signal_id
 constraint	fired.fired_subject_id_not_null	NOT NULL subject_id
 constraint	fired.fired_subject_type_not_null	NOT NULL subject_type
 constraint	fired.fired_window_key_not_null	NOT NULL window_key
+constraint	initiative_admissions.initiative_admissions_pkey	PRIMARY KEY (proposal_id)
+constraint	initiative_admissions.initiative_admissions_policy_digest_not_null	NOT NULL policy_digest
+constraint	initiative_admissions.initiative_admissions_policy_id_fkey	FOREIGN KEY (policy_id) REFERENCES shikigami.initiative_standing_policies(policy_id)
+constraint	initiative_admissions.initiative_admissions_policy_id_not_null	NOT NULL policy_id
+constraint	initiative_admissions.initiative_admissions_proposal_id_fkey	FOREIGN KEY (proposal_id) REFERENCES shikigami.initiative_proposals(proposal_id)
+constraint	initiative_admissions.initiative_admissions_proposal_id_not_null	NOT NULL proposal_id
+constraint	initiative_admissions.initiative_admissions_reserved_at_not_null	NOT NULL reserved_at
+constraint	initiative_admissions.initiative_admissions_reserved_not_null	NOT NULL reserved
+constraint	initiative_admissions.initiative_admissions_stage_check	CHECK ((stage = ANY (ARRAY['reserved'::text, 'created'::text, 'funded'::text, 'staffed'::text, 'launched'::text, 'refused'::text])))
+constraint	initiative_admissions.initiative_admissions_stage_not_null	NOT NULL stage
+constraint	initiative_admissions.initiative_admissions_updated_at_not_null	NOT NULL updated_at
 constraint	initiative_candidates.initiative_candidates_activity_id_not_null	NOT NULL activity_id
 constraint	initiative_candidates.initiative_candidates_observer_not_null	NOT NULL observer
 constraint	initiative_candidates.initiative_candidates_pkey	PRIMARY KEY (observer, activity_id)
@@ -593,6 +625,16 @@ constraint	initiative_proposals.initiative_proposals_status_detail_not_null	NOT 
 constraint	initiative_proposals.initiative_proposals_status_not_null	NOT NULL status
 constraint	initiative_proposals.initiative_proposals_subject_id_not_null	NOT NULL subject_id
 constraint	initiative_proposals.initiative_proposals_subject_kind_not_null	NOT NULL subject_kind
+constraint	initiative_standing_policies.initiative_standing_policies_digest_not_null	NOT NULL digest
+constraint	initiative_standing_policies.initiative_standing_policies_expires_at_not_null	NOT NULL expires_at
+constraint	initiative_standing_policies.initiative_standing_policies_installed_at_not_null	NOT NULL installed_at
+constraint	initiative_standing_policies.initiative_standing_policies_installed_by_not_null	NOT NULL installed_by
+constraint	initiative_standing_policies.initiative_standing_policies_pkey	PRIMARY KEY (policy_id)
+constraint	initiative_standing_policies.initiative_standing_policies_policy_id_not_null	NOT NULL policy_id
+constraint	initiative_standing_policies.initiative_standing_policies_policy_not_null	NOT NULL policy
+constraint	initiative_standing_policies.initiative_standing_policies_principal_not_null	NOT NULL principal
+constraint	initiative_standing_policies.initiative_standing_policies_revision_check	CHECK ((revision >= (0)::numeric))
+constraint	initiative_standing_policies.initiative_standing_policies_revision_not_null	NOT NULL revision
 constraint	objective_assignments.objective_assignments_assignment_id_not_null	NOT NULL assignment_id
 constraint	objective_assignments.objective_assignments_objective_id_fkey	FOREIGN KEY (objective_id) REFERENCES shikigami.objectives(objective_id)
 constraint	objective_assignments.objective_assignments_objective_id_not_null	NOT NULL objective_id
@@ -959,6 +1001,8 @@ index	execution_transcript_operations_execution_id_position_key	CREATE UNIQUE IN
 index	execution_transcript_operations_pkey	CREATE UNIQUE INDEX execution_transcript_operations_pkey ON shikigami.execution_transcript_operations USING btree (operation_id)
 index	executions_pkey	CREATE UNIQUE INDEX executions_pkey ON shikigami.executions USING btree (execution_id)
 index	fired_pkey	CREATE UNIQUE INDEX fired_pkey ON shikigami.fired USING btree (detector, subject_type, subject_id, window_key)
+index	initiative_admissions_pkey	CREATE UNIQUE INDEX initiative_admissions_pkey ON shikigami.initiative_admissions USING btree (proposal_id)
+index	initiative_admissions_policy_window	CREATE INDEX initiative_admissions_policy_window ON shikigami.initiative_admissions USING btree (policy_id, reserved_at)
 index	initiative_candidates_evaluated	CREATE INDEX initiative_candidates_evaluated ON shikigami.initiative_candidates USING btree (observer, evaluated_at)
 index	initiative_candidates_pkey	CREATE UNIQUE INDEX initiative_candidates_pkey ON shikigami.initiative_candidates USING btree (observer, activity_id)
 index	initiative_candidates_window	CREATE INDEX initiative_candidates_window ON shikigami.initiative_candidates USING btree (observer, recorded_at)
@@ -968,6 +1012,8 @@ index	initiative_proposals_notified	CREATE INDEX initiative_proposals_notified O
 index	initiative_proposals_pending_key	CREATE UNIQUE INDEX initiative_proposals_pending_key ON shikigami.initiative_proposals USING btree (proposal_key) WHERE (status = 'pending'::text)
 index	initiative_proposals_pkey	CREATE UNIQUE INDEX initiative_proposals_pkey ON shikigami.initiative_proposals USING btree (proposal_id)
 index	initiative_proposals_window	CREATE INDEX initiative_proposals_window ON shikigami.initiative_proposals USING btree (observer, proposed_at)
+index	initiative_standing_policies_pkey	CREATE UNIQUE INDEX initiative_standing_policies_pkey ON shikigami.initiative_standing_policies USING btree (policy_id)
+index	initiative_standing_policies_principal	CREATE INDEX initiative_standing_policies_principal ON shikigami.initiative_standing_policies USING btree (principal, expires_at)
 index	objective_assignments_pkey	CREATE UNIQUE INDEX objective_assignments_pkey ON shikigami.objective_assignments USING btree (objective_id, assignment_id)
 index	objective_assignments_reference_key_key	CREATE UNIQUE INDEX objective_assignments_reference_key_key ON shikigami.objective_assignments USING btree (reference_key)
 index	objective_associations_pkey	CREATE UNIQUE INDEX objective_associations_pkey ON shikigami.objective_associations USING btree (kind, source_id, objective_id)
@@ -1071,9 +1117,11 @@ table	execution_selections	kind=r
 table	execution_transcript_operations	kind=r
 table	executions	kind=r
 table	fired	kind=r
+table	initiative_admissions	kind=r
 table	initiative_candidates	kind=r
 table	initiative_observers	kind=r
 table	initiative_proposals	kind=r
+table	initiative_standing_policies	kind=r
 table	objective_assignments	kind=r
 table	objective_associations	kind=r
 table	objective_cursors	kind=r

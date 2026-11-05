@@ -1,6 +1,7 @@
 module Main (main) where
 
 import Data.Text qualified as Text
+import Shikigami.AdmitProposalSpec qualified as AdmitProposalSpec
 import Shikigami.Agent.RunJob.WorkerSpec qualified as RunJobWorkerSpec
 import Shikigami.AgentRun.StatusSpec qualified as StatusSpec
 import Shikigami.ExecutionCapacitySpec qualified as ExecutionCapacitySpec
@@ -75,6 +76,7 @@ suite = do
               SchedulerSpec.tests databaseFixture,
               StreamInboxSpec.tests databaseFixture,
               ProposeWorkSpec.tests databaseFixture,
+              AdmitProposalSpec.tests databaseFixture,
               TimerRecoverySpec.tests databaseFixture,
               TelemetrySpec.tests,
               SupervisionSpec.tests

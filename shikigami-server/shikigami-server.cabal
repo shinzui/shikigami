@@ -48,6 +48,7 @@ library
     Shikigami.Server.Command.ObjectiveTrackers
     Shikigami.Server.Command.Objectives
     Shikigami.Server.Command.Ops
+    Shikigami.Server.Command.Proposals
     Shikigami.Server.Command.PublishFixture
     Shikigami.Server.Command.RenderLifecycle
     Shikigami.Server.Command.ResolveApproval
@@ -79,6 +80,7 @@ library
     filepath,
     generic-lens >=2.2,
     hasql-pool,
+    hasql-transaction,
     hs-opentelemetry-api,
     hs-opentelemetry-exporter-otlp,
     hs-opentelemetry-instrumentation-wai,

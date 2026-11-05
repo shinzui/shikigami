@@ -8,6 +8,7 @@ module Shikigami.Sink.Intent
     PreparedSinkIntent,
     enqueueSinkIntents,
     enqueueSinkIntentStep,
+    enqueueSinkIntentStepForRecipient,
     enqueuePreparedSinkIntentTx,
     prepareSinkIntent,
     prepareSinkIntentForRecipient,
@@ -250,10 +251,39 @@ enqueueSinkIntentStep ::
   Value ->
   Eff es SinkResult
 enqueueSinkIntentStep directoryHandle grantSource identity stepName agentName runIdText ordinal occurredAt danwaTarget activity sink output = do
-  (workflowName, workflowId) <- currentWorkflow
-  generation <- currentRunGeneration
+  (_, workflowId) <- currentWorkflow
   now <- liftIO getCurrentTime
   prepared <- liftIO (prepareSinkIntent directoryHandle grantSource identity workflowId stepName agentName runIdText ordinal occurredAt danwaTarget activity sink output now)
+  journalPreparedSinkIntent stepName now prepared
+
+-- | The same journaled emission to a destination the caller already resolved from
+-- configuration, so nothing in the triggering activity can choose where it goes.
+enqueueSinkIntentStepForRecipient ::
+  (Workflow :> es, Store :> es, IOE :> es) =>
+  DirectoryHandle ->
+  GrantSource ->
+  AgentIdentity ->
+  StepName ->
+  AgentName ->
+  SessionId ->
+  Int ->
+  Maybe UTCTime ->
+  Maybe DanwaTarget ->
+  Maybe ActivityEnvelope ->
+  DeclarationCoordinate "recipient" ->
+  Sink ->
+  Value ->
+  Eff es SinkResult
+enqueueSinkIntentStepForRecipient directoryHandle grantSource identity stepName agentName runIdText ordinal occurredAt danwaTarget activity recipient sink output = do
+  (_, workflowId) <- currentWorkflow
+  now <- liftIO getCurrentTime
+  prepared <- liftIO (prepareSinkIntentForRecipient directoryHandle grantSource identity workflowId stepName agentName runIdText ordinal occurredAt danwaTarget activity recipient sink output now)
+  journalPreparedSinkIntent stepName now prepared
+
+journalPreparedSinkIntent :: (Workflow :> es, Store :> es, IOE :> es) => StepName -> UTCTime -> PreparedSinkIntent -> Eff es SinkResult
+journalPreparedSinkIntent stepName now prepared = do
+  (workflowName, workflowId) <- currentWorkflow
+  generation <- currentRunGeneration
   let result = preparedSinkResult prepared
   appendTx <- prepareJournalAppend workflowName workflowId generation (StepRecorded (unStepName stepName) (Aeson.toJSON result) now)
   txResult <- runTransaction do

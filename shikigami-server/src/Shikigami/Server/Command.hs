@@ -43,6 +43,7 @@ import Data.Bifunctor (first)
 import Data.Generics.Labels ()
 import Data.Maybe (catMaybes)
 import Data.Text qualified as Text
+import Data.Time.Format.ISO8601 (iso8601ParseM)
 import Options.Applicative hiding (action)
 import Settei.Optparse (namedOption)
 import Settei.Source (Source)
@@ -66,6 +67,7 @@ import Shikigami.Server.Command.Grants (runGrantsGrant, runGrantsList, runGrants
 import Shikigami.Server.Command.ObjectiveTrackers
 import Shikigami.Server.Command.Objectives
 import Shikigami.Server.Command.Ops (opsConfigSources, opsInvocationParser, runOps)
+import Shikigami.Server.Command.Proposals
 import Shikigami.Server.Command.PublishFixture (runPublishFixture)
 import Shikigami.Server.Command.RenderLifecycle (runRenderLifecycle)
 import Shikigami.Server.Command.ResolveApproval (resolveApprovalOptionsParser, runResolveApproval)
@@ -173,8 +175,43 @@ adminSubcommands =
     ("resources", command "resources" resourcesInfo),
     ("executions", command "executions" executionsInfo),
     ("workers", command "workers" workersInfo),
-    ("objectives", command "objectives" objectivesInfo)
+    ("objectives", command "objectives" objectivesInfo),
+    ("proposals", command "proposals" proposalsInfo)
   ]
+
+-- | Read and govern unrequested work. A standing policy is the one way past a
+-- person, so its verbs are here rather than anywhere an agent could reach.
+proposalsInfo :: ParserInfo AdminAction
+proposalsInfo = info (subparser commands <**> helper) (progDesc "Read proposals, candidates and admissions, and install or revoke standing policies")
+  where
+    commands =
+      command "policy" policyInfo
+        <> command "list" (info (list <**> helper) (progDesc "Page through proposals"))
+        <> command "inspect" (info (inspecting <**> helper) (progDesc "Show observer and policy usage with exhaustion explicit"))
+        <> command "candidates" (info (candidates <**> helper) (progDesc "Page through an observer's recorded candidates"))
+        <> command "admissions" (info (admissions <**> helper) (progDesc "Page through admissions pinned to their policy digests"))
+        <> command "prune" (info (pruning <**> helper) (progDesc "Delete terminal skips older than an instant, a batch at a time"))
+    json = switch (long "json")
+    limit = option auto (long "limit" <> value 50 <> metavar "N")
+    after = optional (strOption (long "after" <> metavar "CURSOR"))
+    list = (\principal status cursor size format -> (runProposalsList principal status cursor size format, [])) <$> optional (strOption (long "principal" <> metavar "PRINCIPAL")) <*> optional (strOption (long "status" <> metavar "STATUS")) <*> after <*> limit <*> json
+    inspecting = (\format failing -> (runProposalsInspect format failing, [])) <$> json <*> switch (long "fail-when-exhausted")
+    candidates = (\principal since cursor size format -> (runProposalsCandidates principal since cursor size format, [])) <$> strOption (long "principal" <> metavar "PRINCIPAL") <*> optional (option instant (long "since" <> metavar "ISO8601")) <*> after <*> limit <*> json
+    admissions = (\policy cursor size format -> (runProposalsAdmissions policy cursor size format, [])) <$> optional (strOption (long "policy" <> metavar "POLICY")) <*> after <*> limit <*> json
+    pruning = (\before batch format -> (runProposalsPrune before batch format, [])) <$> option instant (long "before" <> metavar "ISO8601") <*> option auto (long "batch" <> value 1000 <> metavar "N") <*> json
+    instant = maybeReader iso8601ParseM
+
+policyInfo :: ParserInfo AdminAction
+policyInfo = info (subparser commands <**> helper) (progDesc "Install, revoke and list standing policies as the configured operator")
+  where
+    commands =
+      command "install" (info (installing <**> helper) (progDesc "Validate and install a new policy; a changed policy is a new policy"))
+        <> command "revoke" (info (revoking <**> helper) (progDesc "Stop new admissions at once; admitted work continues"))
+        <> command "list" (info (listing <**> helper) (progDesc "Page through policies with their live, revoked or expired state"))
+    json = switch (long "json")
+    installing = (\path format -> (runPolicyInstall path format, [])) <$> strOption (long "file" <> metavar "FILE") <*> json
+    revoking = (\policy expected format -> (runPolicyRevoke policy expected format, [])) <$> strArgument (metavar "POLICY") <*> option auto (long "expected-revision" <> metavar "N") <*> json
+    listing = (\principal cursor size format -> (runPolicyList principal cursor size format, [])) <$> optional (strOption (long "principal" <> metavar "PRINCIPAL")) <*> optional (strOption (long "after" <> metavar "POLICY")) <*> option auto (long "limit" <> value 50 <> metavar "N") <*> json
 
 objectivesInfo :: ParserInfo AdminAction
 objectivesInfo = info (subparser commands <**> helper) (progDesc "Create, inspect and update authoritative objectives as the configured operator")

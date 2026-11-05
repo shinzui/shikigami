@@ -14,6 +14,7 @@ module Shikigami.Flow.Capability
     defaultRememberOptions,
     deterministicFlowMemoryId,
     emitSignal,
+    emitSignalTo,
     recall,
     recordFlowMemory,
     remember,
@@ -57,7 +58,7 @@ import Shikigami.Directory (DirectoryHandle)
 import Shikigami.Memory.Access (agentActor, shikigamiMemorySpace, shikigamiWriteContext)
 import Shikigami.Memory.Scope (agentScope)
 import Shikigami.Sink (GrantSource)
-import Shikigami.Sink.Intent (enqueueSinkIntentStep)
+import Shikigami.Sink.Intent (enqueueSinkIntentStep, enqueueSinkIntentStepForRecipient)
 import Shikigami.Sink.Types (DanwaTarget, SinkResult)
 
 newtype MemoryQuery = MemoryQuery {query :: Text}
@@ -96,6 +97,7 @@ type instance DispatchOf Memory = Dynamic
 
 data Sink :: Effect where
   EmitSignal :: DeclarationCoordinate "sink-label" -> Agent.Sink -> Value -> Sink m SinkResult
+  EmitSignalTo :: DeclarationCoordinate "sink-label" -> DeclarationCoordinate "recipient" -> Agent.Sink -> Value -> Sink m SinkResult
 
 type instance DispatchOf Sink = Dynamic
 
@@ -205,6 +207,11 @@ rememberWith label opts value = send (Remember label opts value)
 -- but discouraged; prefer a static token.
 emitSignal :: (Sink :> es) => DeclarationCoordinate "sink-label" -> Agent.Sink -> Value -> Eff es SinkResult
 emitSignal label sink output = send (EmitSignal label sink output)
+
+-- | Emit to a recipient the caller resolved from configuration. Journaled as
+-- @emit-signal-\<label\>@, a name the declaration language can spell.
+emitSignalTo :: (Sink :> es) => DeclarationCoordinate "sink-label" -> DeclarationCoordinate "recipient" -> Agent.Sink -> Value -> Eff es SinkResult
+emitSignalTo label recipient sink output = send (EmitSignalTo label recipient sink output)
 
 currentActivity :: (Activity :> es) => Eff es ActivityEnvelope
 currentActivity = send CurrentActivity
@@ -338,6 +345,10 @@ runSink SinkEnv {agent, runId, occurredAt, danwaTarget, activity, grants, direct
           ordinal <- liftIO (atomicModifyIORef' ordinalRef \current -> (current + 1, current))
           let stepName = StepName ("emit-signal:" <> declarationCoordinateText label)
           enqueueSinkIntentStep directory grants identity stepName agent runId ordinal occurredAt danwaTarget activity sink output
+        EmitSignalTo label recipient sink output -> do
+          ordinal <- liftIO (atomicModifyIORef' ordinalRef \current -> (current + 1, current))
+          let stepName = StepName ("emit-signal-" <> declarationCoordinateText label)
+          enqueueSinkIntentStepForRecipient directory grants identity stepName agent runId ordinal occurredAt danwaTarget activity recipient sink output
     )
     action
 

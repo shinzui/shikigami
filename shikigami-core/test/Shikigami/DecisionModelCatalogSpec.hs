@@ -94,7 +94,7 @@ tests =
         assertBool "duplicate slot labels" (not (null (slotErrors registry declaration [slot, slot])))
         assertBool "unknown contract" (not (null (slotErrors (mustRight (programRegistry [])) declaration [slot])))
         assertBool "undeclared alias" (not (null (slotErrors registry ((declaration & #decisionModels .~ ([]))) [slot])))
-        assertBool "other flows have empty inventories" (all (\flow -> flow.name `elem` map declarationCoordinate ["adaptive-delivery", "shikumi-decision-example", "shikumi-judgment-example"] || null flow.decisionSlots) flowRegistry)
+        assertBool "other flows have empty inventories" (all (\flow -> flow.name `elem` map declarationCoordinate ["propose-work", "adaptive-delivery", "shikumi-decision-example", "shikumi-judgment-example"] || null flow.decisionSlots) flowRegistry)
         map (.decisionSlots) (filter (\flow -> flow.name == declarationCoordinate "adaptive-delivery") flowRegistry) @?= [adaptiveSlots],
       testCase "historical declaration JSON defaults to no permission and keeps its bytes" do
         declaration <- mustRight <$> loadAgent "../agents/heartbeat.dhall"

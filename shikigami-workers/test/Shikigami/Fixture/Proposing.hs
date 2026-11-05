@@ -24,6 +24,12 @@ module Shikigami.Fixture.Proposing
     objectives,
     agentPrincipal,
     proposerIdentity,
+    coordinatorIdentity,
+    PolicyTerms (..),
+    defaultTerms,
+    installTerms,
+    runTx,
+    policyContext,
     plainReport,
     repositoryIds,
     settingsWith,
@@ -46,6 +52,7 @@ import Data.Aeson qualified as Aeson
 import Data.Generics.Labels ()
 import Data.IORef (IORef, modifyIORef', newIORef, readIORef)
 import Data.Map.Strict qualified as Map
+import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Time (NominalDiffTime, UTCTime (..), addUTCTime, fromGregorian, getCurrentTime)
@@ -55,6 +62,7 @@ import Hasql.Encoders qualified as E
 import Hasql.Pool qualified as Pool
 import Hasql.Session qualified as Session
 import Hasql.Statement (preparable)
+import Hasql.Transaction qualified as Tx
 import Keiro.Integration.Event (IntegrationContentType (ApplicationJson), IntegrationEvent (..), encodeJsonIntegrationEvent)
 import Keiro.Workflow (loadStepIndex)
 import Keiro.Workflow.Awakeable (AwakeableId (..))
@@ -63,6 +71,7 @@ import Keiro.Workflow.Sleep (drainWorkflowSleepTimers)
 import Keiro.Workflow.Types (WorkflowOutcome)
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
 import Kiroku.Store.Error (StoreError)
+import Kiroku.Store.Transaction (runTransaction)
 import Pgmq (Message (..), MessageBody (..), ReadMessage (..), readMessage)
 import Shikigami.Action.Authorization (allowAllActionAuthorizerForTests)
 import Shikigami.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
@@ -70,10 +79,10 @@ import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Approval (ApprovalChannel, ApprovalDecision (..), ApprovalRequest (..), approvalTimeoutFireAction, autoApprovePolicy, resolveApproval)
 import Shikigami.Agent.Approval.Notification (renderApprovalMessage)
 import Shikigami.Agent.Approval.Workflow qualified as Approval
-import Shikigami.Agent.Decl (AgentDecl (..), defaultDelegationBudget)
+import Shikigami.Agent.Decl (AgentDecl (..), IdentityDecl (..), defaultDelegationBudget)
 import Shikigami.Agent.DeclarationValue (declarationCoordinate)
 import Shikigami.Agent.Loader (loadAgent)
-import Shikigami.Agent.Principal (AgentIdentity (..), AgentPrincipal, mkAgentPrincipal)
+import Shikigami.Agent.Principal (AgentIdentity (..), AgentPrincipal, mkAgentPrincipal, principalText)
 import Shikigami.Agent.Run (AgentRunResult)
 import Shikigami.Agent.RunFailure (AgentRunFailure)
 import Shikigami.Agent.RunJob (RunJob (..), runJobWorkflowId)
@@ -87,12 +96,14 @@ import Shikigami.Capability.Provider qualified as CapabilityProvider
 import Shikigami.Decision.ModelCatalog
 import Shikigami.Decision.StubProvider (decisionStubProvider)
 import Shikigami.Directory qualified as Directory
-import Shikigami.Duration (Duration, durationTime, parseDuration)
+import Shikigami.Duration (Duration, durationTime, parseDuration, remainingDuration)
 import Shikigami.Execution.Policy.Types (defaultHarnessPolicy)
 import Shikigami.Flow.Decision qualified as Decision
 import Shikigami.Flow.Initiative qualified as FlowInitiative
 import Shikigami.Flow.Routing qualified as Routing
+import Shikigami.Initiative.Policy qualified as Policy
 import Shikigami.Initiative.Settings (InitiativeSettings)
+import Shikigami.Initiative.Types (ActionClass (..), SourceKind (..))
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Shikigami.Objective.Runtime qualified as Objectives
@@ -101,7 +112,7 @@ import Shikigami.PracticeReview.Capability qualified as Practice
 import Shikigami.Repository (RepositoryId, repositoryId)
 import Shikigami.RunEvidence.Catalog qualified as Catalog
 import Shikigami.RunJobs qualified as RunJobs
-import Shikigami.Sink (GrantSource (StaticGrants), defaultGrantTable)
+import Shikigami.Sink (GrantSource (StaticGrants), SinkKind (SKizashiSignal), defaultGrantTable)
 import Shikigami.Sink.Config
 import Shikigami.Sink.Http (HttpLimits (..), SinkHttp, credentialsFromConfig, newSinkHttp)
 import Shikigami.Trigger.Consumer (RecordDisposition, processDecodedActivityObserving)
@@ -145,6 +156,7 @@ data Proposing = Proposing
     settings :: !InitiativeSettings,
     directory :: !Directory.DirectoryHandle,
     declaration :: !AgentDecl,
+    coordinator :: !AgentDecl,
     objectiveRuntime :: !Objectives.ObjectiveRuntime,
     calls :: !(IO Int),
     asks :: !(IO [Ask])
@@ -155,6 +167,12 @@ agentPrincipal = either (error . Text.unpack) id (mkAgentPrincipal "agent_shikig
 
 proposerIdentity :: AgentIdentity
 proposerIdentity = VerifiedIdentity agentPrincipal
+
+coordinatorPrincipal :: AgentPrincipal
+coordinatorPrincipal = either (error . Text.unpack) id (mkAgentPrincipal "agent_shikigami_coordinator")
+
+coordinatorIdentity :: AgentIdentity
+coordinatorIdentity = VerifiedIdentity coordinatorPrincipal
 
 repositoryIds :: [RepositoryId]
 repositoryIds = [repositoryId "repo_payments", repositoryId "repo_billing"]
@@ -199,9 +217,16 @@ withProposing fixture options use = withShikigamiFreshDatabase fixture \connecti
     tracer <- noopTracer
     behavior <- newBehaviorEnv
     declaration <- either (assertFailure . show) pure =<< loadAgent "../agents/proof/proposer.dhall"
+    coordinatorDeclaration <- either (assertFailure . show) pure =<< loadAgent "../agents/proof/adaptive-delivery.dhall"
     counted <- newIORef (0 :: Int)
     recorded <- newIORef []
-    directory <- Directory.newDirectoryHandle (Directory.staticDirectorySource [Directory.PrincipalRecord (declarationCoordinate "agent_shikigami_proposer") (declarationCoordinate "proposer") Directory.Active])
+    directory <-
+      Directory.newDirectoryHandle
+        ( Directory.staticDirectorySource
+            [ Directory.PrincipalRecord (declarationCoordinate "agent_shikigami_proposer") (declarationCoordinate "proposer") Directory.Active,
+              Directory.PrincipalRecord (declarationCoordinate "agent_shikigami_coordinator") (declarationCoordinate "adaptive-delivery") Directory.Active
+            ]
+        )
     Directory.refreshDirectory directory >>= either (assertFailure . Text.unpack) pure
     http <- either (assertFailure . show) pure =<< newSinkHttp (HttpLimits defaultAppConfig.httpRequestMaxBytes defaultAppConfig.httpResponseMaxBytes) (credentialsFromConfig defaultAppConfig) (DanwaConfig "http://localhost:1" (declarationCoordinate "fixture"))
     let env = AppEnv {connectionSettings = defaultConnectionSettings connection, tracer, metrics = Nothing, store = Nothing}
@@ -219,7 +244,8 @@ withProposing fixture options use = withShikigamiFreshDatabase fixture \connecti
             & #enabled .~ Objective.ObjectivesEnabled
             & #agentCreation .~ [agentPrincipal | options.creationGranted]
         objectiveRuntime = Objectives.ObjectiveRuntime env objectiveSettings directory allowAllActionAuthorizerForTests Nothing
-        deps = proposingDeps env behavior provider binding objectiveRuntime settings repositoryOptions declaration http directory store.pool recorded
+        coordinator = coordinatorDeclaration & #identity .~ Just (IdentityDecl (declarationCoordinate "agent_shikigami_coordinator"))
+        deps = proposingDeps env behavior provider binding objectiveRuntime settings repositoryOptions [declaration, coordinator] http directory store.pool recorded
         repositoryOptions = [FlowInitiative.RepositoryOption identifier "fixture repository" | identifier <- repositoryIds]
     _ <- either (assertFailure . show) pure =<< ensureRunQueue store.pool
     _ <- either (assertFailure . show) pure =<< runAppIO env Catalog.registerProjectionCatalog
@@ -231,6 +257,7 @@ withProposing fixture options use = withShikigamiFreshDatabase fixture \connecti
           settings,
           directory,
           declaration,
+          coordinator,
           objectiveRuntime,
           calls = readIORef counted,
           asks = reverse <$> readIORef recorded
@@ -246,13 +273,13 @@ proposingDeps ::
   Objectives.ObjectiveRuntime ->
   InitiativeSettings ->
   [FlowInitiative.RepositoryOption] ->
-  AgentDecl ->
+  [AgentDecl] ->
   SinkHttp ->
   Directory.DirectoryHandle ->
   Pool.Pool ->
   IORef [Ask] ->
   Agent.AgentRunDeps
-proposingDeps env behavior provider binding objectiveRuntime settings repositoryOptions declaration http directory pool recorded =
+proposingDeps env behavior provider binding objectiveRuntime settings repositoryOptions declarations http directory pool recorded =
   Agent.AgentRunDeps
     { appEnv = env,
       behaviorEnv = behavior,
@@ -268,7 +295,7 @@ proposingDeps env behavior provider binding objectiveRuntime settings repository
             repositories = repositoryOptions,
             hooks = FlowInitiative.noInitiativeHooks
           },
-      agents = [declaration],
+      agents = declarations,
       kizashi = KizashiConfig "http://localhost:1" (declarationCoordinate "recipient"),
       kawa = KawaConfig "http://localhost:1" (activityCoordinate "fixture"),
       kanmon = KanmonConfig "http://localhost:1",
@@ -281,7 +308,7 @@ proposingDeps env behavior provider binding objectiveRuntime settings repository
       runTimeout = either (error . show) id (parseDuration 30),
       harness = defaultHarnessPolicy,
       delegationBudget = defaultDelegationBudget,
-      grants = StaticGrants defaultGrantTable,
+      grants = StaticGrants (Map.insert proposerIdentity (Set.singleton SKizashiSignal) defaultGrantTable),
       directory,
       routing = Routing.RoutingRuntime (\_ -> error "no router") (\_ _ _ -> error "no router"),
       practiceReview = Practice.unavailablePracticeReviewRuntime,
@@ -308,6 +335,65 @@ recordingNotifier recorded =
           )
         pure (Right ())
     }
+
+-- | The terms of a standing policy a spec varies.
+data PolicyTerms = PolicyTerms
+  { sources :: ![SourceKind],
+    repositories :: ![RepositoryId],
+    actionClasses :: ![ActionClass],
+    perObjectiveAttempts :: !Integer,
+    totalAttempts :: !Integer,
+    admissionsPerWindow :: !Int,
+    lifetimeSeconds :: !NominalDiffTime
+  }
+
+defaultTerms :: PolicyTerms
+defaultTerms =
+  PolicyTerms
+    { sources = [ChatFixture],
+      repositories = [head repositoryIds],
+      actionClasses = [ReproduceAndDiagnose],
+      perObjectiveAttempts = 2,
+      totalAttempts = 20,
+      admissionsPerWindow = 10,
+      lifetimeSeconds = 86400
+    }
+
+policyContext :: Proposing -> UTCTime -> Policy.PolicyContext
+policyContext fixture now =
+  Policy.PolicyContext
+    { principalActive = const True,
+      objectives = fixture.objectiveRuntime.settings,
+      catalog = repositoryIds,
+      declarations = [fixture.declaration, fixture.coordinator],
+      now,
+      maximumLifetime = remainingDuration (30 * 24 * 60 * 60)
+    }
+
+installTerms :: Proposing -> PolicyTerms -> IO Policy.StandingPolicy
+installTerms fixture terms = do
+  now <- getCurrentTime
+  let document =
+        object
+          [ "principal" .= principalText agentPrincipal,
+            "sources" .= terms.sources,
+            "repositories" .= terms.repositories,
+            "actionClasses" .= terms.actionClasses,
+            "coordinator" .= fixture.coordinator.name,
+            "perObjective" .= object ["ActiveWork" .= (2 :: Int), "ModelAttempts" .= terms.perObjectiveAttempts, "Tokens" .= ("unbounded" :: Text), "CostMicroUsd" .= ("unbounded" :: Text)],
+            "objectiveWindow" .= (7200 :: Int),
+            "total" .= object ["ActiveWork" .= (1000 :: Int), "ModelAttempts" .= terms.totalAttempts, "Tokens" .= ("unbounded" :: Text), "CostMicroUsd" .= ("unbounded" :: Text)],
+            "admissionsPerWindow" .= terms.admissionsPerWindow,
+            "window" .= (3600 :: Int),
+            "expiresAt" .= addUTCTime terms.lifetimeSeconds now
+          ]
+      operator = either (error . Text.unpack) id (Objective.parseOperatorId "local-operator")
+  input <- either assertFailure pure (Aeson.eitherDecode (Aeson.encode document))
+  runAppIO fixture.env (Policy.installPolicy operator (policyContext fixture now) input)
+    >>= either (assertFailure . show) (either (assertFailure . show) pure)
+
+runTx :: Proposing -> Tx.Transaction value -> IO value
+runTx fixture transaction = runAppIO fixture.env (runTransaction transaction) >>= either (assertFailure . show) pure
 
 -- | Deliver one chat message through the stream consumer.
 deliver :: Proposing -> Text -> Text -> Text -> IO RecordDisposition

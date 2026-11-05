@@ -56,6 +56,16 @@ workflow AgentRun
       step objectives-initiative-accept -> ObjectiveReply
       step initiative-resolve -> InitiativeResolution
     }
+    patch shikigami-initiative-admission-v1 {
+      step initiative-admit -> InitiativeAdmissionDecision
+      step objectives-initiative-admit -> ObjectiveReply
+      step initiative-fund -> InitiativeFunded
+      step objectives-initiative-grant -> ObjectiveReply
+      step objectives-initiative-staff -> ObjectiveReply
+      step initiative-launch -> InitiativeLaunched
+      step emit-signal-initiative-admitted -> SinkResult
+      step initiative-admission-failed -> InitiativeAdmissionFailure
+    }
     step route-decision-architecture-practice -> RouteDecision
     step recall-risk-history -> RecalledLearnings
     step remember-acknowledged -> RecordedLearning
