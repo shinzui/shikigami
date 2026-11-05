@@ -149,7 +149,7 @@ tests fixture =
                             pure (Right (metadata prepared, state))
                         )
                   )
-              decisionEnv = Decision.DecisionEnv declaration [slot] (Decision.defaultDecisionServices runtime.catalog) runtime.runtime Nothing evidence (Routing.RoutingRuntime (\_ -> error "unused routing catalog") (\_ _ _ -> error "unused routing evaluation")) runtime.timeoutMicros (const (pure ())) (const (pure ()))
+              decisionEnv = Decision.DecisionEnv declaration [slot] (Decision.defaultDecisionServices runtime.catalog) runtime.runtime Nothing evidence (Routing.RoutingRuntime (\_ -> error "unused routing catalog") (\_ _ _ -> error "unused routing evaluation")) runtime.timeoutMicros Nothing (const (pure ())) (const (pure ()))
               parent = runWorkflow (WorkflowName "accepted-decision-slot") template.runId (Decision.runDecisionAccepted decisionEnv host policy (Decision.decide (Decision.decisionStep Decision.Adaptive (programRef investigationProgram)) alias (InvestigationInput "build" "early finding" "bounded catalog")))
               hold provider =
                 provider

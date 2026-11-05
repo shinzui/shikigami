@@ -11,6 +11,12 @@ provenance:
     model: "claude-fable-5-1"
     harness: "claude-code"
     at: 2026-11-04T18:38:36Z
+  revisions:
+    - model: "claude-opus-5-5"
+      harness: "claude-code"
+      at: 2026-11-05T01:16:29Z
+      mode: "implement"
+      note: "Implementing the assessment program, validator and root-accounted slots"
 ---
 
 # Assess candidates with a registered typed decision whose output cannot select repository, authority or recipient
@@ -30,13 +36,15 @@ You can see it working in `cabal test shikigami-core-test --test-options='-p Ini
 
 ## Progress
 
-- [ ] Milestone 1: `Shikigami.Program.Decision.Initiative` registers `assessmentProgram` with `AssessmentInput`, `AssessmentOutput` and `validateAssessment`; the `Propose` label, slot and step names exist in `Shikigami.Flow.Decision`; unit tests prove the validator and the planted-instruction fixtures with the stub provider.
+- [x] Milestone 1: `Shikigami.Program.Decision.Initiative` registers `assessmentProgram` with `AssessmentInput`, `AssessmentOutput` and `validateAssessment`; the `Propose` label, slot and step names exist in `Shikigami.Flow.Decision`; unit tests prove the validator and the planted-instruction fixtures with the stub provider. Completed 2026-11-04: InitiativeAssessment (11 cases) passes with planted-instruction fixtures through the real stub dispatch; DecisionContract, DecisionRunner and TypeSafeDecision groups unchanged.
 - [ ] Milestone 2: Decision slots declare their accounting; `Propose` is root-accounted through `rootAccountedDecisionHooks`; a harness Flow under an enrolled root makes one accounted call, replays without a second call and refuses without a root.
 
 
 ## Surprises & Discoveries
 
-(None yet.)
+- A registered program's result validator sees only the output, so the plan's `outputCheck` cannot run `validateAssessment` against the input. `outputCheck` now holds only input-independent size bounds and every choice rule lives in `validateAssessment`, which the Flow calls. This is better than the plan: a bad choice becomes a recorded `decision-refused` skip instead of a `DecisionAbort` that fails the run.
+- `validateAttempt` requires `ActiveWork`, `ModelAttempts`, `Tokens` and `CostMicroUsd` all be named on a root before a model attempt can be admitted, and no ceiling can be reserved for finite cost. The plan's "must name `ModelAttempts`" settings rule would have accepted envelopes that refuse every call, so `EvaluationEnvelope`'s decoder requires all four and an unbounded `CostMicroUsd`.
+- `proposeStep` and `proposeAlias` live in `Shikigami.Flow.Decision` rather than the program module, because `decisionStep` is defined there and the Flow layer already imports the program registry.
 
 
 ## Decision Log
@@ -47,6 +55,14 @@ You can see it working in `cabal test shikigami-core-test --test-options='-p Ini
 
 - Decision: Decision slots declare their accounting through a total function on `DecisionLabel`; `Propose` is root-accounted and every existing label stays unaccounted.
   Rationale: Accounting every synchronous Flow decision would change the behavior of existing Flows that run under roots. A closed total function keeps the change additive, and MasterPlan 19's drift slot takes the same path through one mechanism.
+  Date: 2026-11-04
+
+- Decision: `validateAssessment` takes the `Candidate` instead of the `AssessmentInput`.
+  Rationale: The sealed `EvidenceRef`s it must cite exist only on the candidate; the input carries their text renderings. Taking the candidate means evidence comes from the journaled envelope's re-derivation rather than a round trip through model-facing text.
+  Date: 2026-11-04
+
+- Decision: Input records use plain lists and `Text` instants rather than `NonEmpty` and `UTCTime`.
+  Rationale: Shikumi has no schema instances for `NonEmpty` or `UTCTime`. The input validator enforces non-emptiness, so nothing is lost.
   Date: 2026-11-04
 
 

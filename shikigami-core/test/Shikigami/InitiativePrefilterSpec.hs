@@ -142,7 +142,7 @@ configured sources =
                    [ "principal" .= ("agent_proposer" :: Text),
                      "sources" .= sources,
                      "minimumExcerptLength" .= (20 :: Int),
-                     "evaluation" .= object ["limits" .= object ["ModelAttempts" .= (1 :: Int)], "cutoff" .= (3600 :: Int)],
+                     "evaluation" .= object ["limits" .= object ["ActiveWork" .= (1 :: Int), "ModelAttempts" .= (1 :: Int), "Tokens" .= ("unbounded" :: Text), "CostMicroUsd" .= ("unbounded" :: Text)], "cutoff" .= (3600 :: Int)],
                      "evaluationsPerWindow" .= (10 :: Int),
                      "proposalsPerWindow" .= (5 :: Int),
                      "notificationsPerWindow" .= (5 :: Int),

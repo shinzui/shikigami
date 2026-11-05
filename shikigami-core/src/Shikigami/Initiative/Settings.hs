@@ -32,7 +32,7 @@ import GHC.Generics (Generic)
 import Shikigami.Agent.DeclarationValue (DeclarationCoordinate)
 import Shikigami.Agent.Principal (AgentIdentity, AgentPrincipal, identityText, mkAgentPrincipal, principalText)
 import Shikigami.Duration (Duration, durationTime, remainingDuration)
-import Shikigami.Execution.Resources (Dimension (ModelAttempts), Envelope (..), Limit (..), Limits)
+import Shikigami.Execution.Resources (Dimension (..), Envelope (..), Limit (..), Limits)
 import Shikigami.Initiative.Types
 
 data InitiativeSettings = InitiativeSettings
@@ -163,15 +163,19 @@ parseLimits = withObject "resource limits" \fields ->
 instance ToJSON EvaluationEnvelope where
   toJSON envelope = object ["limits" .= renderLimits envelope.limits, "cutoff" .= envelope.cutoff]
 
--- | One evaluation is one model call; an envelope denying it is a configuration
--- error rather than a skip every message would silently take.
+-- | One evaluation is one model call. An envelope that cannot pay for one is a
+-- configuration error rather than a refusal every message would silently take:
+-- a model attempt charges active work and a model attempt, and the root admits it
+-- only when token and cost usage are named. No request ceiling can be reserved
+-- for cost before a call, so a finite cost limit could never admit one either.
 instance FromJSON EvaluationEnvelope where
   parseJSON = withObject "evaluation envelope" \fields -> do
     unless (all (`elem` ["limits", "cutoff"]) (KeyMap.keys fields)) (fail "unknown evaluation envelope setting")
     limits <- fields .: "limits" >>= parseLimits
     cutoff <- fields .: "cutoff"
     positive cutoff
-    unless (Map.member ModelAttempts limits) (fail "an evaluation envelope must name ModelAttempts")
+    unless (all (`Map.member` limits) [ActiveWork, ModelAttempts, Tokens, CostMicroUsd]) (fail "an evaluation envelope must name ActiveWork, ModelAttempts, Tokens and CostMicroUsd")
+    unless (Map.lookup CostMicroUsd limits == Just ExplicitlyUnbounded) (fail "an evaluation envelope's CostMicroUsd must be unbounded: no ceiling can be reserved before a call")
     pure EvaluationEnvelope {limits, cutoff}
 
 instance ToJSON NoticeTarget where

@@ -35,7 +35,7 @@ import Shikigami.Directory (DirectoryHandle, Lifecycle (..), PrincipalRecord (..
 import Shikigami.Directory.Store qualified as DirectoryStore
 import Shikigami.Execution.Identity (executionRootIdText)
 import Shikigami.Execution.Quantity (parseResourceAmount)
-import Shikigami.Execution.Resources (Dimension (ModelAttempts), Envelope (..), Limit (Limited))
+import Shikigami.Execution.Resources (Dimension (..), Envelope (..), Limit (..))
 import Shikigami.Initiative.Settings (InitiativeSettings)
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
@@ -201,7 +201,7 @@ tests databaseFixture =
           root <- maybe (assertFailure "the job carries no root") pure job.executionRootId
           assertEqual "origin row names the job's root" [executionRootIdText root] =<< readOriginRoots pool
           (limits, cutoffAt) <- readRootEnvelope pool (executionRootIdText root)
-          assertEqual "the root has the allowance's limits" (Map.fromList [(ModelAttempts, Limited (either (error . show) id (parseResourceAmount 1)))]) limits
+          assertEqual "the root has the allowance's limits" (Map.fromList [(ActiveWork, Limited (either (error . show) id (parseResourceAmount 1))), (ModelAttempts, Limited (either (error . show) id (parseResourceAmount 1))), (Tokens, ExplicitlyUnbounded), (CostMicroUsd, ExplicitlyUnbounded)]) limits
           now <- getCurrentTime
           assertEqual "the cutoff is the receipt instant plus the evaluation window" True (cutoffAt > addUTCTime 3000 now && cutoffAt <= addUTCTime 3600 now)
           assertEqual "candidate row" [("act-chat-3", "evaluating", Nothing, Just "chat-subject", Just (workflowText (runJobWorkflowId job)))] =<< readCandidates pool
@@ -360,7 +360,7 @@ observerSettings =
                      [ "principal" .= ("agent_proposer" :: Text),
                        "sources" .= (["chat-fixture"] :: [Text]),
                        "minimumExcerptLength" .= (20 :: Int),
-                       "evaluation" .= Aeson.object ["limits" .= Aeson.object ["ModelAttempts" .= (1 :: Int)], "cutoff" .= (3600 :: Int)],
+                       "evaluation" .= Aeson.object ["limits" .= Aeson.object ["ActiveWork" .= (1 :: Int), "ModelAttempts" .= (1 :: Int), "Tokens" .= ("unbounded" :: Text), "CostMicroUsd" .= ("unbounded" :: Text)], "cutoff" .= (3600 :: Int)],
                        "evaluationsPerWindow" .= (10 :: Int),
                        "proposalsPerWindow" .= (5 :: Int),
                        "notificationsPerWindow" .= (5 :: Int),

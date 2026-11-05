@@ -15,7 +15,8 @@ import Shikigami.Agent.Name (mkAgentName)
 import Shikigami.Agent.Principal (AgentIdentity (..), AgentPrincipal, mkAgentPrincipal)
 import Shikigami.Decision.Contract (FailureCode (OutputValidationFailure))
 import Shikigami.Execution.Coordinate (executionDigestText)
-import Shikigami.Execution.Resources (Dimension (ModelAttempts), Envelope (..), Limit (ExplicitlyUnbounded))
+import Shikigami.Execution.Quantity (parseResourceAmount)
+import Shikigami.Execution.Resources (Dimension (..), Envelope (..), Limit (..))
 import Shikigami.Initiative.Settings
 import Shikigami.Initiative.Types
 import Shikigami.Objective.Keys (ObservedSource (..), parseProposalRef, proposalRefText)
@@ -123,11 +124,12 @@ tests =
         case settings.observers of
           [allowance] -> do
             let envelope = evaluationEnvelopeAt instant allowance.evaluation
-            envelope.limits @?= Map.fromList [(ModelAttempts, ExplicitlyUnbounded)]
+            envelope.limits @?= Map.fromList [(ActiveWork, Limited one), (ModelAttempts, Limited one), (Tokens, ExplicitlyUnbounded), (CostMicroUsd, ExplicitlyUnbounded)]
             envelope.cutoff @?= UTCTime (fromGregorian 2026 11 4) 3660
           other -> assertFailure (show (length other))
     ]
   where
+    one = either (error . show) id (parseResourceAmount 1)
     chat = ObservedSource (activityCoordinate "fixture/chat") (activityCoordinate "chat") (activityCoordinate "thread-1")
 
 roundTrips :: (Eq value, Show value, ToJSON value, FromJSON value) => value -> IO ()
@@ -153,7 +155,7 @@ validSettings =
                [ "principal" .= ("agent_one" :: Text),
                  "sources" .= (["chat-fixture"] :: [Text]),
                  "minimumExcerptLength" .= (5 :: Int),
-                 "evaluation" .= object ["limits" .= object ["ModelAttempts" .= ("unbounded" :: Text)], "cutoff" .= (3600 :: Int)],
+                 "evaluation" .= object ["limits" .= object ["ActiveWork" .= (1 :: Int), "ModelAttempts" .= (1 :: Int), "Tokens" .= ("unbounded" :: Text), "CostMicroUsd" .= ("unbounded" :: Text)], "cutoff" .= (3600 :: Int)],
                  "evaluationsPerWindow" .= (10 :: Int),
                  "proposalsPerWindow" .= (5 :: Int),
                  "notificationsPerWindow" .= (5 :: Int),

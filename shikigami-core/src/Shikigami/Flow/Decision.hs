@@ -3,11 +3,15 @@
 module Shikigami.Flow.Decision
   ( Decision,
     DecisionLabel (..),
+    DecisionAccounting (..),
+    decisionAccounting,
     DecisionStep,
     decisionStep,
     decisionSlot,
     decisionStepNames,
     decide,
+    proposeStep,
+    proposeAlias,
     investigationCatalog,
     validateInvestigationRoute,
     refuseDecision,
@@ -29,6 +33,8 @@ import Control.Monad (unless, when)
 import Data.Aeson (FromJSON, Result (..), ToJSON, Value, fromJSON, object, toJSON, (.=))
 import Data.IORef (atomicModifyIORef', newIORef)
 import Data.List (find)
+import Data.List.NonEmpty (NonEmpty (..))
+import Data.Maybe (isNothing)
 import Data.Typeable (Typeable)
 import Effectful (Dispatch (Dynamic), DispatchOf, Eff, Effect, IOE, liftIO, (:>))
 import Effectful.Dispatch.Dynamic (interpret, send)
@@ -43,24 +49,41 @@ import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.Attestation.PolicyValue (mkCeiling)
 import Shikigami.Attestation.Resolve (ResolvedProfile)
 import Shikigami.Behavior.Error (TransientBehaviorFailure (..))
+import Shikigami.Decision.Accounting (rootAccountedDecisionHooks)
 import Shikigami.Decision.Contract
 import Shikigami.Decision.Evidence
+import Shikigami.Decision.ModelAlias (modelAliasFromNonEmpty)
 import Shikigami.Decision.ModelCatalog
 import Shikigami.Execution.Driver qualified as Accepted
 import Shikigami.Execution.Executor (ExecutionRuntime)
+import Shikigami.Execution.Identity (ExecutionRootId)
 import Shikigami.Execution.Start qualified as Accepted
 import Shikigami.Execution.Transcript (ExecutionError (ExecutionStorageUnavailable, ProjectionUnavailable))
 import Shikigami.Flow.Routing (RoutingRuntime (..))
 import Shikigami.Log.Correlation (runCorrelationId)
 import Shikigami.Program.Decision
+import Shikigami.Program.Decision.Initiative (AssessmentInput, AssessmentOutput, assessmentProgram)
 import Shikigami.Program.Decision.Registry (decisionCodecs, decisionPrograms)
 import Shikigami.Program.DecisionRunner
 import Shikigami.Router.Catalog (CandidateCatalog)
 import Shikigami.Router.Decision (RouteDecision, validateRouteDecision)
 import Shikigami.Router.Declaration (RouterDeclarationView (policy), validateRouterDeclaration, validatedRouterDeclaration)
 
-data DecisionLabel = Triage | Investigation | Judgment | Adaptive
+data DecisionLabel = Triage | Investigation | Judgment | Adaptive | Propose
   deriving stock (Eq, Ord, Show)
+
+-- | Who pays for a slot's provider calls. Spelled out per label so a new slot
+-- states its answer and no existing Flow changes behavior.
+data DecisionAccounting = UnaccountedCall | RootAccountedCall
+  deriving stock (Eq, Show)
+
+decisionAccounting :: DecisionLabel -> DecisionAccounting
+decisionAccounting = \case
+  Triage -> UnaccountedCall
+  Investigation -> UnaccountedCall
+  Judgment -> UnaccountedCall
+  Adaptive -> UnaccountedCall
+  Propose -> RootAccountedCall
 
 data DecisionStep i o = DecisionStep !DecisionLabel !(DecisionProgramRef i o)
 
@@ -75,12 +98,21 @@ slotLabel Triage = triageDecisionSlot
 slotLabel Investigation = investigationDecisionSlot
 slotLabel Judgment = judgmentDecisionSlot
 slotLabel Adaptive = either (error . show) id (parseDecisionSlotLabel "adapt")
+slotLabel Propose = either (error . show) id (parseDecisionSlotLabel "propose")
 
 decisionStepNames :: DecisionLabel -> (StepName, StepName)
 decisionStepNames Triage = (StepName "decision-prepare-triage", StepName "decision-result-triage")
 decisionStepNames Investigation = (StepName "decision-prepare-investigate", StepName "decision-result-investigate")
 decisionStepNames Adaptive = (StepName "decision-prepare-adapt", StepName "decision-result-adapt")
 decisionStepNames Judgment = (StepName "decision-prepare-judge", StepName "decision-result-judge")
+decisionStepNames Propose = (StepName "decision-prepare-propose", StepName "decision-result-propose")
+
+proposeStep :: DecisionStep AssessmentInput AssessmentOutput
+proposeStep = decisionStep Propose (programRef assessmentProgram)
+
+-- | The alias a proposing agent's declaration lists in @decisionModels@.
+proposeAlias :: ModelAlias
+proposeAlias = modelAliasFromNonEmpty ('p' :| "ropose")
 
 data DecisionServices = DecisionServices
   { catalog :: !ModelCatalog,
@@ -105,6 +137,8 @@ data DecisionEnv = DecisionEnv
     evidence :: !DecisionEvidenceStore,
     routing :: !RoutingRuntime,
     timeoutMicros :: !DecisionTimeout,
+    -- | The run's enrolled resource root, for slots whose calls it must pay for.
+    root :: !(Maybe ExecutionRootId),
     beforeStep :: !(StepName -> IO ()),
     afterStep :: !(StepName -> IO ())
   }
@@ -164,6 +198,8 @@ runDecisionUsing env accepted policy action = do
         Decide (DecisionStep label (_currentRef :: DecisionProgramRef i o)) alias input -> do
           when (maybe False (const (label /= Adaptive)) accepted) (throwIO (DecisionAbort (decisionFailure InvalidSlot "accepted interpreter requires the adaptive slot")))
           when (label == Judgment) requireStructuredPatch
+          -- Before the prepare step: a run that cannot pay records nothing it would owe.
+          when (decisionAccounting label == RootAccountedCall && isNothing env.root) (throwIO (DecisionAbort (decisionFailure InvalidSlot "decision slot requires an enrolled resource root")))
           repeated <- liftIO (atomicModifyIORef' used (\labels -> (label : labels, label `elem` labels)))
           when repeated (throwIO (DecisionAbort (decisionFailure InvalidSlot "decision slot repeated within one generation")))
           let (prepareName, resultName) = decisionStepNames label
@@ -233,9 +269,8 @@ runDecisionUsing env accepted policy action = do
                     pure (ref, storedInput)
               (result, observations) <- case pending of
                 Left refusal -> pure (Left refusal, [])
-                Right (ref, storedInput) ->
-                  liftIO
-                    ( runDecisionProgramWithAnswers
+                Right (ref, storedInput) -> do
+                  let decisionRuntime =
                         DecisionRuntime
                           { runtime = env.runtime,
                             programs = env.services.programs,
@@ -246,10 +281,9 @@ runDecisionUsing env accepted policy action = do
                             timeoutMicros = env.timeoutMicros,
                             callLimit = either (error . show) id (mkCeiling 64)
                           }
-                        prepared
-                        ref
-                        storedInput
-                    )
+                  liftIO case (decisionAccounting label, env.root) of
+                    (RootAccountedCall, Just root) -> runDecisionProgramWithAccounting (rootAccountedDecisionHooks env.evidence env.profile root) decisionRuntime prepared ref storedInput
+                    _ -> runDecisionProgramWithAnswers decisionRuntime prepared ref storedInput
               reportResult <- liftIO (readDecisionReport env.evidence prepared.runId)
               report <- either (throwIO . DecisionAbort) pure reportResult
               let calls = maybe [] (filter (\call -> call.invocationId == prepared.identity) . (\stored -> stored.calls)) report

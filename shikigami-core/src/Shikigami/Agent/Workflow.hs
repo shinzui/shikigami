@@ -1155,6 +1155,7 @@ runFlowBehavior deps activeBehaviorEnv resolvedProfile approvalPolicyForRun reco
                       evidence = DecisionEvidence.postgresDecisionEvidenceStore pool,
                       routing = depsRouting deps,
                       timeoutMicros = timeout,
+                      root = job.executionRootId,
                       beforeStep = ((.hooks) deps).beforeStepBody,
                       afterStep = ((.hooks) deps).afterStepBody
                     }

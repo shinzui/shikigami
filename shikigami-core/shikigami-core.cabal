@@ -260,6 +260,7 @@ library
     Shikigami.Program.Decision
     Shikigami.Program.Decision.Adaptive
     Shikigami.Program.Decision.Examples
+    Shikigami.Program.Decision.Initiative
     Shikigami.Program.Decision.JudgmentExample
     Shikigami.Program.Decision.Registry
     Shikigami.Program.DecisionRunner
@@ -571,6 +572,7 @@ test-suite shikigami-core-test
     Shikigami.Fixture.SinkHttp
     Shikigami.Fixture.TypeSafe
     Shikigami.FormatVersionSpec
+    Shikigami.InitiativeAssessmentSpec
     Shikigami.InitiativePrefilterSpec
     Shikigami.InitiativeValueSpec
     Shikigami.KanmonClientSpec
@@ -688,6 +690,7 @@ test-suite shikigami-core-postgres-test
     Shikigami.Fixture.TypeSafe
     Shikigami.FlowLifecycleSpec
     Shikigami.GrantStoreSpec
+    Shikigami.InitiativeLedgerSpec
     Shikigami.ObjectiveCheckpointSpec
     Shikigami.ObjectiveStoreSpec
     Shikigami.ObjectiveTrackerStoreSpec

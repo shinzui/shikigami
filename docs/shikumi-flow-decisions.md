@@ -218,7 +218,7 @@ no permission.
 
 ## Replay and version retention
 
-The new segment is guarded by `shikigami-flow-decisions-v1`. An old patch snapshot
+The new segment is guarded by `shikigami-structured-judgments-v1`. An old patch snapshot
 keeps the old interpreter and cannot enter decision steps. The static labels and
 envelope contracts are recorded in [workflow versioning](workflow-versioning.md).
 Each slot may run once per generation. Repeating a slot is refused. Unbounded
@@ -279,3 +279,25 @@ The PostgreSQL suite uses isolated migrated databases and actual workflow
 journals. It covers mixed models, retained rich results and local derivation,
 pending pins, lost appends, evidence faults, routing authority, old patch
 snapshots, and child/sink deduplication.
+
+## Assessing observed text
+
+`Shikigami.Program.Decision.Initiative` registers `shikigami.initiative-assessment`
+under the alias `propose` (the `Propose` label). It differs from the other programs
+in two ways worth copying when a decision reads text nobody addressed to the agent.
+
+Its output selects by index. `AssessmentOutput` has no repository, principal,
+recipient, operation or URL field: the model chooses a position in the repository
+list and evidence list it was handed and an action class from the permitted list, and
+`validateAssessment`, the only minter of the sealed `Assessment`, looks the repository
+up from the operator's list. A planted instruction therefore has nothing to steer
+except a bounded choice among operator-supplied options. A result validator cannot
+see its input, so the choice rules run in the Flow and a bad answer is a recorded
+refusal rather than a failed run.
+
+Its slot is root-accounted. `decisionAccounting` returns `RootAccountedCall` for
+`Propose` and `UnaccountedCall` for every other label: each actual provider call
+reserves and settles an attempt on the run's enrolled resource root, a root that
+refuses stops the call before dispatch, and a run without a root refuses before the
+prepare step is journaled. Add a label to that total function when a new slot must pay
+for its calls; no existing slot changes behavior.

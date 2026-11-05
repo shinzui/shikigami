@@ -227,7 +227,7 @@ checkpoint runtime admission =
         }
 
 decisionEnv :: Runtime -> Admission -> Decision.DecisionEnv
-decisionEnv runtime admission = Decision.DecisionEnv admission.declaration adaptiveSlots runtime.decisions runtime.behavior.runtime admission.profile runtime.evidence runtime.routing admission.decisionLimits.timeout runtime.beforeStep runtime.afterStep
+decisionEnv runtime admission = Decision.DecisionEnv admission.declaration adaptiveSlots runtime.decisions runtime.behavior.runtime admission.profile runtime.evidence runtime.routing admission.decisionLimits.timeout Nothing runtime.beforeStep runtime.afterStep
 
 decisionHost :: Runtime -> Admission -> Decision.AcceptedDecisionHost
 decisionHost runtime admission = Decision.AcceptedDecisionHost runtime.execution admission.run.identity $ \prepared parameters ->

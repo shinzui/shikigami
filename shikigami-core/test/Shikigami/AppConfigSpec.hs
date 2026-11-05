@@ -1012,7 +1012,8 @@ initiativeConfigurationTests =
             initiativeDocument (Text.replace "\"window\":3600" "\"window\":0" allowanceFields),
             initiativeDocument (Text.replace "\"proposalExpiry\":86400" "\"proposalExpiry\":0" allowanceFields),
             initiativeDocument (Text.replace "\"evaluationsPerWindow\":10" "\"evaluationsPerWindow\":0" allowanceFields),
-            initiativeDocument (Text.replace "\"ModelAttempts\"" "\"Tokens\"" allowanceFields),
+            initiativeDocument (Text.replace "\"ModelAttempts\":1," "" allowanceFields),
+            initiativeDocument (Text.replace "\"CostMicroUsd\":\"unbounded\"" "\"CostMicroUsd\":9" allowanceFields),
             initiativeDocument (Text.replace "\"sources\":[\"chat-fixture\"]" "\"sources\":[]" allowanceFields),
             initiativeDocument (Text.replace "agent_proposer" "proposer" allowanceFields)
           ]
@@ -1022,7 +1023,7 @@ initiativeConfigurationTests =
     initiativeDocument fields = "{\"observers\":[{" <> fields <> "}]}"
     allowanceFields :: Text
     allowanceFields =
-      "\"principal\":\"agent_proposer\",\"sources\":[\"chat-fixture\"],\"minimumExcerptLength\":5,\"evaluation\":{\"limits\":{\"ModelAttempts\":1},\"cutoff\":3600},\"evaluationsPerWindow\":10,\"proposalsPerWindow\":5,\"notificationsPerWindow\":5,\"window\":3600,\"proposalExpiry\":86400,\"rejectionSuppression\":604800,\"notices\":{\"kizashiRecipient\":\"recipient_ops\"}"
+      "\"principal\":\"agent_proposer\",\"sources\":[\"chat-fixture\"],\"minimumExcerptLength\":5,\"evaluation\":{\"limits\":{\"ActiveWork\":1,\"ModelAttempts\":1,\"Tokens\":\"unbounded\",\"CostMicroUsd\":\"unbounded\"},\"cutoff\":3600},\"evaluationsPerWindow\":10,\"proposalsPerWindow\":5,\"notificationsPerWindow\":5,\"window\":3600,\"proposalExpiry\":86400,\"rejectionSuppression\":604800,\"notices\":{\"kizashiRecipient\":\"recipient_ops\"}"
 
 objectiveConfigurationTests :: TestTree
 objectiveConfigurationTests =
