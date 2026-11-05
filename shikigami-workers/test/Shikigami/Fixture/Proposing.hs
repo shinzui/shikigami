@@ -7,11 +7,14 @@
 module Shikigami.Fixture.Proposing
   ( Proposing (..),
     Ask (..),
-    Options (..),
     defaultOptions,
     withProposing,
     deliver,
     deliverBy,
+    deliverLifted,
+    sql,
+    cancelObjective,
+    Options (..),
     drain,
     settle,
     approve,
@@ -55,6 +58,7 @@ import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as Text
+import Data.Text.Encoding qualified as Text.Encoding
 import Data.Time (NominalDiffTime, UTCTime (..), addUTCTime, fromGregorian, getCurrentTime)
 import Data.Vector qualified as Vector
 import Hasql.Decoders qualified as D
@@ -97,6 +101,7 @@ import Shikigami.Decision.ModelCatalog
 import Shikigami.Decision.StubProvider (decisionStubProvider)
 import Shikigami.Directory qualified as Directory
 import Shikigami.Duration (Duration, durationTime, parseDuration, remainingDuration)
+import Shikigami.Execution.Identity (parseOperationId)
 import Shikigami.Execution.Policy.Types (defaultHarnessPolicy)
 import Shikigami.Flow.Decision qualified as Decision
 import Shikigami.Flow.Initiative qualified as FlowInitiative
@@ -106,6 +111,8 @@ import Shikigami.Initiative.Settings (InitiativeSettings)
 import Shikigami.Initiative.Types (ActionClass (..), SourceKind (..))
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
+import Shikigami.Objective.Capability qualified as Owner
+import Shikigami.Objective.Command qualified as Command
 import Shikigami.Objective.Runtime qualified as Objectives
 import Shikigami.Objective.Types qualified as Objective
 import Shikigami.PracticeReview.Capability qualified as Practice
@@ -117,7 +124,7 @@ import Shikigami.Sink.Config
 import Shikigami.Sink.Http (HttpLimits (..), SinkHttp, credentialsFromConfig, newSinkHttp)
 import Shikigami.Trigger.Consumer (RecordDisposition, processDecodedActivityObserving)
 import Shikigami.Trigger.Enqueue (ensureRunQueue, runQueueName)
-import Shikigami.Trigger.Stream (IncludeAgentActors (ExcludeAgentActors))
+import Shikigami.Trigger.Stream (IncludeAgentActors (ExcludeAgentActors, IncludeAgentActors))
 import Test.Tasty.HUnit (assertFailure)
 
 -- | One ask the notifier was handed, with the deadline its timer was armed at.
@@ -159,7 +166,10 @@ data Proposing = Proposing
     coordinator :: !AgentDecl,
     objectiveRuntime :: !Objectives.ObjectiveRuntime,
     calls :: !(IO Int),
-    asks :: !(IO [Ask])
+    asks :: !(IO [Ask]),
+    -- | Every bounded tag the metric hooks saw, as (instrument, tag).
+    hooksSeen :: !(IO [(Text, Text)]),
+    observe :: !((Text, Text) -> IO ())
   }
 
 agentPrincipal :: AgentPrincipal
@@ -220,6 +230,7 @@ withProposing fixture options use = withShikigamiFreshDatabase fixture \connecti
     coordinatorDeclaration <- either (assertFailure . show) pure =<< loadAgent "../agents/proof/adaptive-delivery.dhall"
     counted <- newIORef (0 :: Int)
     recorded <- newIORef []
+    seen <- newIORef []
     directory <-
       Directory.newDirectoryHandle
         ( Directory.staticDirectorySource
@@ -245,7 +256,7 @@ withProposing fixture options use = withShikigamiFreshDatabase fixture \connecti
             & #agentCreation .~ [agentPrincipal | options.creationGranted]
         objectiveRuntime = Objectives.ObjectiveRuntime env objectiveSettings directory allowAllActionAuthorizerForTests Nothing
         coordinator = coordinatorDeclaration & #identity .~ Just (IdentityDecl (declarationCoordinate "agent_shikigami_coordinator"))
-        deps = proposingDeps env behavior provider binding objectiveRuntime settings repositoryOptions [declaration, coordinator] http directory store.pool recorded
+        deps = proposingDeps env behavior provider binding objectiveRuntime settings repositoryOptions [declaration, coordinator] http directory store.pool recorded (\event -> modifyIORef' seen (event :))
         repositoryOptions = [FlowInitiative.RepositoryOption identifier "fixture repository" | identifier <- repositoryIds]
     _ <- either (assertFailure . show) pure =<< ensureRunQueue store.pool
     _ <- either (assertFailure . show) pure =<< runAppIO env Catalog.registerProjectionCatalog
@@ -260,7 +271,9 @@ withProposing fixture options use = withShikigamiFreshDatabase fixture \connecti
           coordinator,
           objectiveRuntime,
           calls = readIORef counted,
-          asks = reverse <$> readIORef recorded
+          asks = reverse <$> readIORef recorded,
+          hooksSeen = reverse <$> readIORef seen,
+          observe = \event -> modifyIORef' seen (event :)
         }
 
 -- | This module is compiled at -O0 because constructing this record here under
@@ -278,8 +291,9 @@ proposingDeps ::
   Directory.DirectoryHandle ->
   Pool.Pool ->
   IORef [Ask] ->
+  ((Text, Text) -> IO ()) ->
   Agent.AgentRunDeps
-proposingDeps env behavior provider binding objectiveRuntime settings repositoryOptions declarations http directory pool recorded =
+proposingDeps env behavior provider binding objectiveRuntime settings repositoryOptions declarations http directory pool recorded seen =
   Agent.AgentRunDeps
     { appEnv = env,
       behaviorEnv = behavior,
@@ -293,7 +307,13 @@ proposingDeps env behavior provider binding objectiveRuntime settings repository
         FlowInitiative.InitiativeSeed
           { settings = Just settings,
             repositories = repositoryOptions,
-            hooks = FlowInitiative.noInitiativeHooks
+            hooks =
+              FlowInitiative.InitiativeHooks
+                { onCandidate = \verdict reason -> seen ("candidate", verdict <> maybe "" (":" <>) reason),
+                  onProposal = \status -> seen ("proposal", status),
+                  onAdmission = \stage -> seen ("admission", stage),
+                  onRefusal = \kind -> seen ("refusal", kind)
+                }
           },
       agents = declarations,
       kizashi = KizashiConfig "http://localhost:1" (declarationCoordinate "recipient"),
@@ -392,12 +412,38 @@ installTerms fixture terms = do
   runAppIO fixture.env (Policy.installPolicy operator (policyContext fixture now) input)
     >>= either (assertFailure . show) (either (assertFailure . show) pure)
 
+sql :: Proposing -> Text -> IO ()
+sql fixture statement = runTx fixture (Tx.sql (Text.Encoding.encodeUtf8 statement))
+
+-- | Cancel through the objective owner, as the objective's creator.
+cancelObjective :: Proposing -> Objective.Objective -> IO ()
+cancelObjective fixture objective = do
+  key <- either (assertFailure . Text.unpack) pure (parseOperationId "fixture-cancel")
+  outcome <- Objectives.owned fixture.objectiveRuntime (Owner.executeCommand (Objectives.hostFor fixture.objectiveRuntime proposerIdentity) objective.objectiveId objective.revision key Command.CancelObjective)
+  either (assertFailure . show) (const (pure ())) outcome
+
 runTx :: Proposing -> Tx.Transaction value -> IO value
 runTx fixture transaction = runAppIO fixture.env (runTransaction transaction) >>= either (assertFailure . show) pure
 
 -- | Deliver one chat message through the stream consumer.
 deliver :: Proposing -> Text -> Text -> Text -> IO RecordDisposition
 deliver fixture activity subject = deliverBy fixture humanActor "fixture/chat" activity subject
+
+-- | Delivery with the feedback guard lifted, so an agent-authored message reaches
+-- the observer's adapter and is refused there.
+deliverLifted :: Proposing -> Actor -> Text -> Text -> Text -> Text -> IO RecordDisposition
+deliverLifted fixture actor source activity subject body =
+  processDecodedActivityObserving
+    Log.silentLogger
+    fixture.env
+    fixture.directory
+    (Just fixture.settings)
+    (\verdict reason -> fixture.observe ("candidate", verdict <> maybe "" (":" <>) reason))
+    IncludeAgentActors
+    [fixture.declaration]
+    (const (pure ()))
+    (chatEvent actor source activity subject body)
+    Nothing
 
 deliverBy :: Proposing -> Actor -> Text -> Text -> Text -> Text -> IO RecordDisposition
 deliverBy fixture actor source activity subject body =
@@ -406,6 +452,7 @@ deliverBy fixture actor source activity subject body =
     fixture.env
     fixture.directory
     (Just fixture.settings)
+    (\verdict reason -> fixture.observe ("candidate", verdict <> maybe "" (":" <>) reason))
     ExcludeAgentActors
     [fixture.declaration]
     (const (pure ()))

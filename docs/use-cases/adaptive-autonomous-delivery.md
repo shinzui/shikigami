@@ -52,6 +52,13 @@ features:
     acceptance: Restart within a multi-turn worker loop reuses committed outcomes and reconciles uncertain effects without resetting usage.
     jobs: [deliver-verified-outcome, recover-continuing-work]
     improvementRequests: [mori://shinzui/shikigami/okf/improvement-requests/concepts/IR-14]
+  - name: propose-unrequested-work
+    description: Observe activity under an allowance and propose actionable work through durable human acceptance, admitting bounded objectives only under an explicit, revocable standing policy.
+    status: delivered
+    owners: [mori://shinzui/shikigami]
+    acceptance: The nine IR-21 cases pass through real intake, queue, approval and admission, with planted instructions changing no scope, repository, recipient or authority.
+    jobs: [deliver-verified-outcome]
+    improvementRequests: [mori://shinzui/shikigami/okf/improvement-requests/concepts/IR-21]
   - name: continuing-worker-sessions
     description: Address workers across assignments, deliver follow-ups, consume progress events, and transfer ownership safely.
     status: in-progress

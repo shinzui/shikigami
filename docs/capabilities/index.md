@@ -37,4 +37,5 @@ okf_version: "0.2"
 - [Sanctioned execution profile pinning](sanctioned-execution-profiles.md) - Resolve an immutable execution policy before a run and retain its exact provider, model, and option constraints on replay.
 - [Typed agent declarations](typed-agent-declarations.md) - Load typed Dhall manifests with identity, behavior, triggers, sinks, memory, delegation, and overlay policy.
 - [Governed typed decisions in durable Flows](typed-flow-decisions.md) - Pin typed programs and admitted model aliases, journal validated outcomes, and retain actual-attempt evidence across retries and restart.
+- [Unrequested work proposals](unrequested-work-proposals.md) - Observe activity under an allowance, propose actionable work through durable human acceptance, and admit bounded objectives only under an explicit, revocable standing policy.
 - [Worker operations and telemetry](worker-operations-and-telemetry.md) - Operate supervised background roles with bounded recovery, configuration diagnostics, runtime inspection, and exported run metrics.

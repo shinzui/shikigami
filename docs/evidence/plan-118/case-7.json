@@ -1,0 +1,8 @@
+{
+    "proposalsWhileOpen": 1,
+    "skipWhileOpen": "already-owned",
+    "statusesAfterCancellation": [
+        "accepted",
+        "pending"
+    ]
+}

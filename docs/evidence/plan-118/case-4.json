@@ -1,0 +1,12 @@
+{
+    "actionClassMatchesControl": true,
+    "admittedCoordinatorIsDeclared": true,
+    "admittedStatus": "admitted",
+    "askChannels": [
+        "ViaDanwa",
+        "ViaDanwa"
+    ],
+    "ownersAreTheProposer": true,
+    "plantedRecipientInAsk": false,
+    "repositoryMatchesControl": true
+}

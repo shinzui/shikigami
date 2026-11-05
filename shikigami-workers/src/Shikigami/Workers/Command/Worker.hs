@@ -48,6 +48,7 @@ import Shikigami.Sink (DanwaConfig (..), GrantSource (DbGrants), KanmonConfig (.
 import Shikigami.Sink.Http (HttpLimits (..), SinkHttp, SinkHttpError, credentialsFromConfig, newSinkHttp)
 import Shikigami.Sink.Permission (sinkKindText)
 import Shikigami.Telemetry (withRunTelemetry)
+import Shikigami.Telemetry.Metrics (recordInitiativeAdmission, recordInitiativeCandidate, recordInitiativeProposal, recordInitiativeRefusal)
 import Shikigami.Workers.Config (WorkerEnv (..), directoryLoopRegistration, persistAgentLoadReport, schedulerSchedules, startProcessDirectory)
 import Shikigami.Workers.Registry (runWorkers)
 import Shikigami.Workspace.ConfiguredHost (configuredWorkspaceHostWithTransfers, configuredWorkspaceTransfers)
@@ -233,7 +234,13 @@ runWorkerCmdWith resumeBudget config = do
                         -- Identity only: a repository's source is a private locator
                         -- and must not reach a model provider.
                         repositories = [FlowInitiative.RepositoryOption entry.identity (repositoryIdText entry.identity) | entry <- maybe [] (.repositories) config.workspaceSettings],
-                        hooks = FlowInitiative.noInitiativeHooks
+                        hooks =
+                          FlowInitiative.InitiativeHooks
+                            { onCandidate = recordInitiativeCandidate shikigamiMetrics,
+                              onProposal = recordInitiativeProposal shikigamiMetrics,
+                              onAdmission = recordInitiativeAdmission shikigamiMetrics,
+                              onRefusal = recordInitiativeRefusal shikigamiMetrics
+                            }
                       },
                   trackers,
                   practiceReviewAttentionRecipients = (.practiceReviewAttentionRecipients) config

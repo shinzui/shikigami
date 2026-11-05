@@ -34,25 +34,25 @@ evidence:
 
 # Unrequested work proposals
 
-An agent with an observer allowance reads bounded excerpts from `activity.v1` through closed
-per-source adapters. A pure pre-filter records irrelevant messages as bounded skips inside the
-inbox transaction and starts nothing. A candidate gets its own resource root and one run,
-whose `propose-work` Flow checks for an existing owner and the attention windows, asks one
-typed decision whether the excerpt describes work, and records a proposal keyed by observer
-and source subject.
+## Provides
 
-By default the proposal parks on the durable approval child with its own expiry. Accepting
-creates one objective with a trusted link to its proposal and source. Rejecting or ignoring it
-suppresses the subject for a declared period. An operator can install a revocable standing
-policy under which a covered proposal is instead admitted: one funded, staffed objective with
-an independent coordinator run, ending at a reviewable artifact.
+An agent with an observer allowance reads bounded excerpts from `activity.v1` through closed per-source adapters. A pure pre-filter records irrelevant messages as bounded skips inside the inbox transaction and starts nothing. A candidate gets its own resource root and one run, whose `propose-work` Flow checks for an existing owner and the attention windows, asks one typed decision whether the excerpt describes work, and records a proposal keyed by observer and source subject.
 
-## Interface
+By default the proposal parks on the durable approval child with its own expiry. Accepting creates one objective with a trusted link to its proposal and source; rejecting or ignoring it suppresses the subject for a declared period. An operator can install a revocable standing policy under which a covered proposal is instead admitted: one funded, staffed objective with an independent coordinator run, ending at a reviewable artifact.
 
-`shikigami proposals` lists proposals, candidates and admissions, shows observer and policy
-usage with exhaustion explicit, prunes old skips, and installs, revokes and lists standing
-policies. See [Operating unrequested work](../operations/unrequested-work.md) and
-[Unrequested work](../user/unrequested-work.md).
+## Adopt
+
+Add an observer allowance, promote `agents/proof/proposer.dhall`, and follow [Operating unrequested work](../operations/unrequested-work.md). [Unrequested work](../user/unrequested-work.md) is what a person sees. `shikigami proposals` lists proposals, candidates and admissions, shows usage with exhaustion explicit, prunes old skips, and installs, revokes and lists standing policies.
+
+Builds on [CAP-2: Durable trigger intake](durable-trigger-intake.md) and [CAP-3: Program and Skill execution](program-and-skill-execution.md).
+
+## Evidence
+
+- [InitiativeAcceptanceSpec.hs](../../shikigami-workers/test/Shikigami/InitiativeAcceptanceSpec.hs): All nine IR-21 acceptance cases through real stream intake, run queue, approval resolution and admission.
+- [StreamInboxSpec.hs](../../shikigami-workers/test/Shikigami/StreamInboxSpec.hs): A skip or an evaluation root, candidate and job commit with the inbox row, and roll back together.
+- [InitiativeAssessmentSpec.hs](../../shikigami-core/test/Shikigami/InitiativeAssessmentSpec.hs): Model output selects only among operator-supplied options, and its schema has no authority-bearing field.
+- [InitiativePolicySpec.hs](../../shikigami-core/test-postgres/Shikigami/InitiativePolicySpec.hs): Install validation, fresh-read revocation, expiry, window and total exhaustion, and digest pinning.
+- [proposer.dhall](../../agents/proof/proposer.dhall): A stream-triggered proposer declaration.
 
 ## Limits
 

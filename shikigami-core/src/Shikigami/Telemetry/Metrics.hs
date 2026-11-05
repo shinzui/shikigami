@@ -15,6 +15,10 @@ module Shikigami.Telemetry.Metrics
     recordRunDeadLettered,
     recordQueueDepth,
     recordConsumerRecord,
+    recordInitiativeCandidate,
+    recordInitiativeProposal,
+    recordInitiativeAdmission,
+    recordInitiativeRefusal,
   )
 where
 
@@ -50,7 +54,11 @@ data ShikigamiMetrics = ShikigamiMetrics
     runsRetried :: !(Counter Int64),
     runsDeadLettered :: !(Counter Int64),
     queueDepth :: !(Gauge Int64),
-    consumerRecords :: !(Counter Int64)
+    consumerRecords :: !(Counter Int64),
+    initiativeCandidates :: !(Counter Int64),
+    initiativeProposals :: !(Counter Int64),
+    initiativeAdmissions :: !(Counter Int64),
+    initiativeRefusals :: !(Counter Int64)
   }
 
 -- | Instrumentation scope shared by every process. Process identity belongs in
@@ -74,7 +82,11 @@ newShikigamiMetrics meter = liftIO do
   runsDeadLettered <- counter "shikigami.runs.dead_lettered" "Failed run attempts sent to the dead-letter queue."
   queueDepth <- meterCreateGaugeInt64 meter "shikigami.queue.depth" (Just "{job}") (Just "Total run jobs queued or in flight.") defaultAdvisoryParameters
   consumerRecords <- counter "shikigami.consumer.records" "Kafka records delivered to a Shikigami processor."
-  pure ShikigamiMetrics {runsStarted, runsCompleted, runsFailed, runsRetried, runsDeadLettered, queueDepth, consumerRecords}
+  initiativeCandidates <- counter "shikigami.initiatives.candidates" "Observed activity recorded for an observer, by verdict."
+  initiativeProposals <- counter "shikigami.initiatives.proposals" "Unrequested proposals recorded or resolved, by status."
+  initiativeAdmissions <- counter "shikigami.initiatives.admissions" "Admission stages reached under standing policies."
+  initiativeRefusals <- counter "shikigami.initiatives.refusals" "Attention, creation and admission refusals, by kind."
+  pure ShikigamiMetrics {runsStarted, runsCompleted, runsFailed, runsRetried, runsDeadLettered, queueDepth, consumerRecords, initiativeCandidates, initiativeProposals, initiativeAdmissions, initiativeRefusals}
   where
     counter name description =
       meterCreateCounterInt64 meter name (Just "{run}") (Just description) defaultAdvisoryParameters
@@ -105,6 +117,24 @@ recordQueueDepth metrics value = liftIO (gaugeRecord ((.queueDepth) metrics) val
 recordConsumerRecord :: (MonadIO m) => ShikigamiMetrics -> Text -> m ()
 recordConsumerRecord metrics topic =
   liftIO (counterAdd ((.consumerRecords) metrics) 1 (attributes (attr "topic" topic)))
+
+-- | Closed tags only. No proposal, policy or activity identifier, excerpt or error
+-- text belongs on these instruments.
+recordInitiativeCandidate :: (MonadIO m) => ShikigamiMetrics -> Text -> Maybe Text -> m ()
+recordInitiativeCandidate metrics verdict reason =
+  liftIO (counterAdd metrics.initiativeCandidates 1 (attributes (attr "verdict" verdict <> maybe mempty (attr "skip.reason") reason)))
+
+recordInitiativeProposal :: (MonadIO m) => ShikigamiMetrics -> Text -> m ()
+recordInitiativeProposal metrics status =
+  liftIO (counterAdd metrics.initiativeProposals 1 (attributes (attr "status" status)))
+
+recordInitiativeAdmission :: (MonadIO m) => ShikigamiMetrics -> Text -> m ()
+recordInitiativeAdmission metrics stage =
+  liftIO (counterAdd metrics.initiativeAdmissions 1 (attributes (attr "stage" stage)))
+
+recordInitiativeRefusal :: (MonadIO m) => ShikigamiMetrics -> Text -> m ()
+recordInitiativeRefusal metrics kind =
+  liftIO (counterAdd metrics.initiativeRefusals 1 (attributes (attr "refusal.kind" kind)))
 
 recordRun :: (MonadIO m) => Counter Int64 -> Text -> Text -> Maybe Text -> m ()
 recordRun instrument agent trigger outcome =

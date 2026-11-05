@@ -16,6 +16,11 @@ provenance:
       at: 2026-11-05T00:54:00Z
       mode: "implement"
       note: "Started implementation; EP-1 in progress"
+    - model: "claude-opus-5-5"
+      harness: "claude-code"
+      at: 2026-11-05T03:08:20Z
+      mode: "implement"
+      note: "All five children implemented; IR-21 completed"
 ---
 
 # Propose unrequested work from observed activity under governed standing policies
@@ -55,7 +60,7 @@ Cross-plan decisions that deserve ADRs during implementation: observed content i
 | EP-2 | Assess candidates with a registered typed decision whose output cannot select repository, authority or recipient | [docs/plans/115-assess-candidates-with-a-registered-typed-decision-whose-output-cannot-select-repository-authority-or-recipient.md](../plans/115-assess-candidates-with-a-registered-typed-decision-whose-output-cannot-select-repository-authority-or-recipient.md) | EP-1 M1 (the `Shikigami.Initiative.Types` vocabulary) | MasterPlan 19 plan 111 (shared root-accounted decision mechanism) | Complete |
 | EP-3 | Propose work through a stream-triggered Flow with durable human acceptance and trusted origin links | [docs/plans/116-propose-work-through-a-stream-triggered-flow-with-durable-human-acceptance-and-trusted-origin-links.md](../plans/116-propose-work-through-a-stream-triggered-flow-with-durable-human-acceptance-and-trusted-origin-links.md) | EP-1, EP-2 | None | Complete |
 | EP-4 | Admit bounded objectives autonomously under explicit, revocable standing policies | [docs/plans/117-admit-bounded-objectives-autonomously-under-explicit-revocable-standing-policies.md](../plans/117-admit-bounded-objectives-autonomously-under-explicit-revocable-standing-policies.md) | EP-1; EP-3 for M3 (the admission branch of the Flow) | None | Complete |
-| EP-5 | Make proposals observable to operators and qualify IR-21 | [docs/plans/118-make-proposals-observable-to-operators-and-qualify-ir-21.md](../plans/118-make-proposals-observable-to-operators-and-qualify-ir-21.md) | EP-4 | External plan 86 fixture (`tests/workspace/prototype`) for an optional native trial of one admitted objective | In Progress |
+| EP-5 | Make proposals observable to operators and qualify IR-21 | [docs/plans/118-make-proposals-observable-to-operators-and-qualify-ir-21.md](../plans/118-make-proposals-observable-to-operators-and-qualify-ir-21.md) | EP-4 | External plan 86 fixture (`tests/workspace/prototype`) for an optional native trial of one admitted objective | Complete |
 
 Status values: Not Started, In Progress, Complete, Cancelled. EP numbers identify rows here; the linked ExecPlan file ids are 114–118. A whole-child reference is a start gate: that child must be Complete before the dependent child begins. EP-2's hard dependency is EP-1 milestone 1 only: the vocabulary module with its closed sums, checked values and identities, which EP-2's input and validator consume; EP-2 may begin as soon as that milestone is accepted and does not wait for the ledger or the intake change. EP-4's milestones 1 and 2 (the policy types, store, validator and operator commands) depend on EP-1 as a whole; its milestone 3 (the admission branch inside the Flow, declared behind its own patch) depends on EP-3 being Complete. EP-2's soft dependency on MasterPlan 19's plan 111 is a coordination rule, not a gate: whichever of the two lands first implements the root-accounted decision mechanism described under Integration Points, and the other reuses it. EP-5's external soft dependency is optional: the deterministic PostgreSQL and worker suites are the required acceptance, and a native Linux trial of one admitted objective through plan 86's fixture is additional evidence if the environment is available.
 
@@ -112,11 +117,11 @@ No child waits on MasterPlan 19, plan 86 or plan 87. EP-1 may begin immediately.
 
 ## Progress
 
-EP-1 through EP-4 are complete; EP-5 is in progress. Three cross-plan gates have their own acceptance beyond any single child:
+All five children are complete and IR-21 is completed. The three cross-plan gates:
 
 - [x] Early intake check (EP-1 M3): a fixture envelope for an observer agent commits one inbox row, one root origin, one root and one job in one transaction; an unrelated envelope commits one skip row and no job; a store failure after the root insert rolls everything back.
 - [x] Early planted-instruction check (EP-2 M1, repeated by EP-3 M3 and EP-4 M3): an excerpt that names another repository, another principal or a recipient produces an assessment with the policy's repository, no principal and no recipient, or a refusal.
-- [ ] Integrated IR-21 acceptance (EP-5): all nine acceptance cases pass through the real stream intake, run queue and approval resolution in the PostgreSQL and worker suites, and the request's lifecycle is set to completed with evidence under `docs/evidence/plan-118/`.
+- [x] Integrated IR-21 acceptance (EP-5): all nine acceptance cases pass through the real stream intake, run queue and approval resolution in the PostgreSQL and worker suites, and the request's lifecycle is set to completed with evidence under `docs/evidence/plan-118/`.
 
 
 ## Surprises & Discoveries
@@ -166,4 +171,10 @@ EP-1 through EP-4 are complete; EP-5 is in progress. Three cross-plan gates have
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Delivered. An operator declares an observer with an allowance. A matching message either leaves one bounded skip or one root, candidate row and job, committed with the inbox row. A run asks one typed decision whose output can only select among what the operator supplied, and records a proposal keyed by observer and subject. By default a person answers; only a standing policy admits a proposal without one, as one funded, staffed objective with an independent coordinator run that stops at a reviewable artifact. All nine IR-21 acceptance cases pass through the real intake, queue, approval and admission paths. ADRs [0112](../adr/0112-observed-content-is-evidence-and-never-instruction.md), [0113](../adr/0113-unrequested-proposals-park-on-the-approval-child-keyed-by-observer-and-subject.md), [0114](../adr/0114-standing-policies-are-revocable-durable-grants-and-admission-funds-an-independent-coordinator-run.md) and [0115](../adr/0115-evaluation-spend-is-a-root-enrolled-at-the-trigger-and-accounted-slots-refuse-without-one.md) record the durable decisions.
+
+Open risks. FRIC-60 is unresolved: constructing `AgentRunDeps` by a record literal under optimization crashed the collector in the test fixture, with FRIC-13's signature, and the trigger is not established. The fixture and `Shikigami.Workers.Config` are `-O0`, the latter as an unproven precaution, and no test exercises the production construction. It stays `logged` for a decision. The evaluation runs against the stub provider only; no real model, real channel or native admitted-objective trial has run. Assessment reads one message with no thread history, so its quality on real conversations is unknown.
+
+What the plans got wrong, and what caught it: the admission plan omitted registering the coordinator run's objective association, found by a test that drained the coordinator; the plan's evaluation envelope rule accepted envelopes that refuse every call; `ActiveWork` was treated as spendable; and counting verdicts would have freed an evaluation slot after every not-actionable answer. Each is recorded in its child.
+
+Recurring friction: full suites cannot run together and workspace Git cases race under parallelism (FRIC-59, recurring FRIC-2, FRIC-5, FRIC-17 and FRIC-51). One case, `accepted integration combines two retained worker artifacts`, failed at two threads in every full run and passes serially with its whole group. MasterPlan 19 can reuse `decisionAccounting` by adding its label.

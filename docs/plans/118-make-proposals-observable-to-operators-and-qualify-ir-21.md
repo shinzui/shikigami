@@ -11,6 +11,12 @@ provenance:
     model: "claude-fable-5-1"
     harness: "claude-code"
     at: 2026-11-04T18:38:36Z
+  revisions:
+    - model: "claude-opus-5-5"
+      harness: "claude-code"
+      at: 2026-11-05T02:54:04Z
+      mode: "implement"
+      note: "Implementing readers, metrics, guides and the integrated acceptance"
 ---
 
 # Make proposals observable to operators and qualify IR-21
@@ -30,14 +36,16 @@ You can see it working with the worker and PostgreSQL suites running and then `c
 
 ## Progress
 
-- [ ] Milestone 1: Bounded ledger readers, the inspection views and the `shikigami proposals` read verbs exist; `inspect` shows exhausted observers and policies explicitly and `prune` removes only skip rows older than a given instant.
-- [ ] Milestone 2: Metrics for candidates, proposals, admissions and refusals are recorded through the `Initiative` hooks and exported; the operations guide, user guide, capability record and use case are written and the catalogs validate.
-- [ ] Milestone 3: The integrated acceptance runner proves all nine IR-21 cases with evidence under `docs/evidence/plan-118/`; IR-21 is marked completed and MasterPlan 20's registry and retrospective are updated.
+- [x] Milestone 1: Bounded ledger readers, the inspection views and the `shikigami proposals` read verbs exist; `inspect` shows exhausted observers and policies explicitly and `prune` removes only skip rows older than a given instant. Completed 2026-11-04: InitiativeInspection group and option parsing pass; proposals list, inspect, candidates, admissions and prune exist; prune removes only terminal skips.
+- [x] Milestone 2: Metrics for candidates, proposals, admissions and refusals are recorded through the `Initiative` hooks and exported; the operations guide, user guide, capability record and use case are written and the catalogs validate. Completed 2026-11-04: Four instruments export in TelemetrySpec and are installed through the hooks and the consumer; capability, use-case, user and improvement-request bundles validate.
+- [x] Milestone 3: The integrated acceptance runner proves all nine IR-21 cases with evidence under `docs/evidence/plan-118/`; IR-21 is marked completed and MasterPlan 20's registry and retrospective are updated. Completed 2026-11-04: InitiativeAcceptance passes all nine cases (11 tests) with measured evidence under docs/evidence/plan-118/; IR-21 is completed.
 
 
 ## Surprises & Discoveries
 
-(None yet.)
+- `docs/user/adaptive-delivery.md` had no frontmatter, so the user bundle was already failing validation. It now has a handle and the fields the profile requires.
+- A first draft of the acceptance runner wrote hard-coded `true` values into its evidence, including revocation facts in a case that performed no revocation. Every field is now measured from the run, and case 8 and case 9 each write a second file for their second scenario.
+- The Flow reports candidates it skips and proposes while the consumer reports `evaluating` and intake skips, so one candidate counts once under each verdict rather than twice under `evaluating`.
 
 
 ## Decision Log
@@ -49,7 +57,9 @@ You can see it working with the worker and PostgreSQL suites running and then `c
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Complete. Operators can page proposals, candidates and admissions, see exhaustion as an explicit state and a nonzero exit, and read four bounded metrics. All nine IR-21 cases pass through the real path with evidence under `docs/evidence/plan-118/`.
+
+Not established, and stated in `acceptance.md`: no trial against a real model or channel, and the optional native trial of an admitted objective was not run. `--fail-when-exhausted` is covered through `anyExhausted` and option parsing rather than by running the binary. The census counts in `docs/capabilities-coverage.md` were not recomputed; a dated section names the additions.
 
 
 ## Context and Orientation

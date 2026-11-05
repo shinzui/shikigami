@@ -102,7 +102,7 @@ import Shikigami.Integration.ConsumerRuntime (consumerAppConfig, withConsumerApp
 import Shikigami.Integration.Danwa qualified as Danwa
 import Shikigami.Log qualified as Log
 import Shikigami.Prelude hiding ((.=))
-import Shikigami.Telemetry.Metrics (ShikigamiMetrics, recordConsumerRecord)
+import Shikigami.Telemetry.Metrics (ShikigamiMetrics, recordConsumerRecord, recordInitiativeCandidate)
 import Shikigami.Trigger.Enqueue (enqueueRunJobTx, envelopeOccurredAt, integrationRunKey, runJobFromEnvelopeWithIdentity)
 import Shikigami.Trigger.Stream (IncludeAgentActors, matchesStreamWith)
 
@@ -183,7 +183,7 @@ type OnSupervisor = Maybe (Shibuya.Master, Shibuya.ProcessorId) -> IO ()
 -- | Subscribe to @activity.v1@ through the serial Shibuya Kafka adapter.
 subscribeActivityStream :: Log.Logger -> OnSupervisor -> ShikigamiMetrics -> AppEnv -> Directory.DirectoryHandle -> Maybe InitiativeSettings -> StreamConfig -> IncludeAgentActors -> [AgentDecl] -> (StreamHit -> IO ()) -> IO ()
 subscribeActivityStream logger onSupervisor metrics appEnv directory initiatives config@StreamConfig {deadLetterQueue} include agents onHit =
-  runSubscription logger onSupervisor "stream" metrics appEnv config $ processActivityRecordWithDirectory logger appEnv directory initiatives deadLetterQueue include agents onHit
+  runSubscription logger onSupervisor "stream" metrics appEnv config $ processActivityRecordWithDirectory logger appEnv directory initiatives (recordInitiativeCandidate metrics) deadLetterQueue include agents onHit
 
 -- | Subscribe to a public integration-event topic through the same durable
 -- acknowledgement boundary.
@@ -335,26 +335,27 @@ processActivityRecord ::
   KafkaInboundRecord ->
   IO RecordDisposition
 processActivityRecord logger appEnv =
-  processActivityRecordWithDirectory logger appEnv Directory.disabledDirectoryHandle Nothing
+  processActivityRecordWithDirectory logger appEnv Directory.disabledDirectoryHandle Nothing (\_ _ -> pure ())
 
 processActivityRecordWithDirectory ::
   Log.Logger ->
   AppEnv ->
   Directory.DirectoryHandle ->
   Maybe InitiativeSettings ->
+  (Text -> Maybe Text -> IO ()) ->
   QueueName ->
   IncludeAgentActors ->
   [AgentDecl] ->
   (StreamHit -> IO ()) ->
   KafkaInboundRecord ->
   IO RecordDisposition
-processActivityRecordWithDirectory logger appEnv directory initiatives queue include agents onHit record =
+processActivityRecordWithDirectory logger appEnv directory initiatives onObservation queue include agents onHit record =
   case integrationEventFromKafka record of
     Left err -> persistPoison appEnv queue record (Text.pack (show err))
     Right (event, delivery) ->
       case decodeJsonIntegrationEvent event of
         Left err -> persistPoison appEnv queue record (Text.pack (show err))
-        Right activity -> processActivity logger appEnv directory initiatives include agents onHit event (Just delivery) activity
+        Right activity -> processActivity logger appEnv directory initiatives onObservation include agents onHit event (Just delivery) activity
 
 -- | Process one raw public integration-event delivery.
 processIntegrationEventRecord ::
@@ -410,7 +411,7 @@ processDecodedActivityWithDirectory ::
   Maybe KafkaDeliveryRef ->
   IO RecordDisposition
 processDecodedActivityWithDirectory logger appEnv directory =
-  processDecodedActivityObserving logger appEnv directory Nothing
+  processDecodedActivityObserving logger appEnv directory Nothing (\_ _ -> pure ())
 
 -- | The broker-free entry point with observer allowances in force.
 processDecodedActivityObserving ::
@@ -418,16 +419,17 @@ processDecodedActivityObserving ::
   AppEnv ->
   Directory.DirectoryHandle ->
   Maybe InitiativeSettings ->
+  (Text -> Maybe Text -> IO ()) ->
   IncludeAgentActors ->
   [AgentDecl] ->
   (StreamHit -> IO ()) ->
   IntegrationEvent ->
   Maybe KafkaDeliveryRef ->
   IO RecordDisposition
-processDecodedActivityObserving logger appEnv directory initiatives include agents onHit event kafka =
+processDecodedActivityObserving logger appEnv directory initiatives onObservation include agents onHit event kafka =
   case decodeJsonIntegrationEvent event of
     Left err -> pure (TransientFailure (Text.pack (show err)))
-    Right activity -> processActivity logger appEnv directory initiatives include agents onHit event kafka activity
+    Right activity -> processActivity logger appEnv directory initiatives onObservation include agents onHit event kafka activity
 
 -- | When the envelope says it happened, or this moment plus a line saying the
 -- envelope did not say.
@@ -457,6 +459,7 @@ processActivity ::
   AppEnv ->
   Directory.DirectoryHandle ->
   Maybe InitiativeSettings ->
+  (Text -> Maybe Text -> IO ()) ->
   IncludeAgentActors ->
   [AgentDecl] ->
   (StreamHit -> IO ()) ->
@@ -464,7 +467,7 @@ processActivity ::
   Maybe KafkaDeliveryRef ->
   ActivityEnvelope ->
   IO RecordDisposition
-processActivity logger appEnv directory initiatives include agents onHit event kafka activity = do
+processActivity logger appEnv directory initiatives onObservation include agents onHit event kafka activity = do
   -- Resolved before the transaction opens, because deciding it may need a clock
   -- and a log line and the handler runs inside Hasql.
   resolvedOccurredAt <- resolveOccurredAt logger activity
@@ -476,7 +479,7 @@ processActivity logger appEnv directory initiatives include agents onHit event k
         runInboxTransaction Nothing PreferIntegrationMessageId event kafka (inboxHandler prepared)
   case attempt of
     Left storeStartupError -> pure (TransientFailure (Text.pack (show storeStartupError)))
-    Right result -> classifyInboxResult event (reportCommitted logger "stream" onHit) result
+    Right result -> classifyInboxResult event (reportCommitted logger "stream" onObservation onHit) result
 
 -- | Broker-free transactional entry point for public integration events.
 processDecodedIntegrationEvent ::
@@ -522,7 +525,7 @@ processIntegrationEvent logger appEnv directory agents onHit event kafka payload
         runInboxTransaction Nothing PreferIntegrationMessageId event kafka (eventInboxHandler prepared)
   case attempt of
     Left storeStartupError -> pure (TransientFailure (Text.pack (show storeStartupError)))
-    Right result -> classifyInboxResult event (reportCommitted logger "events" onHit) result
+    Right result -> classifyInboxResult event (reportCommitted logger "events" (\_ _ -> pure ()) onHit) result
 
 classifyInboxResult ::
   (Show storeError, Show inboxError) =>
@@ -624,6 +627,8 @@ data CommittedTrigger hit
   = EnqueuedTrigger !hit
   | SkippedTrigger !RunSkip
   | SkippedObservation !Text !Text
+  | -- | A candidate's root, row and job committed with the inbox row.
+    EvaluatingObservation !hit
   | -- | The observer already holds a row for this activity, delivered under
     -- another message id: the run it funded is already owned.
     AlreadyObserved
@@ -769,13 +774,17 @@ commitTrigger = \case
             Right allocated -> do
               Ledger.recordCandidateTx candidate workflow receivedAt
               _ <- enqueueRunJobTx (job & #executionRootId .~ Just allocated)
-              pure (handled (EnqueuedTrigger hit))
+              pure (handled (EvaluatingObservation hit))
 
-reportCommitted :: Log.Logger -> Text -> (hit -> IO ()) -> CommittedTrigger hit -> IO ()
-reportCommitted logger prefix onHit = \case
+reportCommitted :: Log.Logger -> Text -> (Text -> Maybe Text -> IO ()) -> (hit -> IO ()) -> CommittedTrigger hit -> IO ()
+reportCommitted logger prefix onObservation onHit = \case
   EnqueuedTrigger hit -> onHit hit
   AlreadyObserved -> pure ()
-  SkippedObservation agentName reason ->
+  EvaluatingObservation hit -> do
+    onObservation "evaluating" Nothing
+    onHit hit
+  SkippedObservation agentName reason -> do
+    onObservation "skipped" (Just reason)
     Log.logInfo logger "initiative.skip" ["agent" .= agentName, "reason" .= reason]
   SkippedTrigger RunSkip {agentName, principalId, detail, reason, idempotencyKey} ->
     Log.logInfo

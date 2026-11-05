@@ -23,7 +23,7 @@ import Shikigami.Initiative.Settings (InitiativeSettings (..))
 import Shikigami.Initiative.Types hiding (AgentActor)
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Test.Tasty (TestTree, testGroup)
-import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
+import Test.Tasty.HUnit (assertFailure, testCase, (@?=))
 
 tests :: DatabaseFixture -> TestTree
 tests fixture =
@@ -62,12 +62,11 @@ tests fixture =
         run env (pruneCandidatesBefore (addUTCTime 50 t0) 10) >>= (@?= 1)
         remaining <- run env (listCandidates observer Nothing Nothing 10)
         sort (map (.activity) remaining) @?= ["evaluating", "skip-late"],
-      testCase "the proposal list filters by status and pages" $ withEnv fixture \env -> do
+      testCase "an empty ledger lists no proposals" $ withEnv fixture \env -> do
         run env (listProposals Nothing (Just "pending") Nothing 10) >>= \case
           Right rows -> rows @?= []
           Left problem -> assertFailure (show problem)
         run env countPendingProposals >>= (@?= 0)
-        assertBool "bounded page" True
     ]
   where
     inspected env configured =

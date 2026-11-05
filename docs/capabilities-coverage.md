@@ -228,3 +228,11 @@ execution, continuing-worker primitives and pure repository admission. Counts
 above now reflect all current Cabal public modules and fourteen command families.
 Plan 84 remains partial; the repository catalog does not deliver mutable workspaces.
 Objective persistence/API/CLI and full adaptive/recurring coordination remain planned.
+
+## November 4 additions
+
+CAP-31 covers unrequested work: the `Shikigami.Initiative.*` modules (`Types`, `Settings`,
+`Source`, `Prefilter`, `Intake`, `Ledger`, `Policy`, `Inspection`, `Notice`, `Template`),
+`Shikigami.Flow.Initiative`, `Shikigami.Program.Decision.Initiative`, and the `proposals`
+command family in `Shikigami.Server.Command.Proposals`. The counts at the top of this census
+were last computed on October 29 and do not include these.

@@ -1,0 +1,7 @@
+{
+    "skipDuringSuppression": "suppressed",
+    "statusesAfterSuppression": [
+        "rejected",
+        "pending"
+    ]
+}

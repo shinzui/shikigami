@@ -1,0 +1,6 @@
+{
+    "decisionCalls": 1,
+    "evaluationSkip": "evaluations-exhausted",
+    "inspectExhausted": true,
+    "refusalRecorded": true
+}

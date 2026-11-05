@@ -90,6 +90,10 @@ $ cabal run shikigami-consume-stream -- --agents agents --include-agent-actors
 See **[The Living Loop](./living-loop.md)** for how a digest *does* legitimately trigger a
 second agent.
 
+A stream agent can also observe rather than act on every match: see
+[Unrequested work](unrequested-work.md) for an agent that reads a channel under a budget and
+proposes what it notices.
+
 ## Event — addressed delivery
 
 ```dhall

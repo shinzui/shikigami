@@ -1,3 +1,14 @@
+---
+type: "Guide"
+title: "Finite adaptive delivery"
+description: "Run one objective through the compiled adaptive-delivery Flow with a finite resource root and cutoff."
+docId: "DOC-19"
+tags: ["objectives", "flows", "adaptive-delivery"]
+generated:
+  by: process:claude-code
+  at: 2026-11-04T18:45:00Z
+---
+
 # Finite adaptive delivery
 
 `adaptive-delivery` is a compiled Flow for one objective with a finite resource

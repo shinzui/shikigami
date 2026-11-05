@@ -1,0 +1,12 @@
+{
+    "admissionRefusal": {
+        "contents": "admissions-exhausted: 1",
+        "tag": "HumanPath"
+    },
+    "inspectExhausted": true,
+    "refusalRecorded": true,
+    "statuses": [
+        "admitted",
+        "pending"
+    ]
+}

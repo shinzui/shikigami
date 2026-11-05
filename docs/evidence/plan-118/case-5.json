@@ -1,0 +1,20 @@
+{
+    "asks": 0,
+    "jobsFromIntakeSkips": 0,
+    "outboxIntents": 0,
+    "proposals": 0,
+    "skips": [
+        {
+            "reason": "excerpt-too-short",
+            "verdict": "skipped"
+        },
+        {
+            "reason": "agent-actor",
+            "verdict": "skipped"
+        },
+        {
+            "reason": "not-actionable",
+            "verdict": "not-actionable"
+        }
+    ]
+}

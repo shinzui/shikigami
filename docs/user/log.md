@@ -1,5 +1,9 @@
 # Bundle Update Log
 
+## 2026-11-04
+* **Addition**: Add the unrequested-work guide for what a person sees when an agent proposes work nobody asked for.
+* **Correction**: Give the adaptive-delivery guide the frontmatter the profile requires, so the bundle validates.
+
 ## 2026-11-03
 * **Correction**: Document configured objective-backed coordination and shared process-backed supervisor requirements for CoordinatingSkill; remove obsolete absent-provider wording after plan 84 consumer acceptance.
 

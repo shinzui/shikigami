@@ -2,12 +2,13 @@
 type: Improvement Request
 title: Propose unrequested work from observed activity
 description: Let an agent notice actionable work nobody asked it to do and propose a governed objective, starting it only under an explicit, bounded and revocable standing policy.
-timestamp: "2026-11-04T18:45:00Z"
+timestamp: "2026-11-05T03:30:00Z"
 generated:
   by: process:claude-code
   at: "2026-11-04T04:09:59Z"
 requestId: IR-21
-status: accepted
+status: completed
+completedAt: "2026-11-05T03:30:00Z"
 targetPlan: docs/masterplans/20-propose-unrequested-work-from-observed-activity-under-governed-standing-policies.md
 origin: mori://shinzui/shikigami
 ---

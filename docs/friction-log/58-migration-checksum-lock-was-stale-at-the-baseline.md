@@ -6,13 +6,18 @@ generated:
   by: "claude-code/claude-opus-5-5"
   at: "2026-11-05T01:10:05Z"
 frictionId: FRIC-58
-status: logged
+status: "resolved"
 impact: slowdown
 kind: tooling
 origin: "mori://shinzui/shikigami"
 affects: "mori://shinzui/shikigami/plans/114-bound-observation-with-observer-allowances-source-adapters-a-deterministic-pre-filter-and-the-proposal-ledger"
 plan: "docs/plans/114-bound-observation-with-observer-allowances-source-adapters-a-deterministic-pre-filter-and-the-proposal-ledger.md"
 workaround: "regenerated the whole lock from the manifest; entries 0001-0037 were unchanged"
+resolution: "Regenerated the lock and expected schema from the manifest in this initiative; entries 0001 to 0037 were unchanged. new-migration still does not maintain the lock."
+amended:
+  - by: "claude-code/claude-opus-5-5"
+    at: "2026-11-05T02:59:26Z"
+    change: "Status set to resolved."
 ---
 # Migration checksum lock was stale at the baseline
 

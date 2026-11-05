@@ -1,0 +1,15 @@
+{
+    "admittedObjectiveStatus": "Open",
+    "admittedRevisionUnchanged": true,
+    "asksAfterRevocation": 1,
+    "objectivesAfterExpiry": 1,
+    "statusesAfterExpiry": [
+        "admitted",
+        "pending",
+        "pending"
+    ],
+    "statusesAfterRevocation": [
+        "admitted",
+        "pending"
+    ]
+}

@@ -1,0 +1,16 @@
+{
+    "decisionCalls": 1,
+    "externalLinks": 1,
+    "objectivesAfterAnswer": 1,
+    "objectivesBeforeAnswer": 0,
+    "status": "accepted",
+    "steps": [
+        "decision-prepare-propose",
+        "decision-result-propose",
+        "initiative-admit",
+        "initiative-open",
+        "initiative-proposal",
+        "initiative-resolve",
+        "objectives-initiative-accept"
+    ]
+}

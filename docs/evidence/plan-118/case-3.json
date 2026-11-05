@@ -1,0 +1,24 @@
+{
+    "admissionStage": "launched",
+    "asks": 0,
+    "assignmentState": "Pending",
+    "assignments": 1,
+    "outboxIntents": 1,
+    "rootMatchesPerObjectiveEnvelope": true,
+    "status": "admitted",
+    "steps": [
+        "decision-prepare-propose",
+        "decision-result-propose",
+        "emit-signal-initiative-admitted",
+        "initiative-admit",
+        "initiative-fund",
+        "initiative-launch",
+        "initiative-open",
+        "initiative-proposal",
+        "initiative-resolve",
+        "objectives-initiative-admit",
+        "objectives-initiative-grant",
+        "objectives-initiative-staff"
+    ],
+    "workspaceBindings": 0
+}

@@ -11,6 +11,7 @@ refinements; design text is not implementation evidence.
 | Understand packages and durable owners | [Package map](architecture/packages.md), [domain inventory](architecture/shikigami-domain-inventory.md) |
 | Configure and operate a deployment | [Configuration](operations/configuration.md), [operator commands](operations/operator-cli.md), [action authorization](operations/action-authorization.md) |
 | Recover Skill operations or inspect resource use | [Durable execution](operations/durable-execution.md), [resource accounting](operations/execution-resources.md), [Baikai execution](operations/baikai-execution.md) |
+| Let an agent propose work nobody asked for | [Operating unrequested work](operations/unrequested-work.md), [what a person sees](user/unrequested-work.md) |
 | Change durable code safely | [Workflow versioning](workflow-versioning.md), [typed-decision authoring](shikumi-flow-decisions.md) |
 | Choose the next delivery lane | [Roadmap](roadmap.md), [MasterPlans](masterplans/), [ExecPlans](plans/) |
 | Inspect adaptive delivery requirements | [Use case](use-cases/adaptive-autonomous-delivery.md), [theme](use-cases/themes/autonomous-work.md) |

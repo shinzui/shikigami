@@ -228,6 +228,7 @@ test-suite shikigami-workers-test
     Shikigami.Fixture.Proposing
     Shikigami.Health.SupervisionSpec
     Shikigami.Health.WorkerSpec
+    Shikigami.InitiativeAcceptanceSpec
     Shikigami.Inspection.ConsumerSpec
     Shikigami.Integration.ConsumerRuntimeSpec
     Shikigami.ObjectiveTrackerWorkerSpec
@@ -259,6 +260,7 @@ test-suite shikigami-workers-test
 
   build-depends:
     aeson,
+    aeson-pretty,
     async,
     baikai,
     base,

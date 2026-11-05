@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-11-04
+* **Addition**: CAP-31 documents proposing unrequested work from observed activity, with human acceptance by default and admission only under a revocable standing policy.
+
 ## 2026-11-03
 * **Correction**: Refresh the moved health Hurl and Health.SupervisionSpec evidence paths so capability validation reaches their current owning packages.
 * **Qualification**: Plan 84 completes continuing-worker consumer acceptance with 1703 passing package cases, 177 workflow conformance controls and nine focused Linux ownership/restart cases including original and duplicate operator recovery replies. Configure the real providers; adaptive/live coding/recurrence remain separate.

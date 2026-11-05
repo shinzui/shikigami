@@ -7,6 +7,7 @@ import Shikigami.AgentRun.StatusSpec qualified as StatusSpec
 import Shikigami.ExecutionCapacitySpec qualified as ExecutionCapacitySpec
 import Shikigami.Health.SupervisionSpec qualified as SupervisionSpec
 import Shikigami.Health.WorkerSpec qualified as HealthWorkerSpec
+import Shikigami.InitiativeAcceptanceSpec qualified as InitiativeAcceptanceSpec
 import Shikigami.Inspection.ConsumerSpec qualified as InspectionSpec
 import Shikigami.Integration.ConsumerRuntimeSpec qualified as ConsumerAppSpec
 import Shikigami.Migrations.TestSupport (withShikigamiMigratedSuite)
@@ -77,6 +78,7 @@ suite = do
               StreamInboxSpec.tests databaseFixture,
               ProposeWorkSpec.tests databaseFixture,
               AdmitProposalSpec.tests databaseFixture,
+              InitiativeAcceptanceSpec.tests databaseFixture,
               TimerRecoverySpec.tests databaseFixture,
               TelemetrySpec.tests,
               SupervisionSpec.tests

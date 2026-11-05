@@ -433,6 +433,23 @@ DLQ commands do not enforce this retention policy, and cleanup before
 reconciliation can erase the only evidence. See
 [ADR 0050](../adr/0050-run-status-reconciles-retained-dead-letters-through-the-released-read-api.md).
 
+## Proposals
+
+Read and govern unrequested work; see [Operating unrequested work](unrequested-work.md).
+Reads need the database. Installing or revoking a policy and pruning act as the configured
+local operator.
+
+```bash
+cabal run shikigami -- proposals inspect --json --fail-when-exhausted
+cabal run shikigami -- proposals list --status pending --limit 20 --json
+cabal run shikigami -- proposals candidates --principal agent_shikigami_proposer --json
+cabal run shikigami -- proposals admissions --json
+cabal run shikigami -- proposals policy install --file policy.json --json
+cabal run shikigami -- proposals policy list --json
+cabal run shikigami -- proposals policy revoke POLICY --expected-revision 0 --json
+cabal run shikigami -- proposals prune --before 2026-10-01T00:00:00Z --batch 1000 --json
+```
+
 ## Objectives
 
 Enable tracking explicitly and record a local operator identity:

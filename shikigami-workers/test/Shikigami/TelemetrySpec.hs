@@ -12,6 +12,10 @@ import OpenTelemetry.Resource (emptyMaterializedResources)
 import Shikigami.Telemetry.Metrics
   ( newShikigamiMetrics,
     recordConsumerRecord,
+    recordInitiativeAdmission,
+    recordInitiativeCandidate,
+    recordInitiativeProposal,
+    recordInitiativeRefusal,
     recordQueueDepth,
     recordRunCompleted,
     recordRunDeadLettered,
@@ -43,6 +47,10 @@ tests =
         recordRunDeadLettered metrics "heartbeat" "schedule"
         recordQueueDepth metrics 3
         recordConsumerRecord metrics "activity.v1"
+        recordInitiativeCandidate metrics "skipped" (Just "excerpt-too-short")
+        recordInitiativeProposal metrics "pending"
+        recordInitiativeAdmission metrics "launched"
+        recordInitiativeRefusal metrics "evaluations-exhausted"
 
         flushed <- Metric.forceFlushMeterProvider provider Nothing
         assertEqual "provider force-flush" Metric.FlushSuccess flushed
@@ -54,7 +62,11 @@ tests =
             "shikigami.runs.retried",
             "shikigami.runs.dead_lettered",
             "shikigami.queue.depth",
-            "shikigami.consumer.records"
+            "shikigami.consumer.records",
+            "shikigami.initiatives.candidates",
+            "shikigami.initiatives.proposals",
+            "shikigami.initiatives.admissions",
+            "shikigami.initiatives.refusals"
           ]
         void (Metric.shutdownMeterProvider provider Nothing),
       testCase "sampler failure does not suppress the independent sample" do

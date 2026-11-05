@@ -49,6 +49,9 @@ protected instructions, statements and result bodies. Follow `next` while the
 revision stays unchanged; restart paging after a revision change. History retains
 the original command actor and receipt, including after process restarts.
 
+An objective can also begin as an [unrequested proposal](unrequested-work.md) that a person
+accepted or a standing policy admitted. It links back to its proposal and observed source.
+
 ## Continue through a run or conversation
 
 An authorized caller can associate a run using the separate `objective` selector

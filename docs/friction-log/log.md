@@ -1,6 +1,9 @@
 # Bundle Update Log
 
 ## 2026-11-05
+* **Update**: FRIC-59 accepted: Status set to accepted.
+* **Update**: FRIC-58 resolved: Status set to resolved.
+* **Update**: FRIC-57 accepted: Status set to accepted.
 * **Addition**: FRIC-60 records detour tooling friction with https://www.haskell.org/ghc/: Constructing AgentRunDeps in an optimized test module crashes the collector
 * **Addition**: FRIC-59 records slowdown tooling friction with mori://shinzui/shikigami/plans/115-assess-candidates-with-a-registered-typed-decision-whose-output-cannot-select-repository-authority-or-recipient: Full test suites are not runnable together and git workspace cases race under parallelism
 * **Addition**: FRIC-58 records slowdown tooling friction with mori://shinzui/shikigami/plans/114-bound-observation-with-observer-allowances-source-adapters-a-deterministic-pre-filter-and-the-proposal-ledger: Migration checksum lock was stale at the baseline

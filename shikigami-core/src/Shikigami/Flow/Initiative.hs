@@ -176,11 +176,12 @@ failAdmission proposal kind detail = send (FailAdmission proposal kind detail)
 data InitiativeHooks = InitiativeHooks
   { onCandidate :: !(Text -> Maybe Text -> IO ()),
     onProposal :: !(Text -> IO ()),
+    onAdmission :: !(Text -> IO ()),
     onRefusal :: !(Text -> IO ())
   }
 
 noInitiativeHooks :: InitiativeHooks
-noInitiativeHooks = InitiativeHooks (\_ _ -> pure ()) (\_ -> pure ()) (\_ -> pure ())
+noInitiativeHooks = InitiativeHooks (\_ _ -> pure ()) (\_ -> pure ()) (\_ -> pure ()) (\_ -> pure ())
 
 -- | The process-lifetime half of the runtime. It never crosses a journal.
 data InitiativeSeed = InitiativeSeed
@@ -239,7 +240,7 @@ runInitiative runtime = interpret \_ -> \case
     step (StepName "initiative-skip") do
       let facts = candidateFacts opened.candidate
       runTransaction (Ledger.recordSkipTx facts.observer opened.at Nothing (Right (reason, facts.observed)))
-      liftIO (runtime.seed.hooks.onCandidate (verdictOf reason) (Just (skipReasonText reason)))
+      liftIO (reportSkip runtime reason)
   RecordProposal opened assessment ->
     step (StepName "initiative-proposal") (proposalStep runtime opened assessment)
   Resolve opened proposal resolution ->
@@ -249,14 +250,29 @@ runInitiative runtime = interpret \_ -> \case
   Fund _ proposal reservation objective ->
     step (StepName "initiative-fund") (fundStep runtime proposal reservation objective)
   Launch proposal funded ->
-    step (StepName "initiative-launch") (launchStep runtime proposal funded)
+    step (StepName "initiative-launch") do
+      launched <- launchStep runtime proposal funded
+      liftIO (either (const (pure ())) (const (runtime.seed.hooks.onAdmission "launched")) launched)
+      pure launched
   FailAdmission proposal kind detail ->
     step (StepName "initiative-admission-failed") do
       now <- liftIO getCurrentTime
-      liftIO (runtime.seed.hooks.onRefusal (refusalKindText kind))
+      liftIO do
+        runtime.seed.hooks.onRefusal (refusalKindText kind)
+        runtime.seed.hooks.onAdmission "refused"
       case parseProposalId proposal.proposalId of
         Left _ -> pure ()
         Right identifier -> runTransaction (Policy.recordAdmissionStage identifier (Policy.AdmissionFailed kind detail) now)
+
+-- | A full window is a visible refusal as well as a skip.
+reportSkip :: InitiativeRuntime -> SkipReason -> IO ()
+reportSkip runtime reason = do
+  runtime.seed.hooks.onCandidate (verdictOf reason) (Just (skipReasonText reason))
+  case reason of
+    EvaluationsExhausted -> runtime.seed.hooks.onRefusal (skipReasonText reason)
+    ProposalsExhausted -> runtime.seed.hooks.onRefusal (skipReasonText reason)
+    NotificationsExhausted -> runtime.seed.hooks.onRefusal (skipReasonText reason)
+    _ -> pure ()
 
 verdictOf :: SkipReason -> Text
 verdictOf = \case
@@ -293,8 +309,9 @@ openStep runtime = do
       Right allowance -> do
         result <- runTransaction (admitTx runtime allowance now)
         liftIO case result of
-          Left reason -> runtime.seed.hooks.onCandidate (verdictOf reason) (Just (skipReasonText reason))
-          Right _ -> runtime.seed.hooks.onCandidate "evaluating" Nothing
+          Left reason -> reportSkip runtime reason
+          -- The consumer reported this candidate as evaluating when it enqueued the run.
+          Right _ -> pure ()
         pure result
 
 -- | Pre-filter, then owner, then attention, in one transaction under the
@@ -473,7 +490,7 @@ proposalStep runtime opened assessment = do
                 Right (Just row) -> Right (proposalView row)
                 _ -> Left ProposalsExhausted
   liftIO case result of
-    Left reason -> runtime.seed.hooks.onCandidate (verdictOf reason) (Just (skipReasonText reason))
+    Left reason -> reportSkip runtime reason
     Right view -> do
       runtime.seed.hooks.onCandidate "proposed" Nothing
       runtime.seed.hooks.onProposal (proposalStatusTag view.status)
