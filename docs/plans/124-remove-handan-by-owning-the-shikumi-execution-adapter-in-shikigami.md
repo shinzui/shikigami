@@ -47,7 +47,7 @@ qualification work in [plan 80](80-configure-model-providers-and-agent-launches-
 
 
 - [x] M1 (2026-11-05): The shared local runtime executes complete and streaming decisions; all 19 governed runner cases and all 742 core pure tests pass, including complete/stream structured judgments, model selection, retries, terminal callbacks and cancellation.
-- [ ] M2: Registered behaviors use a minimal local task interface; source, component dependencies, the committed solve, and frozen packaging inputs no longer require Handan.
+- [x] M2 (2026-11-05): Registered behaviors use the local task interface; all behavior tests pass. The committed isolated project and regenerated production export contain no Handan package or source entry. Export: 382 packages, six repositories; only five exclusive packages and the Handan source pin disappear, with all retained package records unchanged.
 - [ ] M3: Behavioral regression, durable replay, workflow conformance, and immutable role builds pass, and current documentation describes direct Shikumi execution.
 
 Implementation baseline: `ef6e11b804b9738f65ad87fde05e4be7eec9dc19` on
@@ -60,7 +60,12 @@ tests, all 742 core pure tests, 50 qualification-tool tests, strict user-guide
 validation and Haskell conventions pass. The fresh isolated solve removes
 `handan-core`, `shikumi-eval`, `shikumi-trace-otel`, `tasty` and `tasty-golden`
 from the production closure with no added packages or remaining-version changes.
-The isolated build/suites, replay, workflow gate and role builds remain.
+The isolated all-components build and pure suites pass (742 core, 37 agent,
+107 server). The native workflow gate against `ef6e11b8` has no findings and
+reports `replay-neutral`. Serial PostgreSQL replay suites, heartbeat CLI and
+immutable role builds remain. Packaging inputs are exported from this exact
+isolated solve; committed-input role builds exclude the independent uncommitted
+Biscuit update while preserving it in the working tree.
 
 
 ## Surprises & Discoveries

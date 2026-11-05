@@ -1667,18 +1667,6 @@
       },
       "version": "0.3.3"
     },
-    "handan-core": {
-      "components": [
-        "lib"
-      ],
-      "flags": {},
-      "source": {
-        "repository": "shinzui/handan/8e98b0a955f908f70657c04f384b6286e4967422",
-        "subdir": "handan-core",
-        "type": "github"
-      },
-      "version": "0.1.0.0"
-    },
     "happy": {
       "components": [
         "exe:happy"
@@ -4219,19 +4207,6 @@
       },
       "version": "0.2.1.1"
     },
-    "shikumi-eval": {
-      "components": [
-        "lib"
-      ],
-      "flags": {},
-      "source": {
-        "hash": "sha256-vaF0ulRQ3Te/aYjTC5dRsDsseRoC8qtRH39ppzmnh98=",
-        "metadata_hash": "sha256-ssolzU27INpjgbM8zLGVRHWGZfecY4V9Y3ywHu7O8QY=",
-        "type": "hackage",
-        "url": "https://hackage.haskell.org/package/shikumi-eval-0.3.1.0/shikumi-eval-0.3.1.0.tar.gz"
-      },
-      "version": "0.3.1.0"
-    },
     "shikumi-tools": {
       "components": [
         "lib"
@@ -4257,19 +4232,6 @@
         "url": "https://hackage.haskell.org/package/shikumi-trace-0.3.2.0/shikumi-trace-0.3.2.0.tar.gz"
       },
       "version": "0.3.2.0"
-    },
-    "shikumi-trace-otel": {
-      "components": [
-        "lib"
-      ],
-      "flags": {},
-      "source": {
-        "hash": "sha256-iYBHjuCHmjxwDBzq0lyIM+PqmoXw8SpH+5LY55zQXjk=",
-        "metadata_hash": "sha256-MoyffoWYDjkA6r3CRkttG7qOQJsdMZryVg2M/1uiW+c=",
-        "type": "hackage",
-        "url": "https://hackage.haskell.org/package/shikumi-trace-otel-0.1.3.0/shikumi-trace-otel-0.1.3.0.tar.gz"
-      },
-      "version": "0.1.3.0"
     },
     "shomei-client": {
       "components": [
@@ -4519,36 +4481,6 @@
         "url": "https://hackage.haskell.org/package/tagged-0.8.10/tagged-0.8.10.tar.gz"
       },
       "version": "0.8.10"
-    },
-    "tasty": {
-      "components": [
-        "lib"
-      ],
-      "flags": {
-        "unix": true
-      },
-      "source": {
-        "hash": "sha256-x2EgFBvWHEQYs+1e/F/jCUGG1Hz+Ete+VSMgE59Sxsc=",
-        "metadata_hash": "sha256-IGXvOOBhVRx+Opl8Sk6sG2jb8FU8xhd/Acj3mC9M03U=",
-        "type": "hackage",
-        "url": "https://hackage.haskell.org/package/tasty-1.5.4/tasty-1.5.4.tar.gz"
-      },
-      "version": "1.5.4"
-    },
-    "tasty-golden": {
-      "components": [
-        "lib"
-      ],
-      "flags": {
-        "build-example": false
-      },
-      "source": {
-        "hash": "sha256-jzd/o6IXAMEPiJXgGrn+PbaqFiQp+K5Y/ADy05HXCrw=",
-        "metadata_hash": "sha256-vKe2a9wCONY+ghZJk/aE/XdRyVtnolMwiPZYhA40APo=",
-        "type": "hackage",
-        "url": "https://hackage.haskell.org/package/tasty-golden-2.3.6/tasty-golden-2.3.6.tar.gz"
-      },
-      "version": "2.3.6"
     },
     "template-haskell-compat-v0208": {
       "components": [
@@ -5353,13 +5285,6 @@
       "owner": "shinzui",
       "repo": "en",
       "rev": "51edaab17473f7b9310f8802ccffd23bac5e4a9e",
-      "type": "github"
-    },
-    "shinzui/handan/8e98b0a955f908f70657c04f384b6286e4967422": {
-      "narHash": "sha256-jIiLQS3S347iQM/BNAfpvedSJ3CNVZHXs6EKODi/pw8=",
-      "owner": "shinzui",
-      "repo": "handan",
-      "rev": "8e98b0a955f908f70657c04f384b6286e4967422",
       "type": "github"
     },
     "shinzui/kikan-en/16704290d527d413568bfa40c983f5c3604c35c8": {

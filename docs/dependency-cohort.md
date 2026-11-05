@@ -27,7 +27,9 @@ The real complete-call and durable queue/restart consumer checks pass; see
 Shikumi's released
 `mori://shinzui/shikumi/okf/improvement-requests/concepts/IR-5` implementation
 passes all 15 complete/stream application consumer checks. The frozen Nix
-export now contains 387 runtime packages and seven immutable repositories.
+export now contains 382 runtime packages and six immutable repositories after Plan 124
+removes Handan and its exclusive dependencies. All retained package records and
+source pins are unchanged by that removal.
 All five role attributes evaluate in a dry run; this candidate has not yet
 passed immutable role-package qualification. It is a source/build checkpoint,
 not completion of plan 80 or a new production qualification.
