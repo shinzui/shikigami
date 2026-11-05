@@ -30,9 +30,10 @@ passes all 15 complete/stream application consumer checks. The frozen Nix
 export now contains 382 runtime packages and six immutable repositories after Plan 124
 removes Handan and its exclusive dependencies. All retained package records and
 source pins are unchanged by that removal.
-All five role attributes evaluate in a dry run; this candidate has not yet
-passed immutable role-package qualification. It is a source/build checkpoint,
-not completion of plan 80 or a new production qualification.
+All five immutable native role attributes now build successfully under
+[Plan 124](plans/124-remove-handan-by-owning-the-shikumi-execution-adapter-in-shikigami.md).
+This is native packaging regression for the Handan removal; it does not complete
+Plan 80 or establish additional Linux, paid-provider or production qualification.
 
 ## Keiro 0.22 accepted macOS cohort — selected 2026-10-30
 

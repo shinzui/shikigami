@@ -48,26 +48,14 @@ qualification work in [plan 80](80-configure-model-providers-and-agent-launches-
 
 - [x] M1 (2026-11-05): The shared local runtime executes complete and streaming decisions; all 19 governed runner cases and all 742 core pure tests pass, including complete/stream structured judgments, model selection, retries, terminal callbacks and cancellation.
 - [x] M2 (2026-11-05): Registered behaviors use the local task interface; all behavior tests pass. The committed isolated project and regenerated production export contain no Handan package or source entry. Export: 382 packages, six repositories; only five exclusive packages and the Handan source pin disappear, with all retained package records unchanged.
-- [ ] M3: Behavioral regression, durable replay, workflow conformance, and immutable role builds pass, and current documentation describes direct Shikumi execution.
+- [x] M3 (2026-11-05): All 1,829 application tests, durable replay and accepted-execution accounting, final workflow conformance and all five immutable native role builds pass. Current guides and ADRs describe the local adapter; both implementation friction entries are triaged.
 
 Implementation baseline: `ef6e11b804b9738f65ad87fde05e4be7eec9dc19` on
-2026-11-05 (the planning inspection was `cc7433ec`). This is a standalone plan; it has no MasterPlan prerequisite. Reconcile
-concurrent edits to the decision runner and dependency cohort before proceeding.
-
-Source checkpoint: the shared local runtime, minimal task interface, dependency
-removal and ownership documentation are implemented. All 19 governed runner
-tests, all 742 core pure tests, 50 qualification-tool tests, strict user-guide
-validation and Haskell conventions pass. The fresh isolated solve removes
-`handan-core`, `shikumi-eval`, `shikumi-trace-otel`, `tasty` and `tasty-golden`
-from the production closure with no added packages or remaining-version changes.
-The isolated all-components build and pure suites pass (742 core, 37 agent,
-107 server). The native workflow gate against `ef6e11b8` has no findings and
-reports `replay-neutral`. Serial PostgreSQL suites pass: 604 core database cases and 339 worker cases.
-The heartbeat CLI returns its original digest and echoed payload. Only the five
-immutable role builds remain. Packaging inputs are exported from this exact
-isolated solve; committed-input role builds exclude the independent uncommitted
-Biscuit update while preserving it in the working tree.
-
+2026-11-05 (the planning inspection was `cc7433ec`). This standalone plan has no
+MasterPlan prerequisite. All milestones are complete. Immutable packaging uses
+the exact committed export at `ea5d930a14f1b8b6bc0d0106e705f3a9b043fbbe`;
+the independent Biscuit update is preserved outside these commits. Detailed
+acceptance evidence and the reproduction command are below.
 
 ## Surprises & Discoveries
 
@@ -114,7 +102,27 @@ actual semantic change proves necessary, revise this plan and apply
 ## Outcomes & Retrospective
 
 
-(To be filled during and after implementation.)
+Completed on 2026-11-05. Shikigami owns complete and streaming execution through
+one Shikumi interpreter composition and a small behavior-task interface. Runtime
+construction preserves the prior default model, provider registration and LLM
+policies; decision governance remains in the invocation-local provider wrappers.
+There are no Handan imports, component dependencies, committed project source
+stanza, active Mori declarations or exported production package/repository entries.
+The production export loses only the five exclusive packages and the Handan pin.
+
+All 1,829 application cases, heartbeat execution, workflow conformance and the
+five native immutable roles pass. Committed results still replay after executable
+programs and live bindings are removed, while actual internal calls retain their
+own evidence/accounting boundaries. No workflow label, patch, result codec or
+program commitment changed. ADRs 41, 43 and 45 retain these policy/replay decisions
+and describe the local adapter ownership. This completes this refactor; it does
+not complete Plan 80 or establish additional Linux/production qualification.
+
+FRIC-61 is accepted: the user confirmed the independent Biscuit update, which
+remains preserved outside these commits; isolated committed-source qualification
+keeps its changes distinct. FRIC-62 is resolved: both stale workspace prototype
+constructors now supply the existing disabled initiative seed, and the required
+all-components build passes.
 
 
 ## Context and Orientation
@@ -423,7 +431,18 @@ archive has 362 descriptors and omits all removed Hackage packages. The final
 test solve retains exactly the exported production package set, versions, flags
 and components. Immutable role builds target the exact committed export at
 `ea5d930a14f1b8b6bc0d0106e705f3a9b043fbbe`, preserving the independent Biscuit
-working-tree update outside this qualification.
+working-tree update outside this qualification. All five attributes
+(`shikigami`, `shikigami-server`, `shikigami-worker`, `shikigami-migrate` and
+`shikigami-agent-launch`) build successfully in one native Nix invocation
+(exit 0). Reproduce that exact committed-input check from the repository root:
+
+```bash
+refactor_source="git+file://$PWD?rev=ea5d930a14f1b8b6bc0d0106e705f3a9b043fbbe"
+nix build --no-link --no-write-lock-file \
+  "${refactor_source}#shikigami" "${refactor_source}#shikigami-server" \
+  "${refactor_source}#shikigami-worker" "${refactor_source}#shikigami-migrate" \
+  "${refactor_source}#shikigami-agent-launch"
+```
 
 
 A complete refactor must meet both dependency removal and behavior preservation.
