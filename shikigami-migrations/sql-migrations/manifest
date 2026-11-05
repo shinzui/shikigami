@@ -39,3 +39,4 @@
 0040-decision-root-accounting.sql
 0041-adaptive-checkpoint-wakes.sql
 0042-adaptive-delivery-observations.sql
+0043-initiative-ledger.sql

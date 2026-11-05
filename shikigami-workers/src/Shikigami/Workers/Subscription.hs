@@ -96,7 +96,7 @@ runConsumeStream config = do
           ((ConsumerLoop, loopStaleAfter ConsumerLoop) : directoryLoopRegistration ((.directorySettings) config))
       DirectoryRuntime {handle = directory, refresher = directoryRefresher} <-
         startProcessDirectory logger registry ((.directorySettings) config)
-      let consumerLoop = subscribeActivityStream logger (consumerSupervisor registry) shikigamiMetrics appEnv directory cfg include agents onHit
+      let consumerLoop = subscribeActivityStream logger (consumerSupervisor registry) shikigamiMetrics appEnv directory config.initiativeSettings cfg include agents onHit
           directoryLoops = maybe [] (pure . (DirectoryLoop,)) directoryRefresher
       serveProbesWith
         logger

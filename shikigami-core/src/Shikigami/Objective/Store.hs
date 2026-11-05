@@ -12,6 +12,7 @@ module Shikigami.Objective.Store
     read,
     inspect,
     readVersion,
+    readObjectiveStatusTx,
     resolveAssignment,
     currentCheckpoint,
     readMutationReceipt,
@@ -219,6 +220,13 @@ inspect access objective after limit
           graph = [View.PlacementView (objectiveAssignmentIdText assignment.definition.assignmentId) (agentNameText placement.target) (objectiveAssignmentIdText <$> placement.parent) (map objectiveAssignmentIdText assignment.definition.dependencies) ((.value) <$> assignment.definition.sessionId) | assignment <- current.assignments, placement <- placements, placement.assignment.assignmentId == assignment.definition.assignmentId]
           page = View.AdaptiveView (take limit (drop after graph)) (map View.decisionView (take limit decisions)) (take limit (drop after resources)) (map (\(operation, kind, revision, status, refusal) -> View.AdaptiveObservationView operation kind revision status refusal) (take limit observations)) (if length decisions > limit || length observations > limit || length graph > after + limit || length resources > after + limit then Just (after + limit) else Nothing)
       pure (View.objectiveViewPage after limit current & #adaptive .~ if null placements && null observations then Nothing else Just page)
+
+-- | The one lock-free read the objective owner offers other verticals: whether
+-- an objective is still open. Authority is not consulted because status is all it
+-- returns. A row that will not decode is reported as such rather than guessed.
+readObjectiveStatusTx :: ObjectiveId -> Transaction (Maybe (Either () Status))
+readObjectiveStatusTx identifier =
+  Tx.statement (objectiveIdText identifier) (preparable "SELECT state->'status' FROM shikigami.objectives WHERE objective_id=$1" textParam (D.rowMaybe jsonRow))
 
 readVersion :: (ObjectiveEffects es) => Access -> WS.ObjectiveRef -> Eff es (Either ObjectiveError CP.ObjectiveVersion)
 readVersion access reference = protected do

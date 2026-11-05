@@ -183,6 +183,7 @@ library
     Shikigami.Generated.Conformance
     Shikigami.Health.Ping
     Shikigami.Initiative.Intake
+    Shikigami.Initiative.Ledger
     Shikigami.Initiative.Prefilter
     Shikigami.Initiative.Settings
     Shikigami.Initiative.Source

@@ -4,6 +4,7 @@
 -- Transaction-level hooks let an executor commit its outcome and usage together.
 module Shikigami.Execution.ResourcesStore
   ( allocateRootForWorkflow,
+    allocateRootForWorkflowTx,
     enrollRoot,
     reserveOperation,
     reserveOperationsTx,
@@ -52,24 +53,30 @@ import Shikigami.StateRevision
 -- | Allocate once for the native run coordinate. The origin and root publish
 -- together; a lost response or concurrent producer recovers the same entity.
 allocateRootForWorkflow :: (Store :> es, IOE :> es) => ResolvedAgentIdentity -> AgentName -> WorkflowId -> Maybe ExecutionRootId -> Envelope -> Eff es (Either ResourceError ExecutionRootId)
-allocateRootForWorkflow creator agent (WorkflowId workflow) supplied envelope = do
+allocateRootForWorkflow creator agent workflow supplied envelope = do
   candidate <- liftIO newExecutionRootId
+  runTransaction (allocateRootForWorkflowTx candidate creator agent workflow supplied envelope)
+
+-- | The same allocation inside a caller-owned transaction, so a root can become
+-- one database fact with the receipt that funded it. A refusal condemns the whole
+-- transaction: the caller must surface 'Left' rather than report success.
+allocateRootForWorkflowTx :: ExecutionRootId -> ResolvedAgentIdentity -> AgentName -> WorkflowId -> Maybe ExecutionRootId -> Envelope -> Transaction (Either ResourceError ExecutionRootId)
+allocateRootForWorkflowTx candidate creator agent (WorkflowId workflow) supplied envelope = do
   let binding = Aeson.object ["format" .= (1 :: Int), "creator" .= resolvedIdentity creator, "agent" .= agent, "envelope" .= envelope]
-  runTransaction do
-    existing <- Tx.statement workflow selectOrigin
-    result <- case (existing, supplied) of
-      (Nothing, Just _) -> pure (Left IdentityConflict)
-      _ -> do
-        Tx.statement (workflow, executionRootIdText candidate, binding) insertOrigin
-        Tx.statement workflow selectOrigin >>= \case
-          Nothing -> pure (Left ResourceStateCorrupt)
-          Just (raw, storedBinding) -> case parseExecutionRootId raw of
-            Left _ -> pure (Left ResourceStateCorrupt)
-            Right identifier
-              | storedBinding /= binding || maybe False (/= identifier) supplied -> pure (Left IdentityConflict)
-              | otherwise -> fmap (const identifier) <$> enrollRootTx identifier envelope
-    case result of Left _ -> Tx.condemn; Right _ -> pure ()
-    pure result
+  existing <- Tx.statement workflow selectOrigin
+  result <- case (existing, supplied) of
+    (Nothing, Just _) -> pure (Left IdentityConflict)
+    _ -> do
+      Tx.statement (workflow, executionRootIdText candidate, binding) insertOrigin
+      Tx.statement workflow selectOrigin >>= \case
+        Nothing -> pure (Left ResourceStateCorrupt)
+        Just (raw, storedBinding) -> case parseExecutionRootId raw of
+          Left _ -> pure (Left ResourceStateCorrupt)
+          Right identifier
+            | storedBinding /= binding || maybe False (/= identifier) supplied -> pure (Left IdentityConflict)
+            | otherwise -> fmap (const identifier) <$> enrollRootTx identifier envelope
+  case result of Left _ -> Tx.condemn; Right _ -> pure ()
+  pure result
 
 -- The deferred FK permits receipt-first concurrency without publishing an
 -- orphan origin or an unused losing candidate root.

@@ -21,6 +21,7 @@ module Shikigami.Trigger.Consumer
     processIntegrationEventRecordWithDirectory,
     processDecodedActivity,
     processDecodedActivityWithDirectory,
+    processDecodedActivityObserving,
     processDecodedIntegrationEvent,
     processDecodedIntegrationEventWithDirectory,
     ackDecisionFor,
@@ -78,17 +79,24 @@ import Shibuya.Core.Ingested (Message (..))
 import Shibuya.Core.Types (Cursor (..), Envelope (..))
 import Shibuya.Policy (Concurrency (Serial), OrderingPolicy (StrictInOrder))
 import Shibuya.Telemetry.Effect (runTracing)
-import Shikigami.Activity (ActivityEnvelope)
+import Shikigami.Activity (ActivityEnvelope, ActivityId)
 import Shikigami.Agent.Decl (AgentDecl (..), IdentityDecl (..), StreamMatch, Trigger (..))
 import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Name (AgentName, agentNameText)
-import Shikigami.Agent.Principal (AgentIdentity (..), compatibilityIdentity, mkAgentPrincipal)
+import Shikigami.Agent.Principal (AgentIdentity (..), AgentPrincipal, compatibilityIdentity, mkAgentPrincipal, resolveAgentIdentity)
 
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (..), TriggerKind (TriggeredByEvent))
 import Shikigami.Agent.RunJob qualified as RunJob
 import Shikigami.App (AppEnv (..), runAppIO)
 import Shikigami.Directory qualified as Directory
 import Shikigami.Directory.Store (RunSkip (..), SkipStage (TriggerStage), recordRunSkipTx, reportedPrincipalClaim)
+import Shikigami.Execution.Identity (ExecutionRootId, newExecutionRootId)
+import Shikigami.Execution.Resources qualified as Resources
+import Shikigami.Execution.ResourcesStore (allocateRootForWorkflowTx)
+import Shikigami.Initiative.Intake (Disposition (..), disposition)
+import Shikigami.Initiative.Ledger qualified as Ledger
+import Shikigami.Initiative.Settings (InitiativeSettings, ObserverAllowance (..))
+import Shikigami.Initiative.Types (Candidate, CandidateFacts (..), Observed (..), SkipReason, candidateFacts, skipReasonText)
 import Shikigami.Inspection.Consumer (ConsumerInspection, withConsumerInspection)
 import Shikigami.Integration.ConsumerRuntime (consumerAppConfig, withConsumerApp)
 import Shikigami.Integration.Danwa qualified as Danwa
@@ -173,9 +181,9 @@ data RecordDisposition
 type OnSupervisor = Maybe (Shibuya.Master, Shibuya.ProcessorId) -> IO ()
 
 -- | Subscribe to @activity.v1@ through the serial Shibuya Kafka adapter.
-subscribeActivityStream :: Log.Logger -> OnSupervisor -> ShikigamiMetrics -> AppEnv -> Directory.DirectoryHandle -> StreamConfig -> IncludeAgentActors -> [AgentDecl] -> (StreamHit -> IO ()) -> IO ()
-subscribeActivityStream logger onSupervisor metrics appEnv directory config@StreamConfig {deadLetterQueue} include agents onHit =
-  runSubscription logger onSupervisor "stream" metrics appEnv config $ processActivityRecordWithDirectory logger appEnv directory deadLetterQueue include agents onHit
+subscribeActivityStream :: Log.Logger -> OnSupervisor -> ShikigamiMetrics -> AppEnv -> Directory.DirectoryHandle -> Maybe InitiativeSettings -> StreamConfig -> IncludeAgentActors -> [AgentDecl] -> (StreamHit -> IO ()) -> IO ()
+subscribeActivityStream logger onSupervisor metrics appEnv directory initiatives config@StreamConfig {deadLetterQueue} include agents onHit =
+  runSubscription logger onSupervisor "stream" metrics appEnv config $ processActivityRecordWithDirectory logger appEnv directory initiatives deadLetterQueue include agents onHit
 
 -- | Subscribe to a public integration-event topic through the same durable
 -- acknowledgement boundary.
@@ -327,25 +335,26 @@ processActivityRecord ::
   KafkaInboundRecord ->
   IO RecordDisposition
 processActivityRecord logger appEnv =
-  processActivityRecordWithDirectory logger appEnv Directory.disabledDirectoryHandle
+  processActivityRecordWithDirectory logger appEnv Directory.disabledDirectoryHandle Nothing
 
 processActivityRecordWithDirectory ::
   Log.Logger ->
   AppEnv ->
   Directory.DirectoryHandle ->
+  Maybe InitiativeSettings ->
   QueueName ->
   IncludeAgentActors ->
   [AgentDecl] ->
   (StreamHit -> IO ()) ->
   KafkaInboundRecord ->
   IO RecordDisposition
-processActivityRecordWithDirectory logger appEnv directory queue include agents onHit record =
+processActivityRecordWithDirectory logger appEnv directory initiatives queue include agents onHit record =
   case integrationEventFromKafka record of
     Left err -> persistPoison appEnv queue record (Text.pack (show err))
     Right (event, delivery) ->
       case decodeJsonIntegrationEvent event of
         Left err -> persistPoison appEnv queue record (Text.pack (show err))
-        Right activity -> processActivity logger appEnv directory include agents onHit event (Just delivery) activity
+        Right activity -> processActivity logger appEnv directory initiatives include agents onHit event (Just delivery) activity
 
 -- | Process one raw public integration-event delivery.
 processIntegrationEventRecord ::
@@ -400,10 +409,25 @@ processDecodedActivityWithDirectory ::
   IntegrationEvent ->
   Maybe KafkaDeliveryRef ->
   IO RecordDisposition
-processDecodedActivityWithDirectory logger appEnv directory include agents onHit event kafka =
+processDecodedActivityWithDirectory logger appEnv directory =
+  processDecodedActivityObserving logger appEnv directory Nothing
+
+-- | The broker-free entry point with observer allowances in force.
+processDecodedActivityObserving ::
+  Log.Logger ->
+  AppEnv ->
+  Directory.DirectoryHandle ->
+  Maybe InitiativeSettings ->
+  IncludeAgentActors ->
+  [AgentDecl] ->
+  (StreamHit -> IO ()) ->
+  IntegrationEvent ->
+  Maybe KafkaDeliveryRef ->
+  IO RecordDisposition
+processDecodedActivityObserving logger appEnv directory initiatives include agents onHit event kafka =
   case decodeJsonIntegrationEvent event of
     Left err -> pure (TransientFailure (Text.pack (show err)))
-    Right activity -> processActivity logger appEnv directory include agents onHit event kafka activity
+    Right activity -> processActivity logger appEnv directory initiatives include agents onHit event kafka activity
 
 -- | When the envelope says it happened, or this moment plus a line saying the
 -- envelope did not say.
@@ -432,6 +456,7 @@ processActivity ::
   Log.Logger ->
   AppEnv ->
   Directory.DirectoryHandle ->
+  Maybe InitiativeSettings ->
   IncludeAgentActors ->
   [AgentDecl] ->
   (StreamHit -> IO ()) ->
@@ -439,11 +464,12 @@ processActivity ::
   Maybe KafkaDeliveryRef ->
   ActivityEnvelope ->
   IO RecordDisposition
-processActivity logger appEnv directory include agents onHit event kafka activity = do
+processActivity logger appEnv directory initiatives include agents onHit event kafka activity = do
   -- Resolved before the transaction opens, because deciding it may need a clock
   -- and a log line and the handler runs inside Hasql.
   resolvedOccurredAt <- resolveOccurredAt logger activity
-  prepared <- prepareActivityHits directory resolvedOccurredAt include agents activity
+  receivedAt <- getCurrentTime
+  prepared <- prepareActivityHits directory initiatives resolvedOccurredAt receivedAt include agents activity
   attempt <-
     Exception.try @NotifierStartError $
       runAppIO appEnv $
@@ -501,11 +527,14 @@ processIntegrationEvent logger appEnv directory agents onHit event kafka payload
 classifyInboxResult ::
   (Show storeError, Show inboxError) =>
   IntegrationEvent ->
-  (hit -> IO ()) ->
-  Either storeError (Either inboxError (InboxResult [hit])) ->
+  (CommittedTrigger hit -> IO ()) ->
+  Either storeError (Either inboxError (InboxResult [Handled hit])) ->
   IO RecordDisposition
 classifyInboxResult event onHit = \case
-  Right (Right (InboxProcessed hits)) -> traverse_ onHit hits >> pure Enqueued
+  -- A refusal condemned the handler's transaction, so nothing here committed.
+  Right (Right (InboxProcessed hits)) -> case [reason | Just reason <- map (.failure) hits] of
+    reason : _ -> pure (TransientFailure reason)
+    [] -> traverse_ (onHit . (.outcome)) hits >> pure Enqueued
   Right (Right InboxDuplicate) -> pure Duplicate
   Right (Right InboxInProgress) -> pure (TransientFailure "inbox row is still in progress")
   Right (Right (InboxPreviouslyFailed _)) -> pure (permanentInboxFailure event)
@@ -586,13 +615,30 @@ logDisposition logger prefix = \case
 data PreparedTrigger hit
   = EnqueueTrigger !RunJob !hit
   | SkipTrigger !RunSkip
+  | -- | Pre-filtered out. Records one bounded row and enqueues nothing.
+    SkipObservation !RunJob !AgentPrincipal !UTCTime !(Either (SkipReason, ActivityId) (SkipReason, Observed))
+  | -- | Worth one evaluation: a root, a candidate row and a job become one fact.
+    EvaluateObservation !RunJob !hit !ExecutionRootId !Candidate !Resources.Envelope !UTCTime
 
 data CommittedTrigger hit
   = EnqueuedTrigger !hit
   | SkippedTrigger !RunSkip
+  | SkippedObservation !Text !Text
+  | -- | The observer already holds a row for this activity, delivered under
+    -- another message id: the run it funded is already owned.
+    AlreadyObserved
 
-prepareActivityHits :: Directory.DirectoryHandle -> UTCTime -> IncludeAgentActors -> [AgentDecl] -> ActivityEnvelope -> IO [PreparedTrigger StreamHit]
-prepareActivityHits directory resolvedOccurredAt include agents activity =
+-- | What the handler established, or why its transaction was condemned.
+data Handled hit = Handled
+  { outcome :: !(CommittedTrigger hit),
+    failure :: !(Maybe Text)
+  }
+
+handled :: CommittedTrigger hit -> Handled hit
+handled outcome = Handled {outcome, failure = Nothing}
+
+prepareActivityHits :: Directory.DirectoryHandle -> Maybe InitiativeSettings -> UTCTime -> UTCTime -> IncludeAgentActors -> [AgentDecl] -> ActivityEnvelope -> IO [PreparedTrigger StreamHit]
+prepareActivityHits directory initiatives resolvedOccurredAt receivedAt include agents activity =
   traverse
     prepare
     [ agent
@@ -604,11 +650,24 @@ prepareActivityHits directory resolvedOccurredAt include agents activity =
     prepare agent = do
       let job = runJobFromEnvelopeWithIdentity resolvedOccurredAt UnresolvedLegacyIdentity agent activity
           hit = StreamHit {agentName = agent ^. #name, envelope = activity}
-      prepareTrigger directory "stream" agent job hit
+      admitted <- prepareTrigger directory "stream" agent job hit
+      observing admitted
+
+    -- Applied after identity admission, so a paused agent stays a lifecycle skip
+    -- and an agent without an allowance keeps its exact job bytes.
+    observing = \case
+      prepared@(EnqueueTrigger job hit) -> case disposition initiatives resolvedOccurredAt receivedAt (job ^. #identity) activity of
+        NotObserving -> pure prepared
+        SkipEnvelope allowance reason -> pure (SkipObservation job allowance.principal receivedAt (Left (reason, activity ^. #activityId)))
+        SkipObserved allowance reason observed -> pure (SkipObservation job allowance.principal receivedAt (Right (reason, observed)))
+        Evaluate _ candidate envelope -> do
+          root <- newExecutionRootId
+          pure (EvaluateObservation job hit root candidate envelope receivedAt)
+      other -> pure other
 
 -- | Queue sends and lifecycle refusals share the inbox transaction. A broker
 -- offset is acknowledged only after exactly one durable effect commits.
-inboxHandler :: [PreparedTrigger StreamHit] -> IntegrationEvent -> Tx.Transaction [CommittedTrigger StreamHit]
+inboxHandler :: [PreparedTrigger StreamHit] -> IntegrationEvent -> Tx.Transaction [Handled StreamHit]
 inboxHandler prepared _event = traverse commitTrigger prepared
 
 streamMatchOf :: AgentDecl -> Maybe StreamMatch
@@ -655,7 +714,7 @@ prepareEventHits directory receivedAt agents payloadValue event =
               }
       prepareTrigger directory "event" agent job hit
 
-eventInboxHandler :: [PreparedTrigger EventHit] -> IntegrationEvent -> Tx.Transaction [CommittedTrigger EventHit]
+eventInboxHandler :: [PreparedTrigger EventHit] -> IntegrationEvent -> Tx.Transaction [Handled EventHit]
 eventInboxHandler prepared _event = traverse commitTrigger prepared
 
 prepareTrigger :: Directory.DirectoryHandle -> Text -> AgentDecl -> RunJob -> hit -> IO (PreparedTrigger hit)
@@ -683,18 +742,41 @@ prepareTrigger directory detail agent job hit = do
             idempotencyKey = job ^. #idempotencyKey
           }
 
-commitTrigger :: PreparedTrigger hit -> Tx.Transaction (CommittedTrigger hit)
+commitTrigger :: PreparedTrigger hit -> Tx.Transaction (Handled hit)
 commitTrigger = \case
   EnqueueTrigger job hit -> do
     _ <- enqueueRunJobTx job
-    pure (EnqueuedTrigger hit)
+    pure (handled (EnqueuedTrigger hit))
   SkipTrigger runSkip -> do
     recordRunSkipTx runSkip
-    pure (SkippedTrigger runSkip)
+    pure (handled (SkippedTrigger runSkip))
+  SkipObservation job observer receivedAt skip -> do
+    Ledger.recordSkipTx observer receivedAt Nothing skip
+    pure (handled (SkippedObservation (agentNameText (job ^. #agentName)) (skipReasonText (either fst fst skip))))
+  EvaluateObservation job hit root candidate envelope receivedAt -> do
+    let facts = candidateFacts candidate
+        workflow = RunJob.runJobWorkflowId job
+    recorded <- Ledger.candidateRecordedTx facts.observer facts.observed.activity
+    if recorded
+      then pure (handled AlreadyObserved)
+      else case resolveAgentIdentity (job ^. #identity) of
+        Left reason -> pure (Handled AlreadyObserved (Just reason))
+        Right creator ->
+          allocateRootForWorkflowTx root creator (job ^. #agentName) workflow Nothing envelope >>= \case
+            -- The allocation condemned the transaction; report it as a failure so
+            -- the offset does not advance past a record nothing was committed for.
+            Left refusal -> pure (Handled AlreadyObserved (Just ("evaluation root refused: " <> Text.pack (show refusal))))
+            Right allocated -> do
+              Ledger.recordCandidateTx candidate workflow receivedAt
+              _ <- enqueueRunJobTx (job & #executionRootId .~ Just allocated)
+              pure (handled (EnqueuedTrigger hit))
 
 reportCommitted :: Log.Logger -> Text -> (hit -> IO ()) -> CommittedTrigger hit -> IO ()
 reportCommitted logger prefix onHit = \case
   EnqueuedTrigger hit -> onHit hit
+  AlreadyObserved -> pure ()
+  SkippedObservation agentName reason ->
+    Log.logInfo logger "initiative.skip" ["agent" .= agentName, "reason" .= reason]
   SkippedTrigger RunSkip {agentName, principalId, detail, reason, idempotencyKey} ->
     Log.logInfo
       logger

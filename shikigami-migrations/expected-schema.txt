@@ -1,3 +1,18 @@
+column	adaptive_checkpoint_listeners.generation	integer not null
+column	adaptive_checkpoint_listeners.listener	jsonb not null
+column	adaptive_checkpoint_listeners.objective_id	text not null
+column	adaptive_checkpoint_listeners.owner_id	text not null
+column	adaptive_checkpoint_listeners.owner_name	text not null
+column	adaptive_decisions.manifest	jsonb not null
+column	adaptive_decisions.objective_id	text not null
+column	adaptive_decisions.operation_id	text not null
+column	adaptive_decisions.revision	numeric not null
+column	adaptive_observations.kind	text not null
+column	adaptive_observations.objective_id	text not null
+column	adaptive_observations.operation_id	text not null
+column	adaptive_observations.refusal	text
+column	adaptive_observations.revision	numeric not null
+column	adaptive_observations.status	text not null
 column	agent_load_state.agent_name	text
 column	agent_load_state.enabled	boolean
 column	agent_load_state.error	text
@@ -40,6 +55,9 @@ column	decision_invocations.binding	jsonb not null
 column	decision_invocations.created_at	timestamp with time zone not null default clock_timestamp()
 column	decision_invocations.invocation_id	text not null
 column	decision_invocations.run_id	text not null
+column	decision_resource_calls.call_id	text not null
+column	decision_resource_calls.preparation_id	text not null
+column	decision_resource_calls.receipt	jsonb not null
 column	decision_runs.profile	jsonb not null
 column	decision_runs.report	jsonb
 column	decision_runs.run_id	text not null
@@ -60,6 +78,17 @@ column	execution_allocations.state	jsonb not null
 column	execution_attempts.attempt_id	text not null
 column	execution_attempts.root_id	text not null
 column	execution_attempts.state	jsonb not null
+column	execution_capacity.maximum	integer not null
+column	execution_capacity.revision	bigint not null default 0
+column	execution_capacity.singleton	boolean not null default true
+column	execution_capacity.turn	bigint not null default 0
+column	execution_capacity_roots.last_turn	bigint not null default 0
+column	execution_capacity_roots.root_key	text not null
+column	execution_capacity_tickets.owner	text
+column	execution_capacity_tickets.phase	text not null default 'waiting'::text
+column	execution_capacity_tickets.root_key	text not null
+column	execution_capacity_tickets.sequence	bigint not null
+column	execution_capacity_tickets.ticket_key	text not null
 column	execution_operations.operation_id	text not null
 column	execution_operations.request	jsonb not null
 column	execution_operations.root_id	text not null
@@ -95,6 +124,35 @@ column	fired.signal_id	text not null
 column	fired.subject_id	text not null
 column	fired.subject_type	text not null
 column	fired.window_key	text not null
+column	initiative_candidates.activity_id	text not null
+column	initiative_candidates.evaluated_at	timestamp with time zone
+column	initiative_candidates.observer	text not null
+column	initiative_candidates.proposal_id	text
+column	initiative_candidates.recorded_at	timestamp with time zone not null
+column	initiative_candidates.run_workflow_id	text
+column	initiative_candidates.skip_reason	text
+column	initiative_candidates.source	text
+column	initiative_candidates.subject_id	text
+column	initiative_candidates.subject_kind	text
+column	initiative_candidates.verdict	text not null
+column	initiative_observers.observer	text not null
+column	initiative_proposals.assessment	jsonb not null
+column	initiative_proposals.expires_at	timestamp with time zone not null
+column	initiative_proposals.notified_at	timestamp with time zone
+column	initiative_proposals.observer	text not null
+column	initiative_proposals.proposal_id	text not null
+column	initiative_proposals.proposal_key	text not null
+column	initiative_proposals.proposed_at	timestamp with time zone not null
+column	initiative_proposals.requested	jsonb not null
+column	initiative_proposals.resolved_at	timestamp with time zone
+column	initiative_proposals.revision	numeric not null
+column	initiative_proposals.run_workflow_id	text not null
+column	initiative_proposals.source	text not null
+column	initiative_proposals.status	text not null
+column	initiative_proposals.status_detail	jsonb not null
+column	initiative_proposals.subject_id	text not null
+column	initiative_proposals.subject_kind	text not null
+column	initiative_proposals.suppressed_until	timestamp with time zone
 column	objective_assignments.assignment_id	text not null
 column	objective_assignments.objective_id	text not null
 column	objective_assignments.reference_key	text not null
@@ -311,6 +369,31 @@ column	workspace_transfers.intent	jsonb not null
 column	workspace_transfers.old_epoch	bigint not null
 column	workspace_transfers.proof	jsonb
 column	workspace_transfers.resource	text not null
+constraint	adaptive_checkpoint_listeners.adaptive_checkpoint_listeners_generation_check	CHECK ((generation >= 0))
+constraint	adaptive_checkpoint_listeners.adaptive_checkpoint_listeners_generation_not_null	NOT NULL generation
+constraint	adaptive_checkpoint_listeners.adaptive_checkpoint_listeners_listener_not_null	NOT NULL listener
+constraint	adaptive_checkpoint_listeners.adaptive_checkpoint_listeners_objective_id_fkey	FOREIGN KEY (objective_id) REFERENCES shikigami.objectives(objective_id)
+constraint	adaptive_checkpoint_listeners.adaptive_checkpoint_listeners_objective_id_not_null	NOT NULL objective_id
+constraint	adaptive_checkpoint_listeners.adaptive_checkpoint_listeners_owner_id_not_null	NOT NULL owner_id
+constraint	adaptive_checkpoint_listeners.adaptive_checkpoint_listeners_owner_name_not_null	NOT NULL owner_name
+constraint	adaptive_checkpoint_listeners.adaptive_checkpoint_listeners_pkey	PRIMARY KEY (objective_id, owner_name, owner_id)
+constraint	adaptive_decisions.adaptive_decisions_manifest_not_null	NOT NULL manifest
+constraint	adaptive_decisions.adaptive_decisions_objective_id_fkey	FOREIGN KEY (objective_id) REFERENCES shikigami.objectives(objective_id)
+constraint	adaptive_decisions.adaptive_decisions_objective_id_not_null	NOT NULL objective_id
+constraint	adaptive_decisions.adaptive_decisions_objective_id_revision_key	UNIQUE (objective_id, revision)
+constraint	adaptive_decisions.adaptive_decisions_operation_id_not_null	NOT NULL operation_id
+constraint	adaptive_decisions.adaptive_decisions_pkey	PRIMARY KEY (objective_id, operation_id)
+constraint	adaptive_decisions.adaptive_decisions_revision_check	CHECK ((revision > (0)::numeric))
+constraint	adaptive_decisions.adaptive_decisions_revision_not_null	NOT NULL revision
+constraint	adaptive_observations.adaptive_observations_kind_check	CHECK ((kind = ANY (ARRAY['refusal'::text, 'terminal'::text])))
+constraint	adaptive_observations.adaptive_observations_kind_not_null	NOT NULL kind
+constraint	adaptive_observations.adaptive_observations_objective_id_fkey	FOREIGN KEY (objective_id) REFERENCES shikigami.objectives(objective_id)
+constraint	adaptive_observations.adaptive_observations_objective_id_not_null	NOT NULL objective_id
+constraint	adaptive_observations.adaptive_observations_operation_id_not_null	NOT NULL operation_id
+constraint	adaptive_observations.adaptive_observations_pkey	PRIMARY KEY (objective_id, operation_id, kind)
+constraint	adaptive_observations.adaptive_observations_revision_check	CHECK ((revision >= (0)::numeric))
+constraint	adaptive_observations.adaptive_observations_revision_not_null	NOT NULL revision
+constraint	adaptive_observations.adaptive_observations_status_not_null	NOT NULL status
 constraint	agent_load_state.agent_load_state_manifest_directory_not_null	NOT NULL manifest_directory
 constraint	agent_load_state.agent_load_state_manifest_path_not_null	NOT NULL manifest_path
 constraint	agent_load_state.agent_load_state_observed_at_not_null	NOT NULL observed_at
@@ -365,6 +448,11 @@ constraint	decision_invocations.decision_invocations_invocation_id_not_null	NOT 
 constraint	decision_invocations.decision_invocations_pkey	PRIMARY KEY (invocation_id)
 constraint	decision_invocations.decision_invocations_run_id_fkey	FOREIGN KEY (run_id) REFERENCES shikigami.decision_runs(run_id)
 constraint	decision_invocations.decision_invocations_run_id_not_null	NOT NULL run_id
+constraint	decision_resource_calls.decision_resource_calls_call_id_fkey	FOREIGN KEY (call_id) REFERENCES shikigami.decision_attempts(call_id) DEFERRABLE INITIALLY DEFERRED
+constraint	decision_resource_calls.decision_resource_calls_call_id_not_null	NOT NULL call_id
+constraint	decision_resource_calls.decision_resource_calls_pkey	PRIMARY KEY (call_id)
+constraint	decision_resource_calls.decision_resource_calls_preparation_id_not_null	NOT NULL preparation_id
+constraint	decision_resource_calls.decision_resource_calls_receipt_not_null	NOT NULL receipt
 constraint	decision_runs.decision_runs_pkey	PRIMARY KEY (run_id)
 constraint	decision_runs.decision_runs_profile_not_null	NOT NULL profile
 constraint	decision_runs.decision_runs_run_id_not_null	NOT NULL run_id
@@ -397,6 +485,28 @@ constraint	execution_attempts.execution_attempts_pkey	PRIMARY KEY (root_id, atte
 constraint	execution_attempts.execution_attempts_root_id_fkey	FOREIGN KEY (root_id) REFERENCES shikigami.execution_roots(root_id)
 constraint	execution_attempts.execution_attempts_root_id_not_null	NOT NULL root_id
 constraint	execution_attempts.execution_attempts_state_not_null	NOT NULL state
+constraint	execution_capacity.execution_capacity_maximum_check	CHECK (((maximum >= 1) AND (maximum <= 128)))
+constraint	execution_capacity.execution_capacity_maximum_not_null	NOT NULL maximum
+constraint	execution_capacity.execution_capacity_pkey	PRIMARY KEY (singleton)
+constraint	execution_capacity.execution_capacity_revision_check	CHECK ((revision >= 0))
+constraint	execution_capacity.execution_capacity_revision_not_null	NOT NULL revision
+constraint	execution_capacity.execution_capacity_singleton_check	CHECK (singleton)
+constraint	execution_capacity.execution_capacity_singleton_not_null	NOT NULL singleton
+constraint	execution_capacity.execution_capacity_turn_check	CHECK ((turn >= 0))
+constraint	execution_capacity.execution_capacity_turn_not_null	NOT NULL turn
+constraint	execution_capacity_roots.execution_capacity_roots_last_turn_check	CHECK ((last_turn >= 0))
+constraint	execution_capacity_roots.execution_capacity_roots_last_turn_not_null	NOT NULL last_turn
+constraint	execution_capacity_roots.execution_capacity_roots_pkey	PRIMARY KEY (root_key)
+constraint	execution_capacity_roots.execution_capacity_roots_root_key_not_null	NOT NULL root_key
+constraint	execution_capacity_tickets.execution_capacity_tickets_check	CHECK (((phase = 'active'::text) = (owner IS NOT NULL)))
+constraint	execution_capacity_tickets.execution_capacity_tickets_phase_check	CHECK ((phase = ANY (ARRAY['waiting'::text, 'active'::text, 'settled'::text])))
+constraint	execution_capacity_tickets.execution_capacity_tickets_phase_not_null	NOT NULL phase
+constraint	execution_capacity_tickets.execution_capacity_tickets_pkey	PRIMARY KEY (ticket_key)
+constraint	execution_capacity_tickets.execution_capacity_tickets_root_key_fkey	FOREIGN KEY (root_key) REFERENCES shikigami.execution_capacity_roots(root_key)
+constraint	execution_capacity_tickets.execution_capacity_tickets_root_key_not_null	NOT NULL root_key
+constraint	execution_capacity_tickets.execution_capacity_tickets_sequence_key	UNIQUE (sequence)
+constraint	execution_capacity_tickets.execution_capacity_tickets_sequence_not_null	NOT NULL sequence
+constraint	execution_capacity_tickets.execution_capacity_tickets_ticket_key_not_null	NOT NULL ticket_key
 constraint	execution_operations.execution_operations_operation_id_check	CHECK (((length(operation_id) >= 1) AND (length(operation_id) <= 256)))
 constraint	execution_operations.execution_operations_operation_id_not_null	NOT NULL operation_id
 constraint	execution_operations.execution_operations_pkey	PRIMARY KEY (root_id, operation_id)
@@ -459,6 +569,30 @@ constraint	fired.fired_signal_id_not_null	NOT NULL signal_id
 constraint	fired.fired_subject_id_not_null	NOT NULL subject_id
 constraint	fired.fired_subject_type_not_null	NOT NULL subject_type
 constraint	fired.fired_window_key_not_null	NOT NULL window_key
+constraint	initiative_candidates.initiative_candidates_activity_id_not_null	NOT NULL activity_id
+constraint	initiative_candidates.initiative_candidates_observer_not_null	NOT NULL observer
+constraint	initiative_candidates.initiative_candidates_pkey	PRIMARY KEY (observer, activity_id)
+constraint	initiative_candidates.initiative_candidates_recorded_at_not_null	NOT NULL recorded_at
+constraint	initiative_candidates.initiative_candidates_verdict_check	CHECK ((verdict = ANY (ARRAY['skipped'::text, 'evaluating'::text, 'proposed'::text, 'not-actionable'::text])))
+constraint	initiative_candidates.initiative_candidates_verdict_not_null	NOT NULL verdict
+constraint	initiative_observers.initiative_observers_observer_not_null	NOT NULL observer
+constraint	initiative_observers.initiative_observers_pkey	PRIMARY KEY (observer)
+constraint	initiative_proposals.initiative_proposals_assessment_not_null	NOT NULL assessment
+constraint	initiative_proposals.initiative_proposals_expires_at_not_null	NOT NULL expires_at
+constraint	initiative_proposals.initiative_proposals_observer_not_null	NOT NULL observer
+constraint	initiative_proposals.initiative_proposals_pkey	PRIMARY KEY (proposal_id)
+constraint	initiative_proposals.initiative_proposals_proposal_id_not_null	NOT NULL proposal_id
+constraint	initiative_proposals.initiative_proposals_proposal_key_not_null	NOT NULL proposal_key
+constraint	initiative_proposals.initiative_proposals_proposed_at_not_null	NOT NULL proposed_at
+constraint	initiative_proposals.initiative_proposals_requested_not_null	NOT NULL requested
+constraint	initiative_proposals.initiative_proposals_revision_check	CHECK ((revision >= (0)::numeric))
+constraint	initiative_proposals.initiative_proposals_revision_not_null	NOT NULL revision
+constraint	initiative_proposals.initiative_proposals_run_workflow_id_not_null	NOT NULL run_workflow_id
+constraint	initiative_proposals.initiative_proposals_source_not_null	NOT NULL source
+constraint	initiative_proposals.initiative_proposals_status_detail_not_null	NOT NULL status_detail
+constraint	initiative_proposals.initiative_proposals_status_not_null	NOT NULL status
+constraint	initiative_proposals.initiative_proposals_subject_id_not_null	NOT NULL subject_id
+constraint	initiative_proposals.initiative_proposals_subject_kind_not_null	NOT NULL subject_kind
 constraint	objective_assignments.objective_assignments_assignment_id_not_null	NOT NULL assignment_id
 constraint	objective_assignments.objective_assignments_objective_id_fkey	FOREIGN KEY (objective_id) REFERENCES shikigami.objectives(objective_id)
 constraint	objective_assignments.objective_assignments_objective_id_not_null	NOT NULL objective_id
@@ -775,6 +909,10 @@ constraint	workspace_transfers.workspace_transfers_old_epoch_not_null	NOT NULL o
 constraint	workspace_transfers.workspace_transfers_pkey	PRIMARY KEY (resource, old_epoch)
 constraint	workspace_transfers.workspace_transfers_resource_fkey	FOREIGN KEY (resource) REFERENCES shikigami.workspace_bindings(resource)
 constraint	workspace_transfers.workspace_transfers_resource_not_null	NOT NULL resource
+index	adaptive_checkpoint_listeners_pkey	CREATE UNIQUE INDEX adaptive_checkpoint_listeners_pkey ON shikigami.adaptive_checkpoint_listeners USING btree (objective_id, owner_name, owner_id)
+index	adaptive_decisions_objective_id_revision_key	CREATE UNIQUE INDEX adaptive_decisions_objective_id_revision_key ON shikigami.adaptive_decisions USING btree (objective_id, revision)
+index	adaptive_decisions_pkey	CREATE UNIQUE INDEX adaptive_decisions_pkey ON shikigami.adaptive_decisions USING btree (objective_id, operation_id)
+index	adaptive_observations_pkey	CREATE UNIQUE INDEX adaptive_observations_pkey ON shikigami.adaptive_observations USING btree (objective_id, operation_id, kind)
 index	agent_load_state_agent_name_idx	CREATE INDEX agent_load_state_agent_name_idx ON shikigami.agent_load_state USING btree (agent_name) WHERE (agent_name IS NOT NULL)
 index	agent_load_state_manifest_directory_idx	CREATE INDEX agent_load_state_manifest_directory_idx ON shikigami.agent_load_state USING btree (manifest_directory)
 index	agent_load_state_pkey	CREATE UNIQUE INDEX agent_load_state_pkey ON shikigami.agent_load_state USING btree (manifest_path)
@@ -791,6 +929,7 @@ index	decision_attempts_pkey	CREATE UNIQUE INDEX decision_attempts_pkey ON shiki
 index	decision_attempts_run_id_ordinal_key	CREATE UNIQUE INDEX decision_attempts_run_id_ordinal_key ON shikigami.decision_attempts USING btree (run_id, ordinal)
 index	decision_invocations_pkey	CREATE UNIQUE INDEX decision_invocations_pkey ON shikigami.decision_invocations USING btree (invocation_id)
 index	decision_invocations_run	CREATE INDEX decision_invocations_run ON shikigami.decision_invocations USING btree (run_id)
+index	decision_resource_calls_pkey	CREATE UNIQUE INDEX decision_resource_calls_pkey ON shikigami.decision_resource_calls USING btree (call_id)
 index	decision_runs_pkey	CREATE UNIQUE INDEX decision_runs_pkey ON shikigami.decision_runs USING btree (run_id)
 index	delegation_budgets_pkey	CREATE UNIQUE INDEX delegation_budgets_pkey ON shikigami.delegation_budgets USING btree (budget_id)
 index	delegation_budgets_root_workflow_id_key	CREATE UNIQUE INDEX delegation_budgets_root_workflow_id_key ON shikigami.delegation_budgets USING btree (root_workflow_id)
@@ -799,6 +938,11 @@ index	delegation_reservations_pkey	CREATE UNIQUE INDEX delegation_reservations_p
 index	execution_allocations_pkey	CREATE UNIQUE INDEX execution_allocations_pkey ON shikigami.execution_allocations USING btree (root_id, allocation_id)
 index	execution_assignment_lookup	CREATE INDEX execution_assignment_lookup ON shikigami.executions USING btree (((binding ->> 'assignmentId'::text)))
 index	execution_attempts_pkey	CREATE UNIQUE INDEX execution_attempts_pkey ON shikigami.execution_attempts USING btree (root_id, attempt_id)
+index	execution_capacity_pkey	CREATE UNIQUE INDEX execution_capacity_pkey ON shikigami.execution_capacity USING btree (singleton)
+index	execution_capacity_roots_pkey	CREATE UNIQUE INDEX execution_capacity_roots_pkey ON shikigami.execution_capacity_roots USING btree (root_key)
+index	execution_capacity_tickets_pkey	CREATE UNIQUE INDEX execution_capacity_tickets_pkey ON shikigami.execution_capacity_tickets USING btree (ticket_key)
+index	execution_capacity_tickets_sequence_key	CREATE UNIQUE INDEX execution_capacity_tickets_sequence_key ON shikigami.execution_capacity_tickets USING btree (sequence)
+index	execution_capacity_waiting	CREATE INDEX execution_capacity_waiting ON shikigami.execution_capacity_tickets USING btree (root_key, sequence) WHERE (phase = 'waiting'::text)
 index	execution_operations_pkey	CREATE UNIQUE INDEX execution_operations_pkey ON shikigami.execution_operations USING btree (root_id, operation_id)
 index	execution_payloads_pkey	CREATE UNIQUE INDEX execution_payloads_pkey ON shikigami.execution_payloads USING btree (execution_id, payload_id)
 index	execution_root_origins_pkey	CREATE UNIQUE INDEX execution_root_origins_pkey ON shikigami.execution_root_origins USING btree (workflow_id)
@@ -815,6 +959,15 @@ index	execution_transcript_operations_execution_id_position_key	CREATE UNIQUE IN
 index	execution_transcript_operations_pkey	CREATE UNIQUE INDEX execution_transcript_operations_pkey ON shikigami.execution_transcript_operations USING btree (operation_id)
 index	executions_pkey	CREATE UNIQUE INDEX executions_pkey ON shikigami.executions USING btree (execution_id)
 index	fired_pkey	CREATE UNIQUE INDEX fired_pkey ON shikigami.fired USING btree (detector, subject_type, subject_id, window_key)
+index	initiative_candidates_evaluated	CREATE INDEX initiative_candidates_evaluated ON shikigami.initiative_candidates USING btree (observer, evaluated_at)
+index	initiative_candidates_pkey	CREATE UNIQUE INDEX initiative_candidates_pkey ON shikigami.initiative_candidates USING btree (observer, activity_id)
+index	initiative_candidates_window	CREATE INDEX initiative_candidates_window ON shikigami.initiative_candidates USING btree (observer, recorded_at)
+index	initiative_observers_pkey	CREATE UNIQUE INDEX initiative_observers_pkey ON shikigami.initiative_observers USING btree (observer)
+index	initiative_proposals_key	CREATE INDEX initiative_proposals_key ON shikigami.initiative_proposals USING btree (proposal_key, proposed_at)
+index	initiative_proposals_notified	CREATE INDEX initiative_proposals_notified ON shikigami.initiative_proposals USING btree (observer, notified_at)
+index	initiative_proposals_pending_key	CREATE UNIQUE INDEX initiative_proposals_pending_key ON shikigami.initiative_proposals USING btree (proposal_key) WHERE (status = 'pending'::text)
+index	initiative_proposals_pkey	CREATE UNIQUE INDEX initiative_proposals_pkey ON shikigami.initiative_proposals USING btree (proposal_id)
+index	initiative_proposals_window	CREATE INDEX initiative_proposals_window ON shikigami.initiative_proposals USING btree (observer, proposed_at)
 index	objective_assignments_pkey	CREATE UNIQUE INDEX objective_assignments_pkey ON shikigami.objective_assignments USING btree (objective_id, assignment_id)
 index	objective_assignments_reference_key_key	CREATE UNIQUE INDEX objective_assignments_reference_key_key ON shikigami.objective_assignments USING btree (reference_key)
 index	objective_associations_pkey	CREATE UNIQUE INDEX objective_associations_pkey ON shikigami.objective_associations USING btree (kind, source_id, objective_id)
@@ -870,6 +1023,7 @@ index	worker_session_messages_pkey	CREATE UNIQUE INDEX worker_session_messages_p
 index	worker_session_messages_session_id_operation_id_key	CREATE UNIQUE INDEX worker_session_messages_session_id_operation_id_key ON shikigami.worker_session_messages USING btree (session_id, operation_id)
 index	worker_session_payloads_pkey	CREATE UNIQUE INDEX worker_session_payloads_pkey ON shikigami.worker_session_payloads USING btree (session_id, payload_id)
 index	worker_session_results_pkey	CREATE UNIQUE INDEX worker_session_results_pkey ON shikigami.worker_session_results USING btree (assignment_id)
+index	worker_sessions_objective_reference	CREATE INDEX worker_sessions_objective_reference ON shikigami.worker_sessions USING btree (((binding -> 'objective'::text)))
 index	worker_sessions_parent_scope	CREATE INDEX worker_sessions_parent_scope ON shikigami.worker_sessions USING btree ((((binding -> 'scope'::text) ->> 'parent'::text)), ((binding -> 'parentIdentity'::text)), session_id)
 index	worker_sessions_pkey	CREATE UNIQUE INDEX worker_sessions_pkey ON shikigami.worker_sessions USING btree (session_id)
 index	worker_sessions_scope_digest_key	CREATE UNIQUE INDEX worker_sessions_scope_digest_key ON shikigami.worker_sessions USING btree (scope_digest)
@@ -890,17 +1044,24 @@ index	workspace_successor_admissions_pkey	CREATE UNIQUE INDEX workspace_successo
 index	workspace_transfers_pkey	CREATE UNIQUE INDEX workspace_transfers_pkey ON shikigami.workspace_transfers USING btree (resource, old_epoch)
 index	workspace_unsettled_effects	CREATE INDEX workspace_unsettled_effects ON shikigami.workspace_effects USING btree (resource) WHERE (NOT settled)
 index	workspace_unsettled_processes	CREATE INDEX workspace_unsettled_processes ON shikigami.workspace_processes USING btree (resource) WHERE (NOT settled)
+table	adaptive_checkpoint_listeners	kind=r
+table	adaptive_decisions	kind=r
+table	adaptive_observations	kind=r
 table	agent_load_state	kind=r
 table	agent_run_requests	kind=r
 table	agent_scope_aliases	kind=r
 table	conversation_sessions	kind=r
 table	decision_attempts	kind=r
 table	decision_invocations	kind=r
+table	decision_resource_calls	kind=r
 table	decision_runs	kind=r
 table	delegation_budgets	kind=r
 table	delegation_reservations	kind=r
 table	execution_allocations	kind=r
 table	execution_attempts	kind=r
+table	execution_capacity	kind=r
+table	execution_capacity_roots	kind=r
+table	execution_capacity_tickets	kind=r
 table	execution_operations	kind=r
 table	execution_payloads	kind=r
 table	execution_root_origins	kind=r
@@ -910,6 +1071,9 @@ table	execution_selections	kind=r
 table	execution_transcript_operations	kind=r
 table	executions	kind=r
 table	fired	kind=r
+table	initiative_candidates	kind=r
+table	initiative_observers	kind=r
+table	initiative_proposals	kind=r
 table	objective_assignments	kind=r
 table	objective_associations	kind=r
 table	objective_cursors	kind=r
