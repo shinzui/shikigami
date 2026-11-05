@@ -11,6 +11,12 @@ provenance:
     model: "claude-fable-5-1"
     harness: "claude-code"
     at: 2026-11-04T18:38:36Z
+  revisions:
+    - model: "claude-opus-5-5"
+      harness: "claude-code"
+      at: 2026-11-05T00:54:00Z
+      mode: "implement"
+      note: "Implementing observation vocabulary, adapters, ledger and intake"
 ---
 
 # Bound observation with observer allowances, source adapters, a deterministic pre-filter and the proposal ledger
@@ -30,14 +36,16 @@ You can see it working in `cabal test shikigami-workers-test --test-options='-p 
 
 ## Progress
 
-- [ ] Milestone 1: `Shikigami.Initiative.Types` and `Shikigami.Initiative.Settings` exist with their checked values, closed sums, allocated identities and the `initiatives` settings object; the unit suite proves parsers, codecs and settings validation; `tests/types/initiative-values.py` proves the sealed and opaque values cannot be constructed generically.
+- [x] Milestone 1: `Shikigami.Initiative.Types` and `Shikigami.Initiative.Settings` exist with their checked values, closed sums, allocated identities and the `initiatives` settings object; the unit suite proves parsers, codecs and settings validation; `tests/types/initiative-values.py` proves the sealed and opaque values cannot be constructed generically. Completed 2026-11-04: InitiativeValue and initiative configuration groups pass; tests/types/initiative-values.py refuses all 26 forgeries; just haskell-conventions accepts the Initiative root.
 - [ ] Milestone 2: `Shikigami.Initiative.Source` and `Shikigami.Initiative.Prefilter` turn fixture envelopes for the three source kinds into candidates or skips deterministically; property tests prove totality and that the same envelope always yields the same verdict.
 - [ ] Milestone 3: The proposal ledger migration and `Shikigami.Initiative.Ledger` exist; the stream consumer records skips and enrolls evaluation roots inside the inbox transaction; the PostgreSQL and worker suites prove atomicity, keyed convergence, owner checks and window exhaustion.
 
 
 ## Surprises & Discoveries
 
-(None yet.)
+- `Shikigami.Execution.Resources.Dimension` encodes map keys as arrays of pairs, so the plan's `limits` document would not have been writable by an operator. `Initiative.Settings.renderLimits` and `parseLimits` give operators `{"ModelAttempts": 1, "Tokens": "unbounded"}`; the root's own stored codec is unchanged. Plan 117's policy document reuses them.
+- `mkAgentPrincipal` admits only `agent_`-prefixed names, so a `CompatibilityIdentity` can never equal a listed principal; observation effectively requires a verified principal, as objective creation does.
+- Tasty refuses the plans' `-p "A|B"` filter syntax; use `--test-option=-p --test-option='/A/||/B/'` (FRIC-57).
 
 
 ## Decision Log
@@ -52,6 +60,10 @@ You can see it working in `cabal test shikigami-workers-test --test-options='-p 
 
 - Decision: Observation spend is a per-run resource root enrolled at the trigger from the observer allowance; attention limits are bounded counts over ledger rows inside a window.
   Rationale: `enrollRootRun` refuses descendants and the inbox transaction is the only place a root and a job become one fact. Counts need no reservation and no second accounting owner.
+  Date: 2026-11-04
+
+- Decision: `InitiativeSettings` carries `maximumPolicyLifetime` from the start rather than plan 117 adding it later, and it defaults to 30 days.
+  Rationale: The settings object refuses unknown keys, so a later addition would be the same field with a migration of nothing; defining it with the object keeps one codec.
   Date: 2026-11-04
 
 

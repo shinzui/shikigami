@@ -49,6 +49,8 @@ module Shikigami.App.Config
     HttpAuthSettings (..),
     InspectionSettings (..),
     inspectionKey,
+    InitiativeSettings (..),
+    initiativesKey,
     httpAuthModeKey,
     httpAuthTokenKey,
     httpAuthCallerKey,
@@ -205,6 +207,7 @@ import Shikigami.Directory (DirectorySettings (..))
 import Shikigami.Duration
 import Shikigami.Execution.Capacity qualified as Capacity
 import Shikigami.Execution.Policy.Types qualified as Harness
+import Shikigami.Initiative.Settings (InitiativeSettings (..))
 import Shikigami.Inspection.Settings (InspectionSettings (..))
 import Shikigami.Objective.Tracker.Config (TrackerSettings, defaultTrackerSettings)
 import Shikigami.Objective.Types (ObjectiveSettings, defaultObjectiveSettings)
@@ -517,7 +520,8 @@ data AppConfig = AppConfig
     workspaceSettings :: !(Maybe WorkspaceSettings),
     workspaceSupervisorSettings :: !(Maybe WorkspaceSupervisorSettings),
     objectiveSettings :: !ObjectiveSettings,
-    trackerSettings :: !TrackerSettings
+    trackerSettings :: !TrackerSettings,
+    initiativeSettings :: !(Maybe InitiativeSettings)
   }
   deriving stock (Generic, Eq)
 
@@ -580,6 +584,7 @@ appConfig =
     <*> optional (secretSetting workspaceSupervisorKey "Private systemd socket and bounded peer-checked workspace supervisor intake" jsonDecoder)
     <*> withDefault (secretSetting (stableKey "objectives") "Objective enablement, local operator and default-deny recorded agent creation grants" jsonDecoder) (constant "objectives-disabled" "Objective tracking requires explicit enablement" defaultObjectiveSettings)
     <*> withDefault (secretSetting (stableKey "objective_trackers") "Provider-neutral objective tracker connections and explicit use/export grants" jsonDecoder) (constant "trackers-disabled" "External objective tracking requires explicit enablement" defaultTrackerSettings)
+    <*> optional (publicSettingWithRenderer initiativesKey "Observer allowances: which principals may observe which sources, at what evaluation envelope and attention limits" jsonDecoder renderJson)
 
 -- | Which provider runs a Skill behavior, and what the real branch needs.
 --
@@ -1569,6 +1574,7 @@ environmentBindings =
           binding (EnvName "SHIKIGAMI_BEHAVIOR_HARNESS") behaviorHarnessKey,
           binding (EnvName "SHIKIGAMI_OBJECTIVES") (stableKey "objectives"),
           binding (EnvName "SHIKIGAMI_OBJECTIVE_TRACKERS") (stableKey "objective_trackers"),
+          binding (EnvName "SHIKIGAMI_INITIATIVES") initiativesKey,
           binding (EnvName "SHIKIGAMI_WORKSPACES") workspacesKey,
           binding (EnvName "SHIKIGAMI_WORKSPACE_SUPERVISOR") workspaceSupervisorKey,
           binding (EnvName "SHIKIGAMI_BEHAVIOR_MODEL") behaviorModelKey,
@@ -1737,6 +1743,9 @@ httpAuthCallerKey = stableKey "http.auth.caller"
 
 inspectionKey :: Key
 inspectionKey = stableKey "inspection"
+
+initiativesKey :: Key
+initiativesKey = stableKey "initiatives"
 
 httpAuthModeSetting :: Setting Bool
 httpAuthModeSetting =

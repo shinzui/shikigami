@@ -286,6 +286,7 @@ domain-value-types:
     cabal build shikigami-core shikigami-agent:lib:shikigami-agent shikigami-workers:lib:shikigami-workers
     python3 tests/types/revision-domains.py
     python3 tests/types/opaque-values.py
+    python3 tests/types/initiative-values.py
     python3 tests/types/workspace-scope.py
     python3 tests/types/resume-policy.py
 

@@ -52,6 +52,7 @@ import Shikigami.ExecutionSelectionSpec qualified as ExecutionSelectionSpec
 import Shikigami.Fixture.KawaStub (kawaDoorwayApplication)
 import Shikigami.Fixture.SinkHttp (testSinkHttp, testSinkHttpFor)
 import Shikigami.FormatVersionSpec qualified as FormatVersionSpec
+import Shikigami.InitiativeValueSpec qualified as InitiativeValueSpec
 import Shikigami.Integration.Danwa (AddressedMessage (..), addressedMessageEventType)
 import Shikigami.KanmonClientSpec qualified as KanmonClientSpec
 import Shikigami.KeiroSpecificationSpec qualified as KeiroSpecificationSpec
@@ -117,6 +118,7 @@ main =
           WorkspaceActionProofSpec.tests,
           AgentLoaderSpec.tests,
           ApprovalNotificationSpec.tests,
+          InitiativeValueSpec.tests,
           ObjectiveSpec.tests,
           AdaptiveProposalSpec.tests,
           ObjectiveTrackerSpec.tests,

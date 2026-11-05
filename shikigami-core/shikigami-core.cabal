@@ -182,6 +182,8 @@ library
     Shikigami.FormatVersion
     Shikigami.Generated.Conformance
     Shikigami.Health.Ping
+    Shikigami.Initiative.Settings
+    Shikigami.Initiative.Types
     Shikigami.Inspection.Aggregates
     Shikigami.Inspection.Settings
     Shikigami.Integration.Danwa
@@ -371,6 +373,7 @@ library
     Shikigami.Generated.Structural.Shape.RunTriggerKind
     Shikigami.Generated.StructuralConformance
     Shikigami.Generated.StructuralProjections
+    Shikigami.Initiative.Types.Internal
     Shikigami.Objective.Authority
     Shikigami.Objective.Conversation
     Shikigami.Objective.Tracker.Sql
@@ -564,6 +567,7 @@ test-suite shikigami-core-test
     Shikigami.Fixture.SinkHttp
     Shikigami.Fixture.TypeSafe
     Shikigami.FormatVersionSpec
+    Shikigami.InitiativeValueSpec
     Shikigami.KanmonClientSpec
     Shikigami.KeiroSpecificationSpec
     Shikigami.LogSpec

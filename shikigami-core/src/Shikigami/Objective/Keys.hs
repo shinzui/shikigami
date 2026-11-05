@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 -- | Distinct locators within an objective. These keys do not allocate entities.
 module Shikigami.Objective.Keys
   ( CriterionKey,
@@ -56,12 +58,20 @@ module Shikigami.Objective.Keys
     ResultCommitment,
     resultCommitment,
     resultCommitmentText,
+    ObservedSource (..),
+    ProposalRef,
+    parseProposalRef,
+    proposalRefText,
   )
 where
 
 import Data.Aeson (FromJSON (..), ToJSON (..), object, withObject, withText, (.:), (.=))
+import Data.Bifunctor (first)
+import Data.KindID.V7 qualified as KindID
 import Data.Text (Text)
 import Data.Text qualified as Text
+import GHC.Generics (Generic)
+import Shikigami.Activity.Coordinate (ActivityCoordinate)
 import Shikigami.Decision.Contract (versionedDigest)
 
 newtype CriterionKey = CriterionKey Text
@@ -377,3 +387,36 @@ commandFingerprint = MutationFingerprint . versionedDigest "shikigami.objective-
 
 objectivePayloadDigest :: (ToJSON a) => a -> ObjectivePayloadDigest
 objectivePayloadDigest = ObjectivePayloadDigest . versionedDigest "shikigami.objective-payload/1"
+
+-- | The observed coordinate an unrequested proposal is about. The objective
+-- owner retains it as a link without depending on the initiative vertical.
+data ObservedSource = ObservedSource
+  { source :: !(ActivityCoordinate "source"),
+    subjectKind :: !(ActivityCoordinate "subject-kind"),
+    subjectId :: !(ActivityCoordinate "subject-id")
+  }
+  deriving stock (Eq, Ord, Show, Generic)
+  deriving anyclass (ToJSON, FromJSON)
+
+-- | A nominal link to an allocated proposal, admitted only in canonical form.
+newtype ProposalRef = ProposalRef Text
+  deriving stock (Eq, Ord, Show)
+
+parseProposalRef :: Text -> Either Text ProposalRef
+parseProposalRef input = do
+  value <- first (const "invalid proposal reference") (KindID.parseText @"shikigami_proposal" input)
+  case KindID.checkKindID value of
+    Just _ -> Left "proposal reference requires UUIDv7"
+    Nothing
+      | KindID.toText value == input -> Right (ProposalRef input)
+      | otherwise -> Left "proposal reference requires canonical encoding"
+
+proposalRefText :: ProposalRef -> Text
+proposalRefText (ProposalRef value) = value
+
+instance ToJSON ProposalRef where
+  toJSON = toJSON . proposalRefText
+  toEncoding = toEncoding . proposalRefText
+
+instance FromJSON ProposalRef where
+  parseJSON = withText "proposal reference" (either (fail . Text.unpack) pure . parseProposalRef)

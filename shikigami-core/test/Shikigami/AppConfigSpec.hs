@@ -64,6 +64,7 @@ import Shikigami.Duration (parseDuration)
 import Shikigami.Execution.Capacity qualified as Capacity
 import Shikigami.Execution.Policy.Limits (PolicyNumber (..))
 import Shikigami.Execution.Policy.Types qualified as Harness
+import Shikigami.Initiative.Settings (ObserverAllowance (..))
 import Shikigami.Inspection.Settings qualified as Inspection
 import Shikigami.Objective.Types (ObjectiveService (..), ObjectiveSettings (..), defaultObjectiveSettings, parseOperatorId)
 import Shikigami.PracticeReview.Capability (renderAttentionRecipientMap)
@@ -82,6 +83,7 @@ tests =
   testGroup
     "application configuration"
     [ objectiveConfigurationTests,
+      initiativeConfigurationTests,
       httpAuthTests,
       surfaceTests,
       precedenceTests,
@@ -154,6 +156,7 @@ surfaceTests =
                 "http.port",
                 "http.request_max_bytes",
                 "http.response_max_bytes",
+                "initiatives",
                 "inspection",
                 "kafka.activity.topic",
                 "kafka.broker",
@@ -221,6 +224,7 @@ surfaceTests =
               ("SHIKIGAMI_BEHAVIOR_HARNESS", "behavior.harness"),
               ("SHIKIGAMI_OBJECTIVES", "objectives"),
               ("SHIKIGAMI_OBJECTIVE_TRACKERS", "objective_trackers"),
+              ("SHIKIGAMI_INITIATIVES", "initiatives"),
               ("SHIKIGAMI_WORKSPACES", "workspaces"),
               ("SHIKIGAMI_WORKSPACE_SUPERVISOR", "workspace.supervisor"),
               ("SHIKIGAMI_BEHAVIOR_MODEL", "behavior.model"),
@@ -990,6 +994,35 @@ httpAuthTests =
         let result = runWith ((optionsWith [] [cliOverride httpAuthModeKey "bearer"]) {diagnosticMode = ExplainText}) [] [("SHIKIGAMI_API_TOKEN", secret)]
         assertBool "secret absent from explanation" (not (secret `Text.isInfixOf` (result.standardError <> result.standardOutput)))
     ]
+
+initiativeConfigurationTests :: TestTree
+initiativeConfigurationTests =
+  testGroup
+    "initiative configuration"
+    [ testCase "omission disables observation" do
+        isNothing defaultAppConfig.initiativeSettings @?= True,
+      testCase "a valid allowance resolves" do
+        config <- resolveOrFail (optionsWith [] []) [] [("SHIKIGAMI_INITIATIVES", initiativeDocument allowanceFields)]
+        fmap (map (principalText . (.principal)) . (.observers)) config.initiativeSettings @?= Just ["agent_proposer"],
+      testCase "unknown keys, duplicates, zero durations and envelopes denying a model call fail loader" do
+        forM_
+          [ initiativeDocument ("\"surprise\":1," <> allowanceFields),
+            "{\"observers\":[{" <> allowanceFields <> "},{" <> allowanceFields <> "}]}",
+            "{\"observers\":[],\"surprise\":1}",
+            initiativeDocument (Text.replace "\"window\":3600" "\"window\":0" allowanceFields),
+            initiativeDocument (Text.replace "\"proposalExpiry\":86400" "\"proposalExpiry\":0" allowanceFields),
+            initiativeDocument (Text.replace "\"evaluationsPerWindow\":10" "\"evaluationsPerWindow\":0" allowanceFields),
+            initiativeDocument (Text.replace "\"ModelAttempts\"" "\"Tokens\"" allowanceFields),
+            initiativeDocument (Text.replace "\"sources\":[\"chat-fixture\"]" "\"sources\":[]" allowanceFields),
+            initiativeDocument (Text.replace "agent_proposer" "proposer" allowanceFields)
+          ]
+          \value -> (runWith (diagnosticOptions CheckConfig) [] [("SHIKIGAMI_INITIATIVES", value)]).exitCode @?= resolutionExitCode
+    ]
+  where
+    initiativeDocument fields = "{\"observers\":[{" <> fields <> "}]}"
+    allowanceFields :: Text
+    allowanceFields =
+      "\"principal\":\"agent_proposer\",\"sources\":[\"chat-fixture\"],\"minimumExcerptLength\":5,\"evaluation\":{\"limits\":{\"ModelAttempts\":1},\"cutoff\":3600},\"evaluationsPerWindow\":10,\"proposalsPerWindow\":5,\"notificationsPerWindow\":5,\"window\":3600,\"proposalExpiry\":86400,\"rejectionSuppression\":604800,\"notices\":{\"kizashiRecipient\":\"recipient_ops\"}"
 
 objectiveConfigurationTests :: TestTree
 objectiveConfigurationTests =

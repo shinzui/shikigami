@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-11-05
+* **Addition**: FRIC-57 records nuisance documentation friction with mori://shinzui/shikigami/plans/114-bound-observation-with-observer-allowances-source-adapters-a-deterministic-pre-filter-and-the-proposal-ledger: Plan test filters use a pattern syntax tasty refuses
+
 ## 2026-11-04
 * **Addition**: FRIC-56 records slowdown tooling friction with mori://shinzui/shikigami: Resuming adaptive qualification rebuilds the frozen native graph
 * **Addition**: FRIC-55 records detour tooling friction with mori://shinzui/shikigami: Cold native qualification build interrupted before output publication

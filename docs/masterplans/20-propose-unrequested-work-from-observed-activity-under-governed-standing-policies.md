@@ -10,6 +10,12 @@ provenance:
     model: "claude-fable-5-1"
     harness: "claude-code"
     at: 2026-11-04T18:38:25Z
+  revisions:
+    - model: "claude-opus-5-5"
+      harness: "claude-code"
+      at: 2026-11-05T00:54:00Z
+      mode: "implement"
+      note: "Started implementation; EP-1 in progress"
 ---
 
 # Propose unrequested work from observed activity under governed standing policies
@@ -45,7 +51,7 @@ Cross-plan decisions that deserve ADRs during implementation: observed content i
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| EP-1 | Bound observation with observer allowances, source adapters, a deterministic pre-filter and the proposal ledger | [docs/plans/114-bound-observation-with-observer-allowances-source-adapters-a-deterministic-pre-filter-and-the-proposal-ledger.md](../plans/114-bound-observation-with-observer-allowances-source-adapters-a-deterministic-pre-filter-and-the-proposal-ledger.md) | None | None | Not Started |
+| EP-1 | Bound observation with observer allowances, source adapters, a deterministic pre-filter and the proposal ledger | [docs/plans/114-bound-observation-with-observer-allowances-source-adapters-a-deterministic-pre-filter-and-the-proposal-ledger.md](../plans/114-bound-observation-with-observer-allowances-source-adapters-a-deterministic-pre-filter-and-the-proposal-ledger.md) | None | None | In Progress |
 | EP-2 | Assess candidates with a registered typed decision whose output cannot select repository, authority or recipient | [docs/plans/115-assess-candidates-with-a-registered-typed-decision-whose-output-cannot-select-repository-authority-or-recipient.md](../plans/115-assess-candidates-with-a-registered-typed-decision-whose-output-cannot-select-repository-authority-or-recipient.md) | EP-1 M1 (the `Shikigami.Initiative.Types` vocabulary) | MasterPlan 19 plan 111 (shared root-accounted decision mechanism) | Not Started |
 | EP-3 | Propose work through a stream-triggered Flow with durable human acceptance and trusted origin links | [docs/plans/116-propose-work-through-a-stream-triggered-flow-with-durable-human-acceptance-and-trusted-origin-links.md](../plans/116-propose-work-through-a-stream-triggered-flow-with-durable-human-acceptance-and-trusted-origin-links.md) | EP-1, EP-2 | None | Not Started |
 | EP-4 | Admit bounded objectives autonomously under explicit, revocable standing policies | [docs/plans/117-admit-bounded-objectives-autonomously-under-explicit-revocable-standing-policies.md](../plans/117-admit-bounded-objectives-autonomously-under-explicit-revocable-standing-policies.md) | EP-1; EP-3 for M3 (the admission branch of the Flow) | None | Not Started |
