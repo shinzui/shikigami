@@ -15,6 +15,7 @@ import Shikigami.ExecutionSelectionWorkflowSpec qualified as ExecutionSelectionW
 import Shikigami.ExecutionTranscriptSpec qualified as ExecutionTranscriptSpec
 import Shikigami.FlowLifecycleSpec qualified as FlowLifecycleSpec
 import Shikigami.GrantStoreSpec qualified as GrantStoreSpec
+import Shikigami.InitiativeAssessmentSpec qualified as InitiativeAssessmentSpec
 import Shikigami.InitiativeLedgerSpec qualified as InitiativeLedgerSpec
 import Shikigami.Migrations.TestSupport (withShikigamiMigratedSuite)
 import Shikigami.ObjectiveCheckpointSpec qualified as ObjectiveCheckpointSpec
@@ -54,6 +55,7 @@ suite = withShikigamiMigratedSuite \databaseFixture ->
     ( testGroup
         "shikigami postgres"
         [ AppSpec.tests databaseFixture,
+          InitiativeAssessmentSpec.tests databaseFixture,
           InitiativeLedgerSpec.tests databaseFixture,
           AdaptiveDeliverySpec.tests databaseFixture,
           AdaptiveWorkflowSpec.tests databaseFixture,

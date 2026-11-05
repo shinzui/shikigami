@@ -38,13 +38,16 @@ You can see it working in `cabal test shikigami-workers-test --test-options='-p 
 
 - [x] Milestone 1: `Shikigami.Initiative.Types` and `Shikigami.Initiative.Settings` exist with their checked values, closed sums, allocated identities and the `initiatives` settings object; the unit suite proves parsers, codecs and settings validation; `tests/types/initiative-values.py` proves the sealed and opaque values cannot be constructed generically. Completed 2026-11-04: InitiativeValue and initiative configuration groups pass; tests/types/initiative-values.py refuses all 26 forgeries; just haskell-conventions accepts the Initiative root.
 - [x] Milestone 2: `Shikigami.Initiative.Source` and `Shikigami.Initiative.Prefilter` turn fixture envelopes for the three source kinds into candidates or skips deterministically; property tests prove totality and that the same envelope always yields the same verdict. Completed 2026-11-04: InitiativePrefilter group (10 cases) passes, including determinism and totality over an edge table; no property library is a core test dependency.
-- [ ] Milestone 3: The proposal ledger migration and `Shikigami.Initiative.Ledger` exist; the stream consumer records skips and enrolls evaluation roots inside the inbox transaction; the PostgreSQL and worker suites prove atomicity, keyed convergence, owner checks and window exhaustion.
+- [x] Milestone 3: The proposal ledger migration and `Shikigami.Initiative.Ledger` exist; the stream consumer records skips and enrolls evaluation roots inside the inbox transaction; the PostgreSQL and worker suites prove atomicity, keyed convergence, owner checks and window exhaustion. Completed 2026-11-04: InitiativeLedger (11 cases), StreamInbox (17 cases, atomic commit and rollback), migrations 0043 with a matching schema; core 588 PostgreSQL cases, server 105 and agent 37 pass with suites run separately (FRIC-59).
 
 
 ## Surprises & Discoveries
 
 - `Shikigami.Execution.Resources.Dimension` encodes map keys as arrays of pairs, so the plan's `limits` document would not have been writable by an operator. `Initiative.Settings.renderLimits` and `parseLimits` give operators `{"ModelAttempts": 1, "Tokens": "unbounded"}`; the root's own stored codec is unchanged. Plan 117's policy document reuses them.
 - `mkAgentPrincipal` admits only `agent_`-prefixed names, so a `CompatibilityIdentity` can never equal a listed principal; observation effectively requires a verified principal, as objective creation does.
+- `migrations.lock` and `expected-schema.txt` were stale at the baseline, stopping at 0037, so the migration integrity and schema tests were already failing. Both were regenerated; entries 0001 to 0037 did not change (FRIC-58).
+- An ordinary skip never reaches a job, so an agent-authored envelope only produces its `agent-actor` row when the consumer runs with the guard lifted. With the default guard the envelope matches nothing and leaves no row at all, which is the correct bounded behavior.
+- `Tx.condemn` rolls a transaction back but the handler still returns a value, so `runInboxTransaction` reports `InboxProcessed`. The consumer's handler therefore returns `Handled {outcome, failure}` and `classifyInboxResult` turns a recorded failure into `TransientFailure`; otherwise the broker offset would advance past a record nothing was committed for.
 - Tasty refuses the plans' `-p "A|B"` filter syntax; use `--test-option=-p --test-option='/A/||/B/'` (FRIC-57).
 
 
@@ -74,10 +77,20 @@ You can see it working in `cabal test shikigami-workers-test --test-options='-p 
   Rationale: `parseExcerpt` refuses controls so nothing else can carry them, but channels routinely deliver `\r\n`. Refusing would turn every Windows-authored message into an `excerpt-too-short` skip.
   Date: 2026-11-04
 
+- Decision: Evaluation attention is counted from a new `evaluated_at` column set when a run opens under the anchor lock, not from candidate verdicts, and `notified_at` on the proposal row counts notifications.
+  Rationale: The plan's count of `evaluating` and `proposed` rows would free a slot whenever an evaluation came back not-actionable or refused, though a model call was spent, and would let queued work consume the window. Counting at open is serialized by the lock, so two runs cannot both take the last slot, and `checkWindows` excludes the named activity so a crashed retry does not count itself.
+  Date: 2026-11-04
+
+- Decision: The consumer no-ops when the observer already holds a row for the activity, and a run's retry of its own proposal stays `Created`.
+  Rationale: The same activity can arrive under a second message id, and the evaluation root's binding includes a receipt-relative cutoff, so re-enrolling would be an `IdentityConflict` that halts the ordered stream. A crash between the ledger commit and the journal append must not make a run treat its own proposal as somebody else's.
+  Date: 2026-11-04
+
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Complete. A matched envelope for an observer now leaves one bounded skip row, or one root, candidate row and job, all inside the inbox transaction, and proposals converge per observer and subject. IR-21 acceptance 5 and the ledger halves of 6 and 7 are proved. Interfaces differ from the plan in the ways the Decision Log records, and the MasterPlan's Integration Points were updated.
+
+Friction: FRIC-57 (plan test filter syntax) is a documentation correction this initiative's plans can absorb, and is retained as a reference. FRIC-58 (stale migration lock) was fixed in this change. FRIC-59 (suites cannot run together) recurs earlier entries and belongs to the test infrastructure rather than this initiative.
 
 
 ## Context and Orientation

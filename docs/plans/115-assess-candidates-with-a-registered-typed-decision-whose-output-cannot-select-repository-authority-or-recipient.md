@@ -37,7 +37,7 @@ You can see it working in `cabal test shikigami-core-test --test-options='-p Ini
 ## Progress
 
 - [x] Milestone 1: `Shikigami.Program.Decision.Initiative` registers `assessmentProgram` with `AssessmentInput`, `AssessmentOutput` and `validateAssessment`; the `Propose` label, slot and step names exist in `Shikigami.Flow.Decision`; unit tests prove the validator and the planted-instruction fixtures with the stub provider. Completed 2026-11-04: InitiativeAssessment (11 cases) passes with planted-instruction fixtures through the real stub dispatch; DecisionContract, DecisionRunner and TypeSafeDecision groups unchanged.
-- [ ] Milestone 2: Decision slots declare their accounting; `Propose` is root-accounted through `rootAccountedDecisionHooks`; a harness Flow under an enrolled root makes one accounted call, replays without a second call and refuses without a root.
+- [x] Milestone 2: Decision slots declare their accounting; `Propose` is root-accounted through `rootAccountedDecisionHooks`; a harness Flow under an enrolled root makes one accounted call, replays without a second call and refuses without a root. Completed 2026-11-04: Postgres InitiativeAssessment (5 cases): one accounted attempt, resume without a second call, refusal before dispatch at zero attempts, refusal before the prepare step without a root, unaccounted labels untouched.
 
 
 ## Surprises & Discoveries
@@ -68,7 +68,7 @@ You can see it working in `cabal test shikigami-core-test --test-options='-p Ini
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Complete. The model's answer can select only among what the operator supplied, and the schema itself can be asserted to contain no authority-bearing key. Each provider call on the `Propose` slot is admitted and settled on the run's root; existing slots are unchanged and their fixtures needed only the new positional `DecisionEnv` field. `DecisionWorkflowSpec`'s fixtures needed no change. MasterPlan 19's plan 111 should reuse this mechanism by adding its label to `decisionAccounting`.
 
 
 ## Context and Orientation

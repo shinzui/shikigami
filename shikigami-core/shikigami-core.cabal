@@ -690,6 +690,7 @@ test-suite shikigami-core-postgres-test
     Shikigami.Fixture.TypeSafe
     Shikigami.FlowLifecycleSpec
     Shikigami.GrantStoreSpec
+    Shikigami.InitiativeAssessmentSpec
     Shikigami.InitiativeLedgerSpec
     Shikigami.ObjectiveCheckpointSpec
     Shikigami.ObjectiveStoreSpec
