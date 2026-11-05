@@ -1,6 +1,8 @@
 # Bundle Update Log
 
 ## 2026-11-05
+* **Update**: FRIC-62 resolved: Repaired the stale fixture constructors without enabling initiative behavior.
+* **Update**: FRIC-61 accepted: Accepted shared-worktree concurrency with scoped staging and committed-input qualification.
 * **Addition**: FRIC-62 records detour tooling friction with mori://shinzui/shikigami: Workspace prototype fixtures omit the initiative dependency
 * **Addition**: FRIC-61 records detour environment friction with mori://shinzui/shikigami: Concurrent dependency edits invalidate ambient qualification
 * **Update**: FRIC-59 accepted: Status set to accepted.

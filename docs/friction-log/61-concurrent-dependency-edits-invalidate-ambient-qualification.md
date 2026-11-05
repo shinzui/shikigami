@@ -6,13 +6,18 @@ generated:
   by: "codex-cli/gpt-6.1-sol"
   at: "2026-11-05T13:14:32Z"
 frictionId: FRIC-61
-status: logged
+status: "accepted"
 impact: detour
 kind: environment
 origin: "mori://shinzui/shikigami"
 affects: "mori://shinzui/shikigami"
 plan: "docs/plans/124-remove-handan-by-owning-the-shikumi-execution-adapter-in-shikigami.md"
 workaround: "Stage only Handan-removal hunks in shared files and qualify the committed project in a fresh isolated build directory; preserve the independent edits for reconciliation."
+resolution: "The user confirmed the concurrent Biscuit update; preserve it as an independent working-tree change and qualify this refactor with a committed isolated project and exact-commit role builds."
+amended:
+  - by: "codex-cli/gpt-6.1-sol"
+    at: "2026-11-05T13:28:25Z"
+    change: "Accepted shared-worktree concurrency with scoped staging and committed-input qualification."
 ---
 # Concurrent dependency edits invalidate ambient qualification
 

@@ -62,7 +62,8 @@ validation and Haskell conventions pass. The fresh isolated solve removes
 from the production closure with no added packages or remaining-version changes.
 The isolated all-components build and pure suites pass (742 core, 37 agent,
 107 server). The native workflow gate against `ef6e11b8` has no findings and
-reports `replay-neutral`. Serial PostgreSQL replay suites, heartbeat CLI and
+reports `replay-neutral`. Serial PostgreSQL suites pass: 604 core database cases and 339 worker cases.
+The heartbeat CLI returns its original digest and echoed payload. Only the five
 immutable role builds remain. Packaging inputs are exported from this exact
 isolated solve; committed-input role builds exclude the independent uncommitted
 Biscuit update while preserving it in the working tree.
@@ -396,6 +397,33 @@ Conventional Commit message and the trailer
 
 
 ## Validation and Acceptance
+
+
+Implementation evidence (2026-11-05): the fresh isolated project under
+`build/handan-removal` builds all components. Its suites pass with 742 core,
+37 agent, 107 server, 604 core PostgreSQL and 339 worker cases; database suites
+use `-j1` and `--num-threads 1`. This includes the original full-outcome replay
+with removed executables and bindings, selected-model judgment requests and raw
+answers, retry/terminal/cancellation boundaries, accepted internal-call root
+accounting and restart result reuse. The final workflow gate against
+`ef6e11b804b9738f65ad87fde05e4be7eec9dc19` passes with no findings, no scaffold
+drift and a `replay-neutral` verdict. Qualification-tool tests (50), Haskell
+conventions and their 13 tests, focused preparation tests (3), and strict
+user-guide/friction validation pass. The heartbeat command returns:
+
+```json
+{"input":{"source":"handan-removal"},"summary":"noop-summary produced a fixed digest","verb":"heartbeat.tick"}
+```
+
+The exporter produces 382 packages and six repositories. Compared with the
+pre-refactor cohort, the only removed packages are `handan-core`, `shikumi-eval`,
+`shikumi-trace-otel`, `tasty` and `tasty-golden`; the only removed repository is
+Handan's pin. No retained package record or repository pin changes. The metadata
+archive has 362 descriptors and omits all removed Hackage packages. The final
+test solve retains exactly the exported production package set, versions, flags
+and components. Immutable role builds target the exact committed export at
+`ea5d930a14f1b8b6bc0d0106e705f3a9b043fbbe`, preserving the independent Biscuit
+working-tree update outside this qualification.
 
 
 A complete refactor must meet both dependency removal and behavior preservation.

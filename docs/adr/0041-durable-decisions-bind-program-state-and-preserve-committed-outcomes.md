@@ -31,7 +31,7 @@ executable decision.
 
 Shikigami owns the Flow-facing static-slot/model-alias/typed-input interface and
 versioned validated result. Shikumi API adaptation stays inside the
-program registry and runner. This isolates dependency changes; it does not
+program registry, local runtime and runner. This isolates dependency changes; it does not
 promise that upstream APIs never change. [Shikumi MP-12](mori://shinzui/shikumi/masterplans/12-support-typesafe-jev-and-probability-backed-decision-outputs) is a coordination
 dependency, with Jev, probability-backed types and calibration outside MP-13's
 initial acceptance criteria.
