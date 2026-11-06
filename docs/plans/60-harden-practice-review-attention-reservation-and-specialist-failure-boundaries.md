@@ -3,6 +3,7 @@ id: 60
 slug: harden-practice-review-attention-reservation-and-specialist-failure-boundaries
 title: "Harden practice-review attention reservation and specialist failure boundaries"
 kind: exec-plan
+master_plan: "docs/masterplans/9-architecture-practice-review-flow.md"
 created_at: 2026-08-27T00:54:32Z
 intention: "intention_01m10bc7hae8trp0ev5mzpvt0d"
 provenance:
@@ -12,6 +13,11 @@ provenance:
       at: 2026-10-29T13:39:34Z
       mode: "update"
       note: "Refresh current source and suite paths; correct semantic ordering, exception handling, replay prerequisites, and acceptance coverage."
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-11-06T21:09:33Z
+      mode: "update"
+      note: "Refresh valid retained-skip defect versus existing corruption rollback and current allocation/domain fixtures."
   reviews:
     - model: "gpt-6-astra"
       harness: "codex-cli"
@@ -63,8 +69,11 @@ association table gains the index the operator audit query needs.
 
 ## Surprises & Discoveries
 
-Refresh on 2026-10-29 against `dda505e`: all four defects and the missing index
-remain. The orchestration suite moved to `shikigami-core/test-postgres/`; the old
+Refresh on 2026-11-06 against `ff00b819`: the skip/resume, claim-label,
+problem-rendering and deterministic-failure defects remain, as does the missing
+review-id index. Later domain hardening adds allocated review identities,
+full-request authorization and a corrupt-retained-attention rollback control;
+these do not fix the valid retained-skip path. The orchestration suite moved to `shikigami-core/test-postgres/`; the old
 focused command would miss it. `materialClaimProjection` also sorts by `claimId`,
 so deleting the JSON field alone does not make multi-claim keys label-independent.
 `runFlowBehavior` now handles `DecisionAbort` as well as approval failures; both
@@ -112,9 +121,11 @@ baseline reset, so the current production interpreters are installed directly.
 
 ## Outcomes & Retrospective
 
-The 2026-10-29 refresh validates the plan against source, dependency transaction
+The 2026-10-29 refresh validated the plan against source, dependency transaction
 semantics, ADRs, test-suite declarations, migration recipes, and workflow-versioning
-rules. No implementation milestone is complete. Implementation tests and the Keiro
+rules. The 2026-11-06 source check confirms the remaining obligations and
+credits later allocation/corrupt-result controls without closing a milestone.
+No implementation milestone is complete. Implementation tests and the Keiro
 gate remain acceptance work; this documentation refresh does not claim they passed.
 Plan validation checked all local Markdown links and required sections, language-tagged
 fences, Cabal suite names, and `just --dry-run keiro-gate HEAD`; `git diff --check`
@@ -130,7 +141,7 @@ visible result is written to a journal in PostgreSQL under a step name, and when
 process crashes and the run is resumed, each step returns its journaled value instead of
 re-running. A "patch" is keiro's guard that lets a body add steps without confusing runs
 that started before the steps existed; the current baseline installs practice-review interpreters directly. Preserve the
-existing labels and result codecs declared in `domain/shikigami-agent-run.keiro`.
+existing labels and result codecs declared in `domain/shikigami/agent-run.keiro`.
 Follow `docs/workflow-versioning.md` for every Agent or Flow body edit. This plan
 changes step internals and pure validation, without introducing steps or patch ids.
 Replay already-journaled evaluator, recall, verdict, and attention values unchanged;
@@ -179,7 +190,10 @@ lives in the interpreter, not the Flow.
 [0027](../adr/0027-the-first-release-establishes-one-clean-durable-baseline.md) defines the unused-state prerequisites for changing the
 key version without a data migration; they must be rechecked.
 [0012](../adr/0012-a-declared-workflow-body-only-grows-behind-a-patch.md) is why no step
-name changes in this plan. No cross-repository ADR applies.
+name changes in this plan. [ADR 0092](../adr/0092-review-values-are-checked-and-source-citations-use-structured-coordinates.md)
+and [ADR 0093](../adr/0093-review-entities-are-allocated-behind-durable-request-receipts.md)
+now own checked citation values and allocated review/resolution identities.
+Use their public factories/receipts in the new tests. No cross-repository ADR applies.
 
 
 ## Plan of Work
@@ -191,9 +205,12 @@ reservation unless it also appends a fresh `Reserved` or `Coalesced` journal rec
 same transaction, and a test proves the skip-then-resume scenario leaves no row.
 
 In `shikigami-core/src/Shikigami/PracticeReview/Attention.hs`, inside the `runTransaction`
-block of `reserveAttention`, change the `JournalAlreadyPresent stored` branch so it calls
-`Tx.condemn` before returning `firstText (parseEither Aeson.parseJSON stored)`. The
-returned value is unchanged; only the writes are discarded. Add a comment above the branch
+block of `reserveAttention`, change the `JournalAlreadyPresent stored` branch to call
+`Tx.condemn` for every retained result, before parsing/returning it. Current code
+already condemns malformed retained JSON but returns a valid retained value
+without rollback. Preserve that typed decode failure and the existing corruption
+recovery test; valid `AttentionSkipped` must also roll back speculative writes.
+The returned accepted result is unchanged; only speculative writes are discarded. Add a comment above the branch
 stating that the inserts above are speculative until the append succeeds and that a
 journaled skip must not leave a row behind.
 
@@ -203,7 +220,8 @@ nothing". Build the attention environment exactly as `attentionEnv` does but wit
 `grants = StaticGrants (Map.singleton reviewerAgent (Set.fromList [SKawaDigest]))`, so the
 Kizashi grant is missing. Run `runPracticeReviewAttentionAtomic` under `runWorkflowWith`
 with workflow id `practice-review-attention-skip-resume` and assert the decoded result is
-`AttentionSkipped`. Then run the same workflow id again with the full `attentionEnv`
+`AttentionSkipped`. Use the current allocated review receipt/fixtures rather
+than reintroducing a UUIDv5 ReviewId factory. Then run the same workflow id again with the full `attentionEnv`
 grants. Assert the result is still `AttentionSkipped`, that `attentionCountsStatement`
 returns `(0, 0, 0)`, and that `listOutbox "shinzui/shikigami"` is empty. Before the fix the
 second assertion fails with counts `(1, 1, 0)`; after it, the test passes.
@@ -449,3 +467,5 @@ review records this plan answers are
 Revision note (2026-10-29): refreshed paths, suite commands, current Flow exception
 handling and baseline context; closed label-sort, bounds, prior-scope and migration
 acceptance gaps; made pre-release assumptions conditional on current evidence.
+
+Revision note (2026-11-06): Recheck the live defects, distinguish malformed retained-result rollback from the still-broken valid retained-skip path, retain allocation/corruption controls, update current domain path and fixture/value ownership. No repair implementation or new runtime evidence is claimed.

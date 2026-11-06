@@ -5,6 +5,13 @@ title: "Shikigami Declared-Agent Runtime Bootstrap"
 kind: master-plan
 created_at: 2026-06-24T23:41:08Z
 intention: "intention_01kvy04813ehbv9aghj3tn4zjx"
+provenance:
+  revisions:
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-11-06T20:49:07Z
+      mode: "update"
+      note: "Reconcile bootstrap completion with the corrected child milestone structure and retain historical limits."
 ---
 
 # Shikigami Declared-Agent Runtime Bootstrap
@@ -309,6 +316,12 @@ and the channel-egress sink variant (IR-3).
 
 
 ## Progress
+
+2026-11-06 reconciliation: all six children are accepted at the documented
+bootstrap boundary. Plan 1's finished milestones now appear directly under its
+Progress heading; nested historical checklists had made Mina infer Not Started.
+This is a tracking correction, with no new runtime qualification. The June
+checkpoint and its deferred refinements remain recorded below and in Outcomes.
 
 Track milestone-level progress across all child plans. Each entry names the child plan
 and the milestone. This section provides an at-a-glance view of the entire initiative.

@@ -62,6 +62,11 @@ provenance:
       at: 2026-11-04T03:25:13Z
       mode: "implement"
       note: "Start EP-6 after verified completed prerequisites; retain native fault and live acceptance gates."
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-11-06T20:49:07Z
+      mode: "update"
+      note: "Credit plan 86 native milestones while retaining the actual-model trial and recurrence gates."
 ---
 
 # Deliver adaptive autonomous objectives with durable workers
@@ -107,10 +112,10 @@ Relevant local decisions consulted include [ADR 0007](../adr/0007-a-resolved-pro
 | EP-1 | Enforce root resource reservations across durable work | [docs/plans/81-enforce-root-resource-reservations-across-durable-work.md](../plans/81-enforce-root-resource-reservations-across-durable-work.md) | None | None | Complete |
 | EP-2 | Pin governed execution settings for agent assignments | [docs/plans/82-pin-governed-execution-settings-for-agent-assignments.md](../plans/82-pin-governed-execution-settings-for-agent-assignments.md) | EP-1; external plan 73 | None | Complete |
 | EP-3 | Recover durable model and tool turns with composed policies | [docs/plans/83-recover-durable-model-and-tool-turns-with-composed-policies.md](../plans/83-recover-durable-model-and-tool-turns-with-composed-policies.md) | EP-1, EP-2 | None | Complete |
-| EP-4 | Coordinate continuing worker sessions and fenced handoffs | [docs/plans/84-coordinate-continuing-worker-sessions-and-fenced-handoffs.md](../plans/84-coordinate-continuing-worker-sessions-and-fenced-handoffs.md) | EP-1, EP-2, EP-3; IR-11/joint provider boundary qualified by plan 96; IR-13 provider qualified by plan 99; full consumer acceptance qualified by plan 84 | None | Complete |
+| EP-4 | Coordinate continuing worker sessions and fenced handoffs | [docs/plans/84-coordinate-continuing-worker-sessions-and-fenced-handoffs.md](../plans/84-coordinate-continuing-worker-sessions-and-fenced-handoffs.md) | EP-1, EP-2, EP-3; IR-11/IR-13 and full consumer acceptance qualified by plans 96/99/84 | None | Complete |
 | EP-5 | Adapt durable delivery through validated coordinator decisions | [docs/plans/85-adapt-durable-delivery-through-validated-coordinator-decisions.md](../plans/85-adapt-durable-delivery-through-validated-coordinator-decisions.md) | EP-4; external plan 76; completion gate IR-13 provider | None | Complete |
-| EP-6 | Qualify integrated adaptive autonomous delivery | [docs/plans/86-qualify-integrated-adaptive-autonomous-delivery.md](../plans/86-qualify-integrated-adaptive-autonomous-delivery.md) | EP-5; IR-11 and IR-13 providers before milestones 2–3 | None | In Progress |
-| EP-7 | Supervise recurring objectives from current durable checkpoints | [docs/plans/87-supervise-recurring-objectives-from-current-durable-checkpoints.md](../plans/87-supervise-recurring-objectives-from-current-durable-checkpoints.md) | EP-5; completion gate IR-13 provider | EP-6 fixture reuse | Not Started |
+| EP-6 | Qualify integrated adaptive autonomous delivery | [docs/plans/86-qualify-integrated-adaptive-autonomous-delivery.md](../plans/86-qualify-integrated-adaptive-autonomous-delivery.md) | EP-5 | None | In Progress |
+| EP-7 | Supervise recurring objectives from current durable checkpoints | [docs/plans/87-supervise-recurring-objectives-from-current-durable-checkpoints.md](../plans/87-supervise-recurring-objectives-from-current-durable-checkpoints.md) | EP-5 | EP-6 fixture reuse | Not Started |
 
 EP numbers identify rows in this master plan; the linked ExecPlan file ids are 81–87. A child reference is a whole-child start gate: that child must be Complete before the dependent child begins. External plans 73 and 76 are start gates of the same kind, owned by [MasterPlan 13](13-compose-shikumi-decisions-in-durable-flows.md). IR-11 is owned by [plan 96](../plans/96-provide-governed-mutable-repository-workspaces-for-durable-agents.md) and IR-13 by [MasterPlan 17](17-track-durable-objectives-and-authoritative-assignment-checkpoints-without-rei.md), whose EP-2 (plan 99) delivers the provider that closes the IR-13 gate; where a row names one as a completion gate, the child may build its mechanics against the fixture adapter its own plan defines, but it cannot be marked Complete until the real provider passes the acceptance cases named in the ownership matrix below. EP-6 is the exception: its milestones 2–3 exercise real workspaces and checkpoints, so both providers must exist before those milestones start. Initial status is Not Started, not a claim that every row is currently implementable.
 
@@ -165,12 +170,15 @@ Coordinate those prerequisite deliverables with their separate owning plans when
 ## Progress
 
 
-2026-11-04 UTC: EP-6 is In Progress after auditing completed EP-5 and the real
-workspace/objective providers. Its deterministic two-repository seeds, bounded
-driver and compiled native consumer are implemented; native runtime, the full
-coupled fault matrix and the explicitly configured live trial still gate
-acceptance. The child retains those distinctions and its current evidence.
-EP-7 remains independently eligible and outside this implementation request.
+2026-11-06 reconciliation: EP-6 is In Progress with milestones 1 and 2 accepted.
+Its full native repository/recovery/refusal matrix and independently restored
+exact artifacts pass; [native qualification](../evidence/adaptive-delivery/native-qualification.md)
+and [retained facts](../evidence/adaptive-delivery/native-facts.json) name the
+driver and immutable runtime. M3 still needs the guarded live adapter: the current driver unconditionally blocks
+live mode and cannot be enabled by a credential alone. After that path is implemented/
+qualified, the actual-model trial needs production authority and approved limits. No such trial was run
+for this reconciliation. EP-7 is independently eligible and Not Started;
+watchdog scheduling and standing-policy admission do not implement recurrence.
 
 2026-11-04 UTC current state: EP-1 through EP-5 are Complete. EP-5 qualifies the
 native adaptive coordinator, actual typed-call accounting, shared capacity,
@@ -178,8 +186,8 @@ inspection and exact fixture completion through the real objective/session
 owners. Its [acceptance evidence](../evidence/plan-85/acceptance.md) records
 1,711 package cases, 183 conformance controls and an additive-only native gate.
 This closes its IR-16 mechanics and IR-17 decision-permission/escalation cases.
-EP-6 and EP-7 are now eligible under their declared provider gates and have not
-started. EP-6 retains real repository artifacts, the live trial and integrated
+At that earlier checkpoint EP-6 and EP-7 were eligible and had not started.
+EP-6 subsequently accepted its native milestones as recorded above. It retains the live trial and integrated
 UC-1/IR-14/IR-16/IR-17 qualification; EP-7 retains recurrence. The initiative
 remains in progress.
 
@@ -324,10 +332,13 @@ recurring child gates. See [objective operations](../operations/objective-tracki
 ## Outcomes & Retrospective
 
 
-EP-1 through EP-5 are complete. EP-6 can qualify the integrated repository
-delivery and live trial; EP-7 can implement explicit recurrence. EP-5 preserves
+EP-1 through EP-5 are complete. EP-6 has qualified the native integrated repository
+delivery and still needs the guarded live adapter and authorized actual-model trial;
+EP-7 must implement explicit recurrence against delivered objective providers. EP-5 preserves
 existing populations with real patch branches, and its shared native producer
 and capacity contracts are distilled in ADRs 0108–0111. Overall completion still
 requires both remaining children and the acceptance ownership matrix above.
 Finite integrated delivery may be qualified before recurrence without marking
 the entire initiative complete.
+
+Revision note (2026-11-06): Refresh EP-6's missing live adapter and accepted native matrix; discharge completed provider gates from active registry cells and seed EP-7's actual recurrence outcomes without treating watchdog/proposal scheduling as mandates.

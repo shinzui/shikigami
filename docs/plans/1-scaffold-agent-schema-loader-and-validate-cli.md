@@ -6,6 +6,13 @@ kind: exec-plan
 created_at: 2026-06-24T23:41:28Z
 intention: "intention_01kvy04813ehbv9aghj3tn4zjx"
 master_plan: "docs/masterplans/1-shikigami-declared-agent-runtime-bootstrap.md"
+provenance:
+  revisions:
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-11-06T20:49:07Z
+      mode: "update"
+      note: "Expose the three historically accepted milestones under Progress while retaining detailed evidence."
 ---
 
 # Scaffold, Agent Schema, Loader, and Validate CLI
@@ -58,9 +65,17 @@ composition.
 
 ## Progress
 
-Use a checklist to summarize granular steps. Every stopping point must be documented here,
-even if it requires splitting a partially completed task into two ("done" vs. "remaining").
-This section must always reflect the actual current state of the work.
+Reconciled 2026-11-06: all three milestones were accepted on 2026-06-24, as
+recorded in Outcomes & Retrospective. The original checklist below is retained
+as historical evidence; the milestone summary is directly under Progress so Mina
+can observe the completed work.
+
+- [x] (2026-06-24) M1: four-package bootstrap and coherent dependency pins built successfully; a second build reported `Up to date`.
+- [x] (2026-06-24) M2: composed migrations applied and reapplied without changes; Kioku tables and `shikigami_fired` existed, with no bespoke `agent_runs` table.
+- [x] (2026-06-24) M3: canonical schema, typed loader and validate CLI accepted the heartbeat and Skill fixtures and rejected malformed declarations and mismatched Skill names.
+
+
+## Historical milestone evidence
 
 ### Milestone M1 — four-package project scaffolds and builds ✅ (2026-06-24)
 

@@ -13,6 +13,11 @@ provenance:
       at: 2026-10-28T18:49:50Z
       mode: "update"
       note: "Apply overlay scope transfer and refresh MCP release, discovery authorization, schema binding and durable execution acceptance."
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-11-06T21:09:33Z
+      mode: "update"
+      note: "Refresh current selected MCP/overlay/immutable-auth dependencies and exact remaining provider qualification."
   reviews:
     - model: "gpt-6-astra"
       harness: "codex-cli"
@@ -53,21 +58,19 @@ Do not repeat that work or treat it as evidence that MCP already runs.
 
 ## Progress
 
-- [x] (2026-10-28) Planning refresh reconciles the August scope amendment with the
-  current schema, providers, C13 authorizer and durable execution tools.
-- [x] Existing prerequisites supplied by plans 56–59: capability declaration,
-  immutable catalog, additive registry, acquisition/release, bounded Skill tool
-  loop, durable descriptor pinning and one-off harness integration.
-- [x] Existing generic authorization: `Action/Authorization.hs` and
-  `Capability/Provider.hs` check connection and each exact tool invocation.
-  This is not MCP discovery integration or release/deployment qualification.
-- [ ] M1: implement the selected pure binding contract and fake-lease fixtures; verify the released transport/adapter/auth handoff.
-- [ ] M2: implement the bounded MCP provider and discovery/invocation adapter
-  using existing exact-revision leases and C13.
-- [ ] M3: wire the provider at supported composition roots and prove current
-  durable execution, pinned evidence, cancellation and replay behavior.
-- [ ] M4: hermetic end-to-end proof, failure/security matrix, operator docs and
-  final accepted dependency/deployment evidence.
+
+Implementation of the surviving MCP scope is Not Started. Plans 56–59 deliver the
+generic overlay declaration, catalog, leases, tool loop and durable pinning; existing
+C13 code checks connection/invocation. Those are prerequisites, not completed MCP milestones.
+
+- [ ] M1: pure binding/revision/name/schema and fake-lease fixtures, plus the exact released transport/adapter/discovery-authority handoff.
+- [ ] M2: bounded MCP discovery/invocation provider with partial-acquisition cleanup and fresh authority for every external action.
+- [ ] M3: current one-off/durable Skill and supported conversation wiring, pinned evidence, cancellation and accepted-result replay.
+- [ ] M4: hermetic end-to-end security/recovery/cleanup matrix, operator guidance and final immutable release/consumer qualification.
+
+2026-11-06 source refresh: `Capability/Mcp/` remains absent. No MCP implementation or
+runtime test is credited. Existing root-accounted execution and the immutable Kikan-En
+source pin are available foundations; neither supplies the missing MCP client.
 
 ## Surprises & Discoveries
 
@@ -89,7 +92,11 @@ archives and upstream peeled tags. `baikai 0.10.0.0` at
 Their owner requests remain proposed:
 `mori://shinzui/baikai/okf/improvement-requests/concepts/IR-2` and
 `mori://shinzui/shikumi/okf/improvement-requests/concepts/IR-1`.
-The selected project uses older Baikai 0.7.2.0 and Shikumi Tools 0.4.0.0.
+The 2026-10-28 selected-version observation is historical. As of 2026-11-06 the
+project selects Baikai 0.10.0.0 and Shikumi Tools 0.4.2.1; their Hackage descriptors
+and selected source expose no MCP modules. Shikumi and its tools share peeled
+release commit `7b96ecf06364b37de44b15c4f58b2528b5a3e0f5`. Baikai now has a preferred
+0.10.1.0 release, which this plan does not select.
 Updating a pin alone cannot provide the missing contracts.
 
 `Shikumi.Tool` already supports dynamic tools, and Shikigami composes them. The
@@ -152,14 +159,20 @@ the behavior attempt. Both must be qualified; a one-off echo command alone prove
 neither durable adoption nor replay safety. Read current plans
 [82](82-pin-governed-execution-settings-for-agent-assignments.md) and
 [83](83-recover-durable-model-and-tool-turns-with-composed-policies.md) before
-changing this interface, preserving their in-progress work.
+changing this interface, preserving their completed contracts and consumer regressions.
+Plan 85 now supplies root-accounted accepted decisions, and plan 124 owns the local
+Shikumi runtime. MCP must consume the current accepted execution path.
 
 `Action/Authorization.hs` wraps Kikan-En's proof-verifying client.
 `Capability/Provider.hs` authorizes `ConnectCapability` before acquisition and
 `InvokeCapabilityTool` before each logical tool callback. Extend through the same
 authority for discovery; transport credentials never substitute for authorization.
-The project currently includes local Kikan-En contract/client packages. See
-[the dependency cohort](../dependency-cohort.md) for the immutable-closure gap.
+Kikan-En contract/client are selected from immutable published source commit
+`16704290d527d413568bfa40c983f5c3604c35c8` in
+`mori://shinzui/kikan-en/repos/kikan-en`, with no Hackage release. See
+[the dependency cohort](../dependency-cohort.md) and plan 124 for existing closure
+and native packaging evidence. Adding an MCP dependency still needs a newly
+verified closure and consumer qualification; sibling-source availability is not a gate.
 
 Read [ADR 0025](../adr/0025-capability-overlays-are-requests-for-additive-model-tools.md),
 [ADR 0033](../adr/0033-recorded-agent-principals-key-durable-state.md),
@@ -257,9 +270,9 @@ release. This resolves naming/schema/auth/effect-error questions before multiply
 servers or transports. Until upstream transport/adapter release gates clear, M1
 may produce fixtures and the concrete contract, but M2–M4 may not wire live MCP.
 Coordinate new package adoption with
-[plan 92](92-resolve-the-released-keiro-0-22-cohort-and-rehearse-the-composed-migration.md);
-require an accepted solve/migration/package-closure handoff before consuming APIs
-outside the current cohort, without blocking independent contract work.
+[completed plan 92](92-resolve-the-released-keiro-0-22-cohort-and-rehearse-the-composed-migration.md)
+and the current cohort owner; its upgrade is already accepted. Require a new
+verified solve/closure only if adopting APIs outside today's selected cohort.
 
 ### M2 — Implement an MCP-backed provider
 
@@ -439,7 +452,8 @@ bindings, canonical schema digests and C13 rather than defining competing owners
 Baikai IR-2 supplies transport/discovery/invocation/auth; Shikumi IR-1 supplies the
 public MCP/dynamic-tool adapter. These released contracts gate M2–M4. Kikan-En IR-3
 is retained as coordination lineage; current connection/invocation code exists,
-while discovery integration and immutable deployment evidence still need proof.
+while discovery integration and the MCP-extended immutable deployment still need proof.
+Plans 82–85 and 92–95 are complete foundations, not pending whole-child gates.
 The upstream plan artifacts are
 `mori://shinzui/baikai/plans/30-mcp-transport-and-json-rpc-client-core`,
 `mori://shinzui/baikai/plans/31-mcp-tool-discovery-and-invocation`,
@@ -448,6 +462,8 @@ The upstream plan artifacts are
 Their implementation details must be rechecked against released contracts.
 
 ## Revision Notes
+
+- 2026-11-06: Refresh the selected cohort, immutable Kikan-En dependency and completed execution/upgrade foundations; keep the four MCP outcomes unstarted and remove planning/prerequisite checkboxes from implementation progress.
 
 - 2026-10-28 follow-up: Resolve the review holes with an immutable operator binding,
   concrete name/schema/auth mapping, finite protocol limits, package ownership and

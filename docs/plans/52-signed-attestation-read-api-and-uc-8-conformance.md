@@ -6,104 +6,72 @@ kind: exec-plan
 created_at: 2026-08-05T14:53:02Z
 intention: "intention_01kz96h79mezmbnwm67pdjjepr"
 master_plan: "docs/masterplans/10-sanctioned-execution-attestation-for-agent-runs.md"
+provenance:
+  revisions:
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-11-06T21:09:33Z
+      mode: "update"
+      note: "Refresh existing canonical/evidence/identity/API/workspace foundations and retain shared golden, signing and live proof."
 ---
 
 # Signed attestation, read API, and UC-8 conformance
 
-This ExecPlan is a living document. The sections Progress, Surprises & Discoveries,
-Decision Log, and Outcomes & Retrospective must be kept up to date as work proceeds.
-
+This living plan was refreshed against source checkpoint `ff00b819` on 2026-11-06.
+Signing and served attestations remain unimplemented. This is a documentation refresh.
 
 ## Purpose / Big Picture
 
-By the time this plan starts, an agent run that requires a sanctioned execution profile resolves
-that profile to an immutable digest before it executes, accumulates a durable record of every
-model call it made, seals that record when the behavior and all delegated children are terminal,
-and judges it against the profile — producing a verdict plus the complete list of ways the run
-failed to conform. All of that lives inside this system and is only as trustworthy as this
-system.
+Make a completed sanctioned review verifiable without Shikigami's database. A signed
+attestation must bind the immutable reviewed change, profile, agent artifacts, complete
+actual-call evidence and review result. The signing key stays outside behavior, prompts,
+tools and writable workspaces. A bounded authenticated read API returns the same retained
+record by run or review-request identity; an offline verifier checks the exported proof
+against trusted verification material. Rotation preserves old verification.
 
-This plan closes the loop by making the result verifiable from outside. After it, a sealed
-run-evidence record is canonically encoded, hashed, and signed by a workload identity whose key
-the agent's behavior, its prompt, its tools, and its repository workspace cannot reach. The
-signed attestation is served by a bounded HTTP endpoint, retrievable by run id or by review-request
-id, and is also emitted as a self-contained file that a verifier can check with no access to this
-database at all.
-
-You can watch it work end to end. Take the permitted run: fetch its attestation, hand the file to
-the offline verifier, and get `sanctioned`. Then mutate one field at a time — change the head
-commit, change the model in one call record, change the thinking level, add an undeclared fallback,
-delete a delegated child's call, alter the signature — and each time the verifier refuses, naming
-what it refused. Then rotate the signing key and re-verify the *old* attestation: it still
-verifies, because rotation must not orphan historical proofs.
-
-That mutation suite is the acceptance criterion of the whole initiative, and it is where the trust
-statement gets honest. What this proves is that a trusted runtime emitted specific provider
-requests, received correlated responses, and bound those observations to a code review. It does not
-prove anything about computation inside the provider. The evidence keeps those levels distinct —
-declared configuration, runtime-observed request and response, runtime-signed attestation,
-provider-attested evidence — and a verifier must never promote one to another.
-
-This plan does not decide which models are good enough and does not reject a merge; the gate that
-consumes this proof is `mori://shinzui/kotei/okf/improvement-requests/concepts/IR-2`, in another
-repository.
-
+The trust claim is runtime-attested observation, not proof of hidden provider computation.
+Unknown schemas, issuers, algorithms, incomplete coverage and altered artifacts fail closed.
+Kotei's enforcement remains owned by
+`mori://shinzui/kotei/okf/improvement-requests/concepts/IR-2`.
 
 ## Progress
 
-- [ ] M1: canonical encoding and hashing of the attestation payload built on
-      `Baikai.Evidence.canonicalEncode` and `commitmentDigest` — **adopted, not authored** — and
-      byte-matched against the golden payload published upstream.
-- [ ] M1 (gate): `baikai 0.5.0.0` in the cohort, currently excluded by `kioku-core 0.3.0.0`'s
-      `baikai ^>=0.4.1.0`. Shared with `docs/plans/51-run-evidence-aggregate-and-compliance-roll-up.md`;
-      `docs/plans/53-upgrade-shikigami-to-the-keiro-0-11-and-keiki-0-9-cohort.md` owns requesting
-      the kioku release that lifts it.
-- [ ] M1: `evidenceSchemaVersion` recorded alongside the digest algorithm, so a verifier can tell
-      which evidence vocabulary the covered records used.
-- [ ] M2: signing by a workload identity, with a test proving the key is unreachable from the
-      behavior, the prompt, the tools, and the workspace.
-- [ ] M2: pg-migrate-managed attestation table; read models reconciled.
-- [ ] M3: key rotation that preserves verification of every historical attestation.
-- [ ] M4: bounded read API — by run id and by review-request id — added as one field on the
-      umbrella route record, with the generated OpenAPI document regenerated.
-- [ ] M4: offline verifier input: a self-contained file plus a verifier that checks it with the
-      database stopped.
-- [ ] M5: the UC-8 conformance fixture — `sanctioned` for the permitted run, and explicit refusal
-      for the model, thinking, fallback, missing-call, artifact, and signature mutations.
-- [ ] M5: the live-provider positive case, which needs the credential
-      `docs/plans/13-wire-a-real-model-provider-into-behavior-runs.md` never had.
+- [ ] M1: reconcile the implemented canonical bytes/digest and schema metadata with the ratified Kikan envelope and golden payloads; preserve existing wire fixtures.
+- [ ] M2: sign only eligible sealed evidence through a trusted key boundary, persist one immutable attestation identity, and prove key exclusion from current behavior/execution/workspace paths.
+- [ ] M3: rotate signing keys while historical attestations retain their original bytes, digest and verification.
+- [ ] M4: serve bounded authorized run/review lookups with generated OpenAPI and export a self-contained verifier input that verifies with the database unavailable.
+- [ ] M5: pass the complete UC-8 mutation/refusal matrix and an explicitly authorized real-provider positive case, including plan 13's transferred live proof.
 
+Local plans 49–51, 22 and 44 are complete. `canonicalPayloadBytes` and
+`attestationPayloadDigest` already exist in Envelope.hs. Their existence is delivered
+foundation work, not acceptance of M1's still-missing shared golden conformance.
+The former Baikai 0.5/Kioku 0.3 bounds gate is superseded by the selected cohort.
 
 ## Surprises & Discoveries
 
-**The canonical encoder this plan was going to write already exists upstream (discovered
-2026-08-10).** `baikai 0.5.0.0`, released 2026-08-05, added `Baikai.Evidence`, which includes the
-canonical hashing core: `canonicalEncode` (object keys sorted, no insignificant whitespace,
-numbers normalised so `1`, `1.0`, `1.00`, and `1e0` all encode as `1`, and a hand-written string
-escaper so an aeson upgrade cannot silently invalidate a recorded digest), `commitmentDigest` over
-a full request envelope, and `configurationDigest` over an allow-list projection.
+On 2026-11-06, `AgentRunAttestation` still has optional signature/keyId fields with an
+explicit comment assigning signing to this plan. `ShikigamiApi` serves health, agents,
+objectives and OpenAPI; it has no attestation route. No Sign/Offline implementation or
+attestation persistence migration is present. The existing canonical functions already
+call Baikai's `canonicalEncode` and `commitmentDigest`; no new hashing implementation
+is needed. `ReviewedArtifact` already uses the shared repository/revision vocabulary.
 
-The two properties worth dwelling on are number normalisation and the hand-written escaper. Both
-are the kind of thing a first implementation gets almost right, and both fail in the same way:
-silently, and only when compared against another implementation in another repository — which is
-precisely the cross-repository byte match this plan's Milestone 1 exists to achieve. Adopting the
-upstream encoder removes that risk and has the additional property that the evidence records and
-the attestation covering them are canonicalised by the same code, so they cannot disagree.
-
-**This shrinks what Kikan IR-6 has to ratify.** The upstream request was carrying two jobs: agree
-the attestation *envelope* — which fields the signature covers, in what shape, with what redaction
-— and agree the *encoding* that turns that envelope into bytes. The encoding half is now answered
-by a published library that both sides can depend on. IR-6 still genuinely binds on the envelope
-and on the golden payloads this plan must match byte-for-byte; it no longer needs to specify a
-canonicalisation algorithm in prose. Worth saying in the request, because it makes the request
-smaller and easier to accept.
-
-**The gate is shared with plan 51 and is a bound, not a contract.** `kioku-core 0.3.0.0` declares
-`baikai ^>=0.4.1.0`, which excludes 0.5, so the cohort cannot take `Baikai.Evidence` yet. A kioku
-release admitting `baikai ^>=0.5` lifts it for both plans at once.
-
+The selected Baikai is 0.10.0.0 with Kioku 0.12.0.2 and Keiro 0.22. Hackage and peeled
+upstream tags confirm those selected releases. Baikai's preferred version is now
+0.10.1.0; that observation does not select an upgrade. Real provider evidence APIs and
+normalized restartable facts are adopted locally. The remaining shared contract is
+`mori://shinzui/kikan/okf/improvement-requests/concepts/IR-6`, whose owner still says
+proposed; local round-trip/golden tests cannot stand in for ratified cross-project fixtures.
 
 ## Decision Log
+
+2026-11-06 refresh: retain the five milestones, signing isolation and shared envelope
+contract. Adopt the canonical implementation already delivered by plans 49–51, current
+allocated review identities and current execution/workspace owners. Remove the old
+package-bound and placeholder-type work; preserve the real-provider and golden gates.
+
+Historical rationale follows; package availability and absent-hash observations below
+refer to their dates and are superseded by the current Context and Plan of Work.
 
 - Decision: The signing key is a distinct credential class layered on the outbound-authentication
   machinery, and its non-visibility is asserted by a test rather than documented in a comment.
@@ -165,471 +133,199 @@ release admitting `baikai ^>=0.5` lifts it for both plans at once.
   unusable for signing.
   Date: 2026-08-05
 
+## Outcomes & Retrospective
+
+Not complete. Source inspection credits existing canonicalization, profile/evidence and
+review contracts. Signing, rotation, served/offline proof and full live conformance are
+still acceptance work. No cryptographic implementation, build or paid provider trial was
+performed by this refresh.
 
 ## Context and Orientation
 
-You need this file, the working tree, and three checked-in plans:
-`docs/plans/49-sanctioned-execution-profile-and-attestation-contracts.md` (the envelope and its
-canonical encoding), `docs/plans/50-fail-closed-profile-resolution-and-run-pinning.md` (profile
-resolution and pinning), and `docs/plans/51-run-evidence-aggregate-and-compliance-roll-up.md` (the
-sealed evidence and the verdict this plan signs). Read all three.
+`shikigami-core/src/Shikigami/Attestation/Envelope.hs` owns `AttestationPayload`,
+`AgentRunAttestation`, canonical bytes and digest; Profile/Resolve own pinned policy,
+Evidence/Compliance/EvidenceStore own lifecycle, roll-up and atomic projections.
+`Decision/Evidence.hs` retains actual-call expectations, exact encode-only Baikai JSON
+and normalized compliance facts for restart. Do not decode provider JSON using an
+invented FromJSON instance or reconstruct history from today's defaults.
 
-**What already exists that this plan extends.** Plan 49 defines `AttestationPayload` (everything
-the signature covers), `AgentRunAttestation` (that payload plus a signature and key id), and
-`canonicalPayloadBytes`. It deliberately left the *hash* unimplemented behind a `PayloadDigest`
-newtype. Plan 50 may already have added the hashing dependency — it needs a profile digest — so
-check `shikigami-core/src/Shikigami/Attestation/Envelope.hs` before adding one, and check plan 50's
-Surprises & Discoveries, which is where that change is recorded if it happened.
+`shikigami-core/test/Shikigami/AttestationContractsSpec.hs` and
+`shikigami-core/test-postgres/Shikigami/RunEvidenceSpec.hs` are the existing contract
+and persistence consumers. Plans 73–76 and 81–85 extend actual-attempt accounting;
+unsigned generic Flow reports do not acquire a reviewed-artifact binding automatically.
 
-**The HTTP surface, and its one convention.** `shikigami-api/src/Shikigami/Api.hs` holds
-`ShikigamiApi`, a Servant *named-routes record*: a record whose fields are endpoints, rather than a
-chain of `:<|>` operators. Read its module haddock in full — it is short and it is the contract.
-Three rules from it bind this plan. Adding a vertical means adding one field whose type is
-`mode :- "segment" :> NamedRoutes SomeApi`, with `SomeApi` defined in that vertical's own module.
-Terminal routes must use `MultiVerb` so every status code, media type, and body is part of the
-type. Error alternatives must be declared with `RespondAs ProblemJSON` so they render the single
-problem body defined in `shikigami-api/src/Shikigami/Api/Problem.hs`.
+`Shikigami.PracticeReview` and `PracticeReview/IdentityStore.hs` allocate review and
+resolution entities behind durable receipts; distinguish those identities from caller
+idempotency keys and technical UUIDv5 commitments. Reviewed content comes through the
+existing `PracticeReview/Evidence.hs` public reader contract. Do not reintroduce plan 49's
+removed placeholder revision types or mint a second review-id scheme.
 
-The server that serves that record is `shikigami-server`; see
-`shikigami-server/src/Shikigami/Server/App.hs` and the existing
-`shikigami-server/src/Shikigami/Health/Handler.hs` for the handler shape. `docs/api/openapi.json`
-is generated from the same record by the `shikigami-openapi` executable, so adding an endpoint
-means regenerating that file in the same commit.
+`shikigami-api/src/Shikigami/Api.hs` is the one served route tree. Mount a new
+attestation vertical through the existing `Authenticated` convention, typed NamedRoutes
+and MultiVerb/problem responses, then update the server, typed client and OpenAPI from
+that same proxy. Inspect `Shikigami.Caller.Api`, the agent/objective handlers and current
+server environment to preserve access control. Workers must not import sibling API/server
+packages. Signing/domain logic belongs in core or a separately justified trusted owner;
+HTTP routes belong in api, handlers/administrative entry points in server/client.
 
-The package rules matter here because this is the one plan in the initiative that crosses packages.
-`docs/architecture/packages.md` states them: `shikigami-api` depends on `shikigami-core`,
-`shikigami-server` depends on both, `shikigami-workers` may depend on neither `shikigami-api` nor
-`shikigami-server`, and `shikigami-core/test/Shikigami/PackageArchitectureSpec.hs` fails the build
-on a forbidden edge. So the attestation *types* and the *signing* live in `shikigami-core` (a worker
-must be able to sign), the *route* lives in `shikigami-api`, and the *handler* lives in
-`shikigami-server`.
+The migration executable reads `DATABASE_URL`; use the existing manifest and
+`reconcileShikigamiReadModels` rather than another migration runner. Native workspace
+containment and current durable tool execution are delivered by plans 83/84/96 and their
+real production adapters. Test key exclusion against these boundaries and the one-off
+path, not merely an old portable-harness sketch.
 
-**Credentials.** `docs/plans/22-outbound-authentication-for-sink-clients.md` owns credential
-resolution for outbound clients. This plan reuses that machinery for a different class of secret. Be
-clear on the difference: a sink credential authenticates this system to a downstream service, and a
-behavior that leaked it could impersonate the runtime to that service. A signing key is worse — a
-behavior that could reach it could forge the very attestation that is supposed to constrain the
-behavior. That is why the request prefers a separate trusted attestation component where deployment
-architecture permits, and why the non-visibility test in Milestone 2 is not optional.
-
-The related constraint is in `docs/plans/48-add-a-portable-one-off-repository-agent-harness.md`,
-which is unregistered — it belongs to no MasterPlan — and which defines a workspace, a command
-policy, and a permission boundary for an agent working on a repository checkout. The signing key
-must sit outside that boundary. If plan 48 has landed by the time you read this, read its workspace
-model and assert the exclusion against it; if it has not, record in Surprises & Discoveries that
-the assertion is against this plan's own boundary only, so plan 48's author knows to check.
-
-**The reviewed artifact.** `ReviewedArtifact` (plan 49) needs a canonical repository identity, full
-base and head commits, and a diff digest. Acquiring those values is
-`docs/plans/44-acquire-revision-pinned-architecture-practice-evidence.md`'s job — it defines an
-`EvidenceReader` whose `readDiff` takes a repository identity and two revisions and returns a
-pinned diff. Use it. Plan 49 carries local `RepositoryId` and `Revision` definitions only as a
-placeholder, with a note that they are deleted and imported from plan 44 when it lands; if plan 44
-has landed, doing that deletion is part of this plan's Milestone 1.
-
-**The upstream contract this must match.** Resolve the path with `mori path mori://shinzui/kikan`
-and read `docs/improvement-requests/define-sanctioned-agent-execution-attestations.md`. Its "Shared
-contract" section names the records, its "Invariants" section is normative, and its "Conformance
-fixtures" section promises golden payloads that baikai, this repository, and kotei must all consume.
-Two invariants bear directly on this plan: unknown schemas, issuers, strengths, algorithms, or
-incomplete coverage must fail closed; and replay must preserve attestation identity and must not be
-able to manufacture a second successful review. The driving scenario is
-`docs/use-cases/008-sanctioned-agent-review-attestation.md` in the same repository; its "Failure
-cases" and "Verification semantics" sections are the checklist Milestone 5 implements.
-
-That request was `proposed` as of 2026-08-05. Check its status before starting — if it is still
-`proposed`, the golden payloads may not exist, and Milestone 1's conformance test is one-sided. Say
-so in Surprises & Discoveries rather than implying otherwise.
-
-**Commands.** From `/Users/shinzui/Keikaku/bokuno/shikigami`:
-
-```bash
-nix develop -c cabal build all
-nix develop -c cabal test all
-nix fmt
-```
-
+Read [ADR 0006](../adr/0006-the-attestation-payload-encoding-is-a-wire-format.md),
+[ADR 0007](../adr/0007-a-resolved-profile-is-a-run-local-policy-snapshot.md),
+[ADR 0010](../adr/0010-run-evidence-lifecycle-and-payloads-have-one-atomic-boundary.md),
+[ADR 0036](../adr/0036-external-agent-actions-require-fresh-exact-authorization.md),
+[ADR 0093](../adr/0093-review-entities-are-allocated-behind-durable-request-receipts.md)
+and [workflow versioning](../workflow-versioning.md). Shared source is addressed by
+`mori://shinzui/kikan/okf/improvement-requests/concepts/IR-6` and
+`mori://shinzui/kikan/okf/use-cases/concepts/UC-8`. Resolve those exact artifacts with Mori.
 
 ## Plan of Work
 
-### Milestone 1 — canonical bytes and the payload digest
+### M1 — Conform existing bytes to the shared contract
 
-Finish what plan 49 started, and do it by adopting an encoder rather than writing one.
+Read the selected Baikai source through Mori and preserve Envelope.hs's canonical
+implementation and literal fixtures. Obtain Kikan's ratified envelope, evidence-schema
+binding, algorithm/issuer/redaction rules and golden payloads before freezing a signed
+format. Record their exact canonical artifact/release coordinates. If unavailable,
+prepare local fixtures but leave cross-project acceptance open; do not invent a second
+encoder or describe a local test as two-sided conformance.
 
-`baikai 0.5.0.0`'s `Baikai.Evidence` module ships the canonical hashing core this milestone was
-going to build: `canonicalEncode` gives a JSON value exactly one byte representation, and
-`commitmentDigest` hashes a full request envelope. Implement `canonicalPayloadBytes` as
-`canonicalEncode` applied to the payload's JSON, and `attestationPayloadDigest` as
-`commitmentDigest` over it. Do not add a separate hashing dependency for this — baikai already
-pulls `cryptohash-sha256` and `base16-bytestring` for exactly this purpose. Check
-`shikigami-core/src/Shikigami/Attestation/Envelope.hs` and plan 50's Surprises & Discoveries first
-in case plan 50 already added one for the profile digest; if it did, prefer converging on baikai's
-core so one canonicalisation serves both.
+Require the signed/exported proof to identify the evidence vocabulary it covers using
+retained schema metadata, not whatever `evidenceSchemaVersion` today's library exports.
+Current payload version and digest bytes are persisted contracts. If the agreed envelope
+needs additional fields, introduce the explicit version/codec/compatibility strategy
+before changing it. Complete matching local bytes/digest literals, unknown-version and
+algorithm refusal cases. Existing repository/revision types are already shared.
 
-Two properties of baikai's encoder are worth knowing, because they are the ones a from-scratch
-implementation would most plausibly have gotten wrong and discovered later as a cross-repository
-digest mismatch. Numbers are normalised, so `1`, `1.0`, `1.00`, and `1e0` all encode as `1`. And
-the string escaper is hand-written specifically so that an aeson upgrade cannot silently
-invalidate a recorded digest — which is the same hazard this plan's Decision Log identified from
-the other direction.
+### M2 — Sign sealed evidence outside agent authority
 
-Record the algorithm in the attestation itself, because the upstream invariant requires an unknown
-algorithm to fail closed, which is impossible if the algorithm is implicit. Also record
-`Baikai.Evidence.evidenceSchemaVersion` alongside it, so a verifier can tell which vocabulary
-version the covered evidence used.
+Implement `Attestation/Sign.hs` and a bounded trusted signing interface. Resolve a
+workload credential separately from behavior/sink credentials; select and verify a
+released signature library through Mori, registry and upstream tags before choosing a
+bound. No signature algorithm or key-service API is assumed by this refresh. Match the
+ratified issuer/algorithm contract and keep private keys non-serializable/redacted.
 
-Then make the encoding's stability a test rather than a hope. Encode a fixed payload, assert the
-exact bytes as a literal, and assert that the digest of those bytes is a literal too. Follow the
-convention documented at the top of `shikigami-core/test/Shikigami/WireCompatSpec.hs`: a fixture
-generated by calling the current encoder proves nothing about the encoder. This test matters more
-now, not less — it is what would catch a future baikai release changing the canonical form under
-you, and it is cheap insurance for having delegated the encoder.
+Consume the authoritative sealed evidence and roll-up, including all relevant terminal
+children and unresolved expectations. Reject incomplete, unknown, mismatched or
+nonconforming coverage as specified; never manufacture an artifact binding from a generic
+run. Freeze the payload, issuance and attestation identity once and persist them with
+canonical bytes, digest, signature, key/algorithm/verification coordinates and run/review
+lookup keys. Retrying after a lost reply must recover the same record rather than create
+a new issuance or re-sign changed data. Use additive schema-qualified migrations and
+current read-model registration/projection rules.
 
-Now the conformance half. Locate kikan's golden payload; if it exists, assert byte equality against
-it and you have a two-sided test. If it does not, keep the local pinned fixture, add a haddock
-comment naming the upstream request, and record the absence and the date in Surprises & Discoveries.
-Either way the test exists.
+Prove key exclusion using the actual BehaviorEnv, local ProgramRuntime, decision and
+accepted-execution tool environments, prompts/config renderings, one-off execution and
+configured workspace supervisor/child environment. Plant a distinctive test secret and
+prove the behavior cannot access it through those interfaces. A render-only sentinel
+scan does not prove process/filesystem containment. Qualify a separate trusted signer
+where needed for the accepted boundary; retain the provider-vs-runtime trust distinction.
 
-If `docs/plans/44-acquire-revision-pinned-architecture-practice-evidence.md` has landed, delete
-plan 49's placeholder `RepositoryId` and `Revision` definitions and import plan 44's instead.
-`ReviewedArtifact` itself does not change; this is an import swap, and doing it now prevents two
-revision vocabularies from ever both being live.
+### M3 — Rotate without rewriting history
 
-### Milestone 2 — sign, outside agent authority
+Resolve verification by the retained key id and trusted issuer policy, never today's
+current signing key. Rotation introduces a new signing key and retires the previous key
+for signing while retaining historical verification. Verify an old proof after rotation,
+refuse signing with the retired key, and assert old payload/signature bytes are unchanged.
+Verification material supplied by an untrusted file is not its own trust anchor.
 
-Add `shikigami-core/src/Shikigami/Attestation/Sign.hs`. It takes a sealed `RunEvidence` and its
-`ComplianceRollUp` from plan 51, assembles an `AttestationPayload`, computes the digest, signs it,
-and returns an `AgentRunAttestation` whose signature and key id are populated.
+### M4 — Serve bounded lookups and verify offline
 
-Resolve the key through the credential machinery
-`docs/plans/22-outbound-authentication-for-sink-clients.md` provides, as a distinct credential
-class. Record with the signature everything a verifier needs to check it without asking this
-system: the algorithm, the key id, the signing identity, a certificate or verification reference,
-the issuance time, and the schema version.
+Implement a new attestation route vertical and server handler under the existing caller
+authentication/authorization mount. Lookup by run identity or exact review-request
+identity returns one retained signed proof or declared missing/not-ready/refused problems;
+no unbounded list endpoint. Bound returned evidence and references under the agreed
+contract. Never serve the optional unsigned internal shape as an accepted signed proof.
+Regenerate `docs/api/openapi.json` and exercise both successful and refused dispatch.
 
-The non-visibility test is the milestone's real content, and it needs to test a property rather than
-an intention. Construct the environment a behavior actually runs in — the `BehaviorEnv` from
-`shikigami-core/src/Shikigami/Behavior/Run.hs`, the arguments a program receives via its registry
-at `shikigami-core/src/Shikigami/Program/Registry.hs`, the tool environment, and the prompt inputs
-assembled in `shikigami-core/src/Shikigami/Behavior/Input.hs` — plant a recognisable sentinel value
-as the signing key, and assert the sentinel appears in none of them. Then assert it appears in no
-rendering of the application configuration either; there is an existing precedent for this exact
-technique in `shikigami-core/test/Shikigami/AppConfigSpec.hs`, which asserts a planted secret is
-absent from every rendering of the config, so read that first and follow it.
+Export canonical payload/signature and all required evidence, verification references and
+trusted public material in a self-contained offline input. Put the verifier at the package
+boundary consistent with the current executable ownership. Prove verification with the
+fixture database stopped or unreachable and no hidden database/provider dependency.
+Require a supplied trusted verification policy; an arbitrary embedded public key cannot
+make an issuer trusted.
 
-Persist the result. Create the migration with `just new-migration name=run-attestations`, storing
-the payload's canonical bytes, the digest, the signature, the key id, the algorithm, the issuance
-time, and the run and review-request ids, with the run id and review-request id indexed because
-Milestone 4 queries by both. Confirm `Shikigami.Migrations.reconcileShikigamiReadModels` covers any
-read model you add — a test against a freshly created database will not catch its absence, so read
-that function's source.
+### M5 — Qualify UC-8 and the real-provider case
 
-### Milestone 3 — rotation that does not orphan history
+Start from a permitted review, exact immutable code/artifact/profile/result identities
+and complete actual-call evidence. Seal, sign, fetch by both lookup keys, export and
+verify offline. Independently mutate head/diff/result/profile, call model/thinking,
+undeclared fallback, child-call completeness, evidence strength, issuer/algorithm and
+signature. Each must refuse at its proper boundary with a bounded named reason. Test
+rotation, replay and repeated signing convergence as well as successful plumbing.
 
-Signing keys rotate. Historical proofs must keep verifying, so verification resolves the key by the
-key id recorded *in the attestation*, never by "the current key".
-
-Implement a small key registry: several keys resolvable by id, exactly one marked current for
-signing, retired keys still resolvable for verification. Then write the test that matters: sign an
-attestation, rotate to a new current key, and verify the old attestation — it still verifies. And
-the negative: signing with a retired key is refused.
-
-Do not re-sign history under the new key. That would change historical payload digests, which is
-precisely the thing an auditor relies on not happening.
-
-### Milestone 4 — serve it, and let it be checked offline
-
-Two deliverables, and the second is the one that matters most to the consumer.
-
-The endpoint: define `AttestationApi` in a new module in `shikigami-api`, add one field to
-`ShikigamiApi` in `shikigami-api/src/Shikigami/Api.hs` — following the convention its haddock
-states — with terminal routes declared using `MultiVerb` and error alternatives using
-`RespondAs ProblemJSON` against `shikigami-api/src/Shikigami/Api/Problem.hs`. Two lookups: by run
-id and by review-request id. Bounded means bounded: a not-found is a problem response, not an empty
-success, and there is no list-everything route. Implement the handler in `shikigami-server`
-alongside `shikigami-server/src/Shikigami/Health/Handler.hs`, then regenerate the document:
-
-```bash
-nix develop -c cabal run shikigami-openapi
-git diff docs/api/openapi.json
-```
-
-The diff must show your new endpoint. If it does not, the route is not reachable from the umbrella
-record and the server is not actually serving it.
-
-The offline verifier input: a self-contained file carrying the canonical payload bytes, the
-signature, the key id and algorithm, and the verification reference — everything needed to check
-the proof with no access to this database. Add a verifier entry point that reads such a file and
-answers, and prove it properly: stop the database, run the verifier against the file, and observe
-it succeed. A verifier that quietly needs a database connection is not an offline verifier, and
-stopping the database is the only way to find out.
-
-### Milestone 5 — the UC-8 conformance fixture
-
-The end-to-end case, built on the mutation fixtures plan 51's Milestone 4 already produced.
-
-The positive case first: a permitted run, sealed, judged sanctioned, signed, served, and verified
-offline. Then one mutation at a time, each of which must be refused with its own named reason:
-change the head commit; change the model recorded in one call; change the thinking translation; add
-a fallback the profile does not permit; delete a delegated child's call record; alter one byte of
-the signature. Six mutations, six refusals, each naming what it refused. Read UC-8's "Failure
-cases" section and check your list against it.
-
-Then the honest part, which needs to be stated in the plan rather than discovered at the end. The
-positive case is only fully meaningful with a real provider call, and
-`docs/plans/13-wire-a-real-model-provider-into-behavior-runs.md` is Complete *except* its live
-Anthropic smoke transcript — it was never performed because no credential was available, and it was
-recorded as unproven rather than assumed. Attesting a run that never reached a real provider proves
-the plumbing, not the claim. So: run the full mutation suite with the stub provider, which needs no
-credential and is where all six refusals are proven; and separately run the positive case once
-against a real provider and paste the transcript into Outcomes & Retrospective. If no credential is
-available when you get here, do not fake it and do not quietly drop it — mark that one item
-outstanding in Progress and say so, exactly as plan 13 did.
-
+Use controlled provider fixtures for deterministic mutation coverage, then run the
+positive case once through an explicitly configured real provider with fresh production
+authority and approved limits. This plan owns plan 13's previously transferred live
+provider proof. An ordinary deterministic stub response cannot close that claim. Missing
+configuration remains blocked, and a failed live run preserves evidence without closing
+the milestone. Do not perform a paid call as part of a planning refresh.
 
 ## Concrete Steps
 
-From `/Users/shinzui/Keikaku/bokuno/shikigami`, orient:
+From the repository root, inspect current owners and save the implementation baseline:
 
 ```bash
-cat docs/plans/49-sanctioned-execution-profile-and-attestation-contracts.md
-cat docs/plans/51-run-evidence-aggregate-and-compliance-roll-up.md
-sed -n 1,60p shikigami-api/src/Shikigami/Api.hs
-cat shikigami-server/src/Shikigami/Health/Handler.hs
-sed -n 30,60p docs/architecture/packages.md
-mori path mori://shinzui/kikan
+plan52_base=$(git rev-parse HEAD)
+mori path mori://shinzui/kikan/okf/improvement-requests/concepts/IR-6
+mori registry show shinzui/baikai --full
+nix develop --no-write-lock-file -c cabal test shikigami-core-test -j1 --test-options='--num-threads=1 -p attestation' --test-show-details=direct
+nix develop --no-write-lock-file -c cabal test shikigami-core-postgres-test -j1 --test-options='--num-threads=1 -p evidence' --test-show-details=direct
 ```
 
-Check the gates before starting:
+After adding the signer/verifier/API tests, run the actual new groups; a zero-test filter
+is not evidence. Regenerate OpenAPI using the existing `shikigami-openapi` executable,
+exercise fresh/repeated migrations and registry reconciliation, build all packages and
+run serialized applicable suites. Follow workflow versioning and run the normal gate
+against `plan52_base` for any affected durable body or declaration.
 
 ```bash
-grep -rn "sealEvidence" shikigami-core/src              # plan 51
-grep -rn "credential" shikigami-core/src/Shikigami/App  # plan 22
-grep -rn "EvidenceReader" shikigami-core/src            # plan 44
+nix develop --no-write-lock-file -c cabal build all
+nix develop --no-write-lock-file -c cabal test all -j1 --test-options=--num-threads=1 --test-show-details=direct
+nix develop --no-write-lock-file -c just keiro-gate "$plan52_base"
+git diff --check
 ```
 
-Then check the two upstream requests' status fields, in the repositories `mori path` resolves, and
-record both in Surprises & Discoveries with the date:
-
-```bash
-grep -m1 "^status:" <kikan>/docs/improvement-requests/define-sanctioned-agent-execution-attestations.md
-grep -m1 "^status:" <baikai>/docs/improvement-requests/capture-verifiable-model-call-evidence.md
-```
-
-Per milestone:
-
-```bash
-nix develop -c cabal build all
-nix develop -c cabal test all --test-option -p --test-option "attestation"
-nix fmt
-```
-
-A passing Milestone 5 run looks like this:
-
-```text
-shikigami
-  UC-8 conformance
-    permitted run verifies as sanctioned:            OK
-    changed head commit is refused:                  OK
-    changed call model is refused:                   OK
-    changed thinking translation is refused:         OK
-    undeclared fallback is refused:                  OK
-    deleted child call is refused as incomplete:     OK
-    altered signature fails verification:            OK
-    rotated key still verifies old attestation:      OK
-
-All 8 tests passed
-```
-
-Commit per milestone with all three trailers:
-
-```text
-feat(attestation): sign a sealed run outside agent authority
-
-Sign the canonical payload with a workload-resolved key and assert the
-key is absent from the behavior environment, prompt inputs, tool
-environment, and every config rendering.
-
-MasterPlan: docs/masterplans/10-sanctioned-execution-attestation-for-agent-runs.md
-ExecPlan: docs/plans/52-signed-attestation-read-api-and-uc-8-conformance.md
-Intention: intention_01kz96h79mezmbnwm67pdjjepr
-```
-
+Record actual counts, source/output identities and platform. The old 157/801-test totals
+are historical, not expected current counts. Live verification needs separately supplied
+private configuration; never place credentials or signing material in a transcript.
 
 ## Validation and Acceptance
 
-Full suite:
-
-```bash
-nix develop -c cabal test all
-```
-
-The baseline as of 2026-07-31 was 157 tests across seven suites; expect that plus yours, with no
-failures.
-
-Acceptance, as things a person can watch:
-
-Encode one attestation payload and print its canonical bytes and digest. Run it again; identical.
-If kikan's golden payload exists, the bytes match it exactly.
-
-Sign a sealed run. `GET` the attestation by run id and get it back; `GET` it by review-request id
-and get the same record; `GET` a run id that does not exist and get a problem response, not an
-empty success. Confirm `docs/api/openapi.json` describes all of it — the diff from regenerating it
-is your evidence.
-
-Plant a sentinel signing key. Grep every behavior-facing structure for the sentinel and find
-nothing: the behavior environment, the program arguments, the tool environment, the assembled prompt
-inputs, and every rendering of the application configuration.
-
-Write the attestation to a file. Stop the database. Run the verifier against the file. It answers
-`sanctioned` without a database connection.
-
-Rotate the signing key. Verify an attestation signed before the rotation; it still verifies. Try to
-sign with the retired key; refused.
-
-Run the six mutations. Each is refused, and each refusal names what it refused — not a generic
-verification failure.
-
-Run the positive case against a real provider and paste the transcript. If no credential is
-available, leave that Progress item unchecked and say so plainly; do not substitute a stub run and
-call it proven.
-
+All five milestones must pass. Canonical bytes match the ratified shared golden;
+unknown schemas/algorithms fail; signing is unreachable from agent authority;
+sealed records and replay converge; historical proofs verify after rotation;
+authenticated lookups return the same record; offline verification needs no database;
+the mutation matrix refuses each alteration; and a real-provider positive proof is
+retained. No new acceptance guarantee is inferred from earlier unsigned evidence tests.
 
 ## Idempotence and Recovery
 
-Signing the same sealed evidence twice must produce the same payload digest, because the payload is
-a function of the sealed record. Store attestations keyed by run id so a replayed signature is an
-upsert that converges rather than a second attestation for one run — that is what makes the upstream
-invariant "replay preserves attestation identity and cannot manufacture a second successful review"
-hold. A test should assert it: sign twice, get one row and one digest.
-
-Migrations are additive — one new table — and applying twice is a no-op because `shikigami-migrate`
-tracks what it applied. Adding a field to the route record is additive to the served API; removing
-one is not, so if you need to change the endpoint shape before release, do it in one commit
-together with the regenerated `docs/api/openapi.json`.
-
-Key rotation is append-only: add a key, mark it current, mark the previous one retired. Never delete
-a key that has signed anything, because verification resolves keys by the id recorded in the
-attestation and deleting one makes every proof it signed unverifiable — the exact failure this
-milestone exists to prevent.
-
-The one genuinely irreversible artifact is a published canonical encoding. Once an attestation has
-been served to a consumer, changing `canonicalPayloadBytes` changes every digest and invalidates
-every historical proof. Treat it as a wire format: a change needs a schema-version bump and a
-migration story, not an edit.
-
+Persist a single immutable signed record with stable issuance before publication and
+recover it on retry. Keep old canonical codecs, keys and required evidence for retained
+proofs. Add migrations through the manifest; never rewrite applied files. Refused or
+uncertain signing cannot be reported as success. Do not re-sign history or accept an
+untrusted embedded key as issuer authority. Signed-format changes require a new version
+and an explicit compatibility story.
 
 ## Interfaces and Dependencies
 
-Hard dependencies: `docs/plans/51-run-evidence-aggregate-and-compliance-roll-up.md` (the sealed
-evidence and roll-up to sign), `docs/plans/22-outbound-authentication-for-sink-clients.md` (the
-credential machinery the signer reuses), and
-`docs/plans/44-acquire-revision-pinned-architecture-practice-evidence.md` (the revision-pinned
-repository, revision, and diff vocabulary `ReviewedArtifact` binds).
-
-Upstream gates, both `proposed` as of 2026-08-05:
-`mori://shinzui/kikan/okf/improvement-requests/concepts/IR-6` ratifies the canonical envelope,
-encoding, hashing, redaction, and strength rules this plan must match byte-for-byte and publishes
-the golden payloads Milestone 1 compares against;
-`mori://shinzui/baikai/okf/improvement-requests/concepts/IR-3` supplies real per-call observations,
-without which Milestone 5's positive case runs on stub evidence. Re-check both statuses at the
-start of implementation and record what you found.
-
-Coordination, not blocking: `docs/plans/13-wire-a-real-model-provider-into-behavior-runs.md`'s
-unperformed live smoke is a precondition of the fully meaningful positive case, and
-`docs/plans/48-add-a-portable-one-off-repository-agent-harness.md` must keep the signing key outside
-its workspace and command-policy boundary.
-
-Libraries: a hashing library and a signature library. Verify both released versions against the
-authoritative package registry and the upstream release tags before choosing bounds — do not take a
-version from a local corpus; this repository's `AGENTS.md` requires it. `servant` and
-`servant-openapi-hs` are already in `shikigami-api`; `warp` and `servant-server` are already in
-`shikigami-server`.
-
-Signatures that must exist at the end:
-
-```haskell
--- shikigami-core/src/Shikigami/Attestation/Envelope.hs (completed here)
-attestationPayloadDigest :: AttestationPayload -> PayloadDigest
-data DigestAlgorithm = ...   -- recorded in the attestation; unknown values fail closed
-
--- shikigami-core/src/Shikigami/Attestation/Sign.hs
-newtype KeyId = KeyId {value :: Text}
-data SigningKey = SigningKey {keyId :: !KeyId, algorithm :: !SignatureAlgorithm, ...}
-data KeyRegistry = KeyRegistry
-  { currentSigningKey :: !(IO (Either KeyError SigningKey)),
-    resolveForVerification :: !(KeyId -> IO (Either KeyError VerificationKey))
-  }
-
-signAttestation ::
-  KeyRegistry -> RunEvidence -> ComplianceRollUp -> IO (Either SignError AgentRunAttestation)
-verifyAttestation :: KeyRegistry -> AgentRunAttestation -> IO (Either VerifyError Verified)
-
--- shikigami-core/src/Shikigami/Attestation/Offline.hs
-data OfflineVerifierInput = OfflineVerifierInput
-  { canonicalPayload :: !ByteString,
-    payloadDigest :: !PayloadDigest,
-    signature :: !Text,
-    keyId :: !KeyId,
-    algorithm :: !SignatureAlgorithm,
-    verificationReference :: !Text
-  }
-verifyOffline :: OfflineVerifierInput -> Either VerifyError Verified
-
--- shikigami-api/src/Shikigami/Attestation/Api.hs
-data AttestationApi mode = AttestationApi
-  { byRunId :: mode :- "runs" :> Capture "runId" Text :> MultiVerb ...,
-    byReviewRequestId :: mode :- "reviews" :> Capture "reviewRequestId" Text :> MultiVerb ...
-  }
-
--- shikigami-api/src/Shikigami/Api.hs (extended by one field)
-data ShikigamiApi mode = ShikigamiApi
-  { health :: mode :- "health" :> NamedRoutes HealthApi,
-    attestations :: mode :- "attestations" :> NamedRoutes AttestationApi
-  }
-```
-
-`AttestationPayload`, `AgentRunAttestation`, `PayloadDigest`, and `canonicalPayloadBytes` come from
-plan 49. `RunEvidence` and `ComplianceRollUp` come from plan 51. None are redefined here.
-`canonicalEncode`, `commitmentDigest`, `configurationDigest`, and `evidenceSchemaVersion` come from
-`Baikai.Evidence` in `baikai 0.5.0.0`; `canonicalPayloadBytes` is implemented in terms of the first
-of those rather than being an independent encoder.
-
+Core owns envelope/evidence/signing/verifier contracts; api owns the typed route;
+server/client own serving and commands; migrations own persistence. Reuse nominal
+run/review/profile/artifact values and existing digest helpers. Plans 49–51/22/44
+are satisfied prerequisites. Kikan IR-6 remains the shared-format gate. Baikai evidence
+is already delivered and adopted; its historical IR-3 proposal is not a current
+package-availability blocker. The real-provider trial and independent signing-key
+boundary remain required evidence. Library selection is implementation work requiring
+Mori plus current registry/tag verification; this refresh changes no dependency bounds.
 
 ## Revision Notes
 
-- 2026-08-10: Adopted `Baikai.Evidence`'s canonical hashing core instead of authoring one, and
-  recorded the consequences for Kikan IR-6.
-
-  Milestone 1 was going to implement a canonical encoder and a payload digest from scratch, and the
-  Decision Log of 2026-08-05 had already identified the right requirement — a named function with
-  sorted keys and no insignificant whitespace, not `encode`, because the digest must match a hash
-  computed in another repository and possibly another language. `baikai 0.5.0.0` shipped exactly
-  that on 2026-08-05: `canonicalEncode`, `commitmentDigest`, and `configurationDigest`. The
-  original decision stands; what changed is who implements it.
-
-  The reason to prefer the upstream version over a local one is specific rather than general.
-  Baikai's encoder normalises numbers so `1`, `1.0`, `1.00`, and `1e0` agree, and uses a
-  hand-written string escaper so an aeson upgrade cannot silently change a recorded digest. Both
-  are failure modes that a first local implementation plausibly misses and that surface only as a
-  cross-repository mismatch — the exact failure this milestone exists to prevent. Sharing the
-  encoder with the library producing the call evidence also means the evidence and the attestation
-  covering it cannot disagree about canonical form.
-
-  A second decision was added rather than inherited: keep `commitmentDigest` and
-  `configurationDigest` distinct. The signature must cover the first, because an auditor's question
-  is whether an attestation is about this exact run; comparing runs that legitimately differ in
-  content wants the second. Collapsing them makes one of those questions unanswerable.
-
-  Milestone 1 also now records `evidenceSchemaVersion` beside the digest algorithm, so a verifier
-  can tell which evidence vocabulary the covered records used, and the byte-pinning test is
-  described as more important rather than less — it is what would catch a future baikai release
-  changing the canonical form, which is the cost of having delegated the encoder.
-
-  Finally, Surprises & Discoveries records that this shrinks Kikan IR-6. That request was carrying
-  both the attestation envelope and its encoding; the encoding half is now answered by a published
-  library both sides can depend on. IR-6 still binds on the envelope and the golden payloads, and
-  saying so should make the request easier to accept.
-
-  Gate: `baikai 0.5.0.0` is excluded by `kioku-core 0.3.0.0`'s `baikai ^>=0.4.1.0`. Shared with
-  plan 51; plan 53 owns requesting the kioku release that lifts it.
+2026-11-06: Refreshed canonicalization, allocated identities, evidence/HTTP/workspace
+owners and commands. Removed the obsolete Baikai/Kioku bound, duplicate hash/type work
+and hypothetical signatures. Added missing Outcomes while preserving the original five
+milestones, historical decisions and all live/shared-contract acceptance obligations.

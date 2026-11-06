@@ -3,54 +3,64 @@ id: 63
 slug: extend-practice-review-conformance-to-the-claimed-end-to-end-matrix
 title: "Extend practice-review conformance to the claimed end-to-end matrix"
 kind: exec-plan
+master_plan: "docs/masterplans/9-architecture-practice-review-flow.md"
 created_at: 2026-08-27T00:54:32Z
 intention: "intention_01m10bc7hae8trp0ev5mzpvt0d"
+provenance:
+  revisions:
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-11-06T21:09:33Z
+      mode: "update"
+      note: "Refresh actual PostgreSQL fixtures and allocated identities while preserving the full missing integrated conformance matrix."
 ---
 
 # Extend practice-review conformance to the claimed end-to-end matrix
 
-This ExecPlan is a living document. The sections Progress, Surprises & Discoveries,
-Decision Log, and Outcomes & Retrospective must be kept up to date as work proceeds.
-If durable project context changes, update or create ADRs in docs/adr/ in the same change.
-
+This living plan was refreshed against `ff00b819` on 2026-11-06. Its five full
+conformance outcomes remain unimplemented; later domain tests are credited separately.
 
 ## Purpose / Big Picture
 
-Plan 46 described an end-to-end conformance matrix for the OpenTelemetry practice-review
-specialist: a trigger enters the router and is delegated to the specialist; the specialist
-runs under its sanctioned execution profile; Kizashi delivery is retried, dead-lettered, or
-left unknown without disturbing the semantic attention reservation; Kawa deduplicates a
-redelivered history event; the reviewer's memory, grants, Kawa actor, and Kizashi intent
-all use the identity recorded on the job across three identity kinds; and every material
-change to a verdict yields a new attention key. Review record
-[REV-1](../reviews/plan-46-review-orchestration-closeout.md) established that the
-committed spec proves a smaller set. Plan 62 makes the closeout say so; this plan makes
-the larger set true.
-
-After this plan, `nix develop -c cabal test shikigami-core-test -j1 --test-options='-p
-"practice review orchestration"'` runs a matrix that starts at the router with the real
-proof declarations, provisions and resolves the real profile, drives Kizashi and Kawa
-through in-process Warp stubs with scripted responses, exercises the three identity kinds,
-and varies every input the attention key depends on. A maintainer can then change the
-specialist with the confidence the plan-46 closeout claimed.
-
+Prove the advisory reviewer through its actual routed, profile-constrained, recorded-
+identity and asynchronous sink-delivery boundaries. Existing direct Flow tests do not
+establish that full path. The complete matrix must preserve allocation receipts and
+replay while proving owner attention, history and unresolved delivery recovery.
 
 ## Progress
 
-- [ ] M1: router-to-specialist delegation with the real proof declarations.
-- [ ] M2: provisioned `sanctioned-review` version 1 and a profile-constrained evaluator.
-- [ ] M3: delivery matrix against a reservation: transient 500, terminal 4xx, unknown
-      outcome, Kawa redelivery, and payload assertions.
-- [ ] M4: three recorded identities across memory, grants, Kawa, and Kizashi.
-- [ ] M5: attention-key variation matrix and plan 46 revision note.
+- [ ] M1: load both real proof declarations, route to the actual reviewer Flow and prove admitted child lineage and replay without duplicate children/evidence work.
+- [ ] M2: provision and resolve the exact sanctioned-review profile through the current owner and prove constrained evaluation plus missing-profile refusal.
+- [ ] M3: real receipt/outbox publication against controlled Kawa/Kizashi stubs covers retry, permanent rejection, lost acknowledgement, payloads and reservation preservation.
+- [ ] M4: verified, compatibility and unresolved legacy identities exercise memory, grants, Kawa actor and attention intent, including manifest change before replay.
+- [ ] M5: the semantic-key material-change/label-permutation matrix passes after plan 60, and plan 46 records the exact newly accepted cases.
 
+The current source adds real ingress and corrupt-retained-attention controls beyond the
+original nine cases. Those delivered tests remain regressions; none closes a milestone
+above by itself. Plan 62 supplies a checked profile artifact; plan 61 supplies entitlement.
 
 ## Surprises & Discoveries
 
-(None yet.)
+The entire runtime suite now lives in `shikigami-core/test-postgres/`, with the pure
+review/evidence contracts still under test/. `PracticeReviewOrchestrationSpec` has a
+real ingress enqueue test and a corrupt retained-result rollback test. Current request
+and entity identity ownership is ADR 0093, not deterministic ReviewId/ResolutionId factories.
 
+The production reviewer remains a constrained Flow with a fail-closed unavailable content
+reader. The existing direct fixture's absence of a resolved sanctioned profile cannot
+prove the real proof declaration's profile requirement. Generic sink and identity tests
+are useful components but do not substitute for an attention reservation coupled to
+those paths.
 
 ## Decision Log
+
+2026-11-06 refresh: retain five outcomes, reuse the current PostgreSQL fixtures and
+allocated identities, preserve the real ingress/corruption controls, and model unknown
+delivery through the actual publisher/receipt failure window. Existing coverage is
+regression evidence, not the missing whole matrix.
+
+Historical decomposition rationale follows; old test-tree paths and literal line numbers
+are superseded by Context. The fixture reuse and key-version ordering remain applicable.
 
 - Decision: Build on the fixtures that already exist rather than a new harness:
   `withFixtureUsingTracer` in `SinkDeliverySpec.hs` for publisher-backed delivery,
@@ -68,252 +78,158 @@ specialist with the confidence the plan-46 closeout claimed.
   wrong contract.
   Date: 2026-08-27.
 
-
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
-
+No milestone is complete. This documentation refresh inspected current code and retained
+acceptance but ran no new conformance fixture or live reader. The future matrix below
+continues to answer REV-1/2 without treating original overclaims as proof.
 
 ## Context and Orientation
 
-The orchestration spec is `shikigami-core/test/Shikigami/PracticeReviewOrchestrationSpec.hs`.
-Its groups are `authorizationTests`, `attentionIdentityTests`,
-`completeClassificationTests`, `agentRunSpecialistTests`, `replayTests`, and
-`atomicAttentionTests`. `runPracticeReviewInput` runs the Flow directly under
-`runWorkflowWith` with test interpreters; `specialistAgentRunDeps` runs the real
-`shikigami.agent-run` workflow (`Shikigami.Agent.Workflow.runAgentRunWorkflow`) with
-`deliveryPool = Nothing`, every sink base URL at `http://localhost:1`, the
-`compatibilityIdentity` for the reviewer, and `resolveRunProfile` answering
-`UnknownProfile`. `reviewerDecl` is a hand-written declaration with `sanctionedProfile =
-Nothing`, not the checked-in `agents/proof/opentelemetry-practice-reviewer.dhall`.
+`shikigami-core/test-postgres/Shikigami/PracticeReviewOrchestrationSpec.hs` defines
+`specialistAgentRunDeps`, `runPracticeReviewInput`, classification/identity/replay/
+reservation fixtures and `ingressTests`. Neighboring RouterWorkflowSpec,
+ProfileResolutionSpec, AgentWorkflowSpec, SinkDeliverySpec and ApprovalNotificationSpec
+supply real owner fixtures. Locate helper definitions in their current tree before
+extracting common fixtures; do not import executable Main from a library test helper.
+Register new reusable helpers in the owning Cabal suite and entry point.
 
-The router is `architecture-practice-router`, declared in
-`agents/proof/architecture-practice-router.dhall` and implemented by
-`Shikigami.Flow.Routing`; `shikigami-core/test/Shikigami/RouterWorkflowSpec.hs` drives it
-with a `routerDeps` builder, a scripted `Routing.RoutingRuntime` whose `evaluateRoute`
-returns a chosen candidate, and specialists built by `successSpecialist`, which today is a
-`ShikumiProgram {task = "noop-summary"}`. Delegation spawns a child `shikigami.agent-run`
-whose `RunJob` carries `parentRunWorkflowId`, `parentSessionId`, `delegationDepth`, and
-`lineage`; the child's declaration comes from the same `agents` list in `AgentRunDeps`.
+Production owners are `Flow/OpenTelemetryPracticeReview.hs`, `PracticeReview/Capability.hs`,
+`Memory.hs`, `Attention.hs`, `Authorization.hs`, `IdentityStore.hs` and `Sink/Intent.hs`/
+`Delivery.hs`, under `shikigami-core/src/Shikigami/`. Current domain declarations are in
+`domain/shikigami/agent-run.keiro`, not the removed root-level file.
+The allocation owner reserves review identity before decoding a model proposal and
+allocates an ID-free resolution only after matching the provisional review. Use those
+actual receipts; do not invent entities or duplicate private constructors in fixtures.
 
-Delivery: a sink intent becomes a row in keiro's outbox and a `pending` receipt in
-`shikigami.sink_deliveries`; `Shikigami.Sink.Delivery` publishes asynchronously and moves
-the receipt through `attempting`, `delivered`, `failed`, `dead`, or `unknown`.
-`SinkDeliverySpec.hs` (`withFixtureUsingTracer`, line 445) wires `AgentRunDeps` with
-`deliveryPool = Just pool` and starts Warp stubs for Kizashi and Danwa; its tests show how
-to run a publisher pass and read receipts. Kawa's doorway stub `kawaDoorwayApplication`
-in `shikigami-core/test/Main.hs` stores `(source, source_event_id)` and returns the same
-activity id on redelivery.
-
-Identity: `Shikigami.Agent.Principal.AgentIdentity` has `VerifiedIdentity AgentPrincipal`,
-`CompatibilityIdentity Text`, and `UnresolvedLegacyIdentity`; `RunJob.identity` records
-it, and ADR 0033 requires memory actors, grant checks, Kawa actors, and sink intents to use
-the recorded value. `AgentWorkflowSpec.hs` ("verified recall composes the principal scope
-with an accepted legacy alias", line 417) shows how a verified principal, an alias pool,
-and a directory handle are built; the same file's sink and grant tests show how
-`UnresolvedLegacyIdentity` is refused.
-
-Profiles: `ProfileResolutionSpec.hs` inserts a profile row with `insertProfile pool
-content digest` and resolves it with `resolveProfile (postgresProfileStore pool)`;
-`AgentWorkflowSpec.hs` builds a version-1 profile with `workflowProfileWith
-defaultThinkingProhibitions (ProfileVersion "1")` and shows, in "a profiled Flow is
-constrained before its capability interpreters run", how a constrained `BehaviorEnv`
-surfaces. Plan 62 adds `config/profiles/sanctioned-review-1.json`; if it has landed, use
-that file's content instead of the test builder so the test and the operator provision the
-same bytes.
-
-Relevant local ADRs: [0033](../adr/0033-recorded-agent-principals-key-durable-state.md)
-(identity), [0022](../adr/0022-the-journal-ends-at-enqueue-and-receipts-own-delivery-truth.md)
-(delivery truth), [0035](../adr/0035-practice-review-attention-reserves-semantics-not-delivery-state.md)
-(reservation never released), [0029](../adr/0029-model-routing-output-is-a-proposal-until-validated-against-journaled-authority.md)
-and [0028](../adr/0028-a-router-catalog-is-a-bounded-snapshot-of-declared-authority.md)
-(router), [0007](../adr/0007-a-resolved-profile-is-a-run-local-policy-snapshot.md)
-(profiles). No cross-repository ADR applies.
-
+Read [ADR 0022](../adr/0022-the-journal-ends-at-enqueue-and-receipts-own-delivery-truth.md),
+[ADR 0033](../adr/0033-recorded-agent-principals-key-durable-state.md),
+[ADR 0035](../adr/0035-practice-review-attention-reserves-semantics-not-delivery-state.md),
+[ADR 0092](../adr/0092-review-values-are-checked-and-source-citations-use-structured-coordinates.md)
+and [ADR 0093](../adr/0093-review-entities-are-allocated-behind-durable-request-receipts.md).
+`RunJob.identity` controls recorded reviewer behavior, not the authenticated resolver.
 
 ## Plan of Work
 
-### Milestone 1: Router to specialist with the real declarations
+### M1 — Route the real declarations
 
-At the end of this milestone one test loads both proof declarations from `agents/proof`,
-enqueues a version-1 trigger to the router, and observes the specialist child complete with
-a verdict whose lineage names the router's workflow and session.
+Load `agents/proof/architecture-practice-router.dhall` and
+`agents/proof/opentelemetry-practice-reviewer.dhall` through the actual loader. Use the
+real candidate catalog and a controlled routing evaluator selecting the reviewer, normal
+AgentRun admission, governed delegation and the actual review Flow. Retain both router
+candidates rather than silently narrowing the catalog. The child verdict must bind the
+recorded parent workflow/session and current child identities. Read allocated review
+identity from its retained owner result, not a deterministic fixture factory.
 
-Add a group `routedSpecialistTests` to the orchestration spec. Load the declarations with
-the same loader `AgentLoaderSpec.hs` uses (`expectLoaded "../agents/proof/architecture-practice-router.dhall"`
-and the reviewer file), build `AgentRunDeps` from `specialistAgentRunDeps` but with
-`agents = [routerDecl, reviewerDecl]` and a `Routing.RoutingRuntime` whose
-`resolveCatalog` returns the real catalog for those agents (see `routerDeps` in
-`RouterWorkflowSpec.hs`) and whose `evaluateRoute` selects `opentelemetry-practice-reviewer`.
-Because the proof reviewer requires a profile, either land M2 first or, for this
-milestone only, resolve `sanctioned-review` to the test profile through
-`resolveRunProfile`. Run the router job with `runAgentRunWorkflow`, then locate the child
-workflow id the way `RouterWorkflowSpec.hs` does (from the delegation step's journaled
-child id) and load its outcome; assert the child's behaviour output has `kind =
-practice-review`, that the verdict's `lineage.parentWorkflowId` equals the router's
-workflow id, and that `practice-review-evidence` appears in the child's step index.
-Replay the router job and assert the child is not spawned twice and the fixture reader's
-call count is unchanged.
+Prove replay does not spawn a second child, allocate a second review or reacquire accepted
+evidence. Keep noop-summary router helpers for cases needing only a successful child;
+add a real reviewer variant rather than replacing unrelated routing semantics.
+M2's profile can be developed first, or M1 can resolve the same valid profile through a
+controlled owner fixture until M2 proves the store path.
 
-Also change `RouterWorkflowSpec.successSpecialist` to accept a behaviour so at least one
-existing router case delegates to a `Flow {name = "opentelemetry-practice-review"}`
-specialist, keeping the `noop-summary` variant for the cases that only need a child to
-finish.
+### M2 — Exercise the real profile boundary
 
+Provision `sanctioned-review` version 1 through the actual store/installation operation,
+using plan 62's artifact when available. If developed earlier, use a validated owner
+fixture with exactly the same requirement; reconcile it when the artifact lands.
+Use real profile resolution and the proof declaration, not `sanctionedProfile = Nothing`.
+The controlled evaluator observes the constrained environment. Missing/expired/drifted
+profile must refuse before evidence/evaluation; a planted process-default model cannot
+silently replace admitted selection. Assert store/durable facts, not merely validator success.
 
-### Milestone 2: The provisioned profile
+### M3 — Couple reservation and delivery recovery
 
-At the end of this milestone the specialist runs under the real `sanctioned-review`
-version 1 profile and the evaluator observes the constrained environment.
+Use real prepared intents, outbox publisher and sink receipts with bounded in-process
+Warp stubs. Extract reusable stub helpers from their current fixture modules where useful.
+Run an actionable review, then exercise transient 500 followed by acknowledged success,
+permanent 4xx rejection, and a lost acknowledgement/receipt-persistence window that the
+current delivery owner classifies as unknown. A malformed response alone is not assumed
+to create unknown: choose and assert the real owner transition.
 
-In `agentRunSpecialistTests`, replace `reviewerDecl` with the loaded proof declaration
-(or set `sanctionedProfile = Just ProfileRequirement {profileId = "sanctioned-review",
-version = Just "1"}` on it) and replace `resolveRunProfile` with `\profileId version -> do
-now <- getCurrentTime; resolveProfile (postgresProfileStore pool) now profileId version`,
-the composition the worker uses (`shikigami-workers/src/Shikigami/Workers/Config.hs`,
-`agentRunDeps`). Before the run, insert the profile with `insertProfile`. Make the
-counting evaluator record the `BehaviorEnv` it received and assert its `model` equals the
-profile's sanctioned model, proving `behaviorEnvForProfile`'s `Flow` case reached the
-interpreter. Add a negative case: with no profile row the run completes with
-`PermanentAgentRunFailure` naming the profile, before any `practice-review-evidence` step.
+For every case assert the reservation/association, same outbox/receipt identity and
+expected publisher outcome. Record actual HTTP attempts separately from one logical
+notification; transient failure plus success naturally requires more than one request.
+An equivalent second review coalesces without reserving/enqueueing another attention item.
+Dead or unknown delivery never releases the reservation. Reconcile unknown acceptance
+using independent downstream evidence rather than blind redispatch.
 
+Redeliver Kawa history and assert one stored `(source, source_event_id)`/activity identity.
+Decode payload/context refs and exact cited immutable artifacts; unresolved-before-content
+has only refs the implementation actually emits. Preserve reviewer identity and bounded
+semantic fields. Exercise all five classifications, both exception-approval branches and
+four authorized resolution outcomes through the applicable real owners.
 
-### Milestone 3: Delivery matrix against a reservation
+### M4 — Exercise recorded identity and authority
 
-At the end of this milestone the receipt lifecycle for an attention message is proven
-against scripted Kizashi responses, the reservation row is proven untouched by all of it,
-and Kawa redelivery is proven to deduplicate.
+Verified identity uses the recorded principal for memory scope/actor, grant lookup, Kawa
+actor and attention intent. Compatibility identity uses the explicit disabled-directory
+path. Unresolved legacy identity refuses before review memory/sinks/reservation. Reuse
+current checked identity factories and directory fixtures. Change/rename the live manifest
+after an admitted run and replay it; original recorded coordinates and effects remain.
+Keep the specialist's read-only effect/declaration boundary: no repository mutation,
+merge blocking or extra action authority appears in the test environment.
 
-Add `deliveryTests`. Build deps as `withFixtureUsingTracer` does, with `deliveryPool =
-Just pool`, a Warp Kizashi stub whose response status is read from an `IORef` (start from
-`kizashiApplication` in `ApprovalNotificationSpec.hs`), and the Kawa doorway stub. Run a
-target-suspect review through the real AgentRun with the complete fixture reader and a
-recipient map. Then, per case: with the stub answering 500, run one publisher pass and
-assert the receipt is `failed` with the outbox message id unchanged; flip the stub to 201
-and run another pass and assert `delivered` with the Kizashi id in `detail`, one POST
-recorded, and the reservation row identical to before. With the stub answering 400 from
-the start, assert the receipt reaches `dead` and the reservation row still exists and
-still points at the same outbox id. For the unknown case, make the stub accept the POST
-and then close the connection before responding (or return a body the client cannot
-decode), and assert `unknown`. In each case, run a second equivalent review and assert it
-journals `Coalesced`, adds one association row, enqueues nothing, and that the POST count
-does not change. For Kawa, redeliver the review-history outbox message twice and assert
-the doorway stored one `(source, source_event_id)` pair and returned one activity id; also
-decode the stored envelope and assert `context_refs` contains the target repository as a
-`mori://` ref and `activity://practice-review/<review-id>`.
+### M5 — Prove semantic equivalence and record coverage
 
+After plan 60's accepted projection/renderer change, vary classification, material statement,
+materiality, cited content hash, owner role/recipient mapping and recommended action and
+require a new key when the normalized dispute changes. Rename/swap labels and reverse
+multi-claim/evidence order without changing semantic content and require the same key.
+Keep current citation-label/allocated-entity distinction and frozen namespace rules.
+A one-claim test cannot establish label-independent sorting.
 
-### Milestone 4: Three recorded identities
-
-At the end of this milestone the specialist is proven to use the identity recorded on the
-job for review memory, grant checks, the Kawa actor, and the Kizashi intent, under all
-three identity kinds, even when the manifest changes before replay.
-
-Add `identityTests` with three cases built on the M3 deps. Verified: construct a
-`VerifiedIdentity` principal and directory handle as the AgentWorkflowSpec verified-recall
-test does, run the review, and assert the provisional memory's actor, the grant lookup
-(use `DbGrants` with a grant on the principal), the Kawa envelope's `actor.id`, and the
-sink intent's identity all render the principal, not the name. Compatibility: the
-existing path with `disabledDirectoryHandle`; assert the same four surfaces render the
-name. Unresolved legacy: `identity = UnresolvedLegacyIdentity`; assert the run is refused
-at the first identity-gated boundary in the way `AgentWorkflowSpec.hs` already establishes
-for that constructor, and that no reservation or outbox row exists. For the manifest-change
-half, after the verified run completes, mutate the in-memory `agents` list to rename the
-reviewer, replay the same job, and assert the four surfaces are byte-identical to the
-first run.
-
-
-### Milestone 5: Key variation matrix and closeout revision
-
-At the end of this milestone every input the attention key depends on has a test that
-changes it and observes a new key, and plan 46 records the new coverage.
-
-Extend `attentionIdentityTests` with cases that change, one at a time, the
-classification, a material claim's statement, a material claim's `material` flag, a cited
-evidence item's `contentHash`, the owner role, and the recipient mapping, asserting a
-different key each time; and cases that change only a claim id or the order of claims or
-evidence items, asserting the same key (these require plan 60). Then append a revision
-note to plan 46 stating which Milestone 4 sentences are now realised by which test names.
-Do not edit REV-1 in `docs/reviews/`: a review record is an immutable event, so the
-coverage change is recorded in this plan's Outcomes, and a later review of the same
-subject at a later commit supersedes REV-1 by existing.
-
+Append actual named acceptance to plan 46 and this plan's Outcomes. Do not rewrite the
+immutable historical reviews or claim a live content-plane result from hermetic evidence.
+Include plan-61 ingress entitlement/refusal regressions when its versioned format lands.
 
 ## Concrete Steps
 
-All commands run from `/Users/shinzui/Keikaku/bokuno/shikigami` inside the Nix shell with
-the local PostgreSQL cluster running.
+Run from the repository root with fixture-owned disposable databases. These are future
+conformance commands, not claims of execution by the refresh:
 
 ```bash
-nix develop -c cabal build all
-nix develop -c cabal test shikigami-core-test -j1 --test-options='-p "practice review orchestration"' --test-show-details=direct
-nix develop -c cabal test shikigami-core-test -j1 --test-options='-p "router"' --test-show-details=direct
-nix develop -c cabal test all -j1 --test-show-details=direct
-nix develop -c just keiro-gate <merge-base>
+plan63_base=$(git rev-parse HEAD)
+nix develop --no-write-lock-file -c cabal build all
+nix develop --no-write-lock-file -c cabal test shikigami-core-postgres-test -j1 --test-options='--num-threads=1 -p "practice review orchestration"' --test-show-details=direct
+nix develop --no-write-lock-file -c cabal test shikigami-core-postgres-test -j1 --test-options='--num-threads=1 -p router' --test-show-details=direct
+nix develop --no-write-lock-file -c cabal test all -j1 --test-options=--num-threads=1 --test-show-details=direct
+nix develop --no-write-lock-file -c just keiro-gate "$plan63_base"
 git diff --check
 ```
 
-Expected new groups in the orchestration transcript, each case `OK`:
-
-```text
-    routed specialist
-      router delegates the proof trigger to the Flow specialist and records lineage: OK
-    provisioned profile
-      specialist runs under sanctioned-review 1 and the evaluator sees the constrained env: OK
-      missing profile is refused before evidence:                                  OK
-    delivery
-      transient 500 retries the same outbox and receipt:                            OK
-      terminal 400 dead-letters without releasing the reservation:                  OK
-      unknown outcome is recorded without a second reservation:                     OK
-      kawa redelivery yields one activity with the expected context refs:           OK
-    recorded identity
-      verified principal keys memory, grants, kawa actor, and kizashi intent:        OK
-      compatibility identity keys the same four surfaces by name:                   OK
-      unresolved legacy identity is refused before any review effect:               OK
-      manifest rename before replay does not change any surface:                    OK
-```
-
-Every commit carries:
-
-```text
-ExecPlan: docs/plans/63-extend-practice-review-conformance-to-the-claimed-end-to-end-matrix.md
-Intention: intention_01m10bc7hae8trp0ev5mzpvt0d
-```
-
+The focused command must select the newly named groups. Where relevant, verify a
+negative control fails at the actual protected boundary. An unexpected runtime repair
+belongs in its existing owner, not a weakened test or fabricated success transcript.
 
 ## Validation and Acceptance
 
-Each milestone is accepted by its group passing and by the negative half of each case
-failing when the behaviour it guards is broken: for example, temporarily deleting the
-`Tx.condemn`-guarded enqueue in `reserveAttention` makes the 500-retry case fail on the
-outbox count, and swapping `RunJob.identity` for the manifest name in
-`practiceReviewAttentionEnv` makes the verified-identity case fail on the intent's
-identity. The plan is accepted when `cabal test all -j1` passes with every group above,
-`just keiro-gate` reports no practice-review finding (this plan adds no step or patch),
-and plan 46 carries the revision note.
-
+All five outcomes must have actual passing owner-integrated cases: routed real reviewer,
+provisioned profile, coupled receipt/recovery matrix, three recorded identity kinds and
+semantic key equivalence. Preserve existing allocation, full-request ingress, corrupt
+retained-result, classification, resolution and replay controls. The full applicable
+suite and workflow gate pass at the final candidate, and plan 46 identifies precisely
+which earlier coverage gaps are closed. Live Kikan acquisition remains separate.
 
 ## Idempotence and Recovery
 
-All additions are tests and fixtures. `withShikigamiMigratedDatabase` creates a fresh
-database per case, so a failed run leaves nothing to clean. Warp stubs are started per
-test with `testWithApplication` and stop with it. If the profile JSON from plan 62 changes
-after M2 lands, the digest assertion fails with both digests printed; update the test's
-expected model only if the profile's model changed. Run the groups individually with
-`-p` while iterating; the full suite must stay serialized (`-j1`) because the repository
-has a history of capacity-shaped parallel failures.
-
+Use suite-owned fresh databases and bracketed Warp servers. Repeat runs cannot share
+ambient profile/workflow state. Preserve allocation and receipt keys across interrupted
+retries; never clear reservations to make a delivery succeed. No production format change
+is planned here. Any necessary Agent/Flow change follows workflow versioning and its
+actual baseline, even if a structural diff appears neutral.
 
 ## Interfaces and Dependencies
 
-No production interface changes. Test-side helpers to add: a `scriptedKizashiApplication ::
-IORef Status -> IORef [CreateSignalReq] -> Application` shared between
-`ApprovalNotificationSpec.hs` and the orchestration spec (move it to
-`shikigami-core/test/Shikigami/Fixture/` beside `SinkHttp.hs`), and a
-`loadProofDeclaration :: FilePath -> IO AgentDecl` wrapper over the loader used by
-`AgentLoaderSpec.hs`. Dependencies: `warp`, `wai`, and `hasql` as already used by the
-test suite. Ordering: M5's coalescing cases depend on plan 60; M2 prefers plan 62's
-checked-in profile file. The review record this plan answers is
-[REV-1](../reviews/plan-46-review-orchestration-closeout.md), required items 1 through 3,
-together with the test-coverage item of
-[REV-2](../reviews/practice-review-attention-reservation.md) that plan 60 does not cover.
+This child owns tests, reusable fixtures and coverage reporting. Existing production
+ports stay authoritative. Plan 60 gates the v2 semantic-key matrix; plan 61 owns resolver
+entitlement and its own next-version codec; plan 62 owns the installable profile artifact.
+M1–M4 may develop against real existing owner fixtures without claiming those absent
+contracts are accepted. The local dependency versions are already sufficient; no new
+library, upstream work or live credential is needed for deterministic conformance.
+
+## Revision Notes
+
+2026-11-06: Refresh PostgreSQL suite/helper paths, allocated review/resolution contracts,
+current ingress/corruption controls and profile/delivery semantics. Preserve all five
+missing outcomes, distinguish transport attempts from logical notifications, and remove
+invented exact-output and old deterministic-ID assumptions.

@@ -12,6 +12,11 @@ provenance:
       at: 2026-09-21T18:24:04Z
       mode: "update"
       note: "Reconciled status and progress during the 2026-09-21 portfolio audit"
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-11-06T20:49:07Z
+      mode: "update"
+      note: "Align child and parent tracking with the accepted September closeout and plan 52 verification debt."
 ---
 
 # Production Reality: De-stub the Runtime Behavior and Integration Path
@@ -118,7 +123,7 @@ with a real model) but is not blocked by it.
 | F2 | Adopt Settei configuration across Shikigami binaries | docs/plans/37-adopt-settei-configuration-across-shikigami-binaries.md | F1 | None | Complete (2026-08-26; migration boundary accepted by ADR 0032) |
 | F3 | Upgrade Shikigami to the coherent July 2026 dependency cohort | docs/plans/47-upgrade-shikigami-to-the-coherent-july-2026-dependency-cohort.md | F2 | plan 38 integration | Complete (2026-07-31) |
 | F4 | Give one-off agent runs a light package that does not link the platform | docs/plans/55-give-one-off-agent-runs-a-light-package-that-does-not-link-the-platform.md | F1 | plan 48 | Complete (2026-08-19) |
-| 1 | Wire a real model provider into behavior runs | docs/plans/13-wire-a-real-model-provider-into-behavior-runs.md | F3 | None | Complete (2026-07-31), except the live smoke — see Surprises |
+| 1 | Wire a real model provider into behavior runs | docs/plans/13-wire-a-real-model-provider-into-behavior-runs.md | F3 | None | Complete (implementation 2026-07-31; live proof transferred to plan 52 by the 2026-09-21 closeout) |
 | 2 | Approval and human-in-the-loop end to end | docs/plans/14-approval-and-human-in-the-loop-end-to-end.md | F3; cross-MP: plans 17 and 22 | EP-1 | Complete (2026-08-23) |
 | 3 | Inject recalled memory and trigger payload into behavior context | docs/plans/15-inject-recalled-memory-and-trigger-payload-into-behavior-context.md | F3 | EP-1 | Complete (2026-07-31) |
 | 4 | Honest sink handlers: real ReiAction and honored declaration fields | docs/plans/16-honest-sink-handlers-real-reiaction-and-honored-declaration-fields.md | F3 | None | Complete (2026-07-31) |
@@ -369,6 +374,12 @@ inside the plan-36 worker composition root so the merges stay mechanical.
 
 ## Progress
 
+2026-11-06 reconciliation: all four foundations and all four feature children
+are Complete within the boundary accepted on 2026-09-21. Plan 13 now records the
+same live-proof transfer to plan 52 as this MasterPlan's closeout. This repairs
+tracking only: no live-provider transcript is claimed, and plan 52 retains its
+positive-case acceptance gate.
+
 - [x] (2026-07-31T06:05:00Z) F1 M1–M5: six-package architecture, ownership rules, API
       boundary, and package tests from plan 36 are complete. The repository now has exactly
       `shikigami-core`, `shikigami-api`, `shikigami-server`, `shikigami-workers`,
@@ -408,15 +419,16 @@ inside the plan-36 worker composition root so the merges stay mechanical.
       the code it replaces.
 - [x] (2026-07-31) EP-1 M3 (durable half): `modelUsed` recorded at both session-completing
       seams; the crash-resume case asserts `Just "stub-v1"` on the completed row.
-- [ ] EP-1 M3 (live half): live anthropic smoke transcript. Not performed — no credential
+- [-] EP-1 M3 (live half): live anthropic smoke transcript. Not performed — no credential
       available; recorded as unproven in plan 13 rather than assumed. **Reclassified 2026-08-05
       from an accepted gap to a blocker for another initiative:**
       `docs/masterplans/10-sanctioned-execution-attestation-for-agent-runs.md` must prove that a
       permitted run yields a `sanctioned` attestation, and a run that never reached a real provider
       cannot demonstrate that. See that MasterPlan's Surprises & Discoveries and
       `docs/plans/52-signed-attestation-read-api-and-uc-8-conformance.md` Milestone 5.
-      Rechecked 2026-08-26: the credential is still absent. One plan-52 positive-case run
-      may supply the transcript and close both records; this does not block plan 46.
+      Rechecked 2026-08-26: the credential was still absent. The accepted 2026-09-21
+      closeout assigns this verification debt to plan 52, where it remains open;
+      this does not block plan 46. {disposition=transferred, by=docs/plans/52-signed-attestation-read-api-and-uc-8-conformance.md}
 - [x] EP-2 M1: `ApprovalPolicy` + notifying `ApprovalEnv` (danwa/kizashi asks embed
       the token); policy parsing tests.
 - [x] EP-2 M2: worker consults the policy; loud startup log; danwa-stub integration

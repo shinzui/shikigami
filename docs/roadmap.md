@@ -43,7 +43,8 @@ mandates (87) or multi-machine execution.
 
 ## Current delivery boundary
 
-Implemented: typed Flow decisions and actual-attempt evidence (plans 73–76),
+Implemented, with plan 74's reopened failure-path qualification still outstanding:
+typed Flow decisions and actual-attempt evidence (plans 73–76),
 authenticated HTTP agent discovery and idempotent run acceptance/status/history
 (plans 88–91), root resource accounting (81), immutable assignment model selection
 (82) and protected durable Skill operation/transcript recovery (83). Continuing
@@ -58,7 +59,8 @@ and controller restart, successor writes and former-owner refusal.
 Authoritative objectives and checkpoint/ownership/scope providers are complete
 (MasterPlan 17), as is optional provider-neutral external tracker synchronization
 with the Rei adapter (MasterPlan 18). Plan 86 passes the full native repository,
-recovery and refusal matrix; full autonomous coding delivery still needs its actual-model trial under production
+recovery and refusal matrix; full autonomous coding delivery still needs a guarded live
+adapter and its actual-model trial under production
 authorization and approved live limits. Plan 85 completes validated
 native adaptive coordination, actual typed-call accounting, shared capacity and
 bounded inspection; its finite fixtures pass exact combined acceptance. Plan 84
@@ -83,8 +85,8 @@ qualify installed binaries. See the [streaming checkpoint](evidence/baikai-execu
 ## Portfolio snapshot
 
 This audit covers 21 coordinated MasterPlans (1–21) and 124 ExecPlan files.
-Fifteen MasterPlans are complete: 1–5, 8, 11–13 and 15–20.
-Six coordination documents have remaining work, including the not-started
+Fourteen MasterPlans are complete: 1–5, 8, 11–12 and 15–20.
+Seven coordination documents have remaining work, including the not-started
 machine-daemon lane below.
 Plan 97 is a superseded design, replaced by MasterPlan 17 and plans 98–102;
 it is not a second objective implementation lane. Counts describe artifacts,
@@ -94,9 +96,10 @@ not feature readiness or effort percentages.
 | --- | --- | --- |
 | [6](masterplans/6-operations-and-observability-run-shikigami-as-a-real-service.md) | 3 of 4 children complete; plan 31 in progress | Full service stack and drain proof |
 | [7](masterplans/7-platform-feature-completion-egress-schema-memory-lifecycle-delegation.md) | 3 of 5 complete | Plan 34 memory lifecycle and plan 12 MCP-specific integration |
-| [9](masterplans/9-architecture-practice-review-flow.md) | 3 of 4 complete; plan 46 partial | Safety and closeout plans 60–63, then plan 46 acceptance |
+| [9](masterplans/9-architecture-practice-review-flow.md) | 3 of 8 registered children complete; plans 46/62 in progress | Repairs 60/61, profile provisioning/guidance in 62, full conformance in 63, then live plan-46 acceptance |
 | [10](masterplans/10-sanctioned-execution-attestation-for-agent-runs.md) | 3 of 4 complete | Plan 52 shared signed envelope, read API/verifier and live proof |
-| [14](masterplans/14-deliver-adaptive-autonomous-objectives-with-durable-workers.md) | 5 of 7 complete; plan 86 native milestones pass | Actual-model trial and optional recurrence (87 not started) |
+| [13](masterplans/13-compose-shikumi-decisions-in-durable-flows.md) | 3 of 4 complete; plan 74 M3 reopened | Reject unterminated successful streams and complete cancellation, evidence-write, retry and refusal qualification |
+| [14](masterplans/14-deliver-adaptive-autonomous-objectives-with-durable-workers.md) | 5 of 7 complete; plan 86 native milestones pass | Guarded live adapter plus actual-model trial; recurrence (87 not started) |
 | [21](masterplans/21-execute-governed-work-through-enrolled-machine-daemons.md) | 0 of 5 complete; all not started | Enrollment, local policy, machine-hosted operations, relay/partition fencing and qualification |
 
 Recent completed work:
@@ -116,13 +119,50 @@ Recent completed work:
 
 ## Delivery order and gates
 
-Practice-review safety remains first: plans 60/61 fix attention reservation and
-resolver entitlement; plans 62/63 make closeout and conformance truthful before
-plan 46 closes. Production evidence acquisition still depends on
+The 2026-11-06 Mina reconciliation closes two tracking discrepancies: bootstrap
+plan 1 now exposes its three historically accepted milestones directly under
+Progress, and provider plan 13 records the live-proof transfer already accepted
+by MasterPlan 2 on 2026-09-21. That proof remains open in plan 52. MasterPlan 13
+is genuinely unfinished because its child 74 was reopened on 2026-10-29; the
+former all-complete summary was stale. Mina's percentages count checkboxes,
+including prerequisite/planning work, and omit repair plans outside a registry;
+they do not measure remaining effort.
+
+For the next bounded closeout, finish plan 74 M3 and its core/PostgreSQL consumer
+regressions. It needs no live credential or upstream release. Successful streams
+are covered, but the current runner does not refuse normal completion with a
+begun stream that never persisted a terminal. Keep the completed persistence and
+Flow work; qualify that missing runner boundary before closing MasterPlan 13.
+
+Before enabling production practice review, plans 60/61 must fix attention reservation
+and resolver entitlement. Plan 62's M1 closeout/inventory reconciliation is delivered;
+its actual profile provisioning and operator examples remain, followed by plan 63's full
+conformance matrix. All four existing repair children are now visible in MasterPlan 9
+before plan 46 closes. Production evidence acquisition still depends on
 `mori://shinzui/kikan/okf/improvement-requests/concepts/IR-5`.
 
+Then finish plan 31's composed service smoke, NixOS module and graceful-drain
+acceptance for MasterPlan 6; immutable role builds alone do not close it.
+MasterPlan 7 needs actual lifecycle/MCP implementation: start with plan 34 M0
+and plan 12 M1's local fixtures, then resolve their exact upstream contracts and
+qualify their full matrices. Those planning/foundation checkboxes are not
+delivered lifecycle or MCP behavior.
+
+MasterPlan 10 requires the shared contract at
+`mori://shinzui/kikan/okf/improvement-requests/concepts/IR-6`, then plan 52's
+signing, rotation, bounded read API, offline verifier and conformance matrix.
+The owning IR-5 and IR-6 requests were reread and remain proposed. Plan 52 now
+credits implemented canonical bytes/digests, adopted provider evidence and current
+workspace/API owners; its old Baikai/Kioku version blocker is removed. Baikai
+IR-3 is completed. Shared golden/schema agreement and actual signed proof remain. Its live positive case also owns plan 13's
+transferred provider proof.
+
 For adaptive delivery, plans 84 and 85 are complete against the delivered provider
-contracts; plan 86 is in progress and plan 87 is not started. Plan 96 owns actual
+contracts; plan 86 is in progress and plan 87 is not started but eligible. The current
+driver always blocks live mode, so configuration alone cannot close plan 86: implement
+and qualify the guarded API/production-authority adapter before the approved actual-model
+trial. Plan 87 now lists explicit recurring mandate, wake/watermark and stop/recovery
+outcomes; delivered watchdog/proposal scheduling does not supply them. Plan 96 owns actual
 repository process fencing;
 MasterPlan 17 owns authoritative objective/assignment state, trusted associations
 and checkpoint/ownership/scope providers. Plan 84's
@@ -175,7 +215,7 @@ surfaces, not prerequisites for every autonomous workload.
 | [52](plans/52-signed-attestation-read-api-and-uc-8-conformance.md) | Not started; shared signed envelope and live-provider proof |
 | [60](plans/60-harden-practice-review-attention-reservation-and-specialist-failure-boundaries.md) | Not started; atomic attention/outbox and specialist failure boundaries |
 | [61](plans/61-enforce-practice-review-resolver-entitlement-and-harden-the-authorization-envelope.md) | Not started; resolver entitlement and credential handling |
-| [62](plans/62-make-the-practice-review-closeout-and-operator-documentation-true.md) | Not started; provisioning/operator path and closeout |
+| [62](plans/62-make-the-practice-review-closeout-and-operator-documentation-true.md) | M1 documentation reconciliation accepted; profile provisioning and operator guidance remain |
 | [63](plans/63-extend-practice-review-conformance-to-the-claimed-end-to-end-matrix.md) | Not started; complete claimed conformance matrix |
 | [77](plans/77-add-a-read-only-k8s-observe-capability-provider-for-durable-agents.md) | Not started; bounded read-only Kubernetes provider |
 | [78](plans/78-run-external-operations-from-durable-flows-through-idempotent-shiki-jobs.md) | Not started; external executor, authorization and crash contracts |
@@ -226,13 +266,13 @@ gates; the owning plans and parent completion matrix define those gates.
 
 | Review | Historical outcome | Current disposition |
 | --- | --- | --- |
-| REV-1 — Plan 46 closeout | Changes requested | Open; plans 62 and 63 not started |
+| REV-1 — Plan 46 closeout | Changes requested | Open; plan 62 M1 accepted, provisioning/guidance and plan 63 conformance remain |
 | REV-2 — Attention reservation | Changes requested | Open; plans 60 and 63 not started |
 | REV-3 — Attention migration | Approved | Approval stands; advisory index work is in plan 60 |
 | REV-4 — Resolution authorization | Changes requested | Open; plan 61 not started |
 | REV-5 — Specialist Flow | Commented | Advisory work remains in plans 60 and 62 |
 | REV-6 — Capability ports | Approved | Approval stands; advisory work remains in plans 60 and 62 |
-| REV-7 — User guide | Changes requested | Open; plans 61 and 62 not started |
+| REV-7 — User guide | Changes requested | Open; plan 61 entitlement and plan 62 operator guidance remain |
 | REV-8 — Improvement-request corpus | Changes requested | Resolved locally by plan 64 on 2026-09-21; historical review outcome is unchanged |
 
 ## Status maintenance

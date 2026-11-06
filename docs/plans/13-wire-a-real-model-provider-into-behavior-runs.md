@@ -6,6 +6,13 @@ kind: exec-plan
 created_at: 2026-07-08T20:14:28Z
 intention: "intention_01kx1tygnxenvarsw91bjsy19r"
 master_plan: "docs/masterplans/2-production-reality-de-stub-the-runtime-behavior-and-integration-path.md"
+provenance:
+  revisions:
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-11-06T20:49:07Z
+      mode: "update"
+      note: "Record the live-proof transfer already accepted by MasterPlan 2; retain the unperformed proof in plan 52."
 ---
 
 # Wire a real model provider into behavior runs
@@ -64,13 +71,15 @@ value and never gains `Show`, JSON, or log rendering.
 - [x] (2026-07-31) Milestone 3 (durable half): `modelUsed` recorded from
       `behaviorModelId` at both session-completing seams; `AgentWorkflowSpec` asserts the
       completed row carries `Just "stub-v1"`.
-- [ ] Milestone 3 (live half): live anthropic smoke transcript. **Not performed** — no
+- [-] Milestone 3 (live half): live anthropic smoke transcript. **Not performed** — no
       Anthropic credential is available in this environment (see Surprises & Discoveries).
       Everything it would prove that is checkable without a key has been checked; what
       remains unproven is the round trip to `api.anthropic.com` itself. Rechecked
       2026-08-26: the credential is still absent. This is an external acceptance proof, not
       unfinished provider wiring; it does not block plan 46. Plan 52's live-provider
-      positive conformance run may supply the same transcript and close this box.
+      positive conformance run owns this proof under MasterPlan 2's accepted
+      2026-09-21 closeout. The obligation remains open in plan 52; it is not a
+      successful live result here. {disposition=transferred, by=docs/plans/52-signed-attestation-read-api-and-uc-8-conformance.md}
 
 
 ## Surprises & Discoveries
@@ -250,8 +259,11 @@ value and never gains `Show`, JSON, or log rendering.
 
 ## Outcomes & Retrospective
 
-Implementation-complete as of 2026-07-31. The single external live-provider acceptance
-proof remains open (see Progress and Surprises) and is coordinated with plan 52.
+Complete within the boundary accepted by MasterPlan 2 on 2026-09-21. The
+implementation was complete on 2026-07-31; the external live-provider proof remains
+open under plan 52. The 2026-11-06 reconciliation records that existing transfer
+in Progress so Mina does not count the same obligation against both initiatives.
+No live call or new implementation validation was performed for this correction.
 
 **What an operator can now do that they could not before.** Set `behavior.provider:
 anthropic` and a credential, and the same worker binary runs Skill behaviors against a

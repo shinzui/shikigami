@@ -23,6 +23,11 @@ provenance:
       at: 2026-10-22T01:19:09Z
       mode: "update"
       note: "IR-13 provider is a completion gate, not a start gate"
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-11-06T21:09:33Z
+      mode: "update"
+      note: "Seed existing recurrence milestones and discharge completed provider/coordinator prerequisites without crediting mandates."
 ---
 
 # Supervise recurring objectives from current durable checkpoints
@@ -35,13 +40,19 @@ If durable project context changes, update or create ADRs in docs/adr/ in the sa
 ## Purpose / Big Picture
 
 
-Maintain an explicitly authorized ongoing objective across bounded cycles without duplicate workers or stale scheduled instructions. Fulfill [IR-18](../improvement-requests/support-recurring-objective-supervision.md). A successful cycle leaves the mandate active; expiry, revocation or cancellation stops new admission while preserving uncertain effects. The hard dependency is `docs/plans/85-adapt-durable-delivery-through-validated-coordinator-decisions.md` and its transitive foundations. A delivered IR-13 checkpoint provider is a completion gate: the mandate store and wake coalescing can be built against a fixture checkpoint adapter, but this child cannot be marked Complete until real objective checkpoints come from IR-13. Plan 86 is a soft dependency for reuse of its coding fixture; recurrence can be qualified independently with governed read-only evidence.
+Maintain an explicitly authorized ongoing objective across bounded cycles without duplicate workers or stale scheduled instructions. Fulfill [IR-18](../improvement-requests/support-recurring-objective-supervision.md). A successful cycle leaves the mandate active; expiry, revocation or cancellation stops new admission while preserving uncertain effects. The hard dependency is `docs/plans/85-adapt-durable-delivery-through-validated-coordinator-decisions.md` and its transitive foundations. The IR-13 checkpoint provider is now delivered by plans 98–102. Its actual objective/checkpoint, ownership and scope adapters must participate in acceptance; a fixture adapter alone still cannot close this child. Plan 86 is a soft dependency for reuse of its coding fixture; recurrence can be qualified independently with governed read-only evidence.
 
 
 ## Progress
 
 
-Implementation has not started. Seed unchecked milestone entries when implementation begins.
+Implementation has not started. Plan 85 and the real objective/checkpoint provider
+from plans 98–102 are Complete; recurrence is independently eligible. Existing watchdog
+schedules and standing-policy proposals do not create recurring mandates.
+
+- [ ] M1: explicit versioned recurring admission/store and create/inspect/update/cancel commands with authority, finite expiry and a retained resource root.
+- [ ] M2: event/timer coalescing, current-checkpoint cycles and atomic/recoverable watermark/progress/wake publication with restart proof.
+- [ ] M3: no-delta backoff, expiry/revocation/cancellation, unknown-work retention, inspection and full real-provider recurrence qualification.
 
 
 ## Surprises & Discoveries
@@ -65,7 +76,10 @@ To be filled during implementation. Do not claim request completion until every 
 ## Context and Orientation
 
 
-`shikigami-workers/src/Shikigami/Trigger/Scheduler.hs` supplies `shikigamiTimerFallback`, `scheduleFireAction` and `armNextRun`; `Trigger/Timer.hs` owns the bounded shared timer pass. Core `Trigger/Schedule.hs` defines existing catch-up semantics and `Trigger/Enqueue.hs` provides durable enqueue identities. Cron alone knows no ongoing objective, watermark, ownership or expiry. A mandate is the durable admission record authorizing recurrence; a watermark records the last accepted evidence item for each source. A wakeup is only a hint to read current authoritative state.
+`shikigami-workers/src/Shikigami/Trigger/Scheduler.hs` supplies `shikigamiTimerFallback`, `scheduleFireAction` and `armNextRun`; `Trigger/Timer.hs` owns the bounded shared timer pass. The watchdog/proposal deliveries
+under MasterPlans 19/20 are separate consumers, not mandate storage or watermark
+semantics. Reuse their admitted producers and root policy where applicable without
+turning an installed standing policy into recurring authority. Core `Trigger/Schedule.hs` defines existing catch-up semantics and `Trigger/Enqueue.hs` provides durable enqueue identities. Cron alone knows no ongoing objective, watermark, ownership or expiry. A mandate is the durable admission record authorizing recurrence; a watermark records the last accepted evidence item for each source. A wakeup is only a hint to read current authoritative state.
 
 [ADR 0016](../adr/0016-a-cron-agent-runs-about-now-not-once-per-missed-minute.md) keeps missed ticks from becoming work debt. [ADR 0018](../adr/0018-a-workflow-that-ends-is-re-keyed-by-epoch.md) keeps completed workflow identities from swallowing new work. [ADR 0038](../adr/0038-runtime-startup-and-maintenance-share-validated-owners.md) establishes one timer dispatcher and shared workflow registry. The Mori-discovered [Keiro ADR-7](mori://shinzui/keiro/okf/adrs/concepts/ADR-7) assigns timer completion to its arming generation; a stale re-fire must never advance a newer cycle.
 
@@ -85,7 +99,8 @@ Add operator commands `mandates create`, `mandates inspect MANDATE --json`, `man
 
 Implement `Mandate/Workflow.hs` with adapters for a continuing coordinator and a fresh cycle run. Both receive stable mandate/checkpoint ids and reread current objective instructions, assignments, owner and unresolved work. Under a mandate lock accept event/timer wake ids into one active cycle; store later wake hints for bounded reconciliation. Derive cycle identities from durable mandate state rather than current wall time or model text. Process a configured maximum number of new source events per cycle. Use monotonic source sequence/cursor plus a tie-break identity; timestamps alone cannot deduplicate evidence.
 
-Atomically commit watermark advancement, accepted logical progress references and next-due/desired-wake intent. When IR-13 is a separate transactional owner, persist an idempotent progress intent and wait for its accepted receipt before consuming the watermark; recover a lost acknowledgement by the same operation key. Reconcile desired wake intents through the existing timer owner. Add an explicit mandate kind to `shikigamiTimerFallback`, retaining the single 100-row dispatcher; do not create another cron loop. Each timer carries mandate/cycle revision and arming generation, not an authoritative old prompt.
+Atomically commit watermark advancement, accepted logical progress references and next-due/desired-wake intent. IR-13 is now the existing `Objective/Store.hs` and `Objective/Capability.hs` owner.
+Where its transaction is separate, persist an idempotent progress intent and wait for its accepted receipt before consuming the watermark; recover a lost acknowledgement by the same operation key. Reconcile desired wake intents through the existing timer owner. Add an explicit mandate kind to `shikigamiTimerFallback`, retaining the single 100-row dispatcher; do not create another cron loop. Each timer carries mandate/cycle revision and arming generation, not an authoritative old prompt.
 
 Test a crash between checkpoint commit and timer installation, duplicate event and timer during an active cycle, and replacement instructions before an old timer fires. Resume must converge on current state, not recreate old assignments. Event notifications improve latency; a timer backstop repairs missed delivery.
 
@@ -101,13 +116,13 @@ Register the workflow and active patch sets centrally, and retain cycle/checkpoi
 ## Concrete Steps
 
 
-Run from the repository root in the existing development environment; if native tools are unavailable, enter `nix develop` first. PostgreSQL tests own disposable databases and must not be pointed at production. Capture a baseline before implementation, then run the following after each applicable milestone:
+Run from the repository root in the existing development environment; use `nix develop` for the project toolchain and native linker dependencies. PostgreSQL tests own disposable databases and must not be pointed at production. Capture a baseline before implementation, then run the following after each applicable milestone:
 
 ```bash
 MP14_BASE=$(git rev-parse HEAD)
-cabal build all
-cabal test shikigami-core-test shikigami-core-postgres-test shikigami-workers-test shikigami-server-test --test-show-details=direct
-just migration-schema-isolation
+nix develop --no-write-lock-file -c cabal build all
+nix develop --no-write-lock-file -c cabal test shikigami-core-test shikigami-core-postgres-test shikigami-workers-test shikigami-server-test -j1 --test-options=--num-threads=1 --test-show-details=direct
+nix develop --no-write-lock-file -c just migration-schema-isolation
 ```
 
 The build and tests must exit zero; tests report all cases passed. These are future implementation checks, not results of creating this plan. Add the named new test groups before using their success as evidence. If domain or workflow contracts change, scaffold with the checked workspace, stage/commit generated artifacts so the existing regeneration check compares the intended baseline, then run:
@@ -135,3 +150,5 @@ Use additive, schema-qualified migrations created through `just new-migration`; 
 
 
 This plan owns mandate fields, state transitions, wake/cycle ids, watermark/backoff semantics, mandate timer kind and inspection/control surface. It consumes IR-13 current objective/checkpoint state, plan 85's bounded coordinator cycle and acceptance contract, plan 84 worker events/fences, plan 83 execution history and plan 81 root accounting. It does not own general task state, session mailboxes, a new scheduler or another adaptive proposal engine. Expose `admitMandate`, `acceptWake`, `commitCycleProgress`, `stopMandate` and `inspectMandate` as typed commands with immutable operation keys and version checks. Preserve the existing timer claim-token and generation contracts rather than updating private timer rows. The terminal state rejects all future admission even if a stale schedule continues to fire.
+
+Revision note (2026-11-06): Seed the three existing milestone outcomes, discharge delivered provider/coordinator prerequisites, distinguish watchdog/standing-policy scheduling from mandates, and point recurrence at real objective owners and bounded fixture commands. No recurring implementation is credited.

@@ -13,94 +13,70 @@ provenance:
       at: 2026-10-06T04:07:36Z
       mode: "implement"
       note: "Build the seven-package immutable offline qualification graph and export isolated deployment roles under plan 79"
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-11-06T21:09:33Z
+      mode: "update"
+      note: "Refresh deployment plan against delivered roles, migration/configuration/health owners and remaining composed/drain acceptance."
 ---
 
 # Deployable service stack: process-compose, packaging, and configuration
 
-This ExecPlan is a living document. The sections Progress, Surprises & Discoveries,
-Decision Log, and Outcomes & Retrospective must be kept up to date as work proceeds.
-
+This living plan was refreshed against source checkpoint `ff00b819` on 2026-11-06.
+The refresh changes documentation only; retained qualification applies to its named candidate.
 
 ## Purpose / Big Picture
 
-Shikigami today is a dev-shell-only program: `process-compose.yaml` at the repo root starts
-Postgres and nothing else, the `Justfile` knows only how to create and migrate the database,
-and the four long-running commands that together form the runtime — `shikigami worker`,
-`shikigami scheduler`, `shikigami consume-stream`, and `shikigami consume-events` — must each
-be started by hand in its own terminal, in the right order, with the right flags. There is no
-Kafka broker in the stack even though both consumers need one, no way to install shikigami as
-a service on a real machine, and no single document that says which environment variables and
-flags exist.
+An operator should boot the complete development service with `just dev`, observe a
+fixture pass through Kafka, durable admission, the worker and a sink, and install the
+same roles using `nixosModules.shikigami`. Startup must apply and verify the embedded
+migration plan once, check configuration before resource acquisition, expose the
+existing health endpoints and stop within a configured drain bound.
 
-After this plan, one command — `just dev` — boots the entire local runtime: Postgres, a Kafka
-broker, plan 38's pg-migrate verification/application gate, the `shikigami-server` API,
-the `stub-kawa` sink target, the worker, the scheduler, and both stream consumers, with
-health-check-based startup ordering so nothing races its dependencies.
-A second deliverable makes the same runtime installable outside the dev shell: a flake output
-`nixosModules.shikigami` defines systemd services for the server, worker, scheduler, and consumers,
-configured through module options and plan 37's Settei sources. The third deliverable is
-`docs/operations/configuration.md`, a single reference for every Settei key, source,
-explicit legacy environment binding, secret boundary, and standard SDK-owned `OTEL_*`
-surface. All long-running processes prove graceful drain, telemetry flush, and bounded exit.
-
-The user-visible proof: run `just dev` inside `nix develop`, wait for the process list to show
-every process ready, then `cabal run shikigami -- publish-fixture fixtures/envelope.json` and
-watch the fixture flow through the consumer, the queue, the worker, and out to `stub-kawa` —
-with no manual terminal juggling. On the packaging side, `nix flake show` lists
-`nixosModules.shikigami`, and `nix flake check` passes a check that evaluates the module and
-asserts the rendered service commands.
-
+Immutable packages and a configuration guide already exist. The missing delivery is
+service composition, its end-to-end smoke, the NixOS module and shutdown qualification.
+This plan does not redo the model runtime, workspace supervisor or objective providers.
 
 ## Progress
 
-- [x] (2026-10-06 UTC) Plan-79 packaging preparation: replace the invalid root
-      package with named CLI/server/worker/migration outputs sharing a frozen
-      seven-package runtime closure; declare installed schema and qualification assets.
-      Role discovery and default derivation evaluation pass.
-- [x] (2026-10-06 UTC) Plan-79 packaging build: four immutable roles build at
-      `685a410`; installed CLI/server/worker versions, migration help, Dhall imports
-      and reporter manifests/skills pass outside the checkout. The follow-up at-risk
-      fallback correction passes installed-CLI validation as a source asset delta.
-- [ ] Plan-79 host acceptance: select the corrected fixture revision, build it for
-      deployment and prove configured startup. This slice does not complete the
-      process-compose, NixOS or graceful-drain milestones below.
+- [x] (2026-10-06; extended 2026-11-05) Immutable packaging slice: named roles and installed assets build from a frozen Cabal closure. Plan 124 records all five native role builds after Handan removal, with 382 packages and six immutable repositories.
+- [ ] M1: a complete, health-ordered process-compose stack with an initialized Kafka broker and `just dev|build|dev-down` works on a fresh disposable development database and on restart.
+- [ ] M2: the composed stack completes the fixture through stream intake, durable run and sink receipt; installed startup is proven with explicit test trust/configuration.
+- [ ] M3: `nixosModules.shikigami` and its representative NixOS evaluation check render the real role executables, configuration sources and migration ordering.
+- [ ] M4: the existing configuration reference matches deployment sources, and every long-running role proves bounded SIGTERM intake stop, settlement/drain, telemetry flush and resource closure.
 
-- [ ] Prerequisites: plans 36, 37, and 38 complete; the current seven-package graph and per-role outputs, Settei config, and pg-migrate CLI/manifest/plan are stable.
-
-- [ ] M1: Kafka broker (KRaft single-node) added to the dev shell via `flake.module.nix` and to
-      `process-compose.yaml`, with an exec readiness probe; broker reachable on 127.0.0.1:9092.
-- [ ] M1: `server`, `stub-kawa`, `worker`, `scheduler`, `consume-stream`, and `consume-events` processes
-      added to `process-compose.yaml` with `depends_on` ordering (postgres healthy and schema
-      migrated before DB-touching processes; kafka ready before consumers).
-- [ ] M1: `just dev`, `just build`, and `just dev-down` recipes added to the `Justfile`;
-      `just dev` boots the full stack.
-- [ ] M2: end-to-end smoke transcript recorded in this plan: `publish-fixture` → consumer match
-      → worker run → stub-kawa ingest, all inside the composed stack.
-- [ ] M3: `nix/nixos-module.nix` written; `flake.module.nix` exports it as
-      `nixosModules.shikigami`; `nix flake show` lists it.
-- [ ] M3: flake check `nixos-module-eval` evaluates the module with a sample configuration and
-      asserts the rendered `ExecStart` lines; `nix flake check` passes.
-- [ ] M4: `docs/operations/configuration.md` written, covering every env var and flag verified
-      in the code, plus reserved sections naming the plans that will add more (13, 22, 28, 29).
-- [ ] M4: SIGTERM/graceful shutdown test drains queue/outbox ownership, stops intake,
-      flushes OTel, closes HTTP/Kafka/database resources, and exits within a configured bound.
-
+Plans 36–38, 47, 28–30, 22 and 32 are accepted foundations. No implementation
+milestone above is closed by this refresh. The old plan-79 host acceptance and
+configuration-page tasks are integrated into M2/M4 rather than counted as new features.
 
 ## Surprises & Discoveries
 
-The fresh plan-79 baseline found that the root has no Cabal file and the previous
-default Nix package cannot evaluate. The successful isolated GHC 9.12.4 solve
-contains 354 runtime packages. A compatible Kikan-En client/contract commit is
-unpublished, requiring a checked-in, checksummed source archive. Staging all
-dependency sources as local goals otherwise enables unrelated executables;
-packaging disables only components absent from the selected runtime closure.
-The immutable build and installed reporter asset proof pass at `685a410`.
-The subsequent at-risk fallback asset is separately validated by that installed
-CLI; use its corrected source revision for host deployment. Configured host startup
-remains blocked by unavailable trust and integration configuration.
+On 2026-11-06, `process-compose.yaml` still contains only `sanity_check`,
+`create_schema` and `postgres`. The Justfile has no dev/build/dev-down recipes.
+`nix/nixos-module.nix` is absent. In contrast, `flake.module.nix` already exports
+`shikigami-runtime`, CLI/server/worker/migrate/scheduler/consumer roles and workspace
+qualification outputs. Do not overwrite that module from its example.
 
+`shikigami-migrate` owns `DATABASE_URL` and pg-migrate's parser; it does not accept
+application Settei `--config` files. The old `config/migrations-dev.yaml` command
+was invalid. Its `check` is offline; `up`, `verify` and `verify-schema` use the
+explicit database connection. Runtime startup verification is read-only.
+
+The earlier 354-package closure and unpublished Kikan-En source description are
+historical. Current immutable sources and build facts are in the cohort guide and
+plan 124. Their native packaging acceptance is not a full service-stack or Linux
+runtime qualification result.
 
 ## Decision Log
+
+2026-11-06 refresh: retain the existing deployment target, broker intent, frozen
+closure and four milestones. Consume completed health/configuration/packaging
+owners, remove obsolete CLI paths and migration flags, and keep installed host
+startup distinct from local deterministic composition.
+
+The following decisions describe their dated checkpoints. References to missing
+health endpoints, absent packaging or old host setup are superseded by the current
+Context and Plan of Work; deployment and ownership choices remain in force.
 
 - Decision: Export and build the exact qualified Cabal runtime closure offline,
   then wrap each deployed role around the resulting executable and installed assets.
@@ -174,532 +150,192 @@ remains blocked by unavailable trust and integration configuration.
   an immediately stale reference and lets the composed smoke test exercise real settings.
   Date: 2026-07-22
 
-
 ## Outcomes & Retrospective
 
-The plan-79 packaging slice fixes the invalid root default and compiles all named
-roles. Outside-checkout version/help, schema and reporter skill validation pass at
-`685a410`; the corrected at-risk fixture separately passes installed-CLI validation.
-Select that corrected source for host startup when test configuration is available.
-No composed stack or NixOS deployment completion is claimed; their milestones remain open.
-
+In progress. Packaging has accepted historical and current-native evidence;
+process composition, NixOS installation and graceful drain remain unqualified.
+No build, service startup or live integration was executed by this refresh.
 
 ## Context and Orientation
 
-Shikigami is a declared-agent runtime: agents are short Dhall manifests in `agents/` (for
-example `agents/heartbeat.dhall`), and one CLI executable, `shikigami` (built from
-`shikigami-cli`, dispatcher in `shikigami-cli/src/Shikigami/Cli.hs`), provides twelve
-subcommands. Four of them are long-running and together form "the runtime":
+There are seven application packages. `shikigami-server` owns the server and
+administrative `shikigami` executable, `shikigami-workers` owns worker, scheduler
+and both consumers, and `shikigami-migrations` owns `shikigami-migrate`.
+`shikigami-core` supplies domain and reusable behavior, `shikigami-api` the public
+route contract, `shikigami-client` the typed client and `shikigami-agent` one-offs.
+See [package ownership](../architecture/packages.md).
 
-- `shikigami worker` (`shikigami-cli/src/Shikigami/Cli/Commands/Worker.hs`) drains the
-  `shikigami_run_jobs` Postgres queue and runs agents; it also hosts the keiro workflow-resume,
-  outbox-publisher, and timer loops (`shikigami-core/src/Shikigami/Worker.hs:70`).
-- `shikigami scheduler` (`shikigami-cli/src/Shikigami/Cli/Commands/Scheduler.hs`) arms cron
-  triggers and fires keiro timers.
-- `shikigami consume-stream` and `shikigami consume-events`
-  (`shikigami-cli/src/Shikigami/Cli/Commands/ConsumeStream.hs`) consume Kafka topics
-  (`activity.v1` and `danwa.message-addressed.v1` by default) and enqueue run jobs.
+Read `shikigami-server/src/Shikigami/Server/Command.hs` and its `StubKawa.hs` and
+`PublishFixture.hs` modules; worker composition is in
+`shikigami-workers/src/Shikigami/Workers/Command/` and `Workers/Config.hs`.
+Health and supervision are implemented in `shikigami-workers/src/Shikigami/Health/Worker.hs`
+and the server health vertical. Use exact `/health/live` and `/health/ready`
+routes with distinct configured ports. Workers remain independent of sibling
+API/server packages.
 
-The substrate is Postgres (the pgmq queue, keiro workflow/outbox/timer tables, kioku
-session/memory tables — installed by plan 38's complete pg-migrate application plan) plus a
-Kafka-protocol broker for the two consumers. A fifth process, `shikigami stub-kawa --port 8088`
-(`shikigami-core/src/Shikigami/Sink/KawaStub.hs`), is a warp HTTP server imitating the real
-kawa ingest doorway; the worker's default `--kawa-url http://localhost:8088` points at it.
+Configuration is declared in `shikigami-core/src/Shikigami/App/Config.hs` and
+resolved through Settei. [The existing reference](../operations/configuration.md)
+documents repeated `--config PATH`, explicit environment bindings, flags and
+`--set`. Preserve the migration exception in
+[ADR 0032](../adr/0032-the-migration-cli-keeps-a-dedicated-configuration-boundary.md).
+Do not invent environment names or put secret contents into Nix expressions.
 
-*process-compose* is a docker-compose-style supervisor for plain processes, driven by
-`process-compose.yaml`; the binary is already in the dev shell (`nix/haskell.nix:25-35` lists
-`process-compose` among `baseDevPackages`). The current `process-compose.yaml` (repo root, 30
-lines) defines exactly three processes: `postgres` (socket-only: started with
-`-c listen_addresses=''` and a Unix-socket directory `$PGHOST`, with an exec readiness probe
-`pg_ctl status -D $PGDATA`), `create_schema` (runs `just create-database` once postgres is
-`process_healthy`), and a `sanity_check` echo. There is no broker and none of the shikigami
-processes, even though `docs/initial-spec.md:545-548` and `:728` intended "postgres + a
-Redpanda/Kafka broker".
-
-`shikigami-migrate` exposes the canonical
-component manifest and complete application plan with `plan`, `list`, `check`, `status`,
-`verify`, `up`, `repair`, and `new`; deployment uses the same CLI and test support as CI.
-
-The legacy configuration surface below is input to plan 37's inventory, not the target
-implementation. The target surface is stable Settei keys/source precedence with explicit
-compatibility bindings; command modules do not read environment variables directly:
-
-- `PG_CONNECTION_STRING` — read with `getEnv` (hard failure when unset) by every DB-touching
-  command: `Commands/Worker.hs:28`, `Commands/Scheduler.hs:36`, `Commands/ConsumeStream.hs:40`
-  and `:70`, `Commands/AgentRun.hs:36`, `Commands/EnqueueRun.hs:27`. The dev shell exports it
-  (`nix/haskell.nix:44`).
-- `OTEL_EXPORTER_OTLP_ENDPOINT` — read with `lookupEnv` in
-  `shikigami-core/src/Shikigami/Telemetry.hs:20`; when set, the standard `OTEL_*` exporter
-  variables are also honored via `loadExporterEnvironmentVariables` (Telemetry.hs:38).
-- CLI flags, all with defaults, defined in `shikigami-cli/src/Shikigami/Cli.hs`: the worker's
-  `--agents agents`, `--kawa-url http://localhost:8088`, `--kizashi-url http://localhost:8089`,
-  `--danwa-url http://localhost:8080`, `--danwa-agent part_shikigami` (Cli.hs:139-150); the
-  consumers' `--agents`, `--broker 127.0.0.1:9092`, `--topic`, `--group` (Cli.hs:98-130); the
-  scheduler's `--agents` (Cli.hs:131-138); `stub-kawa`'s required `--port` (Cli.hs:69-78).
-
-Everything Kafka-related is a flag, not an env var — which is why the composed stack can pin
-the broker to `127.0.0.1:9092` and match the flag defaults exactly.
-
-On the Nix side, `flake.nix` wraps
-`mori://shinzui/haskell-nix-dev/repos/haskell-nix-dev` (Seihou). The managed
-`nix/haskell.nix` owns development shells and the `haskellProject.extraDevPackages`
-extension. The committed, unmanaged `flake.module.nix` now exports the CLI default,
-named deployment roles and the complete `shikigami-runtime` bundle through
-`nix/qualification-package.nix`. The former root `callCabal2nix` declaration was
-removed because the root has no Cabal package. A future NixOS module must use the
-complete runtime bundle as its default package, since the CLI role exposes only
-the CLI executable. No NixOS module or container packaging exists yet.
-
-Two sibling plans matter here. `docs/plans/29-health-liveness-and-worker-loop-supervision.md`
-(EP-2 of this MasterPlan) adds `/health/live` and `/health/ready` HTTP endpoints to the long-running
-commands — this plan's readiness probes upgrade to them but do not wait for them.
-`docs/plans/28-structured-logging-metrics-and-trace-propagation.md` (EP-1) adds observability
-configuration (metrics exporter, log level); the configuration reference in M4 must list
-whatever EP-1 introduces, so finish or reconcile M4 after EP-1's surface is known.
-
+`flake.module.nix` and `nix/qualification-package.nix` already assemble the frozen
+runtime. `nix/qualification/cohort.json` is the selected source closure. Follow
+[ADR 0039](../adr/0039-deployment-roles-share-a-frozen-cabal-source-closure.md),
+[plan 124](124-remove-handan-by-owning-the-shikumi-execution-adapter-in-shikigami.md)
+and [the cohort](../dependency-cohort.md). The selected index is
+`2026-11-03T12:48:57Z`: Keiro 0.22, Baikai 0.10, Shikumi 0.5.1 and Kioku 0.12.0.2.
+No dependency upgrade is required here.
 
 ## Plan of Work
 
-### Milestone 1 — the full local stack under process-compose
+### M1 — Compose the local runtime
 
-Scope: a broker in the dev shell, all runtime processes in `process-compose.yaml`, ordered
-startup, and a `just dev` entry point. At the end, `just dev` (inside `nix develop`) brings up
-eight processes with correct ordering.
+Extend the existing unmanaged flake module with a verified Kafka dev dependency;
+retain its role outputs and closure. The selected intent is a single-node KRaft
+broker on loopback 9092, with controller on a separate loopback port and data in
+an isolated development directory. Verify the pinned nixpkgs attribute and shipped
+Kafka CLI before choosing exact flags. Use Mori to find dependency docs first.
+Accept a bounded broker prototype before adding the full startup graph. If native
+Kafka cannot meet the target, record the tested failure and use the documented
+container fallback without changing the Kafka protocol contract.
 
-First, prototype the broker choice (a prototyping step in the PLANS.md sense: cheap,
-discardable, de-risks the milestone). Inside the dev shell run
-`nix eval --raw nixpkgs#apacheKafka.name` and then start a single-node KRaft broker by hand
-(commands in Concrete Steps). If the attribute is missing or broken on the host platform,
-record the failure in Surprises & Discoveries and fall back to documenting a Redpanda container
-profile; the rest of the milestone is broker-agnostic because every consumer flag defaults to
-the stable Settei key `kafka.broker = 127.0.0.1:9092`.
+Extend process-compose with broker readiness, migration completion and server,
+stub-kawa, worker, scheduler and both consumer roles. Database roles wait for
+healthy PostgreSQL and a successful single migration process. Consumers also
+wait for healthy Kafka. Other roles do not require Kafka merely to start.
+The migration process runs the embedded `check`, `up`, `verify` and `verify-schema`
+commands with `DATABASE_URL`; application roles use checked Settei sources.
+Create the referenced non-secret dev configurations and run each role's
+`--check-config` before starting it. Use existing HTTP readiness for server and
+worker roles; the test sink needs a separately valid readiness/start condition.
 
-Second, create `flake.module.nix` at the repo root by copying `flake.module.nix.example` and
-setting `haskellProject.extraDevPackages = [ pkgs.apacheKafka ];` in its `perSystem` section.
-This puts `kafka-server-start.sh`, `kafka-storage.sh`, and `kafka-topics.sh` on the dev-shell
-PATH without touching the seihou-managed `nix/haskell.nix`.
+The composed fixture must supply explicit disposable identity, sink grants and
+any required authority through existing supported owners. Choose a key-free
+fixture provider. Do not require production credentials to prove local wiring
+or claim fixture authority qualifies a production deployment. Add dev/build/down
+recipes and build before probes begin, avoiding compilation-shaped startup races.
+Prove clean startup, teardown and a second startup without reformatting existing
+broker data or racing migrations.
 
-Third, commit a minimal single-node KRaft config as `nix/kafka-server.properties`
-(`listeners=PLAINTEXT://127.0.0.1:9092,CONTROLLER://127.0.0.1:9093`, log dirs under
-`.dev/kafka/data`) and add a `kafka` process to `process-compose.yaml`. KRaft needs a one-time
-storage format; guard it with a marker file under `.dev/kafka` so re-runs are idempotent. Give
-it an exec readiness probe that lists topics against `127.0.0.1:9092`. Keep the existing
-`postgres` process unchanged. Replace the legacy `create_schema` process with a one-shot
-`migrate` process that runs plan 38's exact embedded plan through `check`, `up`, and `verify`,
-using `config/migrations-dev.yaml`; it depends on healthy Postgres and must complete
-successfully before any DB-backed Shikigami role starts.
+### M2 — Prove composed delivery and installed startup
 
-Fourth, add the six shikigami processes, each running through `cabal run` so the stack always
-executes the current working tree (a deliberate dev-stack choice; the NixOS module in M3 runs
-the installed binary instead):
+Select an actual fixture and matching manifest by reading
+`shikigami-server/src/Shikigami/Server/Command/PublishFixture.hs`, agent declarations
+and the existing local-qualification driver. Do not reuse an obsolete positional
+publish-fixture invocation. With no manually started role, observe one accepted
+stream event, one durable run and the prepared/delivered sink receipt plus the
+stub's accepted request. Assert identities and durable outcomes as well as logs;
+structured log names are not the old hand-written MATCH transcript.
 
-Create the referenced non-secret files under `config/` as M1 artifacts. They use only plan
-37's stable keys (`http.port` for the server; agent directory, sink URLs, Kafka
-broker/topic/group, and distinct worker-role health ports), reject unknown keys, and contain
-no credential values. The dev shell's explicit
-`PG_CONNECTION_STRING` compatibility binding may supply `database.connection_string` until a
-local non-secret database source is preferable. Run every file through the corresponding
-`--check-config` command before starting process-compose; a malformed file stops M1 before any
-listener, queue, or database acquisition.
+For installed startup, select the exact current immutable role output and its
+installed assets outside the checkout. Supply explicit private test configuration
+and report missing trust/authority as blocked. Reuse plan 79's actual readiness
+boundary; do not broaden its accepted profile by quoting a native build. Keep
+fixture proof and production-host authorization evidence separate.
 
-- `server`: `cabal run shikigami-server -- --config config/server-dev.yaml`; depends on
-  `migrate` completed.
-- `stub_kawa`: `cabal run shikigami -- stub-kawa --config config/stub-kawa-dev.yaml`;
-  no dependencies. Its only route
-  is `POST /v1/sources/{source}/events` (KawaStub.hs:49); it is a test sink outside plan 29's
-  production probe scope, so its condition for dependents remains `process_started`.
-- `worker`: `cabal run shikigami-worker -- --config config/worker-dev.yaml`; depends on `migrate`
-  completed and `stub_kawa` started.
-- `scheduler`: `cabal run shikigami-scheduler -- --config config/scheduler-dev.yaml`; depends on `migrate`
-  completed.
-- `consume_stream` / `consume_events`: `shikigami-consume-stream` and
-  `shikigami-consume-events` with their checked Settei config files; each
-  depends on `migrate` completed and `kafka` healthy.
+### M3 — Export a NixOS module
 
-Note `migrate` uses condition `process_completed_successfully`, not `process_healthy`,
-because it is a run-once process. The worker and scheduler do not need Kafka at all — they must
-not wait on it.
+Add `nix/nixos-module.nix`, export `nixosModules.shikigami` from the existing flake
+module and default its package to `shikigami-runtime`, which contains every role.
+Expose `services.shikigami` with enable/package, ordered config-source paths,
+secret-directory paths and an optional environment file for explicit compatibility
+bindings and SDK-owned OTel settings. Per-role enablement/configuration paths
+cover server, worker, scheduler, consumeStream and consumeEvents. Avoid mirroring
+all Settei application keys as a second Nix configuration authority.
 
-Fifth, add the `Justfile` recipes: `dev` (depends on `build`, then execs `process-compose`),
-`build` (`cabal build all`), and `dev-down` (`process-compose down`). Making `dev` depend on
-`build` prevents the first boot from timing out probes while cabal compiles.
+Add one optional explicit migration oneshot and make enabled database roles
+require its success when selected. Runtime ExecStart uses the actual installed
+role, not administrative subcommands. Render restart policy, bounded stop timeout
+and SIGTERM delivery. Check service-user access to assets/private configuration
+and required runtime resources; select identity settings appropriate to those
+resources rather than assuming DynamicUser can access every workspace service.
+Keep credentials out of derivation contents.
 
-Acceptance: `just dev` shows all processes up; `process-compose process list` in a second
-terminal reports `postgres` and `kafka` Ready, `migrate` Completed, and the six
-shikigami processes Running.
+Use the pinned nixpkgs NixOS evaluation mechanism with a representative Linux
+configuration to assert enabled units, exact commands, source ordering and
+migration dependencies. Mac development does not require booting a NixOS VM for
+this evaluation milestone. A module evaluation does not prove runtime drain or
+Linux containment. Reuse Apple containers for required Linux runtime checks,
+falling back to the configured builder for compilation as repository guidance states.
 
-### Milestone 2 — end-to-end smoke through the composed stack
+### M4 — Close configuration and shutdown acceptance
 
-Scope: prove the stack is wired, not merely started. With `just dev` up, publish the checked-in
-fixture onto `activity.v1` and observe the full path: `consume_stream` logs a MATCH and an
-enqueue, `worker` logs the agent run completing, and `stub_kawa` logs the ingested digest
-envelope. This is the living-loop shape proven in
-`docs/plans/6-end-to-end-living-loop-proof-and-detector-conformance.md`, but here the subject
-under test is composition and ordering, not agent semantics. Record the transcript in this
-plan's Concrete Steps when done. Acceptance is the three log lines named in Validation
-appearing without any manual process start.
+Update the existing configuration guide and deployment examples from actual
+`--describe-config`/`--check-config` outputs, retaining the migration and typed-client
+exceptions. Document health ports, model/HTTP options, sink credentials, identity
+and authority, and explicitly separate SDK-owned OTel configuration. Remove
+reserved placeholders and invalid flags. Preserve one settings owner.
 
-### Milestone 3 — NixOS module
-
-Scope: a new file `nix/nixos-module.nix` plus its export and an evaluation check. The module
-defines an option tree `services.shikigami` with: `enable`, `package` (defaults to this
-flake's packages), shared non-secret Settei `configSources`, mounted `secretDirectories`, and
-an optional `environmentFile` for explicit compatibility bindings/SDK-owned `OTEL_*` values
-(secrets stay out of the nix store). Per-role submodules `server`, `worker`, `scheduler`,
-`consumeStream`, and `consumeEvents` contain only deployment concerns such as `enable` and
-role-specific additional config-source paths; they do not duplicate Settei keys as Nix
-options. `migrate` owns `enable` plus a oneshot plan/verify/up pg-migrate service for
-single-host setups. Each
-enabled submodule renders one systemd service (`shikigami-server`, `shikigami-worker`, `shikigami-scheduler`,
-`shikigami-consume-stream`, `shikigami-consume-events`) whose `ExecStart` is the installed
-binary with the Settei sources documented in the configuration reference, with
-`Restart=always`, `RestartSec=2`, `DynamicUser=true`, bounded stop timeouts, and graceful
-SIGTERM. Migrations stay a single explicit oneshot dependency because multiple service
-instances must not race schema application.
-
-`flake.module.nix` grows a top-level section:
-
-```nix
-{
-  flake.nixosModules.shikigami = import ./nix/nixos-module.nix;
-}
-```
-
-Because the development hosts are darwin, do not gate acceptance on booting a NixOS VM.
-Instead add a flake check (`perSystem.checks.nixos-module-eval` in `flake.module.nix`) that
-runs `lib.evalModules` over the module with a representative configuration and asserts the
-rendered `ExecStart` strings contain the explicit plan-36 executables and ordered Settei
-`--config` sources. This proves the option
-plumbing without a linux builder; a real `nixos-rebuild` on a linux host is optional extra
-validation.
-
-Acceptance: `nix flake show` lists `nixosModules.shikigami`; `nix flake check` passes,
-including the new check.
-
-### Milestone 4 — the configuration reference
-
-Scope: write `docs/operations/configuration.md`, structured by process. For each runtime
-process plus stubs and `shikigami-migrate`, document every stable Settei key, type/default,
-validation, secret classification, source precedence, explicit legacy binding, and NixOS/
-process-compose incarnation. Document the pg-migrate component/manifest/plan/CLI. Include the actual model-provider configuration from plan
-13, sink and kanmon credentials from plans 22/32, observability settings from plan 28, and
-health ports from plan 29. Cite each owning implementation; do not retain a reserved section.
-
-Acceptance: every setting traces to a Settei declaration/binding and every legacy name is
-explicit; no direct `getEnv`/`lookupEnv` path remains outside the Settei adapter and OTel SDK.
-
+Exercise SIGTERM during accepted work in each affected role: stop intake before
+releasing ownership; drain or durably retain accepted work within the configured
+bound; preserve uncertain remote outcomes; flush OTel and close HTTP, Kafka and
+database resources. Restart and verify recoverable work converges. A fast idle
+exit alone cannot close this milestone, and whole-cgroup process settlement remains
+the workspace supervisor's separately qualified responsibility.
 
 ## Concrete Steps
 
-All commands run from the repo root, inside `nix develop`.
-
-Prototype the broker (M1, discard afterwards):
-
-```bash
-nix eval --raw nixpkgs#apacheKafka.name
-mkdir -p .dev/kafka
-cp nix/kafka-server.properties .dev/kafka/server.properties   # after writing the config file
-kafka-storage.sh format --standalone -t "$(kafka-storage.sh random-uuid)" -c .dev/kafka/server.properties
-kafka-server-start.sh .dev/kafka/server.properties &
-kafka-topics.sh --bootstrap-server 127.0.0.1:9092 --list
-```
-
-Expected probe transcript once the broker runs (empty list first boot, or the fixture topic):
-
-```text
-$ kafka-topics.sh --bootstrap-server 127.0.0.1:9092 --list
-activity.v1
-```
-
-Edit `process-compose.yaml`, retaining `postgres`, removing the legacy `create_schema` and
-`sanity_check` placeholders, and adding the complete startup graph:
-
-```yaml
-  kafka:
-    command: >
-      bash -c 'mkdir -p .dev/kafka &&
-      cp -n nix/kafka-server.properties .dev/kafka/server.properties || true &&
-      test -f .dev/kafka/.formatted ||
-        (kafka-storage.sh format --standalone -t "$(kafka-storage.sh random-uuid)" -c .dev/kafka/server.properties &&
-         touch .dev/kafka/.formatted) &&
-      exec kafka-server-start.sh .dev/kafka/server.properties'
-    readiness_probe:
-      exec:
-        command: "kafka-topics.sh --bootstrap-server 127.0.0.1:9092 --list"
-      initial_delay_seconds: 5
-      period_seconds: 5
-      timeout_seconds: 4
-      failure_threshold: 10
-    availability:
-      restart: on_failure
-
-  migrate:
-    command: >
-      bash -c 'cabal run shikigami-migrate -- check &&
-      cabal run shikigami-migrate -- --config config/migrations-dev.yaml up &&
-      cabal run shikigami-migrate -- --config config/migrations-dev.yaml verify'
-    depends_on:
-      postgres:
-        condition: process_healthy
-
-  server:
-    command: "cabal run shikigami-server -- --config config/server-dev.yaml"
-    depends_on:
-      migrate:
-        condition: process_completed_successfully
-    availability:
-      restart: on_failure
-
-  stub_kawa:
-    command: "cabal run shikigami -- stub-kawa --config config/stub-kawa-dev.yaml"
-    availability:
-      restart: on_failure
-
-  worker:
-    command: "cabal run shikigami-worker -- --config config/worker-dev.yaml"
-    depends_on:
-      migrate:
-        condition: process_completed_successfully
-      stub_kawa:
-        condition: process_started
-    availability:
-      restart: on_failure
-
-  scheduler:
-    command: "cabal run shikigami-scheduler -- --config config/scheduler-dev.yaml"
-    depends_on:
-      migrate:
-        condition: process_completed_successfully
-    availability:
-      restart: on_failure
-
-  consume_stream:
-    command: "cabal run shikigami-consume-stream -- --config config/consume-stream-dev.yaml"
-    depends_on:
-      migrate:
-        condition: process_completed_successfully
-      kafka:
-        condition: process_healthy
-    availability:
-      restart: on_failure
-
-  consume_events:
-    command: "cabal run shikigami-consume-events -- --config config/consume-events-dev.yaml"
-    depends_on:
-      migrate:
-        condition: process_completed_successfully
-      kafka:
-        condition: process_healthy
-    availability:
-      restart: on_failure
-```
-
-(When `docs/plans/29-health-liveness-and-worker-loop-supervision.md` is complete, use the
-server's checked `http.port` and each worker role's distinct checked `health.port` to add
-`http_get` readiness probes against `/health/ready`; `stub_kawa` remains a test sink with its
-own simple startup condition.)
-
-Add to `Justfile`:
-
-```just
-# Boot the full local stack (postgres + kafka + migrations + runtime processes).
-dev: build
-    process-compose
-
-build:
-    cabal build all
-
-dev-down:
-    process-compose down
-```
-
-Run and verify M1:
+Run from the repository root. Before implementation capture a baseline and inspect
+current commands safely:
 
 ```bash
-just dev            # TUI comes up; leave it running
-# in a second terminal:
-process-compose process list
+plan31_base=$(git rev-parse HEAD)
+nix develop --no-write-lock-file -c cabal run shikigami-migrate -- --help
+nix develop --no-write-lock-file -c cabal run shikigami-migrate -- check
+nix develop --no-write-lock-file -c cabal run shikigami-worker -- --describe-config
+nix develop --no-write-lock-file -c cabal run shikigami -- publish-fixture --help
 ```
 
-Expected (abridged; exact column layout varies by process-compose version):
-
-```text
-NAME             STATUS
-postgres         Ready
-kafka            Ready
-migrate          Completed
-server           Running
-stub_kawa        Running
-worker           Running
-scheduler        Running
-consume_stream   Running
-consume_events   Running
-```
-
-M2 smoke, in a second terminal with the stack up:
+Use a task-owned disposable database for migration/runtime acceptance, never an
+existing developer or production database. After implementing the new recipes,
+run `just dev`, inspect `process-compose process list`, execute the fixture using
+the parser's actual arguments, stop with `just dev-down`, and repeat startup.
+The expected evidence is durable event/run/receipt identity and healthy roles,
+not a copied speculative transcript.
 
 ```bash
-cabal run shikigami -- publish-fixture fixtures/envelope.json
+nix flake check --no-write-lock-file
+nix develop --no-write-lock-file -c cabal build all
+nix develop --no-write-lock-file -c cabal test all -j1 --test-options=--num-threads=1 --test-show-details=direct
+git diff --check
 ```
 
-Then observe in the process-compose TUI (or `.dev/process-compose.log`):
-
-```text
-[stream] MATCH agent=heartbeat
-[stream]   enqueued run job ...
-[shikigami.worker] agent=heartbeat workflow completed
-```
-
-followed by an ingest log line from `stub_kawa` (its exact format is defined in
-`shikigami-core/src/Shikigami/Sink/KawaStub.hs`; match on the envelope log it writes per
-accepted POST). Which agent matches depends on the fixture and the manifests in `agents/`;
-`fixtures/envelope.json` is built to match the checked-in detector agents — read the fixture
-and `agents/*.dhall` and substitute the actual agent name in the transcript.
-
-M3, after writing `nix/nixos-module.nix` and extending `flake.module.nix`:
-
-```bash
-nix flake show 2>/dev/null | grep -A1 nixosModules
-nix flake check
-```
-
-Expected:
-
-```text
-└───nixosModules
-    └───shikigami: NixOS module
-```
-
-and `nix flake check` finishing without error (the `nixos-module-eval` check evaluates).
-
-M4:
-
-```bash
-mkdir -p docs/operations
-cabal run shikigami-worker -- --describe-config
-rg -n 'System.Environment.*(getEnv|lookupEnv)|\b(getEnv|lookupEnv)\b' shikigami-* --glob '*.hs'
-rg -n 'OTEL_EXPORTER_OTLP_ENDPOINT|OTEL_SDK_DISABLED' docs/operations/configuration.md
-```
-
-Generate/update the configuration reference from the declared Settei schema plus the explicitly
-documented SDK-owned `OTEL_*` boundary. The environment-read search prints only the centralized
-Settei adapter or documented OTel integration; command modules never appear.
-
+If Haskell lifecycle changes touch Agent/Flow bodies, follow
+[workflow versioning](../workflow-versioning.md) and run the ordinary gate against
+`plan31_base`. Check module evaluation and composed behavior at the final candidate;
+record actual package output, platform and source instead of searching the Nix store.
 
 ## Validation and Acceptance
 
-Local stack: from a clean checkout (no `db/`, no `.dev/`), `nix develop` then `just dev`
-reaches the process list shown above — `postgres` and `kafka` Ready, `migrate`
-Completed, six shikigami processes Running — with no manual intervention. Then
-`cabal run shikigami -- publish-fixture fixtures/envelope.json` produces, within a few
-seconds, a `[stream] MATCH` line from `consume_stream`, a `workflow completed` line from
-`worker`, and an ingest line from `stub_kawa`. While the stack is up,
-`psql "$PG_CONNECTION_STRING" -c 'select 1'` succeeds. Quitting the TUI (or `just dev-down`)
-and re-running `just dev` works without manual cleanup — this proves the Kafka format guard
-and the idempotent pg-migrate `up` path.
-
-Packaging: `nix flake show` lists `nixosModules.shikigami`, and `nix flake check` passes,
-including `checks.<system>.nixos-module-eval`, which must fail if the module stops rendering
-`shikigami-server --config`, `shikigami-worker --config`, or the other three explicit
-worker-role executables into the
-services' `ExecStart`.
-
-Configuration reference: `docs/operations/configuration.md` exists and covers the existing
-database/migration surface plus the actual provider, sink-auth, observability, health, and
-kanmon settings produced by plans 13, 22, 28, 29, and 32. Every entry cites its owning
-implementation; there are no reserved placeholders.
-
-Regression: `cabal build all` and `cabal test all` still pass inside `nix develop`. The
-package-focused core, server, and workers test suites provision ephemeral Postgres via
-`withShikigamiMigratedDatabase`
-(`shikigami-migrations/test-support/Shikigami/Migrations/TestSupport.hs:12`), so it must pass
-whether or not the composed stack is running:
-
-```bash
-cabal test all
-```
-
-Expected: `Test suite shikigami-core-test: PASS`.
-
+M1 accepts healthy ordered startup and repeat startup; M2 accepts the complete
+fixture and installed startup with selected private test configuration; M3 accepts
+the exported module and representative evaluation; M4 accepts truthful configuration
+and bounded drain/recovery under accepted work. Full applicable package checks must
+pass. Published role-build evidence alone satisfies none of these missing gates.
 
 ## Idempotence and Recovery
 
-Every step is re-runnable. `create-database` already guards `createdb` behind a `pg_database`
-existence check; the Kafka storage format is guarded by `.dev/kafka/.formatted`;
-`process-compose` restarts crashed processes per each `availability.restart` policy, and the
-whole stack tears down with `process-compose down`. If the Kafka data directory is corrupted
-(broker crash-loops with a storage error in the TUI), recovery is
-`rm -rf .dev/kafka && just dev` — nothing durable lives in Kafka (durable state is Postgres);
-the fixture topic is re-created on demand. If schema application fails, plan 38's
-`status|verify|repair|up` workflow determines the safe recovery. The nix changes
-are additive files (`flake.module.nix`, `nix/nixos-module.nix`, `nix/kafka-server.properties`);
-rollback is deleting them plus `git checkout -- process-compose.yaml Justfile`.
-
-
-## Portfolio Reconciliation (2026-07-30)
-
-This plan hard-depends on plans 36-38 and 47 and closes after the operational surfaces it
-documents. The actual targets are process-compose and NixOS. Use Settei 0.2's env, YAML/formats,
-and optparse-applicative packages; do not add `settei-kubernetes` or Kubernetes overlays unless a
-real Kubernetes deployment target is separately approved.
-
+Preserve broker identity/data across restart and let pg-migrate own ledger handling.
+Never delete broker/database data or use a Git reset as a routine retry. Use fresh
+task-owned directories for qualification. Restart from retained run/outbox receipts;
+do not republish accepted effects under new identities to hide uncertainty.
+Retain deployed package/secret-source references for rollback decisions; configuration
+rollback cannot decode an incompatible journal branch automatically.
 
 ## Interfaces and Dependencies
 
-Hard dependencies: plans 36, 37, and 38. This closure plan also lands after the actual
-settings/health/telemetry surfaces it documents. It integrates graceful shutdown hooks at
-composition/systemd boundaries and verifies drain/flush behavior.
-
-Tools: `process-compose` (already in the dev shell, `nix/haskell.nix:25-35`); nixpkgs
-`apacheKafka` (new, via `haskellProject.extraDevPackages` in `flake.module.nix`); `just`;
-flake-parts (the `flake.nixosModules` mechanism). Any small Haskell wiring needed for
-SIGTERM drain/flush uses the lifecycle hooks owned by plans 28/29; no parallel supervisor is added.
-
-Files that must exist at the end: `flake.module.nix` (committed; sets `extraDevPackages`,
-exports `flake.nixosModules.shikigami`, defines `perSystem.checks.nixos-module-eval`),
-`nix/nixos-module.nix`, `nix/kafka-server.properties`, the extended `process-compose.yaml`,
-the extended `Justfile` (`dev`, `build`, `dev-down`), and `docs/operations/configuration.md`.
-
-The NixOS module's option interface (the names operators and later plans program against):
-
-```nix
-services.shikigami = {
-  enable = true;
-  package = <derivation>;            # default: this flake's packages.shikigami-runtime
-  configSources = [ "/etc/shikigami/config.yaml" ];
-  secretDirectories = [ "/run/secrets/shikigami" ];
-  environmentFile = "/run/secrets/shikigami.env";  # explicit Settei legacy bindings/secrets; standard OTEL_* remains SDK-owned
-  server = { enable = true; configSources = [ "/etc/shikigami/server.yaml" ]; };
-  worker = { enable = true; configSources = [ "/etc/shikigami/worker.yaml" ]; };
-  scheduler.enable = true;
-  consumeStream = { enable = true; configSources = [ "/etc/shikigami/consume-stream.yaml" ]; };
-  consumeEvents = { enable = true; configSources = [ "/etc/shikigami/consume-events.yaml" ]; };
-  migrate.enable = false;            # oneshot shikigami-migrate service for single-host setups
-};
-```
-
-Cross-plan dependencies, as recorded in
-`docs/masterplans/6-operations-and-observability-run-shikigami-as-a-real-service.md`: soft
-dependency on `docs/plans/29-health-liveness-and-worker-loop-supervision.md` (readiness probes
-upgrade from exec/started conditions to `/health/ready` HTTP probes; nothing here blocks on it);
-integration dependency with
-`docs/plans/28-structured-logging-metrics-and-trace-propagation.md` (its logging/metrics env
-vars and flags are added to the configuration reference and the NixOS module); documentation
-and closure dependency on
-`docs/plans/13-wire-a-real-model-provider-into-behavior-runs.md` and
-`docs/plans/22-outbound-authentication-for-sink-clients.md` (owners of model-provider and
-sink-credential names), plus plan 32's kanmon configuration. The plan is implementable
-earlier, but should land after these soft dependencies.
-
+This child owns process-compose, dev recipes, the NixOS module and its evaluation,
+deployment-source documentation and process-level drain qualification. Existing
+health, settings, migration, telemetry, sink-delivery and workspace owners supply
+behavior. Plans 36–38/47 and 28–30/22/32 are complete; plan 124 supplies the current
+local adapter and native packaging baseline. Optional production trust is a runtime
+qualification prerequisite, not a reason to block key-free local composition.
 
 ## Revision Notes
 
-- 2026-10-06: Record the plan-79 packaging slice, frozen runtime/component closure,
-  explicit unpublished-source pin and remaining immutable build acceptance.
-
-- 2026-07-22: Made this the operations-closure plan. The configuration reference now
-  waits for and documents actual settings from plans 13, 22, 28, 29, and 32 instead of
-  publishing reserved placeholders.
-- 2026-07-22: Rebased the stack on plans 36–38, replaced Codd and raw-environment
-  documentation with pg-migrate and Settei, added graceful shutdown/drain/OTel flush,
-  and recorded NixOS/process-compose as the actual targets (Kubernetes not applicable).
+2026-11-06: Replaced removed CLI/core-worker paths, invalid migration config flags,
+absent-health assumptions and destructive recovery instructions with the seven-package
+runtime, existing frozen roles, current health/configuration owners and four explicit
+remaining acceptance milestones. Preserved prior decisions and historical build evidence.

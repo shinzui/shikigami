@@ -13,6 +13,11 @@ provenance:
       at: 2026-10-28T18:49:50Z
       mode: "update"
       note: "Refresh lifecycle work for principal scopes, shared timer dispatch, host-owned AI and exact bounded-read/retention gates."
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-11-06T21:09:33Z
+      mode: "update"
+      note: "Refresh selected Kioku and completed runtime/execution owners while retaining exact bounded lifecycle gates."
   reviews:
     - model: "gpt-6-astra"
       harness: "codex-cli"
@@ -23,7 +28,7 @@ provenance:
 
 # Memory lifecycle: distillation, retention, and shared scope
 
-This ExecPlan is a living document. Refreshed on 2026-10-28; implementation remains
+This ExecPlan is a living document. Refreshed on 2026-11-06 against `ff00b819`; implementation remains
 Not Started. This body replaces the July implementation instructions, including
 the obsolete fifth timer poller and name-derived scope selector.
 
@@ -43,11 +48,10 @@ learnings without crossing a memory-space boundary. No live model key is needed.
 
 ## Progress
 
-- [x] (2026-10-28) Planning audit: verified current caller paths, principal/space
-  ownership, timer routing, released Kioku APIs, and remaining query gaps.
-- [x] Existing foundations: plan 33 declaration policy, plan 54 principal/alias
-  continuity, worker configuration/supervision, and the shared bounded timer pass
-  are present. This credits foundations, not lifecycle delivery.
+The principal/alias, declaration, supervision and shared timer foundations are already
+implemented. They do not deliver lifecycle milestones. As of 2026-11-06 there is no
+Memory/Policy.hs, general retention/checkpoint store or Kioku timer route in Shikigami.
+
 - [ ] M0: verify the selected contracts and write local fixtures plus the upstream release/adoption matrix.
 - [ ] M1: integrate authorized Kioku firing into the shared timer dispatcher with
   host-owned AI configuration, bounded work and supervised operational behavior.
@@ -79,13 +83,14 @@ approval and conversation-idle payloads, not Kioku distillation. The shared time
 pass already performs guarded recovery and drains at most 100 rows. A second
 unfiltered Kioku worker is not a safe integration strategy.
 
-Both the selected Kioku 0.7.0.0 and inspected 0.12.0.1 source expose
+The selected Kioku 0.12.0.2 source, verified at released commit
+`5a62c3ef29cad50543f7bae97126e0431225998d` (tag `v0.12.0.2`), exposes
 `newDistillRuntime :: AIRuntime -> Maybe FilePath -> DistillRuntime`,
 `testDistillRuntime` and `withTestRunners`. The old self-registering Claude
 constructor and writable runtime-function record are gone. Disabled AI is the
 default; provider credentials alone are not authority to enable execution.
 
-Kioku 0.12.0.1 has permission-checked pages, fixed metadata and newest-active
+Kioku 0.12.0.2 has permission-checked pages, fixed metadata and newest-active
 metadata lookup. Ordinary memory pages are priority-first, and a newest point
 lookup is not a newest-first collection or retention-candidate page. Upstream
 `mori://shinzui/kioku/okf/improvement-requests/concepts/IR-2` remains partially
@@ -160,12 +165,14 @@ project-relative `docs/adr/host-owned-ai-execution.md` and
 the current manifest declares no ADR bundle and registry discovery returned no
 matching ADR handle).
 
-Use Mori before dependency lookup. The current project selects Kioku 0.7.0.0 and
-Keiro 0.18.0.0. On 2026-10-28 Hackage metadata, source archive and the peeled tag
-confirmed Kioku 0.12.0.1 at commit `78c9d0eeeb6f4c4b138122fe6c6a3e0deda80343`.
+Use Mori before dependency lookup. The current project selects Kioku 0.12.0.2, Keiro 0.22.0.0,
+Baikai 0.10.0.0 and Shikumi 0.5.1.0 under index
+`2026-11-03T12:48:57Z`. Hackage and upstream tag verification on 2026-11-06
+confirm the selected Kioku release.
 [Plan 92](92-resolve-the-released-keiro-0-22-cohort-and-rehearse-the-composed-migration.md)
-owns the new compatible cohort/migrations. Do not import newer APIs into the old
-solve or assume generic pages satisfy this plan's exact read contract.
+and runtime plan 94 are complete. Their cohort/runtime delivery is available,
+while the exact bounded-source/read/conditional-retention APIs below still need
+producer acceptance. Do not mistake generic pages for this plan's exact contract.
 
 ## Plan of Work
 
@@ -251,7 +258,7 @@ these function names already exist. Record adoption in a release matrix under
 | M2 fallback and M1 merge candidates | `mori://shinzui/kioku/okf/improvement-requests/concepts/IR-2` | Contextful exact-space/scope newest-first metadata, N and cutoff, stable timestamp/id tie-break, bounded content-by-id; real SQL plans and isolation tests |
 | M3 retention | Same Kioku IR-2 | Reserved-tag/type/scope selection, age AND newest-K exclusion, chronological keyset pages, atomic eligibility/keep-set recheck at archive and authoritative outcomes; concurrency/index evidence |
 | M1 per-timer work | `mori://shinzui/kioku` (follow-up under IR-2; owner artifact pending) | Bounded source-turn/candidate reads for all enabled L1/L2/L3 operations, explicit over-limit refusal without watermark advancement, public test runners and retry/defer outcome mapping |
-| Adoption | Local plan 92 | Accepted compatible source solve, migrations and immutable package closure containing those exact APIs |
+| Adoption | Completed local plan 92 plus the current cohort owner | Current solve/migrations are accepted; only a newly required owner API needs a new verified release/closure handoff |
 
 Plan 34's implementer prepares the producer acceptance fixtures and handoff using
 these coordinates. Updating upstream requests or implementing another repository
@@ -480,9 +487,10 @@ Plan 33 is the satisfied whole-child prerequisite. Plan 54, ADR 0033, existing
 worker configuration and plan 65/69 timer ownership are accepted foundations.
 M0 verifies the selected implementation contracts; M2/M3 require the specific released Kioku reads.
 M4 requires M2 acceptance; M3 requires M4 marker integration. M1 is independent
-after M0 and its exact bounded-source/candidate release gates pass. Plan 92 owns
-cohort/migration adoption, plan 94 owns concurrent runtime changes, and plans 83–84
-own evolving execution/session integration; none is a blanket whole-plan blocker.
+after M0 and its exact bounded-source/candidate release gates pass. Plans 92/94 and 83–85 are complete. Their accepted cohort, runtime,
+execution/session and root-accounting boundaries are regression consumers, not
+pending whole-plan blockers. A new upstream API still needs explicit compatible
+release/closure qualification.
 
 This child owns memory-target policy integration, bounded recall consumer behavior,
 retention eligibility and the Kioku timer adapter. Kioku owns storage, query SQL,
@@ -491,6 +499,8 @@ maintenance assembly. No private storage mutation, effect-row cast, new identity
 resolver or generic timer poller is part of the interface.
 
 ## Revision Notes
+
+- 2026-11-06: Rebase on selected Kioku 0.12.0.2/Keiro 0.22 and completed runtime/execution owners; verify the selected distillation API and still-unbounded source candidate path; preserve the exact missing read/retention and replay contracts without claiming lifecycle delivery.
 
 - 2026-10-28 follow-up: Address the review holes with selected semantics, budgets,
   failure/cursor handling, workflow patch policy and upstream acceptance handoffs.

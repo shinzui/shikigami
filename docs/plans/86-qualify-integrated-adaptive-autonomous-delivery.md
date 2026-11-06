@@ -38,6 +38,11 @@ provenance:
       at: 2026-11-04T05:33:34Z
       mode: "implement"
       note: "Resume native runtime qualification and independently verify retained integrated Git artifacts."
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-11-06T21:09:33Z
+      mode: "update"
+      note: "Refresh the missing guarded live adapter, accepted native matrix and explicit production-authority/actual-model acceptance."
 ---
 
 # Qualify integrated adaptive autonomous delivery
@@ -60,7 +65,7 @@ Implementation began on 2026-11-04 UTC at baseline
 
 - [x] Milestone 1 (2026-11-04): Reproducible two-repository fixture, bounded driver, 50 host controls and native objective admission.
 - [x] Milestone 2 (2026-11-04): Full native integration/recovery/refusal matrix, exact returned artifacts and a passing driver command.
-- [ ] Milestone 3: Explicitly configured actual-model/production-authority trial, published live evidence and corresponding coverage updates.
+- [ ] Milestone 3: implement and qualify the guarded live adapter, then run an explicitly configured actual-model/production-authority trial and publish its live evidence and coverage updates.
 
 Plans 85, 96 and 99 are complete. They supply the native adaptive controller,
 configured transfer-aware workspace provider and real objective/checkpoint owner.
@@ -277,8 +282,10 @@ duration and model attempts, strips ambient provider/database configuration and
 writes private per-attempt manifests. Required `runtime` selects an explicitly
 built Nix output; record that actual output alongside source facts. Missing
 runtime selection returns blocked before native admission. Cold compilation is
-a separate preparation step and cannot consume the finite objective budget. The current
-native envelope has a 48-model-attempt ceiling and 1,200-second cutoff. Its
+a separate preparation step and cannot consume the finite objective budget. The original accepted
+native run used a 48-model-attempt ceiling and 1,200-second cutoff. The current
+checked-in `fixture.yaml` sets 48 attempts and a 1,800-second driver timeout;
+record both configured driver bounds and the native root cutoff separately. Its
 provider is free and deterministic; token/invoice dimensions are explicitly
 unbounded fixture policy. `--mode live` remains blocked until a separate actual
 provider/authority adapter and operator-supplied limits are installed. Do not
@@ -292,7 +299,16 @@ Inject restart after a worker operation outcome, after a follow-up acceptance, a
 
 ### Milestone 3: Run a bounded live coding trial and publish evidence
 
-With explicitly supplied live configuration, run the same finite fixture using at least one actual model-driven coding path, governed writable workspaces and the actual production authorization boundary. Set bounded attempts, duration, cost/token policy where enforceable, and exact local-edit/test scope; no publication or deployment is required. Validate service availability before starting and report absent configuration as blocked. This planning task does not create a deployment or incur live model work.
+The current driver does not implement live admission: `tools/qualification/adaptive-delivery.py`
+unconditionally returns blocked for `--mode live`, and its configuration allow-list
+contains only fixture/runtime/scenario limits. Supplying credentials cannot enable it.
+First implement a separate guarded API-provider/production-authority adapter using
+the delivered selection, root accounting, workspace and objective owners. Add explicit
+private configuration validation, actual provider dispatch, fresh authority and enforceable
+limits; prove absent/invalid configuration refuses before model work. Reuse the existing
+HTTP model path; adding Codex CLI execution remains separately scoped and unqualified.
+
+With that adapter accepted and explicitly supplied live configuration, run the same finite fixture using at least one actual model-driven coding path, governed writable workspaces and the actual production authorization boundary. Set bounded attempts, duration, cost/token policy where enforceable, and exact local-edit/test scope; no publication or deployment is required. Validate service availability before starting and report absent configuration as blocked. This planning task does not create a deployment or incur live model work.
 
 Write `docs/evidence/adaptive-delivery/` summaries containing tested service/source versions, operation and selection ids, exact integrated artifacts, check outcomes, observed latency/resources/rework and uncertainty. Distinguish fixture mechanics from live behavior and do not generalize fleet-wide improvement from one trial. A failed live run preserves artifacts and exact unresolved scope and is not a passing gate. Update capability/use-case coverage and owning request status only after the corresponding evidence exists, using their declared OKF profiles and log commands. Complete ADR distillation across this initiative's storage, ownership, scheduling and acceptance decisions.
 
@@ -316,7 +332,8 @@ nix develop --no-write-lock-file -c just migration-schema-isolation
 python3 -m unittest discover -s tools/qualification -p 'test_*.py' -v
 ```
 
-The build and tests must exit zero; tests report all cases passed. These are future implementation checks, not results of creating this plan. Add the named new test groups before using their success as evidence. If domain or workflow contracts change, scaffold with the checked workspace, stage/commit generated artifacts so the existing regeneration check compares the intended baseline, then run:
+The build and tests must exit zero; tests report all cases passed. M1/M2 already have the named historical acceptance in Progress. These commands
+are requalification instructions for a changed candidate; this refresh did not rerun them. Add the named new test groups before using their success as evidence. If domain or workflow contracts change, scaffold with the checked workspace, stage/commit generated artifacts so the existing regeneration check compares the intended baseline, then run:
 
 ```bash
 TASTY_NUM_THREADS=2 nix develop --no-write-lock-file -c just keiro-gate "$MP14_BASE"
@@ -349,7 +366,9 @@ config["runtime"] = runtime[0]["outputs"]["out"]
 PY
 ```
 
-After implementation, run the driver against the selected runtime and the
+The fixture driver is implemented. Reuse its accepted runtime for unchanged
+mechanics or requalify a rebuilt candidate; after implementing the live adapter,
+run it against the selected runtime and the
 separately supplied live configuration:
 
 ```bash
@@ -383,3 +402,5 @@ commands. Acceptance and ownership remain unchanged.
 2026-11-04: Align the result-recovery cut with the implemented atomic result/wake
 owner transaction. The preserved acceptance is recovery without losing or
 repeating a committed result, now observed before consumer integration.
+
+Revision note (2026-11-06): Preserve accepted native M1/M2 evidence; identify the unconditional live-mode block and missing guarded adapter as real M3 work, reconcile driver/native cutoffs, and keep production authority/approved limits and actual-model proof open.

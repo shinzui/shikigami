@@ -17,6 +17,11 @@ provenance:
       at: 2026-10-28T18:49:50Z
       mode: "update"
       note: "Reconcile delivered features, overlay ownership, current dependencies and prioritized remaining integration gaps."
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-11-06T21:09:33Z
+      mode: "update"
+      note: "Refresh current code, completed prerequisites, shared ownership and genuine remaining acceptance; preserve historical decisions."
   reviews:
     - model: "gpt-6-astra"
       harness: "codex-cli"
@@ -29,7 +34,7 @@ provenance:
 
 This MasterPlan coordinates five feature streams. The registry owns child status;
 child ExecPlans own implementation milestones. Refreshed against the working tree,
-accepted ADRs and upstream release sources on **2026-10-28**.
+accepted ADRs and upstream release sources on **2026-11-06**.
 
 ## Vision & Scope
 
@@ -104,11 +109,11 @@ release and behavioral proof gates remain distinct from design decisions.
 
 | # | Title / current scope | Path | Hard Deps | Soft Deps | Status |
 |---|---|---|---|---|---|
-| EP-1 | Channel egress through Kanmon | [Plan 32](../plans/32-channel-egress-sink-through-kanmon.md) | Accepted shared delivery, HTTP and configuration foundations; see child evidence | None remaining | Complete (2026-08-23) |
-| EP-2 | Identity, memory policy and enablement | [Plan 33](../plans/33-agent-schema-evolution-identity-memory-policy-and-enablement.md) | Accepted loader slice and package foundations; see child evidence | None remaining | Complete (2026-08-20) |
-| EP-3 | Memory lifecycle | [Plan 34](../plans/34-memory-lifecycle-distillation-retention-and-shared-scope.md) | EP-2 Complete; M0 selected-contract fixtures; exact bounded-read/bounded-distillation release for M1–M3 | Plan 92 cohort adoption; plan 94 runtime coordination | Not Started |
-| EP-4 | Declared one-shot delegation | [Plan 35](../plans/35-delegation-as-a-first-class-declared-capability.md) | Accepted policy, versioning, migration and DSL foundations; see child evidence | None remaining | Complete (2026-08-22) |
-| EP-5 | MCP provider for capability overlays (historical filename retained) | [Plan 12](../plans/12-per-agent-mcp-server-declaration-in-agent-dhall.md) | Plans 56–59 Complete; M1 binding fixtures and release/auth handoff before M2–M4 | Plan 92 cohort adoption; plans 82–83 execution integration | Not Started |
+| EP-1 | Channel egress through Kanmon | [Plan 32](../plans/32-channel-egress-sink-through-kanmon.md) | None | None | Complete (2026-08-23) |
+| EP-2 | Identity, memory policy and enablement | [Plan 33](../plans/33-agent-schema-evolution-identity-memory-policy-and-enablement.md) | None | None | Complete (2026-08-20) |
+| EP-3 | Memory lifecycle | [Plan 34](../plans/34-memory-lifecycle-distillation-retention-and-shared-scope.md) | EP-2 | None | Not Started |
+| EP-4 | Declared one-shot delegation | [Plan 35](../plans/35-delegation-as-a-first-class-declared-capability.md) | None | None | Complete (2026-08-22) |
+| EP-5 | MCP provider for capability overlays (historical filename retained) | [Plan 12](../plans/12-per-agent-mcp-server-declaration-in-agent-dhall.md) | None | None | Not Started |
 
 Statuses are Not Started, In Progress, Complete and Cancelled. Missing milestone
 prerequisites do not imply the entire child is blocked. Historical plan 47 is an
@@ -140,14 +145,12 @@ credential handling and discovery authorization. Reuse the local C13 authorizer;
 do not wait for a request-status label to change before acknowledging code that
 already exists. Conversely, C13's existence does not supply the missing MCP client.
 
-Plan 92 owns the impending compatible dependency/cohort change, and plan 94 owns
-runtime lifecycle integration. These are integration/soft edges, not blanket
-whole-child prerequisites: unchanged-cohort work may proceed. Before using APIs
-absent from the selected cohort, require an accepted compiling solve and migration
-handoff from plan 92 (or an explicitly coordinated owner change). Do not upgrade
-Kioku or Keiro independently inside either feature plan. Reconcile shared files
-with ongoing plans 83–84 before edits and repeat affected acceptance if their
-interfaces move.
+Plans 92–95 and 82–85 are Complete. The selected cohort is Keiro 0.22,
+Kioku 0.12.0.2, Baikai 0.10.0.0 and Shikumi 0.5.1.0/tools 0.4.2.1.
+Current owner boundaries are available; only a newly needed API requires another
+verified compatible release/solve/closure. Neither feature waits for an already
+completed upgrade, and neither may silently alter dependency bounds.
+
 
 ## Integration Points
 
@@ -179,7 +182,7 @@ retry/defer/dead-letter semantics and writes. Worker startup owns validated
 and independent enablement so it can run without spending model credentials.
 With live distillation enabled, the shared drain handles one row per pass with a
 30-second AI callback bound and a 60-second heartbeat threshold; the disabled-AI
-fast path retains 100 rows. Plan 94 coordinates this deliberate throughput change.
+fast path retains 100 rows. Consume completed plan 94's runtime contract and requalify this deliberate throughput change.
 
 **MCP catalog, provider and tool binding — plans 56–59 define, EP-5 consumes.**
 `Capability/Overlay.hs`, `Catalog.hs`, `Provider.hs` and `Tools.hs` own immutable
@@ -196,8 +199,9 @@ generic descriptor codec is needed. Existing execution schema digests remain in 
 `Action/Authorization.hs` and `Capability/Provider.hs` already check connection and
 each exact tool invocation. Plan 12 must put `DiscoverCapabilityTools` immediately
 before discovery IO, verify revocation between stages, and resolve secrets only
-at the operator composition root. Production dependencies currently include local
-Kikan-En packages; immutable deployable closure remains a real qualification gate.
+at the operator composition root. Kikan-En uses verified immutable published source commit
+`16704290d527d413568bfa40c983f5c3604c35c8`; native roles already build.
+The MCP-extended closure and discovery consumer still need their own qualification.
 
 **Durable execution and replay — existing workflow/execution owners, both consume.**
 Any change under `Agent/` or `Flow/` follows [workflow versioning](../workflow-versioning.md)
@@ -210,19 +214,18 @@ separate accepted idempotency/recovery contract and are outside this delivery.
 
 ## Progress
 
-2026-10-28: **3 of 5 children Complete.** Plan 34 lifecycle implementation and
-plan 12's MCP-specific integration remain Not Started. Common overlay support is
-complete elsewhere. Source and release inspection performed in this refresh is
-not new runtime qualification; no tests/builds or live provider calls were run.
-Pre-existing execution/worker-session edits were present and were not changed.
+2026-11-06: three of five children are Complete. Memory lifecycle and MCP remain
+Not Started; prerequisite/planning checkboxes have been removed from their implementation
+progress. Existing declarations, principal/alias state, shared timer, C13 connection/
+invocation checks, overlays and accepted model/tool execution are delivered foundations.
+Current code still has unbounded fallback/alias reads, no lifecycle retention/policy
+owner or Kioku timer route, and no MCP provider.
 
-Next work is the concrete local fixtures in plan 34 M0 and plan 12 M1; neither
-requires live upstream IO. The selected designs are recorded, but no feature
-implementation has started. Before initiative closeout, require the
-memory isolation/retention/timer matrix and the MCP authorization/replay/cleanup
-matrix specified by those children, with no regressions in the completed egress,
-schema and delegation behavior. No friction-log entries currently name these two
-children or this MasterPlan; unrelated portfolio friction remains with its owners.
+Start with plan 34 M0 and plan 12 M1's local contracts/fixtures. Exact newest-first,
+conditional-retention and bounded distillation owner behavior still gate the affected
+runtime milestones; current generic Kioku pages are insufficient. Released MCP transport/
+adapter/discovery authority still gate live integration. No runtime qualification was
+performed for this refresh; the selected source and release metadata were inspected.
 
 ## Surprises & Discoveries
 
@@ -245,15 +248,14 @@ principal-first alias truncation, review MemoryPattern overlap, stale MCP schema
 instructions and partial upstream delivery; those observations remain valid until
 implementation replaces them.
 
-Release check on 2026-10-28: Hackage version metadata and downloaded source archives,
-plus peeled upstream tags, report `kioku-core 0.12.0.1` at
-`78c9d0eeeb6f4c4b138122fe6c6a3e0deda80343` in `mori://shinzui/kioku`,
-`baikai 0.10.0.0` at `03140cf60381ac154ebfa86d3bb2208d7df8626c` in
-`mori://shinzui/baikai`, and `shikumi-tools 0.4.1.1` at
-`db4eb373803552762edc9e86a231dfb529f8105b` in `mori://shinzui/shikumi`.
-The latter two archives contain no MCP source modules. The selected project
-versions are still Kioku 0.7.0.0, Baikai 0.7.2.0 and Shikumi Tools 0.4.0.0;
-latest releases are evidence to assess, not instructions to change pins here.
+Release/source check on 2026-11-06: Hackage and peeled tags confirm selected
+Kioku 0.12.0.2 (`5a62c3ef29cad50543f7bae97126e0431225998d`), Baikai 0.10.0.0
+(`03140cf60381ac154ebfa86d3bb2208d7df8626c`) and Shikumi 0.5.1.0/tools 0.4.2.1
+(`7b96ecf06364b37de44b15c4f58b2528b5a3e0f5`). The selected tool/provider
+descriptors have no MCP modules. Baikai's preferred version is now 0.10.1.0,
+which this refresh does not adopt. Selected Kioku distillation still limits candidates
+after `getActiveByScope`, so its exact bounded-read/retention handoffs remain open.
+Baikai MCP IR-2 and Shikumi MCP IR-1 remain proposed; Kioku IR-2 is in progress.
 
 Canonical upstream gates are
 `mori://shinzui/kioku/okf/improvement-requests/concepts/IR-2`,
@@ -295,11 +297,14 @@ Egress, defaulted schema policy and governed one-shot delegation satisfy their
 recorded child acceptance. The platform also gained principal-based state, fresh
 external-action authorization, overlays and durable model/tool execution outside
 this initiative. Those deliveries reduce remaining work but do not complete memory
-lifecycle or MCP. The follow-up selects concrete remedies for the design holes and adds two ADRs.
+lifecycle or MCP. ADRs 0064/0065 already select the required design; this refresh updates
+current dependencies and remaining implementation instructions without creating new ADRs.
 Implementation, missing upstream releases and final integration remain; no row is
 closed by the planning change alone.
 
 ## Revision Notes
+
+- 2026-11-06: Reconcile the selected cohort/immutable Kikan-En closure and completed runtime/accepted execution; keep exact owner API and MCP integration gates while removing inflated planning/foundation progress.
 
 - 2026-10-28 follow-up: Address the identified holes with selected designs, bounded
   defaults, error/recovery contracts, an explicit closure table and ADRs 0064/0065;

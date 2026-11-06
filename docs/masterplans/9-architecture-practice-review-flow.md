@@ -12,6 +12,11 @@ provenance:
       at: 2026-09-21T18:24:04Z
       mode: "update"
       note: "Reconciled status and progress during the 2026-09-21 portfolio audit"
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-11-06T20:49:07Z
+      mode: "update"
+      note: "Make the unstarted repair plans and live content-plane acceptance explicit in the current snapshot."
 ---
 
 # Architecture-practice review flow
@@ -43,7 +48,12 @@ content plane.
 
 ## Decomposition Strategy
 
-The work is divided into four behavior-oriented streams. EP-1 fixes the versioned domain
+The original work is divided into four behavior-oriented streams; the existing
+review repair wave (plans 60–63) is now explicitly registered alongside them.
+Those repair plans preserve their original scope and do not duplicate the core streams.
+EP-4 retains final integrated/live closeout.
+
+The four core streams are: EP-1 fixes the versioned domain
 contract so every other stream shares one vocabulary. EP-2 acquires and normalizes pinned
 evidence without making a judgment. EP-3 persists provisional findings and explicit human
 resolutions with applicability and supersession semantics. EP-4 composes those capabilities
@@ -61,102 +71,101 @@ review lineage.
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| 1 | Define architecture-practice review contracts | docs/plans/43-define-architecture-practice-review-contracts.md | None | cross-MP: plan 47 for package implementation | Complete (2026-08-19) |
-| 2 | Acquire revision-pinned architecture-practice evidence | docs/plans/44-acquire-revision-pinned-architecture-practice-evidence.md | EP-1; cross-MP: plan 47; upstream Kikan IR-5 for live adapter | None | Complete (deterministic seam; live adapter still blocked) |
-| 3 | Persist and adjudicate architecture-practice reviews | docs/plans/45-persist-and-adjudicate-architecture-practice-reviews.md | EP-1; cross-MP: plans 25 and 47 | None | Complete (2026-08-20) |
-| 4 | Orchestrate review delivery and end-to-end conformance | docs/plans/46-orchestrate-review-delivery-and-end-to-end-conformance.md | EP-1, EP-2, EP-3; cross-MP: plans 16, 19, 25, 35, 47, and MasterPlan 8; upstream Kikan IR-5 | None | In Progress (core landed; REV-1/2/4/7 follow-ups open) |
+| 1 | Review contracts | docs/plans/43-define-architecture-practice-review-contracts.md | None | None | Complete (2026-08-19) |
+| 2 | Revision-pinned evidence seam | docs/plans/44-acquire-revision-pinned-architecture-practice-evidence.md | EP-1 | None | Complete (deterministic seam; live reader remains in EP-4 acceptance) |
+| 3 | Review memory/adjudication | docs/plans/45-persist-and-adjudicate-architecture-practice-reviews.md | EP-1 | None | Complete (2026-08-20) |
+| 4 | Orchestration and full closeout | docs/plans/46-orchestrate-review-delivery-and-end-to-end-conformance.md | EP-1, EP-2, EP-3 | EP-5, EP-6, EP-7, EP-8 | In Progress (M4/M5 repairs and live reader remain) |
+| 5 | Attention atomicity, semantics and failure boundaries | docs/plans/60-harden-practice-review-attention-reservation-and-specialist-failure-boundaries.md | None | EP-6 | Not Started |
+| 6 | Resolver entitlement and envelope hardening | docs/plans/61-enforce-practice-review-resolver-entitlement-and-harden-the-authorization-envelope.md | None | EP-5 | Not Started |
+| 7 | Truthful closeout, profile provisioning and operator guidance | docs/plans/62-make-the-practice-review-closeout-and-operator-documentation-true.md | None | EP-6 | In Progress (M1 documentation accepted; M2/M3 open) |
+| 8 | Full routed/profile/delivery/identity conformance | docs/plans/63-extend-practice-review-conformance-to-the-claimed-end-to-end-matrix.md | None | EP-5, EP-6, EP-7 | Not Started |
 
-Status values: Not Started, In Progress, Complete, Cancelled.
-Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3).
-
+Statuses are Not Started, In Progress, Complete and Cancelled. The four existing repair
+plans are now registered rather than hidden behind EP-4's percentage. No plan was created
+or acceptance waived. Hard Deps list start gates only; the mandatory milestone/closeout
+gates below also govern completion. Original external package/DSL/provider foundations
+are accepted; Kikan IR-5 remains the live-reader acceptance prerequisite.
 
 ## Dependency Graph
 
-EP-1 comes first because it defines the trigger, provenance, claim, verdict, resolution,
-review-id, and applicability types. EP-2 and EP-3 both consume those types and can then run
-in parallel. EP-4 waits for all three because it passes EP-2's evidence bundle into the
-specialist, sends the resulting EP-1 verdict through EP-3's memory lifecycle, and maps that
-same verdict to delivery behavior.
+EP-1 supplies contracts to EP-2/EP-3; all three are Complete. EP-4's delivered
+M1–M3 supply the actual Flow/interpreters/receipt behavior used by the repair children.
+That accepted artifact permits repair work without requiring EP-4's whole incomplete
+closeout. There is no circular whole-child start dependency.
 
-EP-2 has an external hard dependency on the C16 content-plane and Shikumi ToolEnv work
-authored by Kikan plans 25, 28, and 29; if those plans are not implemented, only its
-deterministic client seam and stub tests can land. EP-3 hard-depends on
-`docs/plans/25-replay-safe-flow-memory-capabilities.md` for labeled `recall` and
-`rememberWith`, metadata, deterministic ids, and supersession. EP-4 hard-depends on the
-completed declarative-router MasterPlan 8 and plan 35's durable Flow delegation. It also
-consumes the honest sink/outbox behavior from plans 16 and 19. Mori's Agent action and
-practice-adoption fan-out are external trigger producers; fixtures can exercise the
-Shikigami boundary before those producers land.
+EP-4 cannot complete until EP-5–EP-8 are Complete and its live content-plane/deployment
+proof passes. EP-8's semantic-key M5 requires EP-5 M2 acceptance; its final entitlement
+regressions consume EP-6's new codec, and its installed-profile case consumes EP-7 M2.
+Existing owner fixtures permit earlier test development without claiming those absent
+outcomes are accepted. Final operator examples in EP-7 follow EP-6's implemented version,
+not a prospective schema. These are milestone/completion gates, not optional suggestions.
 
+The existing local foundations (sink delivery/auth, memory/delegation, recorded identity,
+router and workflow specification) have landed. Current scalar/allocated identity owners
+are plans 107/108; the local Shikumi adapter is plan 124. Live revision-pinned reading
+still requires `mori://shinzui/kikan/okf/improvement-requests/concepts/IR-5`.
+The governed workspace provider is not that content-plane protocol.
 
 ## Integration Points
 
-IP-1 — domain contracts. EP-1 owns the types under
-`shikigami-api/src/Shikigami/Api/PracticeReview.hs`, including their JSON versions and strict
-validation. EP-2 through EP-4 consume them without defining local lookalikes. Haskell records
-use direct strict fields under `DuplicateRecordFields`.
+**Contracts and identity.** `shikigami-core/src/Shikigami/PracticeReview.hs` owns
+checked trigger/verdict/resolution-request types. IdentityStore/Memory own allocated
+review/resolution receipts and retained memory transitions under ADRs 0092/0093.
+EP-4–EP-8 consume these owners. ReviewId is not an attention key or caller request key;
+no child restores deterministic application entity factories.
 
-IP-2 — pinned evidence. EP-2 owns `Shikigami.PracticeReview.Evidence` and the normalized
-`EvidenceBundle`. Every material excerpt carries `repoId`, full commit `revision`, `path`,
-`contentHash`, and fact/inference role. EP-4 may judge only from this bundle; an incomplete
-required bundle deterministically becomes `unresolved`.
+**Evidence and evaluation.** EP-2's EvidenceReader validates exact repository/revision,
+path, opaque content hash, bounds and provenance. EP-4 journals the bounded EvidenceBundle
+and raw evaluator result; incomplete evidence yields Unresolved without a model call.
+Live reads still await Kikan IR-5. EP-5 adds stable problem rendering and proposal bounds;
+it cannot weaken the abstract reader's content-hash contract into an invented SHA grammar.
 
-IP-3 — review lineage. EP-1 defines deterministic `ReviewId` inputs and EP-3 applies them to
-memory ids, supersession, and resolution. EP-4 uses the same lineage for workflow step
-labels, Kawa idempotency, and attention coalescing; no consumer invents another key.
+**Review memory and authorization.** EP-3 owns provisional/adjudicated content and
+cross-workflow convergence. The Flow uses the dedicated journaled practice-memory effects,
+not generic remember calls. EP-6 adds resolver entitlement through current ID-free ingress
+and the next explicit receipt version; EP-4 reuses admitted receipts and retained verdicts
+without live replay authorization. EP-7 documents the actually implemented envelope and
+keeps the absent deployed ingress adapter explicit.
 
-IP-4 — memory content and tags. EP-3 owns the typed provisional/resolved memory envelope,
-state transition rules, and indexed tags for practice, project, applicability, and active
-state. EP-4 invokes it through plan 25's labeled Flow operations. Existing Kioku storage is
-not migrated for the first slice.
+**Attention and delivery.** Attention.hs owns semantic reservation/association and atomic
+journal/outbox/receipt publication. EP-5 repairs valid-retained-result rollback and claim
+semantics. Sink/Delivery owns status/retry/unknown truth; no child creates attention-level
+delivery state or releases a reservation to retry. EP-8 owns the joined transport/fault
+proof. History is unconditional for completed semantic reviews; attention is conditional
+and uses the explicit semantic-owner recipient map.
 
-IP-5 — delivery. EP-4 owns mapping verdict classifications to Kawa/Kizashi/Danwa behavior.
-It uses the existing sink outbox and preserves the distinction between semantic verdicts and
-delivery failures. `consistent` never emits attention; failures remain retryable runtime
-failures.
-
-IP-6 — router integration. MasterPlan 8 owns candidate selection and route decisions. EP-4
-provides the concrete router/specialist declarations and passes the untouched review trigger
-into the specialist child; Mori never names that specialist.
+**Routing/profile/inspection.** The existing router owns catalog/selection/delegation;
+EP-4 supplies the reviewer Flow and recorded lineage. EP-7 owns operator profile
+provisioning; EP-8 proves both actual declarations, resolved profile and recorded identity
+through those real paths. The specialist remains advisory/read-only. Reuse current
+operator query/receipt owners rather than inventing a separate review supervisor.
 
 
 ## Progress
 
-Track milestone-level progress across all child plans. Each entry names the child plan
-and the milestone. This section provides an at-a-glance view of the entire initiative.
+2026-11-06: three of eight registered children are Complete. EP-4 is In Progress;
+EP-5/EP-6/EP-8 remain Not Started. EP-7's bounded closeout/inventory reconciliation
+is accepted in this refresh, while profile provisioning and current operator examples
+remain. Explicitly registering existing repairs makes Mina's counts include their work.
 
-- [x] EP-1 M1: Define and round-trip the versioned trigger and revision provenance types.
-- [x] EP-1 M2: Define the five-way verdict, claim evidence, applicability, and resolution types.
-- [x] EP-1 M3: Add deterministic review ids, validators, fixtures, and public API exports.
-- [x] EP-2 M1: Add a fail-closed content-plane evidence client seam and pinned-read validation.
-- [x] EP-2 M2: Collect target, reference, upstream, and prior-adjudication evidence into one bundle.
-- [x] EP-2 M3: Prove hash/provenance preservation and unresolved behavior for missing evidence.
-- [x] EP-3 M1: Encode provisional and resolved review memories with deterministic ids and tags.
-- [x] EP-3 M2: Implement accepted, rejected, narrowed, and superseded transitions.
-- [x] EP-3 M3: Prove replay idempotency, audit retention, scoped recall, and supersession.
-- [x] EP-4 M1: Declare the architecture router and OpenTelemetry specialist and register the Flow.
-- [x] EP-4 M2: Implement the named durable review steps and typed verdict production.
-- [x] EP-4 M3: Publish Kawa history and coalesced owner attention from the verdict.
-- [ ] EP-4 M4: Prove all five verdicts, explicit resolution, re-review, replay, and read-only safety end to end.
-
+The current code has real Flow wiring, allocated identities, ID-free schema-2 ingress,
+redacted submission credentials, full-request receipt binding, an ingress queue test and
+corrupt-retained-attention recovery. It still lacks valid retained-skip rollback,
+label-independent semantic keys, resolver entitlement, profile install/show and the full
+coupled conformance matrix. No runtime suite or live content call was rerun here.
 
 ## Surprises & Discoveries
 
-Document cross-plan insights, dependency changes, scope adjustments, or unexpected
-interactions between child plans. Provide concise evidence.
+The old registry omitted the already-required repair plans and its high checkbox fraction
+therefore hid substantial unfinished work. They are now explicit registry children with
+unchanged scopes and completion gates. The current source additionally supplies allocated
+identity/full-request receipt/redaction/ingress/corruption controls, which obsolete parts
+of the August repair instructions but do not close the remaining safety matrix.
 
-- Kikan Use Case 006 confirms that Mori's `Agent` reaction and the C16 content plane are
-  planned rather than deployed. The Shikigami plans therefore need ports and deterministic
-  stubs, with live integration explicitly gated on the upstream plans.
-- Current Flow memory performs raw IO and generates a new memory id on every call. Plan 25 is
-  not optional: implementing review memory before it lands would make replay duplicate or
-  change conclusions.
-- Existing Kawa and Kizashi sink clients already expose the necessary wire families but use
-  general JSON output. The review initiative can remain additive by producing typed JSON at
-  the Flow boundary and using the established transactional outbox.
-- Kikan's current top-level improvement-request bundle assigns the
-  revision-pinned content-plane and ToolEnv work to IR-5. The child plans now
-  use its stable OKF concept URI.
+The original source snapshot predated dedicated replay-safe Flow memory, typed review
+allocation and current domain declarations. Those are now delivered. Old instructions to
+add missing memory interpreters or retired patch labels have been replaced by the current
+owners and the normative workflow guide.
 
 
 ## Decision Log
@@ -201,11 +210,14 @@ Compare the result against the original vision.
 
 In progress. Plans 43 through 45 are complete, and plan 46 delivered the core workflow, but the
 2026-08-27 review corpus found correctness, resolver-entitlement, documentation, and conformance
-gaps. Plans 60 through 63 are the required closeout wave. The live evidence adapter remains
+gaps. Plans 60 through 63 are the required registered closeout wave; plan 62 now has
+its documentation-reconciliation milestone accepted, with provisioning/examples open. The live evidence adapter remains
 fail-closed pending `mori://shinzui/kikan/okf/improvement-requests/concepts/IR-5`.
 
 
 ## Revision Notes
+
+- 2026-11-06: Register existing repair plans 60–63, distinguish accepted core artifacts from final closeout gates, credit delivered identity/ingress hardening and plan-62 documentation while preserving all missing safety, provisioning, conformance and live-reader acceptance.
 
 - 2026-09-21: Reconciled plans 43 through 45 as Complete and plan 46 as In Progress;
   recorded the open review-driven closeout wave in plans 60 through 63.

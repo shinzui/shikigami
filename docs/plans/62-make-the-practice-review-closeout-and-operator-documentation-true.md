@@ -3,55 +3,67 @@ id: 62
 slug: make-the-practice-review-closeout-and-operator-documentation-true
 title: "Make the practice-review closeout and operator documentation true"
 kind: exec-plan
+master_plan: "docs/masterplans/9-architecture-practice-review-flow.md"
 created_at: 2026-08-27T00:54:32Z
 intention: "intention_01m10bc7hae8trp0ev5mzpvt0d"
+provenance:
+  revisions:
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-11-06T21:09:33Z
+      mode: "update"
+      note: "Accept bounded closeout documentation reconciliation; refresh still-open profile provisioning and current operator examples."
 ---
 
 # Make the practice-review closeout and operator documentation true
 
-This ExecPlan is a living document. The sections Progress, Surprises & Discoveries,
-Decision Log, and Outcomes & Retrospective must be kept up to date as work proceeds.
-If durable project context changes, update or create ADRs in docs/adr/ in the same change.
-
+This living plan was refreshed against `ff00b819` on 2026-11-06. The existing
+repair scope remains; obsolete August paths, entity IDs and patch instructions are removed.
 
 ## Purpose / Big Picture
 
-Plan 46 landed the OpenTelemetry practice-review specialist and wrote a closeout that the
-next engineer will read instead of the code. Review records
-[REV-1](../reviews/plan-46-review-orchestration-closeout.md) and
-[REV-7](../reviews/architecture-practice-reviews-user-guide.md) found that the closeout
-claims conformance coverage the suite does not contain, that master plan 9 still lists all
-four of its plans as not started, that the workflow-versioning inventory omits the seven
-new journal labels and two patch ids, that ADR 0034 fails `git diff --check`, and that the
-user guide tells an operator to do two things nobody can do: submit a resolution through an
-ingress that has no caller, and provision a sanctioned execution profile with no procedure
-or tool.
-
-After this plan every one of those documents says what is true at its commit. The plan
-also closes the second gap for real rather than by disclaimer: an operator can run
-`cabal run shikigami -- profiles install config/profiles/sanctioned-review-1.json` against
-a migrated database, see the computed digest printed, and then start the reviewer without
-the "profile absent" refusal. The resolution ingress remains unreachable until a
-deployment adapter lands, and the guide says so in the same voice as its existing
-live-evidence callout.
-
+An operator should be able to install and inspect the exact sanctioned review profile
+using supported commands and follow instructions that match the implemented reviewer.
+The closeout must distinguish actual fixture coverage from unproven routed/delivery/live
+cases. Resolution examples must describe the real ingress contract and its deployment gap.
+This plan documents the core enqueue boundary; it does not add a public authentication
+adapter or implement resolver entitlement, which remains plan 61.
 
 ## Progress
 
-- [ ] M1: plan 46 Outcomes and Milestone 4 rewritten to the proven set; master plan 9
-      registry; workflow-versioning inventory; ADR 0034 whitespace.
-- [ ] M2: `shikigami profiles install` and `profiles show`, the checked-in
-      `sanctioned-review` version 1 profile, and their tests.
-- [ ] M3: user guide corrections (unreachable ingress, provisioning procedure, unresolved
-      context refs) and the interpreter-branch comment.
+- [x] (2026-11-06) M1: current plan-46 closeout and MasterPlan-9 registry describe the delivered subset and required repairs/live evidence; the current workflow guide points to actual declarations/generated facts, and ADR-0034 has no whitespace defect.
+- [ ] M2: implemented profile install/show commands and an operator-authored `sanctioned-review` version-1 artifact pass validation, immutable duplicate/conflict and real resolution tests.
+- [ ] M3: current ID-free/versioned user examples, absent-ingress and unresolved-context guidance, provisioning instructions and applicable operator documentation validate against the final code.
 
+M1 is the documentation reconciliation delivered in this refresh, not proof that plan 46
+or this child is complete. Profiles commands and `config/profiles/` are still absent.
 
 ## Surprises & Discoveries
 
-(None yet.)
+The old plan cited deleted pure-test paths and a nine-case suite. Orchestration,
+profile resolution, router and delivery integration tests now live under
+`shikigami-core/test-postgres/Shikigami/`. The suite additionally covers real ID-free
+ingress and corrupt attention results. Its larger presence does not close plan 63.
 
+The maintained workflow inventory now links `domain/shikigami/agent-run.keiro` and
+its generated facts. Historical review patch ids have been retired; the old instruction
+to append seven labels and two retired patches to a prose census is obsolete. Follow
+the checked current declarations instead. ADR 0034 already ends cleanly.
+
+The user guide still shows a schema-1 envelope and caller-supplied deterministic
+resolutionId. Current schema-2 admission takes an ID-free request and allocates the
+entity in its owner. Plan 61 will add entitlement with a new version; examples must
+follow whichever implementation has actually landed, never a planned codec.
 
 ## Decision Log
+
+2026-11-06 refresh: credit current closeout/inventory reconciliation as M1; preserve
+profile provisioning and user guidance as separate deliverables. Use current opaque
+profile values, the public store owner and actual admin composition; remove obsolete
+patch-branch comments because those branches no longer exist.
+
+Historical rationale follows; dated references to a missing registry refresh or the
+old test inventory are superseded by the current Context and Plan of Work.
 
 - Decision: Give profile provisioning a real subcommand instead of documenting SQL.
   Rationale: the digest is `commitmentDigest` over the profile's canonical JSON
@@ -75,251 +87,146 @@ live-evidence callout.
   checked, otherwise `In Progress` with the open item named.
   Date: 2026-08-27.
 
-
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
-
+M1's documentation reconciliation is delivered by this refresh. M2/M3 remain open:
+there is no profiles command or shipped profile artifact, and existing user examples
+are stale. No database, profile installation or runtime test was executed for this
+planning update. The documented future transcript is an acceptance expectation only.
 
 ## Context and Orientation
 
-The documents involved are all in the repository. `docs/plans/46-orchestrate-review-delivery-and-end-to-end-conformance.md`
-is the closeout; its Progress entry for Milestone 4 (lines 66-70), its Outcomes and
-Retrospective (lines 252-278), and its Milestone 4 narrative (lines 526-565) are the
-passages that overclaim. `docs/masterplans/9-architecture-practice-review-flow.md` holds
-the Exec-Plan Registry table (lines 55-60) with a Status column whose allowed values are
-written under the table. `docs/workflow-versioning.md` has a section "What Shikigami
-journals today" (from line 415) that declares itself the complete inventory of journal
-step names and patch ids. `docs/adr/0034-review-resolutions-enter-as-verified-durable-envelopes.md`
-ends with two newlines. `docs/user/architecture-practice-reviews.md` is the user guide;
-its sections are "Trigger a review", "Resolve a review", "Configure attention and grants",
-and "Inspect and recover delivery". `docs/operations/operator-cli.md` documents the
-`shikigami` admin executable and the keiro-ops verbs it mounts.
+`shikigami-server/src/Shikigami/Server/Command.hs` owns administrative command dispatch;
+`Server/Command/Grants.hs` and existing Ops/Objectives commands show current parser,
+configuration and administrative runtime composition. Add the Profiles command in that
+package, with reusable install/store behavior in core rather than tests mirroring SQL.
 
-What the suite actually proves is recorded in REV-1: nine cases in
-`shikigami-core/test/Shikigami/PracticeReviewOrchestrationSpec.hs`, no Warp sink stubs,
-no attention-specific Kizashi retry coverage, one identity, a router spec that still uses a
-`noop-summary` specialist, and no provisioned profile. Plans 61 and 63 change some of
-that later; this plan writes what is true at the commit it lands on, and those plans
-append revision notes when they change it.
+`shikigami-core/src/Shikigami/Attestation/Profile.hs` defines the checked profile;
+Envelope.hs supplies `profileDigest` and Resolve.hs supplies `postgresProfileStore`
+and fail-closed `resolveProfile`. The profile migration and store schema already exist.
+Read their current statement/codec instead of constructing obsolete public newtypes.
+PostgreSQL ProfileResolutionSpec and AgentWorkflowSpec provide validation fixtures.
 
-A *sanctioned execution profile* is a versioned record naming which model, provider, and
-thinking settings a run may use. The reviewer declaration
-(`agents/proof/opentelemetry-practice-reviewer.dhall`) requires profile
-`sanctioned-review` version `1`. At run time `Shikigami.Attestation.Resolve.resolveProfile`
-reads `shikigami.sanctioned_execution_profiles` (created by
-`shikigami-migrations/sql-migrations/0004-sanctioned-execution-profiles.sql`),
-re-hashes `profile_content`, and refuses a row that is absent, not `active`, expired,
-or whose stored digest disagrees with the content. The row shape is `(profile_id, version,
-issuer, lifecycle, valid_from, valid_until, profile_content, profile_digest)`, with a check
-that the JSON's `profileId`, `version`, `issuer`, and `lifecycle` equal the columns.
-`shikigami-core/test/Shikigami/ProfileResolutionSpec.hs` has an `insertProfile` helper
-that shows the exact statement, and `shikigami-core/test/Shikigami/AgentWorkflowSpec.hs`
-builds a version-1 profile with `workflowProfileWith defaultThinkingProhibitions
-(ProfileVersion "1")`; both are the models for M2.
+The proof reviewer at `agents/proof/opentelemetry-practice-reviewer.dhall` requires
+`sanctioned-review` version 1. Its installed artifact must use approved provider/model/
+thinking tuples and explicit validity/issuer/lifecycle. Test fixture defaults cannot
+choose deployment authority for an operator. A profile is permission data, not a secret.
 
-Relevant local ADRs: [0007](../adr/0007-a-resolved-profile-is-a-run-local-policy-snapshot.md)
-and plan [50](../plans/50-fail-closed-profile-resolution-and-run-pinning.md)
-define profile resolution; [0027](../adr/0027-the-first-release-establishes-one-clean-durable-baseline.md)
-explains why no compatibility branch is needed for a new CLI verb;
-[0034](../adr/0034-review-resolutions-enter-as-verified-durable-envelopes.md) is corrected
-for whitespace only here (plan 61 amends its content). No cross-repository ADR applies.
-
+Read [ADR 0007](../adr/0007-a-resolved-profile-is-a-run-local-policy-snapshot.md),
+[ADR 0034](../adr/0034-review-resolutions-enter-as-verified-durable-envelopes.md),
+[ADR 0093](../adr/0093-review-entities-are-allocated-behind-durable-request-receipts.md)
+and [workflow versioning](../workflow-versioning.md). Plan 46 owns the current closeout,
+plan 61 entitlement/source policy and plan 63 the full conformance matrix. Historical
+review events in docs/reviews are immutable; later evidence supersedes their findings.
 
 ## Plan of Work
 
-### Milestone 1: True closeout documents
+### M1 — Keep closeout consistent with proven behavior
 
-At the end of this milestone the four planning and versioning documents match the tree.
+The refreshed plan 46 identifies delivered M1–M3 separately from M4/M5 acceptance;
+MasterPlan 9 keeps three original children Complete and plan 46 In Progress with
+repair dependencies. The current guide delegates label inventory to checked declarations
+and generated facts. Do not restore old patch ids or stale line-number inventories.
+As repairs land, replace only the applicable open findings with named test evidence.
+Do not rewrite original review events or imply that historical suite totals certify
+new branches. This refresh accepts that bounded documentation outcome.
 
-In plan 46, rewrite the Milestone 4 Progress entry and the Outcomes paragraph that begins
-"The focused practice-review suite passes 44 tests" so they enumerate what the nine
-orchestration cases prove (authorization refusals, key stability under whitespace and
-under recipient and action change, the five-classification matrix with attention
-presence, one real AgentRun with the incomplete reader, replay of the incomplete path,
-and one concurrent reservation race) and state plainly what they do not: no Warp Kawa or
-Kizashi stubs, no transient-500, terminal-4xx, or unknown-outcome coverage against a
-reservation, only the compatibility identity, no classification, claim, or content-hash
-key variation, no router-to-specialist delegation with the Flow specialist, and no
-provisioned profile. Add a sentence that the resolution enqueue boundary has no production
-caller. Append a Revision Note dated 2026-08-27 citing REV-1 by relative link and naming
-plans 61 and 63 as the work that changes the facts. Do not rewrite the Milestone 4
-narrative as if it were never claimed; add one paragraph at its end that says which of
-its sentences the suite does not yet realise.
+### M2 — Implement immutable profile provisioning
 
-In master plan 9, set each registry row's Status from that plan's Progress section. Open
-plans 43, 44, and 45, confirm every non-external checklist item is checked, and record
-`Complete`; for plan 46 record `In Progress` and name the open external item (Kikan IR-5
-live evidence) in the same cell, because the master plan's status vocabulary has no
-"complete except external" value. Append a revision note to the master plan.
+Add `shikigami profiles install FILE` and `profiles show ID [--version V]` in the
+server admin parser. Decode through the actual checked SanctionedExecutionProfile
+boundary, compute the same canonical digest resolution uses, and install through one
+reusable core operation. A new id/version inserts immutable content; an identical
+retry returns the existing digest; a different payload under the same id/version
+refuses and leaves the row unchanged. Concurrent identical/conflicting installs must
+follow those same outcomes. Reuse the admin runtime and explicit database settings.
 
-In `docs/workflow-versioning.md`, under "flow capabilities" in the inventory, add
-`practice-review-evidence`, `practice-review-evaluate`, and `practice-review-attention`
-with the file `Shikigami/PracticeReview/Capability.hs` and
-`Shikigami/PracticeReview/Attention.hs`, marked "declared; post-patch", and
-`practice-review-remember-provisional`, `practice-review-resolve`,
-`practice-review-recall`, and `practice-review-chain` with
-`Shikigami/PracticeReview/Memory.hs`, marked the same. Under "written by keiro on this
-service's behalf", add `patch:shikigami-practice-review-memory-v1` and
-`patch:shikigami-practice-review-flow-v1`, each described as "every agent-run that
-interprets a flow", because `runFlowBehavior` and `runPracticeReviewMemory` evaluate both
-guards for every Flow. Also fix the dangling sentence "that they are governed by rule 5
-and names their owners." that sits after "Two ordinal-derived names remain" while you are
-in the file.
+Create `config/profiles/sanctioned-review-1.json` from an explicitly chosen non-secret
+profile, validated against the proof reviewer's requirement and current provider catalog.
+Do not synthesize deployment issuer/authority from fixture defaults. The checked-in
+example must clearly distinguish the example's model/validity from deployment approval.
+`show` uses the same fail-closed resolution owner and renders bounded public fields,
+not a raw secret/config dump. Existing absent/expired/withdrawn/ambiguous/digest-mismatch
+refusals remain authoritative.
 
-Remove the final blank line from ADR 0034 so `git diff --check` passes.
+Test real command parsing and dispatch plus actual install/show behavior with disposable
+migrated PostgreSQL. Install twice, resolve the committed artifact, attempt a changed
+payload and assert refusal/original preservation. Cover malformed files, invalid values,
+concurrent conflicts and explicit version selection. Keep these in the server suite and
+core PostgreSQL owner suite; do not copy the command's SQL into a test-only substitute.
+Document the actual commands in `docs/operations/operator-cli.md`.
 
+### M3 — Fix current operator/user guidance
 
-### Milestone 2: A profile provisioning command
+In `docs/user/architecture-practice-reviews.md`, state that no deployed resolution
+authentication adapter is wired. The tested core enqueue helper is a contract for such
+an adapter, not a command an operator can currently invoke. Use an ID-free resolution
+request, the actually implemented outer schema and its real receipt fields; remove
+caller-authored ResolutionId and derived-entity instructions. If plan 61 has landed,
+include its entitlement field/version and owner-or-authority rule; otherwise do not
+claim it is enforced. A self-consistent receipt checksum is not authentication.
 
-At the end of this milestone `cabal run shikigami -- profiles install <file>` inserts a
-sanctioned profile with the digest resolution will recompute, `profiles show <id>
-[--version V]` prints what resolution sees, and a checked-in file provisions
-`sanctioned-review` version 1.
+Replace unsupported profile-provisioning prose with M2's real validated install/show
+commands, before reviewer enablement. Explain required explicit deployment authorization
+and profile validity. For an unresolved review before content acquisition, document only
+refs actually emitted; do not claim a missing project citation exists. Preserve the
+live-reader warning and correct grants/recipient/recovery commands from current parsers.
 
-Create `shikigami-server/src/Shikigami/Server/Command/Profiles.hs` following the shape of
-the existing `Shikigami.Server.Command.Grants` module (find it via the `grants` entry in
-`adminSubcommands` in `shikigami-server/src/Shikigami/Server/Command.hs`). `install`
-takes a file path, decodes it as `Shikigami.Attestation.Envelope.SanctionedExecutionProfile`,
-computes `profileDigest`, inserts the row with `ON CONFLICT (profile_id, version) DO
-NOTHING` using the same column list as `ProfileResolutionSpec.insertProfile`, and prints
-`installed <profileId> <version> digest=<sha> ` or `already present <profileId>
-<version>` when the row existed, in which case it also compares the stored digest and
-exits non-zero with a clear message if they differ, because an existing row with different
-content is exactly the drift resolution would refuse. `show` calls `resolveProfile
-(postgresProfileStore pool)` for the id and optional version and prints the resolved
-profile or the rendered `ProfileResolutionError`. Register both under a `profiles` entry in
-`adminSubcommands`. The admin executable's configuration loading and pool acquisition are
-already done for `grants`; reuse them.
-
-Create `config/profiles/sanctioned-review-1.json` by encoding the value
-`workflowProfileWith defaultThinkingProhibitions (ProfileVersion "1")` from
-`AgentWorkflowSpec.hs` once (a one-off test that writes the JSON, run and then deleted, or
-a `cabal repl shikigami-core-test` session) and committing the output. Add a test in
-`shikigami-server/test` that runs the parser over `profiles install` and `profiles show`
-help text, following the existing "each subcommand parses" test, and an integration case
-in `shikigami-core/test/Shikigami/ProfileResolutionSpec.hs` that loads the checked-in
-JSON, inserts it through the same statement the command uses, and resolves it with
-`resolveProfile` at a time inside its validity window, proving the file is a profile the
-reviewer can actually run under.
-
-Document the two verbs in `docs/operations/operator-cli.md` beside `grants`.
-
-
-### Milestone 3: User guide corrections and the interpreter comment
-
-At the end of this milestone the guide describes only steps an operator can take, marks
-the one it cannot, and the dead interpreter branch explains itself.
-
-In `docs/user/architecture-practice-reviews.md`, at the top of "Resolve a review", add a
-blockquote in the same form as the existing "Live-evidence status" callout: the envelope
-below is the contract an ingress must produce; no ingress is wired in this release, so
-resolutions cannot be submitted until a deployment adapter that authenticates the resolver
-lands; the entitlement rule (plan 61) applies to any such adapter. In "Configure attention
-and grants", replace the sentence "Provision that immutable active profile in the
-deployment profile store before enabling the agent" with the two commands from M2 and
-their expected output, and keep the list of refusals that follows. In "Trigger a review",
-after the sentence about Kawa context refs, add that an `unresolved` verdict recorded
-before live evidence is available carries only the `activity://practice-review/<id>` ref,
-because no project was cited. Update the guide's `cabal run shikigami -- agents sync`
-sequence so provisioning precedes it.
-
-In `shikigami-core/src/Shikigami/Agent/Workflow.hs`, above the `attentionInterpreter`
-binding in `runFlowBehavior`, add a comment: the `otherwise` branch is the pre-patch
-shape required by rule 2 of `docs/workflow-versioning.md`; no journal can take it today
-because every fresh run records the patch as true and no pre-patch reviewer journal exists
-(ADR 0027), and the stub `attention` callback it installs fails closed by design.
-
+No obsolete attention-interpreter branch comment is needed: current production installs
+the interpreter directly. If code comments are changed, describe the current body and
+follow the workflow rules. Maintain user OKF timestamp/log/index through its established
+commands and run user-docs validation. Examples should be decoded by the current
+validators where feasible, rather than checked only by matching strings.
 
 ## Concrete Steps
 
-All commands run from `/Users/shinzui/Keikaku/bokuno/shikigami` inside the Nix shell with
-the local PostgreSQL cluster running.
-
-Milestone 1 is prose; verify with:
+Run from the repository root. Use the Nix shell and isolated migrated fixtures; ordinary
+plan refresh does not install into an existing developer or production database.
 
 ```bash
+plan62_base=$(git rev-parse HEAD)
+nix develop --no-write-lock-file -c cabal build all
+nix develop --no-write-lock-file -c cabal test shikigami-core-postgres-test -j1 --test-options='--num-threads=1 -p profile' --test-show-details=direct
+nix develop --no-write-lock-file -c cabal test shikigami-server-test -j1 --test-options=--num-threads=1 --test-show-details=direct
+just user-docs-validate
 git diff --check
-grep -n "practice-review-" docs/workflow-versioning.md
-grep -n "| 4 |" docs/masterplans/9-architecture-practice-review-flow.md
 ```
 
-The first prints nothing; the second lists the seven labels and two patch ids; the third
-shows the plan-46 row with `In Progress`.
-
-Milestone 2:
-
-```bash
-nix develop -c cabal build all
-nix develop -c cabal run shikigami -- profiles install config/profiles/sanctioned-review-1.json
-nix develop -c cabal run shikigami -- profiles show sanctioned-review --version 1
-nix develop -c cabal run shikigami -- profiles install config/profiles/sanctioned-review-1.json
-nix develop -c cabal test shikigami-core-test -j1 --test-options='-p "profile"' --test-show-details=direct
-nix develop -c cabal test shikigami-server-test -j1 --test-show-details=direct
-```
-
-Expected transcript for the three `profiles` invocations:
-
-```text
-installed sanctioned-review 1 digest=sha256:<64 hex>
-sanctioned-review 1 issuer=<issuer> lifecycle=active valid_from=<time> digest=sha256:<same 64 hex>
-already present sanctioned-review 1 digest=sha256:<same 64 hex>
-```
-
-Finish with the full suite and gate:
-
-```bash
-nix develop -c cabal test all -j1 --test-show-details=direct
-nix develop -c just keiro-gate <merge-base>
-```
-
-Every commit carries:
-
-```text
-ExecPlan: docs/plans/62-make-the-practice-review-closeout-and-operator-documentation-true.md
-Intention: intention_01m10bc7hae8trp0ev5mzpvt0d
-```
-
+After M2 exists, against a task-owned migrated fixture database, exercise install, show
+and repeat install with the same artifact, then reject a changed same-version artifact.
+Record actual output/digest and assert the proof manifest validates. These commands are
+future deliverables, not available merely because they appear in this plan.
+Run full applicable tests; use `just keiro-gate` against `plan62_base` only where durable
+body/codec changes occur. No removed patch or production ingress is introduced here.
 
 ## Validation and Acceptance
 
-For M1, a reader of plan 46 can list, from its Outcomes alone, exactly the nine cases the
-suite has and the six things it lacks, and finds a 2026-08-27 revision note; master plan 9
-shows three `Complete` rows and one `In Progress` row naming Kikan IR-5; `grep` finds the
-new inventory lines; `git diff --check` is silent.
-
-For M2, on a freshly migrated local database the three-command transcript above
-reproduces, and after it `nix develop -c cabal run shikigami -- validate
-agents/proof/opentelemetry-practice-reviewer.dhall` still validates the declaration. A
-second `install` of a *modified* copy of the JSON with the same id and version exits
-non-zero with a digest-mismatch message and leaves the original row untouched.
-
-For M3, the guide's "Resolve a review" section opens with the not-wired callout, and its
-provisioning paragraph is the transcript an operator can reproduce. `cabal test all -j1`
-passes.
-
+M1 documents actual coverage and current declarations without obsolete patch claims.
+M2 installs and resolves the exact artifact, converges on repeat/concurrency and refuses
+conflicting content. M3's instructions/examples match current code, show real provisioning
+and explicitly identify absent ingress/live reader behavior. All docs and applicable
+behavioral tests pass. Profile deployment authorization remains explicit.
 
 ## Idempotence and Recovery
 
-Document edits are plain text; re-running the greps verifies them. `profiles install` is
-idempotent by construction (`ON CONFLICT DO NOTHING` plus a digest comparison) and never
-updates a row, which matches the table's "immutable revisions" comment; to change a
-profile, install a new version. If the checked-in JSON is regenerated, compare its digest
-with the one recorded in the guide's transcript; a difference means the profile content
-changed and the guide's sample output must be refreshed. No step touches `domain/` or the
-generated layer.
-
+Profile revisions are immutable; changes use a new version. Do not update stored content
+or canonical bytes to make an old digest pass. Failed parsing/admission changes nothing;
+lost successful responses recover the original record. Documentation can be rerun against
+current validators. Never alter immutable review events to erase prior findings.
 
 ## Interfaces and Dependencies
 
-`Shikigami.Server.Command.Profiles` exports the `install` and `show` parsers and runners
-used by `Shikigami.Server.Command.adminSubcommands`. It depends on
-`Shikigami.Attestation.Envelope` (`SanctionedExecutionProfile`, `profileDigest`),
-`Shikigami.Attestation.Resolve` (`postgresProfileStore`, `resolveProfile`,
-`renderProfileResolutionError`, `profileDigestText`), `hasql` for the insert, and the admin
-executable's existing configuration and pool plumbing. `config/profiles/sanctioned-review-1.json`
-is a `SanctionedExecutionProfile` document. The review records this plan answers are
-[REV-1](../reviews/plan-46-review-orchestration-closeout.md) (required items 1 through 7)
-and [REV-7](../reviews/architecture-practice-reviews-user-guide.md) (required items 1 and 2
-and the unresolved-refs follow-up), plus the interpreter-branch note from
-[REV-6](../reviews/practice-review-capability-ports.md).
+Server owns the Profiles command; core owns reusable profile install/resolve behavior;
+AppConfig owns administrative connection settings. The existing profile store, typed
+values and digest are delivered prerequisites. Plan 61 owns entitlement, plan 63 runtime
+conformance and plan 46 live reader acceptance. No signature algorithm or upstream release
+is required for profile provisioning. This plan answers
+[REV-1](../reviews/plan-46-review-orchestration-closeout.md) and
+[REV-7](../reviews/architecture-practice-reviews-user-guide.md), with current fact checks
+superseding obsolete line numbers and retired-branch notes.
+
+## Revision Notes
+
+2026-11-06: Accept bounded closeout/inventory reconciliation; rebase provisioning and
+examples on current admin/store/ID-free contracts, remove retired-patch and removed-test
+instructions, and retain real install/show and user-document acceptance as open work.
