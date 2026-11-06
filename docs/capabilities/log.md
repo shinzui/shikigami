@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-11-06
+* **Addition**: CAP-32 documents the independently funded advisory watchdog, bounded observation, scoped inspection and independent completion-age telemetry.
+
 ## 2026-11-04
 * **Addition**: CAP-31 documents proposing unrequested work from observed activity, with human acceptance by default and admission only under a revocable standing policy.
 

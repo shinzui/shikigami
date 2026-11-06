@@ -50,6 +50,7 @@ import Shikigami.Sink.Http (HttpLimits (..), SinkHttp, SinkHttpError, credential
 import Shikigami.Sink.Permission (sinkKindText)
 import Shikigami.Telemetry (withRunTelemetry)
 import Shikigami.Telemetry.Metrics (recordInitiativeAdmission, recordInitiativeCandidate, recordInitiativeProposal, recordInitiativeRefusal)
+import Shikigami.Telemetry.Sampler (watchdogHooks)
 import Shikigami.Workers.Config (WorkerEnv (..), directoryLoopRegistration, persistAgentLoadReport, schedulerSchedules, startProcessDirectory)
 import Shikigami.Workers.Registry (runWorkers)
 import Shikigami.Workspace.ConfiguredHost (configuredWorkspaceHostWithTransfers, configuredWorkspaceTransfers)
@@ -229,7 +230,7 @@ runWorkerCmdWith resumeBudget config = do
                   directory,
                   directoryRefresher,
                   objectiveSettings = config.objectiveSettings,
-                  observe = FlowObserve.ObserveSeed config.watchdog FlowObserve.noObserveHooks,
+                  observe = FlowObserve.ObserveSeed config.watchdog (watchdogHooks shikigamiMetrics),
                   initiatives =
                     FlowInitiative.InitiativeSeed
                       { settings = config.initiativeSettings,

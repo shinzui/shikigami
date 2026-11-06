@@ -164,7 +164,7 @@ EP-4 enrollment handoff discovered during EP-3 review (2026-11-06): `allocateRoo
   Date: 2026-11-04
 
 - Decision: Drift is one batched typed decision per sweep with its own `DecisionLabel`, bounded by `driftSubjectsPerSweep` and `driftInterval`, charged to the watchdog run's root.
-  Rationale: A decision slot is one-use per generation and labels are static, so per-subject slots would need a declared label family. One bounded batch keeps the model call count at most one per sweep and makes the limit a configuration value rather than a declaration shape.
+  Rationale: A decision slot is one-use per generation and labels are static, so per-subject slots would need a declared label family. One bounded batch keeps one logical decision slot per sweep and makes the subject limit a configuration value rather than a declaration shape. Actual calls can repeat after a lost result append and each remains independently accounted.
   Date: 2026-11-04
 
 - Decision: A scheduled watchdog receives an operator-configured resource envelope that `scheduleFireAction` enrolls per tick; only the schedule path honors it in this initiative.
@@ -172,7 +172,7 @@ EP-4 enrollment handoff discovered during EP-3 review (2026-11-06): `allocateRoo
   Date: 2026-11-04
 
 - Decision: Watchdog liveness is an operator-facing sweep ledger, metrics and a command verdict, not a readiness or liveness probe.
-  Rationale: ADR 0020 restricts readiness to what restarting or eviction fixes and liveness to in-process progress; a late sweep is neither. A stopped watchdog must still be distinguishable from "no findings", which the sweep age metric and `inspect --fail-when-overdue` provide without touching the probes.
+  Rationale: [ADR 0120](../adr/0120-watchdog-liveness-is-an-operator-facing-ledger-verdict.md) records the implemented independent ledger boundary. ADR 0020 restricts readiness to what restarting or eviction fixes and liveness to in-process progress; a late sweep is neither. A stopped watchdog must still be distinguishable from "no findings", which the sweep age metric and `inspect --fail-when-overdue` provide without touching the probes.
   Date: 2026-11-04
 
 - Decision: Findings leave only through the watchdog's declared sinks, addressed to the objective's bound conversation or the operator recipient; no mailbox write, objective command or checkpoint wake is used for delivery.

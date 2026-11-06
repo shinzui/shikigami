@@ -226,6 +226,8 @@ test-suite shikigami-workers-test
     Shikigami.ExecutionCapacitySpec
     Shikigami.Fixture.ExecutionIdentity
     Shikigami.Fixture.Proposing
+    Shikigami.Fixture.Watchdog
+    Shikigami.Fixture.WatchdogExecution
     Shikigami.Health.SupervisionSpec
     Shikigami.Health.WorkerSpec
     Shikigami.InitiativeAcceptanceSpec
@@ -237,6 +239,7 @@ test-suite shikigami-workers-test
     Shikigami.StreamInboxSpec
     Shikigami.TelemetrySpec
     Shikigami.TimerRecoverySpec
+    Shikigami.WatchdogQualificationSpec
     Shikigami.WatchdogSweepSpec
     Shikigami.Workers.CommandSpec
     Shikigami.WorkspaceContainedFileSpec
@@ -274,6 +277,7 @@ test-suite shikigami-workers-test
     hasql,
     hasql-pool,
     hasql-transaction,
+    hs-opentelemetry-api,
     hs-opentelemetry-exporter-in-memory,
     hs-opentelemetry-sdk,
     http-client,

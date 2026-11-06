@@ -87,7 +87,7 @@ The real Flow harness passes all six cases, including committed-result replay af
 ## Decision Log
 
 - Decision: One batched drift decision per sweep, over one objective and at most `driftSubjectsPerSweep` of its subjects, rather than one decision per subject.
-  Rationale: A decision slot is static and one-use per generation (ADR 0045), and the watchdog sweep is one generation. A per-subject slot family would turn the limit into a declaration shape; a batch keeps the model call count at most one per sweep and the limit a configuration value.
+  Rationale: A decision slot is static and one-use per generation (ADR 0045), and the watchdog sweep is one generation. A per-subject slot family would turn the limit into a declaration shape; a batch keeps one logical decision slot per sweep and the subject limit a configuration value. A lost result append may require another actual provider call within the independently accounted attempt allowance.
   Date: 2026-11-04
 
 - Decision: The output validator requires the assessed subject set to equal the input subject set and every cited reference to be a member of that subject's input references.

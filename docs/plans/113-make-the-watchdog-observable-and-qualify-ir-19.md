@@ -42,7 +42,7 @@ You can see it working by running the qualification group, `cabal test shikigami
 ## Progress
 
 - [x] Milestone 1: Bounded ledger readers, the inspection views and the `shikigami watchdog` command family exist; `shikigami watchdog inspect --fail-when-overdue` exits nonzero on a stale ledger and zero on a fresh one.
-- [ ] Milestone 2: Metrics instruments and the sampler exist; `TelemetrySpec` proves the sweep-age gauge is exported from the ledger alone and the counters from the `Observe` hooks.
+- [x] Milestone 2: Metrics instruments and the sampler exist; `TelemetrySpec` proves the sweep-age gauge is exported from the ledger alone and the counters from the `Observe` hooks.
 - [ ] Milestone 3: The operations guide, capability record, user guide and coverage tables exist and validate; the integrated qualification group passes all eight acceptance cases with evidence under `docs/evidence/plan-113/`; IR-19 is completed; ADR distillation is done.
 
 
@@ -56,13 +56,13 @@ Migration 0048 adds claim-scoped latest-attempt/completion indexes and episode/f
 ## Decision Log
 
 - Decision: Watchdog liveness is reported through a ledger-backed gauge, a command verdict and inspection views, never through `/health/ready` or `/health/live`.
-  Rationale: ADR 0020 restricts readiness to what restarting or eviction fixes and liveness to in-process progress. A late sweep is neither, and a probe that restarted a healthy worker because a cron agent was late would amplify the problem. The age gauge is sampled from the ledger by the worker's existing sampler so it is exported even when no sweep runs.
+  Rationale: [ADR 0120](../adr/0120-watchdog-liveness-is-an-operator-facing-ledger-verdict.md) retains this boundary. ADR 0020 restricts readiness to what restarting or eviction fixes and liveness to in-process progress. A late sweep is neither, and a probe that restarted a healthy worker because a cron agent was late would amplify the problem. The age gauge is sampled from the ledger by the worker's existing sampler so it is exported even when no sweep runs.
   Date: 2026-11-04
 
 
 ## Outcomes & Retrospective
 
-Milestone 1 is implemented. Six PostgreSQL inspection cases, all 113 server tests, 91 built CLI contracts, migration unit/smoke checks and the Haskell convention/schema-isolation gates pass. A newer unfinished attempt does not conceal the last completion, and missing coverage remains unavailable. Metrics and the eight integrated qualification cases remain open.
+Milestone 1 is implemented. Six PostgreSQL inspection cases, all 113 server tests, 91 built CLI contracts, migration unit/smoke checks and the Haskell convention/schema-isolation gates pass. A newer unfinished attempt does not conceal the last completion, and missing coverage remains unavailable. Milestone 2 implements the four instruments, fixed-tag runtime hooks and independent fifteen-second sampling of scoped completion age from the database clock. Force-flush controls cover counters, no-completion absence and failure isolation. All eight integrated qualification cases pass through scheduler, generated queue worker and resume, including an additional lost-append accounting control. Final package regression/build/native-gate validation and lifecycle closure remain open.
 
 
 ## Context and Orientation
@@ -73,7 +73,7 @@ Metrics are OpenTelemetry instruments on the `ShikigamiMetrics` record in `shiki
 
 Documentation is profile-governed. Capabilities: `docs/capabilities-maintenance.md` says to allocate a handle with `okf id next docs/capabilities CAP --profile docs/capabilities/profile.dhall`, write one flat record with `status: shipped`, `stability: experimental`, `since: unreleased`, evidence links in both body and frontmatter, a dated entry in `docs/capabilities/log.md`, then `just capabilities-index`, `just capabilities-validate`, `mori validate` and `okf graph docs/capabilities`, and reconcile `docs/capabilities-coverage.md` (its administrative command table already lacks `objectives`; add `watchdog` and fix the gap you find). Operations guides live in `docs/operations/` (`inspection.md`, `execution-resources.md`, `objective-tracking.md` are the models); user guides in `docs/user/` validate with `just user-docs-validate`. Improvement requests: `docs/improvement-requests/` is an OKF bundle validated by `just improvement-requests-validate`; a completed request carries `status: completed`, `completedAt` and a status paragraph with evidence links (see `support-optional-major-task-tracking.md` for the shape), and `docs/improvement-requests/log.md` takes a dated entry. `docs/roadmap.md` has a plan and request table that should name IR-19 and plans 109–113. Evidence directories are `docs/evidence/plan-<N>/`; plan 102's `qualification.json` and `serving-qualification.txt` are the model for recorded acceptance.
 
-Plans 109–112 supply the ledger (`shikigami.watchdog_sweeps`, `watchdog_marks`, `watchdog_episodes`, `watchdog_findings`, `watchdog_coverage`, `watchdog_drift_checks`), `Shikigami.Watchdog.Store`, `FindingView`, `WatchdogSettings`, the `Observe` capability with `ObserveHooks {onSweepCompleted, onFinding, onRefusal}` (no-ops by default), the `watchdog-sweep` Flow, `agents/proof/watchdog.dhall` with its cron, and the fixture that stalls a worker while its session stays `Active`. The scheduler's `Shikigami.Trigger.Schedule.nextDue :: CronSchedule -> UTCTime -> Maybe UTCTime` gives the expected next tick after an instant, and `Shikigami.Agent.Loader.loadAgentsReport` loads a declaration directory, which is how the command learns the watchdog's cron. The worker and PostgreSQL suites register groups in `shikigami-workers/test/Main.hs` and `shikigami-core/test-postgres/Main.hs`. Friction to expect: PostgreSQL connection exhaustion under parallel suites (FRIC-2, FRIC-5, FRIC-17, FRIC-51) and, for the optional native trial, the frozen-runtime rebuild cost recorded in FRIC-54 through FRIC-56 and the Apple guest clock step in FRIC-24 that expires absolute deadline guards.
+Plans 109–112 supply the ledger (`shikigami.watchdog_sweeps`, `watchdog_marks`, `watchdog_episodes`, `watchdog_findings`, `watchdog_coverage`, `watchdog_drift_checks`), `Shikigami.Watchdog.Store`, `FindingView`, `WatchdogSettings`, the `Observe` capability with `ObserveHooks {onSweepCompleted, onFinding, onRefusal, onSweepFailed}` (no-ops by default), the `watchdog-sweep` Flow, `agents/proof/watchdog.dhall` with its cron, and the fixture that stalls a worker while its session stays `Active`. The scheduler's `Shikigami.Trigger.Schedule.nextDue :: CronSchedule -> UTCTime -> Maybe UTCTime` gives the expected next tick after an instant, and `Shikigami.Agent.Loader.loadAgentsReport` loads a declaration directory, which is how the command learns the watchdog's cron. The worker and PostgreSQL suites register groups in `shikigami-workers/test/Main.hs` and `shikigami-core/test-postgres/Main.hs`. Friction to expect: PostgreSQL connection exhaustion under parallel suites (FRIC-2, FRIC-5, FRIC-17, FRIC-51) and, for the optional native trial, the frozen-runtime rebuild cost recorded in FRIC-54 through FRIC-56 and the Apple guest clock step in FRIC-24 that expires absolute deadline guards.
 
 
 ## Plan of Work
@@ -83,39 +83,30 @@ Plans 109–112 supply the ledger (`shikigami.watchdog_sweeps`, `watchdog_marks`
 Add bounded readers to `shikigami-core/src/Shikigami/Watchdog/Store.hs` and views to a new `shikigami-core/src/Shikigami/Watchdog/Inspection.hs`:
 
 ```haskell
-data SweepView = SweepView
-  { sweepId :: !SweepId
-  , dueAt :: !UTCTime
-  , openedAt :: !UTCTime
-  , completedAt :: !(Maybe UTCTime)
-  , subjects :: !Word
-  , notices :: !Word
-  , refusals :: ![RefusalView]
-  }
-  deriving stock (Eq, Show, Generic)
-
-data CoverageView = CoverageView
-  { passStartedAt :: !UTCTime
-  , lastPassCompletedAt :: !(Maybe UTCTime)
+data InspectionView = InspectionView
+  { latestAttempt :: !(Maybe SweepView)
+  , lastCompletedSweep :: !(Maybe SweepView)
+  , coverage :: !(Maybe Coverage)
   , openEpisodes :: !Word
+  , inspectedAt :: !UTCTime
   }
-  deriving stock (Eq, Show, Generic)
 
-data OverdueVerdict = SweepFresh | SweepOverdue { expectedBy :: !UTCTime } | NoSweepYet
-  deriving stock (Eq, Show)
+data EpisodeFilter = EpisodeFilter { openOnly :: !Bool, objective :: !(Maybe ObjectiveId) }
+data OverdueVerdict = SweepFresh | SweepOverdue { expectedBy :: !UTCTime } | NoSweepYet | ScheduleUnknown
 
 overdueVerdict :: CronSchedule -> Duration "watchdog-grace" -> UTCTime -> Maybe SweepView -> OverdueVerdict
-
-readLastCompletedSweep :: Transaction (Either WatchdogError (Maybe SweepView))
-listEpisodes :: EpisodeFilter -> Maybe EpisodeId -> Int -> Transaction (Either WatchdogError [EpisodeView])
-listFindings :: EpisodeId -> Maybe FindingId -> Int -> Transaction (Either WatchdogError [FindingView])
+readLastCompletedSweep :: AgentIdentity -> ObservationScope -> Transaction (Either WatchdogError (Maybe SweepView))
+inspectWatchdog :: AgentIdentity -> ObservationScope -> Transaction (Either WatchdogError InspectionView)
+listEpisodes :: AgentIdentity -> ObservationScope -> EpisodeFilter -> Maybe EpisodeId -> Int -> Transaction (Either WatchdogError [EpisodeView])
+listFindings :: AgentIdentity -> ObservationScope -> EpisodeId -> Maybe FindingId -> Int -> Transaction (Either WatchdogError [FindingView])
+readSweepAgeSeconds :: AgentIdentity -> ObservationScope -> Transaction (Either WatchdogError (Maybe Int64))
 ```
 
 `overdueVerdict` is pure: with no completed sweep it is `NoSweepYet`; otherwise it computes `nextDue cron completedAt` and adds the grace, and the sweep is overdue when `now` is past that instant. Limits are 1..100 with keyset paging on the identity, as the sibling commands do. Create `shikigami-server/src/Shikigami/Server/Command/Watchdog.hs` with `watchdog inspect [--agents DIR] [--grace SECONDS] [--fail-when-overdue] --json`, `watchdog episodes [--open] [--objective ID] [--after ID] [--limit N] --json` and `watchdog findings EPISODE [--after ID] [--limit N] --json`; `inspect` loads the declaration directory (default `agents/`), finds the declaration whose behavior is the `watchdog-sweep` Flow, parses its cron, reads the last sweep and coverage, prints one JSON object with the sweep, coverage, verdict and the configured windows and budget, and exits 2 on `SweepOverdue` or `NoSweepYet` when `--fail-when-overdue` is given. Register the subcommand, add the module to `compositionModules`, and add `CommandSpec` cases: a fresh ledger yields `SweepFresh` and exit zero; a ledger whose last sweep is two cron intervals old yields `SweepOverdue` and exit 2 with the flag; `episodes --open` pages only open episodes; bounds are refused with the fixed messages. Add the three commands to `tests/cli/contracts.py` for help and exit-code coverage.
 
 ### Milestone 2: Metrics and the sampler
 
-Add to `ShikigamiMetrics`: `watchdogSweeps` (counter, attribute `outcome` in `completed`, `refused`, `failed`), `watchdogFindings` (counter, attribute `detection.kind`), `watchdogRefusals` (counter, attribute `refusal.kind`) and `watchdogSweepAge` (gauge, seconds since the last completed sweep). Install the first three through plan 112's `ObserveHooks` in `Workers/Config.hs` when telemetry is configured. Sample the gauge in `Telemetry/Sampler.hs` from `readLastCompletedSweep` on the sampler's existing cadence, using the database clock for `now`, and emit nothing (not zero) when there is no completed sweep, matching the inspection host's rule that a missing optional metric is unavailable rather than zero. Extend `TelemetrySpec`: a force-flush after a recorded sweep exports the counters with their attributes and the gauge with a nonnegative value; with an empty ledger the gauge is absent; a failed sampler read leaves other instruments exported. Confirm no attribute carries a sweep id, episode id, objective id or error text.
+Add to `ShikigamiMetrics`: `watchdogSweeps` (counter, attribute `outcome` in `completed`, `refused`, `failed`), `watchdogFindings` (counter, attribute `detection.kind`), `watchdogRefusals` (counter, attribute `refusal.kind`) and `watchdogSweepAge` (gauge, seconds since the last completed sweep). Install the first three through plan 112's `ObserveHooks` in `Workers/Command/Worker.hs` through `Telemetry.Sampler.watchdogHooks`. Sample the gauge in `Telemetry/Sampler.hs` from `readLastCompletedSweep` on the sampler's existing cadence, using the database clock for `now`, and emit nothing (not zero) when there is no completed sweep, matching the inspection host's rule that a missing optional metric is unavailable rather than zero. Extend `TelemetrySpec`: a force-flush after a recorded sweep exports the counters with their attributes and the gauge with a nonnegative value; with an empty ledger the gauge is absent; a failed sampler read leaves other instruments exported. Confirm no attribute carries a sweep id, episode id, objective id or error text.
 
 ### Milestone 3: Documentation, qualification and closure
 
@@ -140,7 +131,7 @@ After milestone 1:
 
 ```bash
 just haskell-conventions
-cabal test shikigami-server-test --test-show-details=direct --test-options='-p "Command|Watchdog"'
+cabal test shikigami-server-test --test-show-details=direct --test-options='--num-threads 1'
 python3 tests/cli/contracts.py
 cabal run shikigami -- watchdog inspect --help
 ```
@@ -189,8 +180,12 @@ Readers and commands are side-effect free. Documentation index and validation co
 
 ## Interfaces and Dependencies
 
-This plan owns `Shikigami.Watchdog.Inspection` (`SweepView`, `CoverageView`, `EpisodeView`, `RefusalView`, `OverdueVerdict`, `overdueVerdict`), the readers `readLastCompletedSweep`, `listEpisodes` and `listFindings` in `Shikigami.Watchdog.Store`, `Shikigami.Server.Command.Watchdog` and its registration, the four `ShikigamiMetrics` instruments and their hook and sampler wiring, `docs/operations/watchdog.md`, `docs/capabilities/active-work-watchdog.md`, `docs/user/watchdog.md`, the roadmap and coverage updates, `shikigami-workers/test/Shikigami/WatchdogQualificationSpec.hs`, `docs/evidence/plan-113/`, the IR-19 lifecycle transition and the final ADR distillation. It consumes plans 109–112 unchanged and requires plan 112 to be Complete. It adds no domain behavior: a defect found by qualification is fixed in the owning plan's modules, and this plan records the result.
+This plan owns `Shikigami.Watchdog.Inspection` (`InspectionView`, `EpisodeFilter`, `OverdueVerdict`, `overdueVerdict`), reusing existing ledger `SweepView`, `Coverage`, `EpisodeView` and summary refusal counts, the readers `readLastCompletedSweep`, `listEpisodes` and `listFindings` in `Shikigami.Watchdog.Store`, `Shikigami.Server.Command.Watchdog` and its registration, the four `ShikigamiMetrics` instruments and their hook and sampler wiring, `docs/operations/watchdog.md`, `docs/capabilities/active-work-watchdog.md`, `docs/user/watchdog.md`, the roadmap and coverage updates, `shikigami-workers/test/Shikigami/WatchdogQualificationSpec.hs`, `docs/evidence/plan-113/`, the IR-19 lifecycle transition and the final ADR distillation. It consumes plans 109–112 unchanged and requires plan 112 to be Complete. It adds no domain behavior: a defect found by qualification is fixed in the owning plan's modules, and this plan records the result.
 
 Revision 2026-11-05: inspection and the age sampler select the latest completed sweep (`completed_at IS NOT NULL`), with the latest attempt shown separately. Scope all readers to the configured watchdog principal and observation scope. A newer incomplete attempt must not hide the previous completion. Add cases for no completed sweep, a newer unfinished attempt, and incomplete population coverage; report unavailable coverage distinctly from an empty population. The qualification restart case requires no resampling only after the result append committed; inject lost append separately and verify conservative attempt accounting. Use the existing Apple container setup for the optional native trial, with the configured builder fallback described in AGENTS.md.
 
 The reviewed coordination constraints are recorded in [ADR 0116](../adr/0116-watchdog-observation-preserves-completeness-and-detector-boundaries.md); operator-owned spend follows [ADR 0115](../adr/0115-evaluation-spend-is-a-root-enrolled-at-the-trigger-and-accounted-slots-refuse-without-one.md).
+
+EP-5 implementation note: reuse the existing ledger views and claim-scoped readers without introducing duplicate `SweepView`/`CoverageView` types. `InspectionView` retains unavailable coverage and a separate latest attempt. Refusals are bounded retained counts; runtime metrics are at least once and use no identifiers. The eight-case runner records current-run facts atomically in `acceptance.json`; permission and command subjects have independent workflow parents so one wait cannot mask the other.
+
+Qualification discovery: when advancing to an approval deadline, another schedule timer can be due first. The integrated fixture uses the production multi-kind dispatcher, temporarily refuses incidental schedule admission, and admits the following tick under the original policy. A single-timer call against only the approval handler would leave the approval pending and would not qualify expiration. This is fixture construction, not a production timeout-policy change.

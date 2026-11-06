@@ -3,7 +3,7 @@
 This census was checked on 2026-10-29 against the Cabal manifests, public module
 exports, executable entry points, administrative parser, implementation, tests,
 and current user/operations documentation. It maps **seven packages, 226 exposed
-modules, twelve executables, and fourteen repository-owned administrative command
+modules, twelve executables, and seventeen repository-owned administrative command
 families** to the capability catalog or an explicit supporting-surface exclusion.
 
 This is a coverage audit of the current consumer surface, not a declaration that
@@ -164,7 +164,7 @@ mechanism remain grouped under that provision.
 
 ## Administrative command families
 
-These are the eleven entries in `adminSubcommands`. Nested verbs share
+These are the seventeen entries in `adminSubcommands`. Nested verbs share
 their owning provision: `agents list/sync`, `grants list/grant/revoke`, and
 `runs show`. The mounted runtime administration tree is covered by CAP-17;
 its commands belong to
@@ -183,7 +183,9 @@ its commands belong to
 | `grants` | [CAP-9](capabilities/authorized-sink-outbox.md) |
 | `agents` | [CAP-6](capabilities/principal-lifecycle-and-continuity.md) |
 | `runs` | [CAP-17](capabilities/worker-operations-and-telemetry.md), [CAP-25](capabilities/http-agent-run-lifecycle.md) |
-
+| `objectives` | [Durable objectives](operations/objective-tracking.md) |
+| `proposals` | [CAP-31](capabilities/unrequested-work-proposals.md) |
+| `watchdog` | [CAP-32](capabilities/active-work-watchdog.md) |
 | `resources` | [CAP-26](capabilities/root-resource-accounting.md) |
 | `executions` | [CAP-28](capabilities/recoverable-skill-execution.md) |
 | `workers` | [CAP-29](capabilities/continuing-worker-primitives.md) |
@@ -236,3 +238,11 @@ CAP-31 covers unrequested work: the `Shikigami.Initiative.*` modules (`Types`, `
 `Shikigami.Flow.Initiative`, `Shikigami.Program.Decision.Initiative`, and the `proposals`
 command family in `Shikigami.Server.Command.Proposals`. The counts at the top of this census
 were last computed on October 29 and do not include these.
+
+## Watchdog extension (2026-11-06)
+
+`Watchdog`, `Program.Decision.Drift`, `Flow.Observe`, `Flow.Watchdog`, the
+watchdog metrics/sampler and `Server.Command.Watchdog` map to
+[CAP-32](capabilities/active-work-watchdog.md). Inspection and counters extend the
+existing worker and administrative binaries. The `objectives` command was absent
+from the older administrative table; it is now linked to its owning guide.

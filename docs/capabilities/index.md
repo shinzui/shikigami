@@ -8,6 +8,7 @@ okf_version: "0.2"
 
 # Capability
 
+- [Independent active-work watchdog](active-work-watchdog.md) - Observe retained active work with bounded read authority and deliver coalesced quiet-work and cited drift advisories.
 - [Addressed durable conversations](addressed-conversations.md) - Consume addressed messages, preserve conversation turns, and rotate a durable workflow generation after every reply.
 - [Advisory practice-review orchestration](advisory-practice-review.md) - Run a registered advisory review flow with pinned evidence contracts, validated verdicts, review memory, and deduplicated attention.
 - [Agent memory and sessions](agent-memory-and-sessions.md) - Recall prior agent learnings and record session outcomes with configurable automatic memory policy.

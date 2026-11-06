@@ -17,6 +17,7 @@ import Shikigami.SchedulerSpec qualified as SchedulerSpec
 import Shikigami.StreamInboxSpec qualified as StreamInboxSpec
 import Shikigami.TelemetrySpec qualified as TelemetrySpec
 import Shikigami.TimerRecoverySpec qualified as TimerRecoverySpec
+import Shikigami.WatchdogQualificationSpec qualified as WatchdogQualificationSpec
 import Shikigami.WatchdogSweepSpec qualified as WatchdogSweepSpec
 import Shikigami.Workers.CommandSpec qualified as CommandSpec
 import Shikigami.WorkspaceContainedFileSpec qualified as WorkspaceContainedFileSpec
@@ -76,13 +77,14 @@ suite = do
               RunJobWorkerSpec.tests databaseFixture,
               StatusSpec.tests databaseFixture,
               WatchdogSweepSpec.tests databaseFixture,
+              WatchdogQualificationSpec.tests databaseFixture,
               SchedulerSpec.tests databaseFixture,
               StreamInboxSpec.tests databaseFixture,
               ProposeWorkSpec.tests databaseFixture,
               AdmitProposalSpec.tests databaseFixture,
               InitiativeAcceptanceSpec.tests databaseFixture,
               TimerRecoverySpec.tests databaseFixture,
-              TelemetrySpec.tests,
+              TelemetrySpec.tests databaseFixture,
               SupervisionSpec.tests
             ]
         )

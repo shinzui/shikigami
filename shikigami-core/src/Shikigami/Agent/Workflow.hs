@@ -1214,6 +1214,9 @@ runFlowBehavior deps activeBehaviorEnv resolvedProfile approvalPolicyForRun reco
               . attentionInterpreter
               $ run ((.triggerPayload) job)
           )
+      case attempted of
+        Left _ | useWatchdog && flow.name == WatchdogFlow.watchdogFlowName -> liftIO deps.observe.hooks.onSweepFailed
+        _ -> pure ()
       when (not (null inventory)) do
         forM_ ((.deliveryPool) deps) \pool -> do
           finalized <- liftIO (DecisionEvidence.finalizeDecisionReport (DecisionEvidence.postgresDecisionEvidenceStore pool) (runCorrelationId (jobIdempotencyKey job)))

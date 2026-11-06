@@ -9,6 +9,19 @@ See the [HTML roadmap](artifacts/roadmap.html),
 [engineer onboarding map](artifacts/shikigami-engineer-onboarding.html) and
 [adaptive delivery guide](artifacts/adaptive-autonomous-objectives.html).
 
+## Watchdog delivery (2026-11-06)
+
+The independent active-work watchdog is implemented under
+[MasterPlan 19](masterplans/19-supervise-active-work-with-an-independent-watchdog-agent.md):
+[109](plans/109-observe-active-work-through-bounded-lock-free-reads-under-a-watchdog-grant.md) owns bounded observation,
+[110](plans/110-classify-stuck-work-deterministically-and-coalesce-findings-into-episodes.md) owns classification and episodes,
+[111](plans/111-assess-drift-with-a-registered-typed-decision-over-bounded-evidence.md) owns typed Drift,
+[112](plans/112-run-the-watchdog-as-a-scheduled-flow-agent-with-its-own-principal-allowance-and-sinks.md) owns scheduled advisory execution,
+and [113](plans/113-make-the-watchdog-observable-and-qualify-ir-19.md) owns inspection, telemetry and
+[eight-case qualification](evidence/plan-113/acceptance.md) for
+[IR-19](improvement-requests/supervise-active-work-with-an-independent-watchdog-agent.md).
+Native and live-model watchdog trials remain additional evidence.
+
 ## Current delivery boundary
 
 Implemented: typed Flow decisions and actual-attempt evidence (plans 73–76),

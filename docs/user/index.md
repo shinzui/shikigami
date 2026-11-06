@@ -21,6 +21,7 @@ okf_version: "0.2"
 - [Skills — authoring a SKILL.md behavior](skills.md) - Author and validate a skill directory for a Shikigami Skill behavior.
 - [Typed decisions in Flows](typed-decisions.md) - Configure model aliases, run the typed decision example, and preserve governed results and attempt evidence on replay.
 - [Unrequested work](unrequested-work.md) - What a person sees when an agent proposes work nobody asked for, and what answering does.
+- [Active-work watchdog notices](watchdog.md) - Understand quiet-work and drift notices and inspect their bounded evidence before acting.
 - [Writing Agents](writing-agents.md) - Declare agent identity, behavior, triggers, sinks, memory policy, and routing in Dhall.
 
 # Navigation

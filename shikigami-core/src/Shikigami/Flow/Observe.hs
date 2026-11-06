@@ -53,11 +53,12 @@ import Shikigami.Watchdog.Types
 data ObserveHooks = ObserveHooks
   { onSweepCompleted :: !(SweepId -> Ledger.SweepSummary -> IO ()),
     onFinding :: !(FindingView -> IO ()),
-    onRefusal :: !(IO ())
+    onRefusal :: !(IO ()),
+    onSweepFailed :: !(IO ())
   }
 
 noObserveHooks :: ObserveHooks
-noObserveHooks = ObserveHooks (\_ _ -> pure ()) (\_ -> pure ()) (pure ())
+noObserveHooks = ObserveHooks (\_ _ -> pure ()) (\_ -> pure ()) (pure ()) (pure ())
 
 data ObserveSeed
   = ObserveSeed {settings :: !(Maybe WatchdogSettings), hooks :: !ObserveHooks}
@@ -130,7 +131,7 @@ runObserve runtime = selectObserve runtime.seed $ interpret \_ -> \case
     pure result
   OpenSweep granted -> step (StepName "watchdog-open") do
     proposed <- liftIO newSweepId
-    case restoreGrant granted.grant runtime.identity runtime.seed.settings of
+    result <- case restoreGrant granted.grant runtime.identity runtime.seed.settings of
       Left _ -> pure (Left Ledger.LedgerBindingConflict)
       Right _ -> runTransactionNoRetry do
         Ledger.openSweep proposed runtime.origin granted.grant >>= \case
@@ -142,6 +143,8 @@ runObserve runtime = selectObserve runtime.seed $ interpret \_ -> \case
                 Ledger.readSweep sweep >>= \case
                   Right (Just saved) -> pure (Right (SweepOpened sweep (maybe initialCursor (.cursor) coverage) saved.openedAt))
                   _ -> pure (Left Ledger.LedgerCorrupt)
+    case result of Left _ -> liftIO runtime.seed.hooks.onRefusal; Right _ -> pure ()
+    pure result
   ObserveActive granted cursor -> step (StepName "watchdog-observe") do
     case restoreGrant granted.grant runtime.identity runtime.seed.settings of
       Left _ -> pure (Left ObservationUnavailable)
@@ -196,7 +199,7 @@ runObserve runtime = selectObserve runtime.seed $ interpret \_ -> \case
     pure result
   where
     report result = do
-      liftIO case result of Right outcome -> mapM_ runtime.seed.hooks.onFinding outcome.notices; Left _ -> runtime.seed.hooks.onRefusal
+      liftIO case result of Right outcome -> mapM_ runtime.seed.hooks.onFinding outcome.notices; Left _ -> pure ()
       pure result
 
 selectObserve :: ObserveSeed -> (Eff (Observe : es) a -> Eff es a) -> Eff (Observe : es) a -> Eff es a

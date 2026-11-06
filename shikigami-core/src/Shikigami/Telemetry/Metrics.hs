@@ -19,6 +19,10 @@ module Shikigami.Telemetry.Metrics
     recordInitiativeProposal,
     recordInitiativeAdmission,
     recordInitiativeRefusal,
+    recordWatchdogSweep,
+    recordWatchdogFinding,
+    recordWatchdogRefusal,
+    recordWatchdogAge,
   )
 where
 
@@ -58,6 +62,10 @@ data ShikigamiMetrics = ShikigamiMetrics
     initiativeCandidates :: !(Counter Int64),
     initiativeProposals :: !(Counter Int64),
     initiativeAdmissions :: !(Counter Int64),
+    watchdogSweeps :: !(Counter Int64),
+    watchdogFindings :: !(Counter Int64),
+    watchdogRefusals :: !(Counter Int64),
+    watchdogSweepAge :: !(Gauge Int64),
     initiativeRefusals :: !(Counter Int64)
   }
 
@@ -86,7 +94,11 @@ newShikigamiMetrics meter = liftIO do
   initiativeProposals <- counter "shikigami.initiatives.proposals" "Unrequested proposals recorded or resolved, by status."
   initiativeAdmissions <- counter "shikigami.initiatives.admissions" "Admission stages reached under standing policies."
   initiativeRefusals <- counter "shikigami.initiatives.refusals" "Attention, creation and admission refusals, by kind."
-  pure ShikigamiMetrics {runsStarted, runsCompleted, runsFailed, runsRetried, runsDeadLettered, queueDepth, consumerRecords, initiativeCandidates, initiativeProposals, initiativeAdmissions, initiativeRefusals}
+  watchdogSweeps <- counter "shikigami.watchdog.sweeps" "Watchdog attempts by outcome; runtime callbacks are at least once."
+  watchdogFindings <- counter "shikigami.watchdog.findings" "Watchdog notices by detection kind."
+  watchdogRefusals <- counter "shikigami.watchdog.refusals" "Watchdog observation and delivery refusals."
+  watchdogSweepAge <- meterCreateGaugeInt64 meter "shikigami.watchdog.sweep.age" (Just "s") (Just "Database-clock age of the last completed scoped sweep; absent before completion.") defaultAdvisoryParameters
+  pure ShikigamiMetrics {watchdogSweeps, watchdogFindings, watchdogRefusals, watchdogSweepAge, runsStarted, runsCompleted, runsFailed, runsRetried, runsDeadLettered, queueDepth, consumerRecords, initiativeCandidates, initiativeProposals, initiativeAdmissions, initiativeRefusals}
   where
     counter name description =
       meterCreateCounterInt64 meter name (Just "{run}") (Just description) defaultAdvisoryParameters
@@ -152,3 +164,15 @@ recordRun instrument agent trigger outcome =
 
 attributes :: AttrsBuilder -> Attributes
 attributes = addAttributesFromBuilder defaultAttributeLimits emptyAttributes
+
+recordWatchdogSweep :: (MonadIO m) => ShikigamiMetrics -> Text -> m ()
+recordWatchdogSweep metrics outcome = liftIO (counterAdd metrics.watchdogSweeps 1 (attributes (attr "outcome" outcome)))
+
+recordWatchdogFinding :: (MonadIO m) => ShikigamiMetrics -> Text -> m ()
+recordWatchdogFinding metrics kind = liftIO (counterAdd metrics.watchdogFindings 1 (attributes (attr "detection.kind" kind)))
+
+recordWatchdogRefusal :: (MonadIO m) => ShikigamiMetrics -> Text -> Int64 -> m ()
+recordWatchdogRefusal metrics kind count = liftIO (counterAdd metrics.watchdogRefusals count (attributes (attr "refusal.kind" kind)))
+
+recordWatchdogAge :: (MonadIO m) => ShikigamiMetrics -> Int64 -> m ()
+recordWatchdogAge metrics age = liftIO (gaugeRecord metrics.watchdogSweepAge age emptyAttributes)

@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-11-06
+* **Addition**: DOC-20 explains watchdog notices, trusted recipients, bounded evidence and operator inspection.
+
 ## 2026-11-05
 * **Correction**: Plan 124: describe registered programs and typed decisions through the Shikigami-owned Shikumi execution adapter in DOC-1, DOC-5 and DOC-15.
 
