@@ -18,6 +18,11 @@ provenance:
       at: 2026-11-06T21:09:33Z
       mode: "update"
       note: "Refresh selected Kioku and completed runtime/execution owners while retaining exact bounded lifecycle gates."
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-11-06T21:35:46Z
+      mode: "update"
+      note: "Align lifecycle acceptance with v2 compatibility identities, standalone scheduler and adaptive timer routing."
   reviews:
     - model: "gpt-6-astra"
       harness: "codex-cli"
@@ -28,7 +33,7 @@ provenance:
 
 # Memory lifecycle: distillation, retention, and shared scope
 
-This ExecPlan is a living document. Refreshed on 2026-11-06 against `ff00b819`; implementation remains
+This ExecPlan is a living document. Refreshed on 2026-11-06 against `69ac8b25`; implementation remains
 Not Started. This body replaces the July implementation instructions, including
 the obsolete fifth timer poller and name-derived scope selector.
 
@@ -79,7 +84,7 @@ false. General retention must not take ownership of practice-review adjudication
 `Agent/Conversation.hs:recordAssistantTurnAndEnqueueReply` applies
 `l1TimerScheduleProjection`, while
 `Trigger/Scheduler.hs:shikigamiTimerFallback` handles schedule, execution-observation,
-approval and conversation-idle payloads, not Kioku distillation. The shared timer
+approval, adaptive cutoff and conversation-idle payloads, not Kioku distillation. The shared timer
 pass already performs guarded recovery and drains at most 100 rows. A second
 unfiltered Kioku worker is not a safe integration strategy.
 
@@ -132,6 +137,14 @@ The declaration and bounded `RecallLimit` (1–1000) are in
 takes `ResolvedAgentIdentity`; verified identities are stable Meibo principals,
 and compatibility identities are explicitly self-asserted. Accepted old name
 scopes live in `Memory/AliasStore.hs`. Do not recompute identity from a mutable name.
+[ADR 0087](../adr/0087-agent-values-retain-checked-meaning-and-separate-compatibility-scopes.md)
+now defines compatibility scope as `shikigami.agent.v2.` plus the exact-name
+commitment, through `Agent/Principal.hs`. Preserve that implementation and checked
+`AgentName`; do not reconstruct the old colon/dot sanitizer or infer aliases.
+Verified-principal legacy aliases remain explicit. Add `a:b` versus `a.b`, Unicode
+and whitespace fixtures proving distinct admitted compatibility scopes, private
+sessions and same-build recovery. The earlier first-release namespace reset does
+not authorize a new reset or a populated cross-build migration in this plan.
 
 `Memory/Access.hs` owns the current single `shikigamiMemorySpace`, read context and
 agent write context. A scope organizes data inside a space; it does not authorize
@@ -151,6 +164,12 @@ Worker assembly belongs to `shikigami-workers`: `Workers/Command/Worker.hs`,
 `Workers/Config.hs`, `Trigger/Timer.hs`, `Trigger/Scheduler.hs`, and `Health/Worker.hs`.
 Core owns reusable memory operations, workers own process settings and loops.
 The old `shikigami-core/src/Shikigami/Worker.hs` no longer exists.
+The standalone `Workers/Command/Scheduler.hs` also drains timers through
+`Trigger/Scheduler.hs:runSchedulerTimerWorker`; it must consume the same Kioku
+routing/configuration contract. `Health/Supervision.hs` owns loop supervision.
+Follow [ADR 0075](../adr/0075-service-composition-has-a-closed-reviewed-module-budget.md)
+and `tools/style/module-ownership.json` when adding modules; keep lifecycle behavior
+inside Memory and composition inside the existing reviewed worker owners.
 
 Read [ADR 0033](../adr/0033-recorded-agent-principals-key-durable-state.md),
 [ADR 0031](../adr/0031-practice-review-adjudication-is-a-logical-memory-transition.md),
@@ -295,7 +314,13 @@ worker-built `TimerRow -> IO (Either StoreError (Maybe EventId))` callback. That
 callback runs `fireKiokuTimer` and `applyFireOutcome` under Kioku's lawful `runAppIO`
 resource environment with a context provider restricted to the configured space.
 The scheduler invokes the callback through IO; it does not cast effect rows or
-recreate Kioku writes. All other owners retain their existing fallback handlers.
+recreate Kioku writes. All other owners retain their existing fallback handlers, including
+`Adaptive.Wake` cutoff timers. Thread the same callback and validated drain limit
+through `runSchedulerTimerWorker` and its standalone command composition; leaving
+that role on the old unknown-kind fallback could consume Kioku work incorrectly.
+Both drain entry points must share the recognized-owner decision and disabled-AI
+policy. Test each entry point against mixed-owner rows; adding another poller or
+only updating the full worker is insufficient.
 Store errors escape as visible failed passes with no invented completion marker.
 
 Use Kioku's public outcome mapping: Completed finalizes, RetryLater reschedules,
@@ -324,7 +349,8 @@ Add worker integration coverage beside `shikigami-workers/test/Shikigami/TimerRe
 seed a real conversation session/turn, apply the real projection, advance the test
 clock, run the actual Shikigami timer pass and assert extraction output and terminal
 timer state. Use `testDistillRuntime`/`withTestRunners` from the selected release.
-Test mixed timer owners, duplicate/restarted passes, denied or foreign memory space,
+Test mixed timer owners (including adaptive cutoffs), both drain entry points,
+duplicate/restarted passes, denied or foreign memory space,
 AI-disabled/deferred outcomes, bounded retries, timeout and cancellation. Assert
 successful persistence, not just a callback counter. Include L2/L3 routing evidence
 before claiming the full pipeline works.
@@ -453,7 +479,8 @@ regression, then the workflow gate against the actual pre-change baseline:
 
 ```bash
 nix develop --command cabal test all --test-options='--num-threads=1'
-just keiro-gate <pre-change-commit>
+nix develop --command just haskell-conventions
+nix develop --command just keiro-gate <pre-change-commit>
 git diff --check
 ```
 
@@ -499,6 +526,10 @@ maintenance assembly. No private storage mutation, effect-row cast, new identity
 resolver or generic timer poller is part of the interface.
 
 ## Revision Notes
+
+- 2026-11-06 focused compatibility audit: Retain ADR 0087 v2 identity semantics and
+  checked values, cover the standalone scheduler drain and adaptive cutoff timers,
+  and require current module-ownership checks. No lifecycle milestone is complete.
 
 - 2026-11-06: Rebase on selected Kioku 0.12.0.2/Keiro 0.22 and completed runtime/execution owners; verify the selected distillation API and still-unbounded source candidate path; preserve the exact missing read/retention and replay contracts without claiming lifecycle delivery.
 

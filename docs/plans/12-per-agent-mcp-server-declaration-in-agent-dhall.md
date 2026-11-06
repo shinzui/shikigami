@@ -18,6 +18,11 @@ provenance:
       at: 2026-11-06T21:09:33Z
       mode: "update"
       note: "Refresh current selected MCP/overlay/immutable-auth dependencies and exact remaining provider qualification."
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-11-06T21:35:46Z
+      mode: "update"
+      note: "Clarify generic observation leases, menu discovery, selective dispatch and checked-value compatibility."
   reviews:
     - model: "gpt-6-astra"
       harness: "codex-cli"
@@ -29,7 +34,7 @@ provenance:
 # MCP provider integration for declared capability overlays
 
 The historical filename and frontmatter title identify this plan. Its effective
-scope changed on 2026-08-22 and is reconciled throughout this body on 2026-10-28.
+scope changed on 2026-08-22; this body was checked against `69ac8b25` on 2026-11-06.
 It does not add `mcpServers` to Agent.dhall. Implementation of the surviving
 MCP-specific scope remains Not Started.
 
@@ -153,8 +158,8 @@ registry. Do not replace their model loop or widen support to ShikumiProgram/Flo
 by changing behavior dispatch.
 
 `Execution/Tools.hs` is also a required consumer: new durable Skill execution
-pins tool bindings/schema digests, reacquires only needed providers, and uses
-accepted tool results after recovery. Existing older workflow branches still use
+pins tool bindings/schema digests, reacquires only needed providers at pending-tool
+dispatch, and uses accepted tool results after recovery. Existing older workflow branches still use
 the behavior attempt. Both must be qualified; a one-off echo command alone proves
 neither durable adoption nor replay safety. Read current plans
 [82](82-pin-governed-execution-settings-for-agent-assignments.md) and
@@ -162,6 +167,18 @@ neither durable adoption nor replay safety. Read current plans
 changing this interface, preserving their completed contracts and consumer regressions.
 Plan 85 now supplies root-accounted accepted decisions, and plan 124 owns the local
 Shikumi runtime. MCP must consume the current accepted execution path.
+
+There are two execution integrations in `Capability/Provider.hs` and
+`Execution/Tools.hs`. Generic observation overlays use `withCapabilityOverlays`
+and its bracketed leases. Installed `DurableAdapter` values instead use
+`prepareGovernedTools`, whose current admission requires `snapshot.workspace`.
+This MCP delivery uses the generic observation path; do not install an MCP durable
+adapter simply because its caller is a durable Skill or bypass the workspace guard.
+`describeExecutionTools` acquires all selected generic overlays to build the menu;
+`withExecutionTools` filters acquisition to the requested unfinished tool.
+Consequently menu construction can connect and discover, but must never invoke a
+remote tool. Qualify both lifetimes, including failure and cleanup, and require
+no acquisition at all when replay returns an already accepted tool result.
 
 `Action/Authorization.hs` wraps Kikan-En's proof-verifying client.
 `Capability/Provider.hs` authorizes `ConnectCapability` before acquisition and
@@ -233,7 +250,10 @@ sort the tool list by logical name, preserve JSON schema arrays and do not inven
 semantic schema equivalence. Reordered object keys compare equal through canonical
 encoding; any other schema difference requires a new binding revision. The existing
 CapabilityDescriptor pins this content-derived revision, so no generic descriptor
-field or old JSON codec changes are needed. Resolve only the exact stored binding;
+field or old JSON codec changes are needed. Construct the revision through
+`mkCapabilityRevision`; retain checked `CapabilityId` and
+`ExecutionCoordinate "tool-name"` values at existing owner boundaries and render
+only for transport or explicit codec/digest inputs. Resolve only the exact stored binding;
 recompute its digest at startup and refuse an edited revision. Retain historical
 bindings for pending accepted work. `Execution/Tools.hs` continues deriving its
 existing per-tool schema digest from this same approved schema.
@@ -326,8 +346,10 @@ Put binding types and the reusable client/provider adapter in core under
 already resolved configuration and authorization functions; it never reads process
 configuration. Both `shikigami-workers` and `shikigami-agent` construct it at their
 composition roots, preserving the existing seven-package dependency arrows.
-Add a default-empty MCP binding catalog to those composition roots; do not duplicate
-factories in the binaries. The source dependency and immutable packaging update is
+Follow [ADR 0075](../adr/0075-service-composition-has-a-closed-reviewed-module-budget.md)
+and update `tools/style/module-ownership.json` for any new composition module;
+run the existing convention checks. Add a default-empty MCP binding catalog to
+those composition roots; do not duplicate factories in the binaries. The source dependency and immutable packaging update is
 owned jointly with plan 92 and the final packaging owner.
 
 Durable providers expose observations only. Reject remote mutations/emissions
@@ -361,6 +383,12 @@ authorizer outage/proof mismatch, missing credentials, unknown/colliding names,
 same-name schema drift, unknown pinned revision, oversize data, timeout,
 partial acquisition, cancellation and release failure. Sentinel secrets and tool
 payloads must not appear in captured public diagnostics.
+
+First test menu description: all approved generic overlays acquire and release,
+a denied discovery fails without invocation, and no remote tool is executed.
+Then dispatch one requested pending tool and prove unrelated providers are not
+acquired. Exercise the observation provider with no governed workspace and keep
+the existing workspace requirement for installed durable adapters unchanged.
 
 The durable test accepts a tool result, interrupts/restarts the consumer and proves
 no repeated call for that result; a pending result with a missing or changed
@@ -410,7 +438,8 @@ At final implementation qualification:
 
 ```bash
 nix develop --command cabal test all --test-options='--num-threads=1'
-just keiro-gate <pre-change-commit>
+nix develop --command just haskell-conventions
+nix develop --command just keiro-gate <pre-change-commit>
 git diff --check
 ```
 
@@ -462,6 +491,11 @@ The upstream plan artifacts are
 Their implementation details must be rechecked against released contracts.
 
 ## Revision Notes
+
+- 2026-11-06 focused compatibility audit: Specify generic observation leases versus
+  governed adapters, menu-time discovery and pending-tool selective acquisition;
+  retain checked coordinates and module ownership. Add corresponding acceptance
+  cases without changing ADR 0065 or claiming MCP implementation.
 
 - 2026-11-06: Refresh the selected cohort, immutable Kikan-En dependency and completed execution/upgrade foundations; keep the four MCP outcomes unstarted and remove planning/prerequisite checkboxes from implementation progress.
 

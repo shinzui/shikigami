@@ -22,6 +22,11 @@ provenance:
       at: 2026-11-06T21:09:33Z
       mode: "update"
       note: "Refresh current code, completed prerequisites, shared ownership and genuine remaining acceptance; preserve historical decisions."
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-11-06T21:35:46Z
+      mode: "update"
+      note: "Audit current identity, dual timer entry points and generic MCP execution compatibility; preserve outstanding release gates."
   reviews:
     - model: "gpt-6-astra"
       harness: "codex-cli"
@@ -34,7 +39,8 @@ provenance:
 
 This MasterPlan coordinates five feature streams. The registry owns child status;
 child ExecPlans own implementation milestones. Refreshed against the working tree,
-accepted ADRs and upstream release sources on **2026-11-06**.
+accepted ADRs and upstream release sources on **2026-11-06**, including a focused
+compatibility audit at `69ac8b25`.
 
 ## Vision & Scope
 
@@ -173,10 +179,22 @@ private conversational history implicitly. Metadata retention requires the reser
 space/type/scope predicate. Unmarked history, review, explicit Flow and distilled
 memories remain protected; keep counts apply per physical scope.
 
+**Current identity and module contracts — both children consume.**
+[ADR 0087](../adr/0087-agent-values-retain-checked-meaning-and-separate-compatibility-scopes.md)
+replaced compatibility-name sanitization with the exact-name v2 commitment.
+Plan 34 preserves that scope and explicit verified-principal aliases; it must not
+revive the old sanitizer as a fallback. Both children retain checked domain values
+and [ADR 0075](../adr/0075-service-composition-has-a-closed-reviewed-module-budget.md)'s
+module ownership checks. Plans 107/108 are delivered foundations, not new prerequisites.
+
 **Timer dispatch, AI and maintenance — EP-3 extends existing owners.**
 `shikigami-workers/src/Shikigami/Trigger/Timer.hs:runTimerPass` owns the bounded
 claim/drain boundary; `Trigger/Scheduler.hs` routes application timers. Plan 34
-adds a Kioku handler, not a competing generic poller. Kioku owns its fire outcomes,
+adds a Kioku handler, not a competing generic poller. The standalone scheduler also
+calls `runSchedulerTimerWorker`, which drains the same table: EP-3 must supply the
+same recognized-owner routing and limits there. Mixed-owner regression includes
+adaptive cutoff timers as well as schedules, approvals, observations and idle timers.
+Kioku owns its fire outcomes,
 retry/defer/dead-letter semantics and writes. Worker startup owns validated
 `AIRuntime` and memory context supply. Retention has a finite per-pass work budget
 and independent enablement so it can run without spending model credentials.
@@ -194,6 +212,11 @@ and the MCP-specific proof. Dynamic discovery must not mutate an accepted catalo
 or change a pinned tool's schema/revision silently. The approved binding commits names, schemas, descriptions, endpoint binding and
 limits into an existing-format capability revision using `versionedDigest`; no new
 generic descriptor codec is needed. Existing execution schema digests remain in use.
+Observation-only MCP uses the generic overlay lease path. The separate
+`DurableAdapter` installation path currently requires governed workspace admission;
+MCP does not gain that requirement merely by being durable. Tool-menu description
+currently acquires generic leases too: plan 12 qualifies authorization and cleanup
+on that path, and selective acquisition on pending-tool dispatch.
 
 **External action authority — existing C13 owner, EP-5 integrates discovery.**
 `Action/Authorization.hs` and `Capability/Provider.hs` already check connection and
@@ -267,6 +290,11 @@ released code as well as registry metadata.
 
 ## Decision Log
 
+- 2026-11-06 focused audit: Apply the existing v2 compatibility-identity and
+  module-ownership contracts, cover both timer-drain entry points and adaptive
+  cutoff timers, and make the generic MCP menu/dispatch lease behavior explicit.
+  These are corrections against current owners, not new architecture decisions.
+
 - 2026-10-28 follow-up: Resolve the review holes in ADRs 0064/0065 and the child
   contracts. Select private sessions/distillation with shared learnings, marker-only
   retention, bounded alias merging and checkpointed maintenance, one-row live-AI
@@ -303,6 +331,11 @@ Implementation, missing upstream releases and final integration remain; no row i
 closed by the planning change alone.
 
 ## Revision Notes
+
+- 2026-11-06 focused audit at `69ac8b25`: Verified the remaining work against code,
+  current ADRs and release metadata; added missing identity, standalone scheduler,
+  adaptive timer and generic-versus-governed execution acceptance. Completed
+  children retain their historical acceptance; runtime suites were not rerun.
 
 - 2026-11-06: Reconcile the selected cohort/immutable Kikan-En closure and completed runtime/accepted execution; keep exact owner API and MCP integration gates while removing inflated planning/foundation progress.
 
