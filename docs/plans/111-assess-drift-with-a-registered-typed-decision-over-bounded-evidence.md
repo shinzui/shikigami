@@ -17,6 +17,11 @@ provenance:
       at: 2026-11-06T04:40:28Z
       mode: "update"
       note: "Reconciled proposed APIs, ownership and acceptance with current source review."
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-11-06T14:59:30Z
+      mode: "implement"
+      note: "Implement bounded typed drift proposal, input-bound validation and root-accounted replay qualification."
 ---
 
 # Assess drift with a registered typed decision over bounded evidence
@@ -36,14 +41,35 @@ You can see it working in `cabal test shikigami-core-postgres-test --test-option
 
 ## Progress
 
-- [ ] Milestone 1: The `Drift` decision label, the `shikigami.watchdog-drift` program with its input and output types, root-accounting classification and validators are registered, and the unit group proves subject substitution, invented evidence and missing subjects are refused.
+- [x] (2026-11-06) Milestone 1: The `Drift` decision label, the `shikigami.watchdog-drift` program with its input and output types, root-accounting classification and validators are registered, and the unit group proves subject substitution, invented evidence and missing subjects are refused.
 - [ ] Milestone 2: A test Flow invokes the slot against the stub provider through the real journaled decision path, replay after a crash makes no second call, and provider calls are accounted against a fixture root.
 - [ ] Milestone 3: Cadence selection, the `watchdog_drift_checks` table and the conversion of assessments into `Drift` detections exist, with the settings fields and the authoring guide updated.
 
 
+M1 acceptance 2026-11-06: all eight drift-program unit groups and the full core
+unit suite pass (774 tests). Conventions pass. Compiler controls refuse direct,
+Generic, decoded and representation-coerced DriftAssessment construction and
+unchecked Rationale construction. The registered descriptor golden is
+`sha256:d8d47c490849c498c7b251378221af9eeb47a89b204fde64d60f563aa4ae0705`.
+M2's real journal/accounting harness and M3's cadence/settings remain.
+
+
 ## Surprises & Discoveries
 
-(None yet.)
+EP-1 and EP-2 are Complete at `39c0a7e1`. The registered program API validates
+outputs without invocation input, so its result remains an untrusted proposal.
+The raw proposal uses canonical subject-key strings and per-subject evidence
+indexes; the pure input-bound validator resolves exact references and mints the
+assessment. This requires no orphan Shikumi schema instances for owner types.
+The fixed catalog subject maximum is 16; a lower configured bound is retained in
+the typed input. Drift persistence has an owner-local refusal type, preserving
+the soft dependency on EP-2. `dueForDrift` receives liveness-eligible candidates
+from EP-4, which owns that classification decision.
+
+Adding the uninvoked Drift label under `Flow/Decision.hs` preserves all existing
+labels, result types and branches under workflow-versioning rules 4 and 7. The
+production caller, patch and declaration remain EP-4 work. Harness-only callers
+use their own undeclared test workflow.
 
 
 ## Decision Log
@@ -137,7 +163,7 @@ Create `shikigami-core/test-postgres/Shikigami/WatchdogDriftSpec.hs`. Define a h
 
 ### Milestone 3: Cadence, the checks table and detections
 
-Allocate the next migration with `just new-migration name=watchdog-drift-checks`; do not reserve 0044 (other initiatives may already own it):
+Allocate the next migration with `just new-migration watchdog-drift-checks`; do not reserve 0044 (other initiatives may already own it):
 
 ```sql
 -- Last drift assessment per subject. Metadata only.
@@ -218,11 +244,13 @@ Expected: `WatchdogDriftSpec` passes, including the case whose name states that 
 After milestone 3:
 
 ```bash
-just new-migration name=watchdog-drift-checks
+just new-migration watchdog-drift-checks
 sha256sum shikigami-migrations/sql-migrations/NNNN-watchdog-drift-checks.sql
 # append the lock line, then:
 just migration-schema-isolation
-SHIKIGAMI_REGENERATE_EXPECTED_SCHEMA=1 cabal test shikigami-migrations-test
+SHIKIGAMI_REGENERATE_EXPECTED_SCHEMA=1 cabal test shikigami-migrations-smoke
+# Rebuild and verify the embedded expected snapshot after regeneration.
+cabal test shikigami-migrations-smoke --test-show-details=direct
 cabal test shikigami-core-test shikigami-core-postgres-test shikigami-workers-test shikigami-server-test --test-show-details=direct
 ```
 

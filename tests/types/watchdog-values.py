@@ -24,6 +24,8 @@ import Shikigami.Watchdog.Types qualified as Types
 import Shikigami.Watchdog.Grant qualified as Grant
 import Shikigami.Watchdog.Classify qualified as Classify
 import Shikigami.Watchdog.Episode qualified as Episode
+import Shikigami.Program.Decision.Drift qualified as Drift
+import Data.List.NonEmpty (NonEmpty)
 '''
 POSITIVE = '''
 sweep :: Text -> Either Text Types.SweepId
@@ -40,6 +42,10 @@ summary :: Text -> Either Text Classify.SummaryDigest
 summary = Classify.parseSummaryDigest
 finding :: Episode.Finding -> Types.FindingView
 finding = Episode.findingView
+assessment :: Drift.DriftAssessment -> NonEmpty Drift.DriftSubjectAssessment
+assessment = Drift.assessmentView
+rationale :: Text -> Either Text Drift.Rationale
+rationale = Drift.parseRationale
 '''
 with tempfile.TemporaryDirectory(prefix="shikigami-watchdog-values-") as directory:
     source = Path(directory) / "WatchdogBoundary.hs"
@@ -51,7 +57,7 @@ with tempfile.TemporaryDirectory(prefix="shikigami-watchdog-values-") as directo
     assert result.returncode == 0, (result.stdout, result.stderr)
     print("watchdog values: public parsers and views compile", flush=True)
     for module, name in [("Types", "SweepId"), ("Types", "EpisodeId"), ("Types", "FindingId"),
-                         ("Types", "MarkDigest"), ("Classify", "SummaryDigest"), ("Types", "SubjectKey"), ("Grant", "ObservationGrant"), ("Episode", "Finding")]:
+                         ("Types", "MarkDigest"), ("Classify", "SummaryDigest"), ("Types", "SubjectKey"), ("Grant", "ObservationGrant"), ("Episode", "Finding"), ("Drift", "DriftAssessment"), ("Drift", "Rationale")]:
         owner = f"{module}.{name}"
         for label, body in [
             ("constructor", f"bypass = {owner}\n"),
@@ -67,6 +73,10 @@ with tempfile.TemporaryDirectory(prefix="shikigami-watchdog-values-") as directo
     result = compile("bypass :: Aeson.Value -> Aeson.Result Episode.Finding\nbypass = Aeson.fromJSON\n")
     assert result.returncode != 0 and "FromJSON" in result.stderr, result.stderr
     result = compile("bypass :: Types.FindingView -> Episode.Finding\nbypass = coerce\n")
+    assert result.returncode != 0, result.stdout
+    result = compile("bypass :: Aeson.Value -> Aeson.Result Drift.DriftAssessment\nbypass = Aeson.fromJSON\n")
+    assert result.returncode != 0 and "FromJSON" in result.stderr, result.stderr
+    result = compile("bypass :: NonEmpty Drift.DriftSubjectAssessment -> Drift.DriftAssessment\nbypass = coerce\n")
     assert result.returncode != 0, result.stdout
     for target in ['Types.WatchdogLimit "subjects"', 'Types.WatchdogLimit "bytes"']:
         result = compile(f'bypass :: Types.WatchdogLimit "rows" -> {target}\nbypass = coerce\n')

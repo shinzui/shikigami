@@ -119,3 +119,14 @@ Observed retains the exact prior used, enabling the ledger to reject stale input
 Material summaries exclude sweep identity, evidence revisions and elapsed time,
 while retaining lapsed deadline kinds, owner epoch, root controls, uncertainty and
 the optional drift category.
+
+## Input-bound drift assessment
+
+The implemented program has a fixed catalog maximum of sixteen subjects and a
+lower configured bound retained in its typed input. The untrusted proposal names
+canonical subject keys and evidence indexes within each subject's supplied
+references. The pure validator requires exact subject cardinality, resolves those
+indexes, checks category/rationale bounds and alone mints an opaque assessment.
+Owner identifiers need no orphan model-schema instances. Goal and criteria prose
+remain untrusted input. The new Drift slot is explicitly root-accounted; no
+registered production Flow invokes it until plan 112's guarded integration.

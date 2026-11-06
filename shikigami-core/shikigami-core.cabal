@@ -269,6 +269,7 @@ library
     Shikigami.Prelude
     Shikigami.Program.Decision
     Shikigami.Program.Decision.Adaptive
+    Shikigami.Program.Decision.Drift
     Shikigami.Program.Decision.Examples
     Shikigami.Program.Decision.Initiative
     Shikigami.Program.Decision.JudgmentExample
@@ -585,6 +586,7 @@ test-suite shikigami-core-test
     Shikigami.DelegationBatchSpec
     Shikigami.DirectorySpec
     Shikigami.DirectoryValueSpec
+    Shikigami.DriftProgramSpec
     Shikigami.EnqueueHardeningSpec
     Shikigami.ExecutionPolicySpec
     Shikigami.ExecutionPositionSpec

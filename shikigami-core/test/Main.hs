@@ -44,6 +44,7 @@ import Shikigami.DelegationBatchSpec qualified as DelegationBatchSpec
 import Shikigami.Directory (disabledDirectoryHandle)
 import Shikigami.DirectorySpec qualified as DirectorySpec
 import Shikigami.DirectoryValueSpec qualified as DirectoryValueSpec
+import Shikigami.DriftProgramSpec qualified as DriftProgramSpec
 import Shikigami.EnqueueHardeningSpec qualified as EnqueueHardeningSpec
 import Shikigami.ExecutionPolicySpec qualified as ExecutionPolicySpec
 import Shikigami.ExecutionPositionSpec qualified as ExecutionPositionSpec
@@ -127,6 +128,7 @@ main =
           InitiativeValueSpec.tests,
           WatchdogTypesSpec.tests,
           WatchdogClassifySpec.tests,
+          DriftProgramSpec.tests,
           ObjectiveSpec.tests,
           AdaptiveProposalSpec.tests,
           ObjectiveTrackerSpec.tests,

@@ -69,7 +69,7 @@ import Shikigami.Router.Catalog (CandidateCatalog)
 import Shikigami.Router.Decision (RouteDecision, validateRouteDecision)
 import Shikigami.Router.Declaration (RouterDeclarationView (policy), validateRouterDeclaration, validatedRouterDeclaration)
 
-data DecisionLabel = Triage | Investigation | Judgment | Adaptive | Propose
+data DecisionLabel = Triage | Investigation | Judgment | Adaptive | Propose | Drift
   deriving stock (Eq, Ord, Show)
 
 -- | Who pays for a slot's provider calls. Spelled out per label so a new slot
@@ -84,6 +84,7 @@ decisionAccounting = \case
   Judgment -> UnaccountedCall
   Adaptive -> UnaccountedCall
   Propose -> RootAccountedCall
+  Drift -> RootAccountedCall
 
 data DecisionStep i o = DecisionStep !DecisionLabel !(DecisionProgramRef i o)
 
@@ -98,6 +99,7 @@ slotLabel Triage = triageDecisionSlot
 slotLabel Investigation = investigationDecisionSlot
 slotLabel Judgment = judgmentDecisionSlot
 slotLabel Adaptive = either (error . show) id (parseDecisionSlotLabel "adapt")
+slotLabel Drift = either (error . show) id (parseDecisionSlotLabel "drift")
 slotLabel Propose = either (error . show) id (parseDecisionSlotLabel "propose")
 
 decisionStepNames :: DecisionLabel -> (StepName, StepName)
@@ -105,6 +107,7 @@ decisionStepNames Triage = (StepName "decision-prepare-triage", StepName "decisi
 decisionStepNames Investigation = (StepName "decision-prepare-investigate", StepName "decision-result-investigate")
 decisionStepNames Adaptive = (StepName "decision-prepare-adapt", StepName "decision-result-adapt")
 decisionStepNames Judgment = (StepName "decision-prepare-judge", StepName "decision-result-judge")
+decisionStepNames Drift = (StepName "decision-prepare-drift", StepName "decision-result-drift")
 decisionStepNames Propose = (StepName "decision-prepare-propose", StepName "decision-result-propose")
 
 proposeStep :: DecisionStep AssessmentInput AssessmentOutput
