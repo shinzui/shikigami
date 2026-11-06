@@ -8,6 +8,7 @@ module Shikigami.Objective.Store
     create,
     createWithDisposition,
     listObjectives,
+    module Shikigami.Objective.Observation,
     history,
     read,
     inspect,
@@ -103,6 +104,7 @@ import Shikigami.Objective.Command
 import Shikigami.Objective.Conversation qualified as Conversation
 import Shikigami.Objective.Inspection (HistoryEntry (..))
 import Shikigami.Objective.Inspection qualified as View
+import Shikigami.Objective.Observation
 import Shikigami.Objective.Reference (ObjectiveAssociation (..))
 import Shikigami.Objective.Tracker.Publication qualified as Tracker
 import Shikigami.Objective.Tracker.Sql qualified as TrackerSql

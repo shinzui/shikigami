@@ -10,14 +10,19 @@ import Data.Text qualified as Text
 import Shikigami.Agent.Approval (parseReviewRequestId)
 import Shikigami.Agent.Name (mkAgentName)
 import Shikigami.Agent.Principal (AgentIdentity (..), mkAgentPrincipal)
+import Shikigami.Coordination.Observation qualified as Coordinator
 import Shikigami.Duration (durationTime)
 import Shikigami.Execution.Coordinate (executionIdentity)
 import Shikigami.Execution.Identity (newExecutionRootId, parseOperationId)
+import Shikigami.Execution.Observation qualified as Execution
+import Shikigami.Objective.Observation qualified as ObjectiveObservation
 import Shikigami.Objective.Types qualified as Objective
 import Shikigami.StateRevision (initialRevision)
 import Shikigami.Watchdog.Grant
+import Shikigami.Watchdog.Observation qualified as Observation
 import Shikigami.Watchdog.Types
 import Shikigami.WorkerSession.Input (workerSessionId)
+import Shikigami.WorkerSession.Observation qualified as Session
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
 
@@ -25,7 +30,21 @@ tests :: TestTree
 tests =
   testGroup
     "Watchdog values"
-    [ testCase "allocated ids require canonical UUIDv7 and the exact prefix" do
+    [ testCase "a one-subject sweep rotates fairly and skips exhausted kinds" do
+        Observation.pageShares 1 Observation.initialCursor @?= [(Observation.Objectives, 1), (Observation.Sessions, 0), (Observation.Executions, 0)]
+        let sessionsNext = Observation.CoverageCursor Nothing Nothing Nothing Nothing [] Observation.Sessions True
+            executionsNext = Observation.CoverageCursor Nothing Nothing Nothing Nothing [Observation.Sessions] Observation.Executions True
+        Observation.pageShares 1 sessionsNext @?= [(Observation.Objectives, 0), (Observation.Sessions, 1), (Observation.Executions, 0)]
+        Observation.pageShares 3 executionsNext @?= [(Observation.Objectives, 1), (Observation.Sessions, 0), (Observation.Executions, 2)]
+        sum (map snd (Observation.pageShares 16777216 Observation.initialCursor)) @?= 96,
+      testCase "observation owner statements take no row locks" do
+        mapM_
+          ( \sql -> do
+              assertBool "no exclusive lock" (not ("FOR UPDATE" `Text.isInfixOf` Text.toUpper sql))
+              assertBool "no shared lock" (not ("FOR SHARE" `Text.isInfixOf` Text.toUpper sql))
+          )
+          [ObjectiveObservation.observationSql, Session.observationSql, Execution.observationSql, Coordinator.observationSql],
+      testCase "allocated ids require canonical UUIDv7 and the exact prefix" do
         sweep <- newSweepId
         episode <- newEpisodeId
         finding <- newFindingId

@@ -1,4 +1,4 @@
-module Shikigami.ObjectiveStoreSpec (tests, crashWriter) where
+module Shikigami.ObjectiveStoreSpec (tests, crashWriter, withObjective, createFixtureObjective, bindFixtureAssignment) where
 
 import Contravariant.Extras (contrazip2, contrazip3)
 import Control.Concurrent.Async (concurrently, replicateConcurrently)
@@ -550,6 +550,19 @@ withObjective :: DatabaseFixture -> (AppEnv -> WS.SessionAdmission -> ObjectiveI
 withObjective fixture callback = SessionsFixture.withFixture fixture \env admission _ -> do
   receipt <- right =<< run env (O.createObjective ownerHost (fixtureOperationId "create") Nothing request)
   callback env admission receipt.objectiveId
+
+createFixtureObjective :: AppEnv -> Text -> IO ObjectiveId
+createFixtureObjective env key = do
+  receipt <- right =<< run env (O.createObjective ownerHost (fixtureOperationId key) Nothing request)
+  pure receipt.objectiveId
+
+bindFixtureAssignment :: AppEnv -> ObjectiveId -> Text -> IO WS.ObjectiveRef
+bindFixtureAssignment env objective key = do
+  current <- get env objective
+  now <- getCurrentTime
+  let assignment = draft now key
+  _ <- right =<< run env (O.executeCommand ownerHost objective current.revision (fixtureOperationId ("bind-" <> key)) (SetAssignments [assignment]))
+  pure (S.referenceFor objective assignment.assignmentId)
 
 get :: AppEnv -> ObjectiveId -> IO Objective
 get env objective = right =<< run env (O.readObjective ownerHost objective)

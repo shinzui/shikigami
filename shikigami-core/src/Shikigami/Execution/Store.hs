@@ -12,6 +12,7 @@ module Shikigami.Execution.Store
     authorizeReplay,
     loadExecution,
     inspectExecution,
+    module Shikigami.Execution.Observation,
     inspectExecutionTx,
     rootExecutionsSettledTx,
     inspectExecutionPage,
@@ -100,6 +101,7 @@ import Shikigami.Execution.Catalog (withLiveExecution)
 import Shikigami.Execution.Claim
 import Shikigami.Execution.Coordinate
 import Shikigami.Execution.Identity (AttemptId, ExecutionRootId, OperationId, attemptIdText, executionRootIdText, operationIdText)
+import Shikigami.Execution.Observation
 import Shikigami.Execution.Payload
 import Shikigami.Execution.Policy (ContextView (..), ModelOperationInput (..), validateTerminalOutput, validateToolInvocation)
 import Shikigami.Execution.Policy.Limits (policyNumber)

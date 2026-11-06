@@ -44,21 +44,26 @@ You can see it working in the PostgreSQL suite: `cabal test shikigami-core-postg
 ## Progress
 
 - [x] (2026-11-06) Milestone 1: The watchdog vocabulary, settings and grant exist in `shikigami-core`, the `Watchdog` module root is admitted by the module policy, and `just haskell-conventions`, `just domain-value-types` and `cabal test shikigami-core-test` pass with the new value and codec cases.
-- [ ] Milestone 2: Lock-free observation reads exist for objectives, coordinators, sessions and executions, `observePage` composes them, and the PostgreSQL contention case completes under competing `FOR UPDATE` locks with both subjects present and no body fields.
+- [x] (2026-11-06) Milestone 2: Lock-free observation reads exist for objectives, coordinators, sessions and executions, `observePage` composes them, and the PostgreSQL contention case completes under competing `FOR UPDATE` locks with both subjects present and no body fields.
 - [ ] Milestone 3: Roots, unsettled processes, tool permissions and pending approval timers are attached as waiting facts, the coverage cursor wraps around the population, and bounds, refusals and corruption cases are covered in the PostgreSQL suite.
 
 
-Handoff 2026-11-06: milestone 1 is accepted: `just haskell-conventions` passed, `just domain-value-types` passed all compiler controls including the new watchdog clients, and `cabal test shikigami-core-test --test-show-details=direct` passed all 754 tests. Milestone 2 owner projections and the composed page are next. The joint objective/session contention gate, complete scope/bounds coverage, and milestone 3 remain unfinished.
+Handoff 2026-11-06: milestone 1 is accepted: `just haskell-conventions` passed, `just domain-value-types` passed all compiler controls including the new watchdog clients, and `cabal test shikigami-core-test --test-show-details=direct` passed all 754 tests. Milestone 2 is accepted: all 13 watchdog PostgreSQL cases pass, including the joint objective/session contention check, timeout recovery, scope filtering before LIMIT, a mixed population pass, a one-subject budget, and incomplete relationship refusals. Full regressions pass: 756 core unit tests, 617 core PostgreSQL tests, 339 worker tests and 107 server tests. `just haskell-conventions` passes. Milestone 3 remains: root/process facts, approval association and separately bounded public Keiro reads, plus their integration cases.
 
 
 ## Surprises & Discoveries
 
 The execution owner's `activeOperation` is an `OperationId`, not an operation-position revision. The observation activity record now retains that exact owner type. The grant admission API accepts `Maybe WatchdogSettings` so omitted configuration has a typed `WatchdogDisabled` result. Settings live in `Watchdog.Settings` and are re-exported by `App.Config` to avoid a configuration/grant import cycle.
 
-The session's objective reference is a digest of objective and assignment coordinates, not the objective id. Scoped session enumeration therefore takes owner-local `SessionObservationScope` references; objective composition must resolve its assignment references before enumerating sessions. Corrupt rows retain their primary key with a per-row typed refusal, allowing other rows and keyset coverage to proceed.
+The session's objective reference is a digest of objective and assignment coordinates, not the objective id. Scoped session enumeration therefore uses owner-local `SessionObservationScope` selectors and the objective owner's retained assignment-reference relation before applying LIMIT. Its bounded follow-up includes sessions that have not yet published their first checkpoint/session id into the objective graph. Corrupt rows retain their primary key with a per-row typed refusal, allowing other rows and keyset coverage to proceed.
 
 
 ## Decision Log
+
+- Decision: Keep observation projection records and SQL in owner-local `Objective.Observation`, `WorkerSession.Observation`, `Execution.Observation` and `Coordination.Observation` modules, re-exported by their stores. Retain per-row typed refusals and a scope-bound cursor with exhausted-kind flags, rotation and pass cleanliness. The composed page caps top-level subjects at 96, relationships at 256, nested metadata in each owner, and encoded pages at 32 MiB.
+  Rationale: Read-only repeatable-read composition must expose incomplete relationships without decoding protected state. A corrupt row must retain its key so later subjects remain reachable; a budget of one must visit every kind. The PostgreSQL fixture with 4,000 terminal rows per owner uses the existing indexes, so no observation index migration is required by this milestone.
+  Date: 2026-11-06
+
 
 - Decision: Owner verticals expose their own lock-free observation reads; the watchdog composes them and never writes SQL against another vertical's tables.
   Rationale: The vertical-slice standard keeps SQL and decoders with the concept that owns the table, and the owners already have the decoders that refuse corrupt stored JSON inside the transaction. A watchdog-side query over `shikigami.objectives` would duplicate the decoder and silently diverge from the owner.

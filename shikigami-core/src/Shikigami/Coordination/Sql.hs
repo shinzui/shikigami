@@ -3,7 +3,7 @@
 -- | Private projection of accepted manifests, committed with the objective.
 -- Every protected read binds the projection to its original objective receipt
 -- and payload commitment before it can supply executable operations.
-module Shikigami.Coordination.Sql (saveDecision, readDecision, readArrangement, readDecisions, saveObservation, readObservations) where
+module Shikigami.Coordination.Sql (saveDecision, readDecision, readArrangement, readDecisions, saveObservation, readObservations, module Shikigami.Coordination.Observation) where
 
 import Contravariant.Extras (contrazip2, contrazip3, contrazip4, contrazip6)
 import Data.Aeson qualified as Aeson
@@ -16,6 +16,7 @@ import Hasql.Encoders qualified as E
 import Hasql.Statement (preparable)
 import Hasql.Transaction (Transaction)
 import Hasql.Transaction qualified as Tx
+import Shikigami.Coordination.Observation
 import Shikigami.Coordination.Proposal
 import Shikigami.Execution.Identity (OperationId, operationIdText)
 import Shikigami.FormatVersion (FormatVersion (V1))

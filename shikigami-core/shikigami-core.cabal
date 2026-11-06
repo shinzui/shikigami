@@ -106,6 +106,7 @@ library
     Shikigami.Coordination.DecisionAuthority
     Shikigami.Coordination.Direct
     Shikigami.Coordination.Identity
+    Shikigami.Coordination.Observation
     Shikigami.Coordination.Proposal
     Shikigami.Coordination.Runtime
     Shikigami.Coordination.Sql
@@ -140,6 +141,7 @@ library
     Shikigami.Execution.Foreground
     Shikigami.Execution.Identity
     Shikigami.Execution.Live
+    Shikigami.Execution.Observation
     Shikigami.Execution.Payload
     Shikigami.Execution.Policy
     Shikigami.Execution.Policy.Limits
@@ -212,6 +214,7 @@ library
     Shikigami.Objective.Inspection
     Shikigami.Objective.Keys
     Shikigami.Objective.Live
+    Shikigami.Objective.Observation
     Shikigami.Objective.Operation
     Shikigami.Objective.Origin
     Shikigami.Objective.Ownership
@@ -309,6 +312,7 @@ library
     Shikigami.Trigger.Schedule
     Shikigami.Trigger.Stream
     Shikigami.Watchdog.Grant
+    Shikigami.Watchdog.Observation
     Shikigami.Watchdog.Settings
     Shikigami.Watchdog.Types
     Shikigami.WorkerSession.Capability
@@ -319,6 +323,7 @@ library
     Shikigami.WorkerSession.Input
     Shikigami.WorkerSession.Integration
     Shikigami.WorkerSession.Live
+    Shikigami.WorkerSession.Observation
     Shikigami.WorkerSession.Position
     Shikigami.WorkerSession.Store
     Shikigami.WorkerSession.Tools
@@ -716,6 +721,7 @@ test-suite shikigami-core-postgres-test
     Shikigami.SinkDeliverySpec
     Shikigami.SpikeWorkflowSpec
     Shikigami.TypeSafeDecisionWorkflowSpec
+    Shikigami.WatchdogObservationSpec
     Shikigami.WorkerSessionCapabilitySpec
     Shikigami.WorkerSessionHandoffSpec
     Shikigami.WorkerSessionSpec

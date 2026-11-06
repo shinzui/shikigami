@@ -12,6 +12,7 @@ module Shikigami.WorkerSession.Store
     ensureSessionDriver,
     authorizeSession,
     inspectSession,
+    module Shikigami.WorkerSession.Observation,
     rootSessionsTerminalTx,
     rootSessionsSettledTx,
     inspectSessionPage,
@@ -106,6 +107,7 @@ import Shikigami.WorkerSession.Checkpoint
 import Shikigami.WorkerSession.CheckpointAuthority (CheckpointRejection (..), RejectionAuthority (..))
 import Shikigami.WorkerSession.Identity (assignmentChildWorkflowIdV2, sessionWorkflowId, sessionWorkflowName)
 import Shikigami.WorkerSession.Input
+import Shikigami.WorkerSession.Observation
 import Shikigami.WorkerSession.Position
 import Shikigami.WorkerSession.Transfer
 import Shikigami.WorkerSession.Types

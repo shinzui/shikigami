@@ -62,3 +62,24 @@ enablement and the exact configured identity without replacing the retained
 policy. Compatibility names and verified principals remain distinct modes.
 Omitted operator configuration returns WatchdogDisabled. This is the implemented
 vocabulary/grant boundary only; sweep and runtime qualification remain open.
+
+## Bounded metadata pages
+
+Owner-local Observation modules project permitted JSON fields before decoding;
+watchdog composition does not load owner snapshots, instructions or results.
+The execution owner extracts only an objective-scope coordinate from its retained
+snapshot and never selects the snapshot body. Each corrupt row keeps its key and
+a typed refusal. Owner relationships carry completeness, and truncation produces
+unknown metadata and an unclean pass rather than evidence of inactivity.
+
+Coverage retains its scope, exhausted populations and rotating next kind. A
+one-subject page visits every kind; exhausted kinds remain exhausted until the
+pass ends. PassIncomplete distinguishes a finished traversal with refusals from
+accepted complete coverage. Scope changes start a new traversal. Session discovery
+also follows retained assignment-reference bindings before the first checkpoint
+publishes a session id into the objective graph.
+
+The metadata page is one read-only repeatable-read transaction with statement and
+lock timeouts. A PostgreSQL timeout aborts the page; it returns no advanced cursor
+and the next transaction can recover. Root/process and public Keiro waiting-fact
+qualification remain separate work under plan 109.

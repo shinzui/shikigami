@@ -1,6 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 
-module Shikigami.ExecutionTranscriptSpec (tests, withFixture, withConfiguredResourceFixture, driverRuntime, pumpDriver, pendingReference, summaryConfiguration, run) where
+module Shikigami.ExecutionTranscriptSpec (tests, withFixture, withFixtureIn, withConfiguredResourceFixture, driverRuntime, pumpDriver, pendingReference, summaryConfiguration, run) where
 
 import Baikai.Api (Api (OpenAIResponses))
 import Baikai.Content qualified as Content
@@ -1497,10 +1497,18 @@ withConfiguredFixture fixture configure = withConfiguredResourceFixture fixture 
 withConfiguredResourceFixture :: DatabaseFixture -> (ExecutionSnapshot -> ExecutionSnapshot) -> (R.Limits -> R.Limits) -> (AppEnv -> ExecutionSnapshot -> Store.ReplayAccess -> IO a) -> IO a
 withConfiguredResourceFixture fixture configure editLimits use = withShikigamiFreshDatabase fixture \connection -> do
   tracer <- noopTracer
+  let env = AppEnv (defaultConnectionSettings connection) tracer Nothing Nothing
+  withConfiguredFixtureIn env configure editLimits use
+
+-- | Reuse the real execution admission fixture inside another owner's database.
+withFixtureIn :: AppEnv -> (AppEnv -> ExecutionSnapshot -> Store.ReplayAccess -> IO a) -> IO a
+withFixtureIn env = withConfiguredFixtureIn env id id
+
+withConfiguredFixtureIn :: AppEnv -> (ExecutionSnapshot -> ExecutionSnapshot) -> (R.Limits -> R.Limits) -> (AppEnv -> ExecutionSnapshot -> Store.ReplayAccess -> IO a) -> IO a
+withConfiguredFixtureIn env configure editLimits use = do
   now <- getCurrentTime
   session <- genSessionId
-  let env = AppEnv (defaultConnectionSettings connection) tracer Nothing Nothing
-      limits = editLimits (Map.insert R.Tokens (R.Limited (fixtureAmount 1000)) (Map.fromList [(dimension, R.ExplicitlyUnbounded) | dimension <- [minBound .. maxBound]]))
+  let limits = editLimits (Map.insert R.Tokens (R.Limited (fixtureAmount 1000)) (Map.fromList [(dimension, R.ExplicitlyUnbounded) | dimension <- [minBound .. maxBound]]))
       selection = mustRight (resolveExecutionSelection (fixtureAssignment "transcript-assignment") (mustRight (modelCatalog [])) (defaultBinding stubModel emptyOptions) Nothing Nothing Nothing Nothing (Just rootId) now)
       snapshot = configure (ExecutionSnapshot V1 (executionIdFor selection.assignmentId) (WorkflowId "transcript-run") (fixtureAgentName "worker") (compatibilityIdentity (fixtureAgentName "worker")) session selection Nothing (SkillInstructions (ExecutionValue.executionCoordinate "fixture") "system" "PRIVATE_REPLAY_MARKER") (ReplayContext LegacyContext (Just "system") [UserTurn [TextBlock "PRIVATE_REPLAY_MARKER"] Nothing]) emptyResolvedCapabilitySet (toJSON ([] :: [Value])) defaultHarnessPolicy [] Nothing Nothing)
   _ <- expectRight =<< run env Catalog.registerProjectionCatalog
