@@ -36,6 +36,9 @@ column	agent_scope_aliases.created_at	timestamp with time zone not null default 
 column	agent_scope_aliases.legacy_agent_name	text not null
 column	agent_scope_aliases.principal_id	text not null
 column	agent_scope_aliases.updated_at	timestamp with time zone not null default now()
+column	approval_observation_associations.parent_id	text not null
+column	approval_observation_associations.parent_name	text not null
+column	approval_observation_associations.review_id	text not null
 column	conversation_sessions.conversation_id	text not null
 column	conversation_sessions.epoch	integer not null default 0
 column	conversation_sessions.session_id	text not null
@@ -443,6 +446,12 @@ constraint	agent_scope_aliases.agent_scope_aliases_pkey	PRIMARY KEY (principal_i
 constraint	agent_scope_aliases.agent_scope_aliases_principal_id_check	CHECK ((principal_id ~~ like_escape('agent\_%'::text, '\'::text)))
 constraint	agent_scope_aliases.agent_scope_aliases_principal_id_not_null	NOT NULL principal_id
 constraint	agent_scope_aliases.agent_scope_aliases_updated_at_not_null	NOT NULL updated_at
+constraint	approval_observation_associations.approval_observation_associations_parent_id_check	CHECK (((length(parent_id) >= 1) AND (length(parent_id) <= 512)))
+constraint	approval_observation_associations.approval_observation_associations_parent_id_not_null	NOT NULL parent_id
+constraint	approval_observation_associations.approval_observation_associations_parent_name_check	CHECK (((length(parent_name) >= 1) AND (length(parent_name) <= 512)))
+constraint	approval_observation_associations.approval_observation_associations_parent_name_not_null	NOT NULL parent_name
+constraint	approval_observation_associations.approval_observation_associations_pkey	PRIMARY KEY (review_id)
+constraint	approval_observation_associations.approval_observation_associations_review_id_not_null	NOT NULL review_id
 constraint	conversation_sessions.conversation_sessions_conversation_id_not_null	NOT NULL conversation_id
 constraint	conversation_sessions.conversation_sessions_epoch_not_null	NOT NULL epoch
 constraint	conversation_sessions.conversation_sessions_pkey	PRIMARY KEY (conversation_id)
@@ -964,6 +973,8 @@ index	agent_run_requests_pkey	CREATE UNIQUE INDEX agent_run_requests_pkey ON shi
 index	agent_run_requests_run_key_key	CREATE UNIQUE INDEX agent_run_requests_run_key_key ON shikigami.agent_run_requests USING btree (run_key)
 index	agent_scope_aliases_legacy_agent_name_key	CREATE UNIQUE INDEX agent_scope_aliases_legacy_agent_name_key ON shikigami.agent_scope_aliases USING btree (legacy_agent_name)
 index	agent_scope_aliases_pkey	CREATE UNIQUE INDEX agent_scope_aliases_pkey ON shikigami.agent_scope_aliases USING btree (principal_id, legacy_agent_name)
+index	approval_observation_associations_pkey	CREATE UNIQUE INDEX approval_observation_associations_pkey ON shikigami.approval_observation_associations USING btree (review_id)
+index	approval_observation_parent	CREATE INDEX approval_observation_parent ON shikigami.approval_observation_associations USING btree (parent_name, parent_id, review_id)
 index	conversation_sessions_pkey	CREATE UNIQUE INDEX conversation_sessions_pkey ON shikigami.conversation_sessions USING btree (conversation_id)
 index	decision_attempts_correlation_id_key	CREATE UNIQUE INDEX decision_attempts_correlation_id_key ON shikigami.decision_attempts USING btree (correlation_id)
 index	decision_attempts_invocation	CREATE INDEX decision_attempts_invocation ON shikigami.decision_attempts USING btree (invocation_id, ordinal)
@@ -1096,6 +1107,7 @@ table	adaptive_observations	kind=r
 table	agent_load_state	kind=r
 table	agent_run_requests	kind=r
 table	agent_scope_aliases	kind=r
+table	approval_observation_associations	kind=r
 table	conversation_sessions	kind=r
 table	decision_attempts	kind=r
 table	decision_invocations	kind=r

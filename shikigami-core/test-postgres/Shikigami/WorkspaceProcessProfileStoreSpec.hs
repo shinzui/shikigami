@@ -1,6 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 
-module Shikigami.WorkspaceProcessProfileStoreSpec (tests) where
+module Shikigami.WorkspaceProcessProfileStoreSpec (tests, withProfile) where
 
 import Control.Concurrent.Async (concurrently)
 import Data.Aeson qualified as Aeson

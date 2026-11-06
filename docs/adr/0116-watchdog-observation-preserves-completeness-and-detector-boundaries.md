@@ -81,5 +81,30 @@ publishes a session id into the objective graph.
 
 The metadata page is one read-only repeatable-read transaction with statement and
 lock timeouts. A PostgreSQL timeout aborts the page; it returns no advanced cursor
-and the next transaction can recover. Root/process and public Keiro waiting-fact
-qualification remain separate work under plan 109.
+and the next transaction can recover. Root and process metadata are read in that same snapshot. Public Keiro waiting
+facts have separate bounded reads and observation instants.
+
+## Exact waiting facts and child progress
+
+Approval observations require an immutable approval-owner review-to-parent link,
+matching public parent and child headers, and an exact review-filtered pending
+timer with the fixed structured approval payload. Unassociated timers cannot
+establish a wait. Suspended parents without a known association remain unknown;
+the native coordinator checkpoint listener is explicitly known to wait for a
+checkpoint. Production association publication belongs to guarded workflow
+integration in plan 112, while plan 109 introduces the projection and migration.
+No generic timer or child-result scan is permitted.
+
+The metadata transaction uses at most fifteen statements. Public reads have a
+separate allowance of 32 parent headers, 32 child headers and 32 exact timer
+lookups, each bounded to two seconds. Page bytes remain capped after supplements.
+Expired permission, approval or process deadlines do not yield live waiting facts;
+their references remain evidence. Root cancellation and exhaustion never exclude
+subjects or spend their root's resources.
+
+A worker message does not retain its execution id until recording a result.
+Observation links live work through the retained child workflow id and execution
+snapshot run coordinate. Session activity marks include child execution activity.
+The execution owner separately reports bounded historical sampling and complete
+current activity; long settled histories alone do not imply incomplete activity.
+Live/uncertain operation and attempt overflow remains unknown.

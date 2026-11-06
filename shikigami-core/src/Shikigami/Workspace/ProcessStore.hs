@@ -4,7 +4,8 @@
 -- | Launch intent precedes systemd IO. A duplicate never receives another
 -- launch grant; factual observations/receipts remain writable after revocation.
 module Shikigami.Workspace.ProcessStore
-  ( reserveProcessTx,
+  ( module Shikigami.Workspace.ProcessObservation,
+    reserveProcessTx,
     reserveAdmittedProcessTx,
     requestAdmittedProcessLaunchTx,
     requestProcessLaunchTx,
@@ -32,6 +33,7 @@ import Shikigami.Prelude
 import Shikigami.StateRevision
 import Shikigami.Workspace.Instructions (WorkspaceAdmission (..))
 import Shikigami.Workspace.Process
+import Shikigami.Workspace.ProcessObservation
 import Shikigami.Workspace.Reference (WorkspaceRef (..))
 import Shikigami.Workspace.Store qualified as Store
 import Shikigami.Workspace.TransferStore qualified as Transfers

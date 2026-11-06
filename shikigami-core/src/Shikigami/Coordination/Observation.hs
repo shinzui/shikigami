@@ -23,7 +23,7 @@ import Hasql.Statement (preparable)
 import Hasql.Transaction (Transaction)
 import Hasql.Transaction qualified as Tx
 import Shikigami.Agent.Principal (AgentIdentity)
-import Shikigami.Execution.Identity (OperationId)
+import Shikigami.Execution.Identity (ExecutionRootId, OperationId)
 import Shikigami.Objective.Types (ObjectiveError (ObjectiveUnavailable), ObjectiveId, objectiveIdText)
 import Shikigami.StateRevision (StateRevision)
 
@@ -35,7 +35,7 @@ data ListenerObservation = ListenerObservation
   }
   deriving stock (Eq, Show, Generic)
 
-data RunObservation = RunObservation {runId :: !Text, identity :: !AgentIdentity}
+data RunObservation = RunObservation {runId :: !Text, identity :: !AgentIdentity, rootId :: !(Maybe ExecutionRootId)}
   deriving stock (Eq, Show, Generic)
 
 data CoordinatorObservation = CoordinatorObservation
@@ -56,10 +56,10 @@ instance FromJSON ListenerObservation where
   parseJSON = withObject "ListenerObservation" \fields -> ListenerObservation <$> fields .: "ownerName" <*> fields .: "ownerId" <*> fields .: "generation" <*> fields .: "after"
 
 instance ToJSON RunObservation where
-  toJSON value = object ["runId" .= value.runId, "identity" .= value.identity]
+  toJSON value = object ["runId" .= value.runId, "identity" .= value.identity, "rootId" .= value.rootId]
 
 instance FromJSON RunObservation where
-  parseJSON = withObject "RunObservation" \fields -> RunObservation <$> fields .: "runId" <*> fields .: "identity"
+  parseJSON = withObject "RunObservation" \fields -> RunObservation <$> fields .: "runId" <*> fields .: "identity" <*> fields .: "rootId"
 
 instance ToJSON CoordinatorObservation where
   toJSON value = object ["objectiveId" .= value.objectiveId, "latestDecision" .= value.latestDecision, "latestRevision" .= value.latestRevision, "listeners" .= value.listeners, "runs" .= value.runs, "terminal" .= value.terminal, "relationshipsComplete" .= value.relationshipsComplete]
@@ -103,7 +103,7 @@ observationSql =
      'generation',l.generation,'after',l.listener->'after')) FROM
      (SELECT owner_name,owner_id,generation,listener FROM shikigami.adaptive_checkpoint_listeners
       WHERE objective_id=o.objective_id ORDER BY owner_name,owner_id LIMIT 8) l),'[]'::jsonb),
-   'runs',COALESCE((SELECT jsonb_agg(jsonb_build_object('runId',s.scope#>'{run,runId}','identity',s.scope#>'{run,identity}')) FROM
+   'runs',COALESCE((SELECT jsonb_agg(jsonb_build_object('runId',s.scope#>'{run,runId}','identity',s.scope#>'{run,identity}','rootId',s.scope#>'{run,rootId}')) FROM
      (SELECT scope FROM shikigami.objective_scopes WHERE objective_id=o.objective_id ORDER BY fingerprint LIMIT 8) s),'[]'::jsonb),
    'terminal',EXISTS (SELECT 1 FROM shikigami.adaptive_observations a WHERE a.objective_id=o.objective_id AND a.kind='terminal'),
    'relationshipsComplete',

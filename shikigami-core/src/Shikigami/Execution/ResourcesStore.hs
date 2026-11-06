@@ -3,7 +3,8 @@
 -- | Every mutation locks the root before any operation/allocation/attempt.
 -- Transaction-level hooks let an executor commit its outcome and usage together.
 module Shikigami.Execution.ResourcesStore
-  ( allocateRootForWorkflow,
+  ( module Shikigami.Execution.RootObservation,
+    allocateRootForWorkflow,
     allocateRootForWorkflowTx,
     enrollRoot,
     reserveOperation,
@@ -47,6 +48,7 @@ import Shikigami.Execution.Counter
 import Shikigami.Execution.Identity
 import Shikigami.Execution.Quantity
 import Shikigami.Execution.Resources
+import Shikigami.Execution.RootObservation
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.StateRevision
 

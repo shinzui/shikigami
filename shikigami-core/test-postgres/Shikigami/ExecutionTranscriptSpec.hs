@@ -1,6 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 
-module Shikigami.ExecutionTranscriptSpec (tests, withFixture, withFixtureIn, withConfiguredResourceFixture, driverRuntime, pumpDriver, pendingReference, summaryConfiguration, run) where
+module Shikigami.ExecutionTranscriptSpec (tests, withFixture, withFixtureIn, withPermissionFixture, withToolFixtureForRootIn, withConfiguredFixtureIn, withHistoryFixture, withConfiguredResourceFixture, driverRuntime, pumpDriver, pendingReference, summaryConfiguration, run) where
 
 import Baikai.Api (Api (OpenAIResponses))
 import Baikai.Content qualified as Content
@@ -1491,6 +1491,36 @@ anotherSnapshot snapshot raw = let assignment = fixtureAssignment raw in snapsho
 withFixture :: DatabaseFixture -> (AppEnv -> ExecutionSnapshot -> Store.ReplayAccess -> IO a) -> IO a
 withFixture fixture = withConfiguredFixture fixture id
 
+-- | A real accepted tool operation parked under its owner's permission policy.
+withPermissionFixture :: DatabaseFixture -> (AppEnv -> ExecutionSnapshot -> OperationId -> PermissionBinding -> IO a) -> IO a
+withPermissionFixture fixture use =
+  withConfiguredFixture fixture (\snapshot -> toolConfiguration snapshot & #policy . #humanTools .~ map ExecutionValue.executionCoordinate ["observe"]) \env snapshot access -> do
+    (response, assistant) <- commitToolRequest env snapshot access
+    let input = ToolOperationInput response (fixtureToolPosition 0) (head (toolInvocations assistant)) observationBinding
+        specification = toolSpec snapshot 1 input
+    _ <- expectRight =<< run env (Store.acceptOperation access (fixtureRevision 2) specification (toJSON input))
+    permission <- expectRight =<< run env (Store.parkOperationPermission access (fixtureRevision 3) specification.operationId)
+    use env snapshot specification.operationId permission
+
+withHistoryFixture :: DatabaseFixture -> (AppEnv -> ExecutionSnapshot -> Operation -> IO a) -> IO a
+withHistoryFixture fixture use = withConfiguredFixture fixture (\snapshot -> snapshot & #policy . #maxModelTurns .~ fixturePolicy 200) \env snapshot access -> do
+  mapM_
+    ( \cursor -> do
+        (_, operation) <- expectRight =<< run env (Store.acceptOperation access (fixtureRevision (2 * cursor)) (spec snapshot cursor) secretInput)
+        run env (Store.recordOutcomeAndAdvance access (fixtureRevision (2 * cursor + 1)) operation.specification.operationId (OperationDenied "bounded fixture refusal") NeedModel Nothing) >>= (@?= Right R.Accepted)
+    )
+    [0 .. 39]
+  (_, active) <- expectRight =<< run env (Store.acceptOperation access (fixtureRevision 80) (spec snapshot 40) secretInput)
+  use env snapshot active
+
+withToolFixtureForRootIn :: AppEnv -> ExecutionRootId -> (AppEnv -> ExecutionSnapshot -> Operation -> IO a) -> IO a
+withToolFixtureForRootIn env root use = withRootFixtureIn env root toolConfiguration id \environment snapshot access -> do
+  (response, assistant) <- commitToolRequest environment snapshot access
+  let input = ToolOperationInput response (fixtureToolPosition 0) (head (toolInvocations assistant)) observationBinding
+      specification = toolSpec snapshot 1 input
+  (_, operation) <- expectRight =<< run environment (Store.acceptOperation access (fixtureRevision 2) specification (toJSON input))
+  use environment snapshot operation
+
 withConfiguredFixture :: DatabaseFixture -> (ExecutionSnapshot -> ExecutionSnapshot) -> (AppEnv -> ExecutionSnapshot -> Store.ReplayAccess -> IO a) -> IO a
 withConfiguredFixture fixture configure = withConfiguredResourceFixture fixture configure id
 
@@ -1505,14 +1535,21 @@ withFixtureIn :: AppEnv -> (AppEnv -> ExecutionSnapshot -> Store.ReplayAccess ->
 withFixtureIn env = withConfiguredFixtureIn env id id
 
 withConfiguredFixtureIn :: AppEnv -> (ExecutionSnapshot -> ExecutionSnapshot) -> (R.Limits -> R.Limits) -> (AppEnv -> ExecutionSnapshot -> Store.ReplayAccess -> IO a) -> IO a
-withConfiguredFixtureIn env configure editLimits use = do
+withConfiguredFixtureIn env configure editLimits use = withRootFixtureIn env rootId configure editLimits use
+
+withRootFixtureIn :: AppEnv -> ExecutionRootId -> (ExecutionSnapshot -> ExecutionSnapshot) -> (R.Limits -> R.Limits) -> (AppEnv -> ExecutionSnapshot -> Store.ReplayAccess -> IO a) -> IO a
+withRootFixtureIn env selectedRoot configure editLimits use = do
   now <- getCurrentTime
   session <- genSessionId
   let limits = editLimits (Map.insert R.Tokens (R.Limited (fixtureAmount 1000)) (Map.fromList [(dimension, R.ExplicitlyUnbounded) | dimension <- [minBound .. maxBound]]))
-      selection = mustRight (resolveExecutionSelection (fixtureAssignment "transcript-assignment") (mustRight (modelCatalog [])) (defaultBinding stubModel emptyOptions) Nothing Nothing Nothing Nothing (Just rootId) now)
+      selection = mustRight (resolveExecutionSelection (fixtureAssignment "transcript-assignment") (mustRight (modelCatalog [])) (defaultBinding stubModel emptyOptions) Nothing Nothing Nothing Nothing (Just selectedRoot) now)
       snapshot = configure (ExecutionSnapshot V1 (executionIdFor selection.assignmentId) (WorkflowId "transcript-run") (fixtureAgentName "worker") (compatibilityIdentity (fixtureAgentName "worker")) session selection Nothing (SkillInstructions (ExecutionValue.executionCoordinate "fixture") "system" "PRIVATE_REPLAY_MARKER") (ReplayContext LegacyContext (Just "system") [UserTurn [TextBlock "PRIVATE_REPLAY_MARKER"] Nothing]) emptyResolvedCapabilitySet (toJSON ([] :: [Value])) defaultHarnessPolicy [] Nothing Nothing)
   _ <- expectRight =<< run env Catalog.registerProjectionCatalog
-  run env (Roots.enrollRoot rootId (R.Envelope limits (addUTCTime 3600 now))) >>= (@?= Right R.Accepted)
+  existing <- run env (Roots.inspectRoot selectedRoot)
+  case existing of
+    Left R.RootMissing -> run env (Roots.enrollRoot selectedRoot (R.Envelope limits (addUTCTime 3600 now))) >>= (@?= Right R.Accepted)
+    Right _ -> pure ()
+    other -> assertFailure (show other)
   run env (Store.admitExecution snapshot) >>= (@?= Right R.Accepted)
   access <- expectRight =<< run env (Store.authorizeReplay snapshot.executionId snapshot.identity (pure (Right ())))
   use env snapshot access

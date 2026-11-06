@@ -15,6 +15,7 @@ import Shikigami.Duration (durationTime)
 import Shikigami.Execution.Coordinate (executionIdentity)
 import Shikigami.Execution.Identity (newExecutionRootId, parseOperationId)
 import Shikigami.Execution.Observation qualified as Execution
+import Shikigami.Execution.RootObservation qualified as Root
 import Shikigami.Objective.Observation qualified as ObjectiveObservation
 import Shikigami.Objective.Types qualified as Objective
 import Shikigami.StateRevision (initialRevision)
@@ -23,6 +24,7 @@ import Shikigami.Watchdog.Observation qualified as Observation
 import Shikigami.Watchdog.Types
 import Shikigami.WorkerSession.Input (workerSessionId)
 import Shikigami.WorkerSession.Observation qualified as Session
+import Shikigami.Workspace.ProcessObservation qualified as Process
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
 
@@ -43,7 +45,7 @@ tests =
               assertBool "no exclusive lock" (not ("FOR UPDATE" `Text.isInfixOf` Text.toUpper sql))
               assertBool "no shared lock" (not ("FOR SHARE" `Text.isInfixOf` Text.toUpper sql))
           )
-          [ObjectiveObservation.observationSql, Session.observationSql, Execution.observationSql, Coordinator.observationSql],
+          [ObjectiveObservation.observationSql, Session.observationSql, Execution.observationSql, Coordinator.observationSql, Root.observationSql, Process.observationSql],
       testCase "allocated ids require canonical UUIDv7 and the exact prefix" do
         sweep <- newSweepId
         episode <- newEpisodeId

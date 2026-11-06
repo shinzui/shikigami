@@ -10,9 +10,12 @@ import Data.Aeson (Value, eitherDecode, encode, object, (.=))
 import Data.Aeson qualified as Aeson
 import Data.ByteString.Lazy.Char8 qualified as Lazy
 import Data.Generics.Labels ()
+import Data.IORef (newIORef, writeIORef)
 import Data.List (nub)
 import Data.List.NonEmpty (NonEmpty (..))
+import Data.Map.Strict qualified as Map
 import Data.Text qualified as Text
+import Data.Time (addUTCTime, getCurrentTime)
 import Effectful (Eff)
 import Hasql.Decoders qualified as D
 import Hasql.Encoders qualified as E
@@ -20,15 +23,31 @@ import Hasql.Pool qualified as Pool
 import Hasql.Session qualified as Session
 import Hasql.Statement (preparable)
 import Hasql.Transaction qualified as Tx
-import Keiro.Workflow.Types (WorkflowId (..))
+import Keiro.Timer qualified as Timer
+import Keiro.Workflow (WorkflowOutcome (Suspended), defaultWorkflowRunOptions, runWorkflow)
+import Keiro.Workflow.Child (runChildWorkflow)
+import Keiro.Workflow.Sleep (runWorkflowTimerWorker)
+import Keiro.Workflow.Types (WorkflowId (..), WorkflowName (..))
+import Kioku.Id (genSessionId)
 import Kiroku.Store.Connection (KirokuStore (..), withStore)
 import Kiroku.Store.Transaction (runTransaction)
+import Shikigami.Agent.Approval qualified as Approval
+import Shikigami.Agent.Approval.Workflow qualified as ApprovalWorkflow
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
 import Shikigami.Agent.Principal (AgentIdentity (..), mkAgentPrincipal)
+import Shikigami.Agent.Workflow.Name (agentRunWorkflowName)
 import Shikigami.App (AppEffects, AppEnv (..), runAppIO)
+import Shikigami.Approval.Observation qualified as ApprovalMetadata
+import Shikigami.Duration (parseDuration)
 import Shikigami.Execution.AssignmentKey (parseAssignmentKey)
+import Shikigami.Execution.Claim (parseClaimOwner)
+import Shikigami.Execution.Identity (newAttemptId, operationIdText)
 import Shikigami.Execution.Observation qualified as Execution
 import Shikigami.Execution.Resources (Admission (Accepted))
+import Shikigami.Execution.Resources qualified as Resources
+import Shikigami.Execution.ResourcesStore qualified as Roots
+import Shikigami.Execution.Runner (OperationContext (..))
+import Shikigami.Execution.Selection (ExecutionSelection (..))
 import Shikigami.Execution.Store qualified as ExecutionStore
 import Shikigami.Execution.Transcript qualified as Execution
 import Shikigami.ExecutionTranscriptSpec qualified as ExecutionFixture
@@ -43,11 +62,17 @@ import Shikigami.StateRevision (advanceRevision, initialRevision)
 import Shikigami.Watchdog.Grant
 import Shikigami.Watchdog.Observation qualified as Watchdog
 import Shikigami.Watchdog.Types qualified as Watchdog
+import Shikigami.Watchdog.Waiting qualified as Waiting
 import Shikigami.WorkerSession.Input (parseInstructionText, workerCoordinate)
 import Shikigami.WorkerSession.Observation
 import Shikigami.WorkerSession.Store qualified as Store
 import Shikigami.WorkerSession.Types
 import Shikigami.WorkerSessionStoreSpec (withFixture)
+import Shikigami.Workspace.Process qualified as Process
+import Shikigami.Workspace.ProcessStore qualified as ProcessStore
+import Shikigami.Workspace.Types qualified as Workspace
+import Shikigami.Workspace.Value
+import Shikigami.WorkspaceProcessProfileStoreSpec (withProfile)
 import System.Timeout (timeout)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
@@ -56,7 +81,148 @@ tests :: DatabaseFixture -> TestTree
 tests fixture =
   testGroup
     "Watchdog observation"
-    [ testCase "sparse active populations use indexes after terminal history accumulates" $
+    [ testCase "one corrupt session refuses locally while other subject kinds advance" $
+        withFixture fixture \env admission access -> do
+          start env access
+          ExecutionFixture.withFixtureIn env \_ snapshot _ -> do
+            run env (runTransaction (Tx.sql "UPDATE shikigami.worker_sessions SET state=jsonb_set(state,'{format}','2'::jsonb)"))
+            grant <- fixtureGrant
+            page <- right =<< run env (Watchdog.observePage grant Watchdog.defaultObservationBounds Watchdog.initialCursor)
+            assertBool "valid execution survives another owner's corruption" (Watchdog.Execution snapshot.executionId `elem` map (.subject) page.subjects)
+            assertBool "session refusal names its population" (any (\refusal -> refusal.kind == Watchdog.Sessions && refusal.reason == Watchdog.CorruptMetadata) page.refusals)
+            page.cursor.sessions @?= Nothing
+            assertBool "corruption prevents clean completion" (page.passCompleted /= Watchdog.PassCompleted)
+            assertBool "corrupt session cannot become a valid observation" (Watchdog.WorkerSession (sessionIdFor admission) `notElem` map (.subject) page.subjects),
+      testCase "session marks follow accepted child work before any result is recorded" $
+        withFixture fixture \env _ access -> do
+          message <- startWithReceipt env access
+          parent <- maybe (assertFailure "missing child") pure message.childWorkflowId
+          ExecutionFixture.withConfiguredFixtureIn env (\snapshot -> snapshot & #runId .~ parent) id \_ snapshot _ -> do
+            grant <- fixtureGrant
+            first <- right =<< run env (Watchdog.observePage grant Watchdog.defaultObservationBounds Watchdog.initialCursor)
+            session <- onlySession first
+            case session.metadata of
+              Watchdog.SessionMetadata metadata [execution] -> do
+                metadata.executionId @?= Nothing
+                execution.executionId @?= snapshot.executionId
+                execution.runId @?= parent
+              _ -> assertFailure (show session)
+            run env (runTransaction (Tx.sql "UPDATE shikigami.executions SET state=jsonb_set(state,'{revision}','1'::jsonb)"))
+            next <- right =<< run env (Watchdog.observePage grant Watchdog.defaultObservationBounds Watchdog.initialCursor)
+            changed <- onlySession next
+            assertBool "accepted child progress changes the session mark" (session.mark /= changed.mark),
+      testCase "long settled history leaves current activity complete and bounded" $
+        ExecutionFixture.withHistoryFixture fixture \env snapshot active -> do
+          grant <- fixtureGrant
+          page <- right =<< run env (Watchdog.observePage grant Watchdog.defaultObservationBounds Watchdog.initialCursor)
+          case [subject | subject <- page.subjects, subject.subject == Watchdog.Execution snapshot.executionId] of
+            [subject] -> case subject.metadata of
+              Watchdog.ExecutionMetadata execution -> do
+                length execution.operations @?= 32
+                execution.operationsComplete @?= False
+                execution.activityComplete @?= True
+                execution.activeOperation @?= Just active.specification.operationId
+                assertBool "active operation retained ahead of history" (active.specification.operationId `elem` map (.operationId) execution.operations)
+                subject.relationshipsComplete @?= Watchdog.Complete
+              _ -> assertFailure (show subject)
+            _ -> assertFailure (show page),
+      testCase "command intents respect their deadline and exclude literal arguments" $
+        withProfile fixture \env binding _ ->
+          ExecutionFixture.withToolFixtureForRootIn env binding.request.rootId \_ snapshot operation -> do
+            now <- getCurrentTime
+            attempt <- newAttemptId
+            owner <- right (parseClaimOwner "watchdog-process-observation")
+            timeoutSeconds <- right (parseProcessSeconds 30)
+            outputBytes <- right (parseProcessOutputBytes 1024)
+            let digest :: WorkspaceCoordinate scope
+                digest = workspaceCoordinate ("sha256:" <> Text.replicate 64 "a")
+                command = Process.ProcessCommand (workspaceCoordinate "validate") digest (workspaceCoordinate "/bin/validate") [workspaceCoordinate "WATCHDOG_PRIVATE_SENTINEL"] (workspaceCoordinate "") Map.empty timeoutSeconds outputBytes
+                logical = OperationContext snapshot.executionId operation.specification.operationId operation.specification.operationId operation.fingerprint operation.specification.scopeDigest
+                fingerprint = Process.processFingerprint binding digest logical command
+                record = Process.ProcessRecord operation.specification.operationId attempt owner (advanceRevision initialRevision) (Workspace.workspaceBindingDigest binding) digest fingerprint command (addUTCTime 30 now) (Process.processUnit operation.specification.operationId fingerprint) Nothing Nothing Process.ProcessReserved Nothing Nothing
+            run env (runTransaction (ProcessStore.reserveProcessTx binding record)) >>= (@?= Right record)
+            run env (runTransaction (ProcessStore.requestProcessLaunchTx binding record (workspaceCoordinate "00000000-0000-4000-8000-000000000001"))) >>= (@?= Right True)
+            grant <- fixtureGrant
+            page <- right =<< run env (Watchdog.observePage grant Watchdog.defaultObservationBounds Watchdog.initialCursor)
+            case [subject | subject <- page.subjects, subject.subject == Watchdog.Execution snapshot.executionId] of
+              [subject] -> do
+                assertBool "command waits only within its deadline" (Watchdog.CommandWait record.deadline record.operationId `elem` subject.waits)
+                map (.deadline) subject.processes @?= [record.deadline]
+                assertBool "process evidence" (Watchdog.ProcessEvidence record.operationId `elem` subject.evidence)
+              _ -> assertFailure (show page)
+            assertBool "literal command arguments excluded" (not ("WATCHDOG_PRIVATE_SENTINEL" `Text.isInfixOf` Text.pack (Lazy.unpack (encode page))))
+            run env (runTransaction (Tx.statement (operationIdText record.operationId) (preparable "UPDATE shikigami.workspace_processes SET record=jsonb_set(record,'{deadline}',to_jsonb(clock_timestamp()-interval '1 second')) WHERE operation_id=$1" (E.param (E.nonNullable E.text)) D.noResult)))
+            expired <- right =<< run env (Watchdog.observePage grant Watchdog.defaultObservationBounds Watchdog.initialCursor)
+            case [subject | subject <- expired.subjects, subject.subject == Watchdog.Execution snapshot.executionId] of
+              [subject] -> do
+                assertBool "expired command is not a wait" (not (any isCommandWait subject.waits))
+                assertBool "expired process remains evidence" (Watchdog.ProcessEvidence record.operationId `elem` subject.evidence)
+              _ -> assertFailure (show expired),
+      testCase "future permissions wait; expiration keeps evidence without a waiting fact" $
+        ExecutionFixture.withPermissionFixture fixture \env snapshot operation permission -> do
+          grant <- fixtureGrant
+          page <- right =<< run env (Watchdog.observePage grant Watchdog.defaultObservationBounds Watchdog.initialCursor)
+          case [subject | subject <- page.subjects, subject.subject == Watchdog.Execution snapshot.executionId] of
+            [subject] -> assertBool "exact permission deadline" (Watchdog.PermissionWait permission.expiresAt `elem` subject.waits)
+            _ -> assertFailure "parked execution missing"
+          run env (runTransaction (Tx.sql "UPDATE shikigami.execution_transcript_operations SET state=jsonb_set(state,'{permission,expiresAt}',to_jsonb(clock_timestamp()-interval '1 second')) WHERE state->'permission' IS NOT NULL"))
+          expired <- right =<< run env (Watchdog.observePage grant Watchdog.defaultObservationBounds Watchdog.initialCursor)
+          case [subject | subject <- expired.subjects, subject.subject == Watchdog.Execution snapshot.executionId] of
+            [subject] -> do
+              assertBool "expired permission is not a wait" (not (any isPermissionWait subject.waits))
+              assertBool "operation evidence retained" (not (null subject.evidence))
+            _ -> assertFailure (show operation),
+      testCase "stopped roots remain observable without spending their allowance" $
+        ExecutionFixture.withFixture fixture \env snapshot _ -> do
+          root <- maybe (assertFailure "missing root") pure snapshot.selection.rootId
+          before <- right =<< run env (Roots.inspectRoot root)
+          run env (Roots.setRootControl root before.revision Resources.StopWork Nothing) >>= (@?= Right ())
+          grant <- fixtureGrant
+          page <- right =<< run env (Watchdog.observePage grant Watchdog.defaultObservationBounds Watchdog.initialCursor)
+          case page.subjects of
+            [subject] -> do
+              map (.cancelled) subject.roots @?= [Resources.StopWork]
+              assertBool "root evidence" (Watchdog.RootEvidence root (advanceRevision before.revision) `elem` subject.evidence)
+            _ -> assertFailure (show page)
+          after <- right =<< run env (Roots.inspectRoot root)
+          after.usage @?= before.usage,
+      testCase "approval waits require the exact owner link and retain no approval body" $
+        withFixture fixture \env admission access -> do
+          message <- startWithReceipt env access
+          parent <- maybe (assertFailure "missing child parent") pure message.childWorkflowId
+          session <- genSessionId
+          token <- newIORef Nothing
+          duration <- right (parseDuration 900)
+          let review = Approval.reviewRequestIdFor agentRunWorkflowName parent 0 "watchdog-observation-approval"
+              childEnv = ApprovalWorkflow.ApprovalWorkflowEnv (ApprovalWorkflow.ApprovalNotifier (\_ _ opaque _ -> writeIORef token (Just opaque)) (\_ _ _ _ -> pure (Right ())))
+              parentBody = ApprovalWorkflow.requestBoundApproval review session (Approval.ApprovalRequest "WATCHDOG_PRIVATE_SENTINEL" (object []) Approval.ViaDanwa) duration
+          run env (runWorkflow agentRunWorkflowName parent parentBody) >>= (@?= Suspended)
+          run env (runChildWorkflow defaultWorkflowRunOptions ApprovalWorkflow.approvalWorkflowName (Approval.approvalWorkflowId review) (ApprovalWorkflow.approvalWorkflow childEnv Nothing)) >>= (@?= Suspended)
+          grant <- fixtureGrant
+          unknown <- right =<< run env (Watchdog.observePage grant Watchdog.defaultObservationBounds Watchdog.initialCursor)
+          assertBool "uncorrelated approval is not a wait" (all (not . any isApprovalWait . (.waits)) unknown.subjects)
+          run env (runTransaction (ApprovalMetadata.recordApprovalAssociationTx review agentRunWorkflowName parent)) >>= (@?= Right ())
+          run env (runTransaction (ApprovalMetadata.recordApprovalAssociationTx review agentRunWorkflowName parent)) >>= (@?= Right ())
+          timerPage <- right =<< run env (Timer.findPendingTimers (Timer.PendingTimerFilter (Just ApprovalWorkflow.approvalWorkflowName.unWorkflowName) (Just (Approval.reviewRequestIdText review))) (Timer.PendingTimerPageRequest 1 Nothing))
+          deadline <- case timerPage.timers of
+            [timer] -> pure timer.timer.fireAt
+            _ -> assertFailure "expected one owner approval timer"
+          page <- right =<< run env (Watchdog.observePage grant Watchdog.defaultObservationBounds Watchdog.initialCursor)
+          case page.subjects of
+            [subject] -> do
+              assertBool "exact timer deadline" (Watchdog.ApprovalWait deadline review `elem` subject.waits)
+              assertBool "live approval wait" (any isApprovalWait subject.waits)
+              assertBool "review evidence" (Watchdog.ApprovalEvidence review `elem` subject.evidence)
+              map (.phase) subject.approvals @?= [Waiting.ApprovalPending]
+            _ -> assertFailure (show page)
+          assertBool "approval request body excluded" (not ("WATCHDOG_PRIVATE_SENTINEL" `Text.isInfixOf` Text.pack (Lazy.unpack (encode page))))
+          now <- getCurrentTime
+          fired <- run env (runWorkflowTimerWorker Nothing (addUTCTime 901 now) Approval.approvalTimeoutFireAction)
+          assertBool "exact approval timer fired" (maybe False (const True) fired)
+          expired <- right =<< run env (Watchdog.observePage grant Watchdog.defaultObservationBounds Watchdog.initialCursor)
+          assertBool "fired timer no longer waits" (all (not . any isApprovalWait . (.waits)) expired.subjects)
+          run env (runTransaction (ApprovalMetadata.recordApprovalAssociationTx review agentRunWorkflowName (WorkflowId "another-parent"))) >>= (@?= Left ApprovalMetadata.ApprovalAssociationConflict),
+      testCase "sparse active populations use indexes after terminal history accumulates" $
         withObjective fixture \env admission _ -> do
           access <- right =<< run env (Store.authorizeSession (sessionIdFor admission) admission.context.identity (pure (Right ())))
           start env access
@@ -134,6 +300,8 @@ tests fixture =
                     Watchdog.ObjectiveMetadata _ _ related _ -> map (.sessionId) related @?= [sessionIdFor worker]
                     _ -> assertFailure "missing coordinator metadata"
                   [] -> assertFailure "missing coordinator"
+                reset <- right =<< run env (Watchdog.observePage grant Watchdog.defaultObservationBounds (page.cursor & #scope .~ Nothing & #exhausted .~ [Watchdog.Objectives, Watchdog.Sessions]))
+                map (.subject) reset.subjects @?= map (.subject) page.subjects
                 assertBool "every observed binding is in scope" (all ((== Just objective) . (.objective)) page.subjects)
             )
             [(firstObjective, first), (secondObjective, second)],
@@ -297,11 +465,16 @@ tests fixture =
 
 start :: AppEnv -> Store.SessionAccess -> IO ()
 start env access = do
+  _ <- startWithReceipt env access
+  pure ()
+
+startWithReceipt :: AppEnv -> Store.SessionAccess -> IO MessageReceipt
+startWithReceipt env access = do
   instructions <- right (parseInstructionText "WATCHDOG_PRIVATE_SENTINEL")
   let instruction = Instruction V1 FollowUp instructions initialRevision initialRevision initialRevision Nothing
   (_, accepted) <- right =<< run env (Store.acceptMessage access initialRevision initialRevision (fixtureOperationId "watchdog-observation-accept") instruction)
-  _ <- right =<< run env (Store.startAssignment access (advanceRevision initialRevision) initialRevision (fixtureOperationId "watchdog-observation-start") accepted.assignmentId)
-  pure ()
+  (_, started) <- right =<< run env (Store.startAssignment access (advanceRevision initialRevision) initialRevision (fixtureOperationId "watchdog-observation-start") accepted.assignmentId)
+  pure started
 
 run :: AppEnv -> Eff AppEffects a -> IO a
 run env action = runAppIO env action >>= right
@@ -349,3 +522,20 @@ withHeld env statement action = do
       answer <- action `finally` putMVar release ()
       _ <- right =<< wait worker
       pure answer
+
+isPermissionWait :: Watchdog.WaitingFact -> Bool
+isPermissionWait Watchdog.PermissionWait {} = True
+isPermissionWait _ = False
+
+isApprovalWait :: Watchdog.WaitingFact -> Bool
+isApprovalWait Watchdog.ApprovalWait {} = True
+isApprovalWait _ = False
+
+isCommandWait :: Watchdog.WaitingFact -> Bool
+isCommandWait Watchdog.CommandWait {} = True
+isCommandWait _ = False
+
+onlySession :: Watchdog.ObservationPage -> IO Watchdog.SubjectObservation
+onlySession page = case [subject | subject <- page.subjects, Watchdog.WorkerSession _ <- [subject.subject]] of
+  [subject] -> pure subject
+  _ -> assertFailure (show page)

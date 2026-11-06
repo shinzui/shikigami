@@ -45,10 +45,10 @@ You can see it working in the PostgreSQL suite: `cabal test shikigami-core-postg
 
 - [x] (2026-11-06) Milestone 1: The watchdog vocabulary, settings and grant exist in `shikigami-core`, the `Watchdog` module root is admitted by the module policy, and `just haskell-conventions`, `just domain-value-types` and `cabal test shikigami-core-test` pass with the new value and codec cases.
 - [x] (2026-11-06) Milestone 2: Lock-free observation reads exist for objectives, coordinators, sessions and executions, `observePage` composes them, and the PostgreSQL contention case completes under competing `FOR UPDATE` locks with both subjects present and no body fields.
-- [ ] Milestone 3: Roots, unsettled processes, tool permissions and pending approval timers are attached as waiting facts, the coverage cursor wraps around the population, and bounds, refusals and corruption cases are covered in the PostgreSQL suite.
+- [x] (2026-11-06) Milestone 3: Roots, unsettled processes, tool permissions and pending approval timers are attached as waiting facts, the coverage cursor wraps around the population, and bounds, refusals and corruption cases are covered in the PostgreSQL suite.
 
 
-Handoff 2026-11-06: milestone 1 is accepted: `just haskell-conventions` passed, `just domain-value-types` passed all compiler controls including the new watchdog clients, and `cabal test shikigami-core-test --test-show-details=direct` passed all 754 tests. Milestone 2 is accepted: all 13 watchdog PostgreSQL cases pass, including the joint objective/session contention check, timeout recovery, scope filtering before LIMIT, a mixed population pass, a one-subject budget, and incomplete relationship refusals. Full regressions pass: 756 core unit tests, 617 core PostgreSQL tests, 339 worker tests and 107 server tests. `just haskell-conventions` passes. Milestone 3 remains: root/process facts, approval association and separately bounded public Keiro reads, plus their integration cases.
+Acceptance 2026-11-06: all three milestones are complete. The final focused PostgreSQL group passes all 20 cases, including row-local composed refusal, exact approval timer deadlines, process and permission expiry, stopped-root observation, child-execution progress and bounded settled history. Full regression suites pass: 756 core unit, 623 core PostgreSQL, 339 worker and 107 server tests. The final focused run adds the composed corruption case after that full run; production code is unchanged. All 11 migrations smoke cases, `just migration-schema-isolation` and `just haskell-conventions` pass. The earlier `just domain-value-types` result still covers the unchanged opaque scalar/grant boundaries. EP-2 can consume the implemented records. Approval association publication is deliberately deferred to EP-4's workflow integration, as specified in M3.
 
 
 ## Surprises & Discoveries
@@ -57,6 +57,12 @@ The execution owner's `activeOperation` is an `OperationId`, not an operation-po
 
 The session's objective reference is a digest of objective and assignment coordinates, not the objective id. Scoped session enumeration therefore uses owner-local `SessionObservationScope` selectors and the objective owner's retained assignment-reference relation before applying LIMIT. Its bounded follow-up includes sessions that have not yet published their first checkpoint/session id into the objective graph. Corrupt rows retain their primary key with a per-row typed refusal, allowing other rows and keyset coverage to proceed.
 
+
+The worker message publishes `executionId` only at result recording. Active execution discovery therefore also joins its retained snapshot's `runId` to `childWorkflowId`; a session's mark includes the accepted progress of its related child executions. Complete current activity is separate from the bounded historical operation sample, preventing long settled histories from making all future observations unknown. Live/uncertain operations are sampled ahead of settled history; overflow remains unknown.
+
+Public Keiro timer reads hydrate their timer payload and cannot filter by parent. The implementation performs only exact approval-owner review lookups, validates the fixed small approval payload internally, and exports only review, parent, phase, deadline and observation time. The owner association required the additive migration 0045; its production writer belongs to EP-4's guarded workflow integration. Suspended parents with no exact association remain unknown. The read never scans generic timers or child results.
+
+The plan's original schema-regeneration command named the unit suite, which cannot regenerate the snapshot (FRIC-63). Use the migrations smoke suite with the regeneration flag, then rebuild and run it without the flag: the first run writes the new snapshot, while embedded expected-schema verification still uses the pre-build file.
 
 ## Decision Log
 
@@ -76,7 +82,17 @@ The session's objective reference is a digest of objective and assignment coordi
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Observation and read authority are implemented and qualified. The page is bounded,
+lock-free under competing owner row locks, body-free at its public boundary and
+explicit about incomplete relationships. Coverage rotates fairly, survives local
+refusals and resets on scope changes. Current activity is distinguished from
+sampled historical operations. No workflow, classifier, episode or scheduled run
+is enabled by this plan.
+
+FRIC-63 is resolved: the plan now names the migrations smoke suite and the required
+rebuild/verification after snapshot regeneration. The durable completeness,
+waiting-fact and child-link decisions are recorded in
+[ADR 0116](../adr/0116-watchdog-observation-preserves-completeness-and-detector-boundaries.md).
 
 
 ## Context and Orientation
@@ -127,6 +143,7 @@ data SessionActivity = SessionActivity
   , epoch :: !(StateRevision "worker-owner")
   , phase :: !SessionPhase
   , assignmentPhase :: !(Maybe AssignmentPhase)
+  , executions :: ![ExecutionActivity]
   }
   deriving stock (Eq, Show, Generic)
 
@@ -263,7 +280,7 @@ EP-1 also defines shared `DetectionFamily = Liveness | DriftAssessmentFamily` an
 
 ### Milestone 3: Waiting facts, roots, processes, approvals and coverage
 
-Add `Shikigami.Execution.ResourcesStore.observeRoots :: NonEmpty ExecutionRootId -> Transaction (Either ResourceError [RootObservation])` (root id, revision, `cancelled`, `overage`, `cutoff`, active and unknown counts) and `Shikigami.Workspace.ProcessStore.observeUnsettledProcesses :: NonEmpty OperationId -> Transaction (Either WorkspaceError [ProcessObservation])` (operation id, phase, deadline, whether a receipt exists), both lock-free and bounded by the input list. Add the approval read in `Watchdog/Observation.hs`: for sessions whose active assignment has a child workflow id, and for executions whose phase is `Parked` without a permission binding, use the public `Keiro.Timer.findPendingTimers :: Store :> es => PendingTimerFilter -> PendingTimerPageRequest -> Eff es (Either PendingTimerReadError PendingTimerPage)` from `mori://shinzui/keiro/packages/keiro`. Its filter has only optional process-manager name and correlation id, not timer kind or parent workflow; it opens its own transaction. Bound this scan separately, inspect kind only after reading a page, and retain its cursor and observation time. Before claiming an approval wait, prove the parent-to-review association from existing owner metadata and exact workflow headers; an uncorrelated timer is not evidence. If the public metadata cannot establish that relation, add a body-free association projection in the approval owner as part of EP-1, with any workflow-body change explicitly deferred to EP-4's guarded integration. Missing/truncated association evidence is unknown, never proof of no approval. Produce `AwaitingPermission {until}` from the parked permission's `expiresAt` when the resolution is absent, `RunningCommand {until, operationId}` from a process in `ProcessLaunchRequested` or `ProcessRunning` with a future deadline, and `ParkedAssignment` for a parked session or assignment (the `since` is filled by plan 110 from the mark ledger; this plan records only the fact). A process past its deadline with no receipt, a permission past `expiresAt` with no resolution, or an approval timer that has fired with the parent still parked produce no waiting fact and are therefore classified from the mark alone; record each as an `EvidenceRef` so the finding can cite it. `WaitingFact` is the closed sum of these facts with their deadlines; the request's "within its deadline" comparison belongs to the classifier, which receives `observedAt`.
+Add `Shikigami.Execution.ResourcesStore.observeRoots :: NonEmpty ExecutionRootId -> Transaction (Either ResourceError [RootObservation])` (root id, revision, `cancelled`, `overage`, `cutoff`, active and unknown counts) and `Shikigami.Workspace.ProcessStore.observeUnsettledProcesses :: NonEmpty OperationId -> Transaction (Either WorkspaceError [ProcessObservation])` (operation id, phase, deadline, whether a receipt exists), both lock-free and bounded by the input list. The implemented results retain `(id, Either owner-error observation)` per row, so one corrupt row cannot discard another row or its coverage key. Add the approval read in `Watchdog/Observation.hs`: for sessions whose active assignment has a child workflow id, and for executions whose phase is `Parked` without a permission binding, use the public `Keiro.Timer.findPendingTimers :: Store :> es => PendingTimerFilter -> PendingTimerPageRequest -> Eff es (Either PendingTimerReadError PendingTimerPage)` from `mori://shinzui/keiro/packages/keiro`. Its filter has only optional process-manager name and correlation id, not timer kind or parent workflow; it opens its own transaction. Bound these exact review-filtered reads separately, validate the fixed approval timer kind and token shape internally, and retain their observation times. A next-page cursor means ambiguous/truncated evidence and yields unknown rather than traversing arbitrary timers. Before claiming an approval wait, prove the parent-to-review association from existing owner metadata and exact workflow headers; an uncorrelated timer is not evidence. If the public metadata cannot establish that relation, add a body-free association projection in the approval owner as part of EP-1, with any workflow-body change explicitly deferred to EP-4's guarded integration. Missing/truncated association evidence is unknown, never proof of no approval. Produce `AwaitingPermission {until}` from the parked permission's `expiresAt` when the resolution is absent, `RunningCommand {until, operationId}` from a process in `ProcessLaunchRequested` or `ProcessRunning` with a future deadline, and `ParkedAssignment` for a parked session or assignment (the `since` is filled by plan 110 from the mark ledger; this plan records only the fact). A process past its deadline with no receipt, a permission past `expiresAt` with no resolution, or an approval timer that has fired with the parent still parked produce no waiting fact and are therefore classified from the mark alone; record each as an `EvidenceRef` so the finding can cite it. `WaitingFact` is the closed sum of these facts with their deadlines; the request's "within its deadline" comparison belongs to the classifier, which receives `observedAt`.
 
 Attach root facts to every subject with a root id: `cancelled`, `overage` and whether `observedAt` is past `cutoff`. These are evidence, not verdicts; a subject under a cancelled or exhausted root must still be observed and reported (IR-19 acceptance 7).
 
@@ -297,7 +314,7 @@ cabal test shikigami-core-postgres-test --test-show-details=direct --test-option
 cabal test shikigami-core-test shikigami-core-postgres-test shikigami-workers-test shikigami-server-test --test-show-details=direct
 ```
 
-Expected: the `WatchdogObservationSpec` group passes, including a case whose name states the contention (`observes locked subjects within the statement timeout`), and the full suites exit zero. No migration is added by this plan unless milestone 2's `EXPLAIN` check requires an index; if it does, create it with `just new-migration name=watchdog-observation-indexes`, append its `sha256` line to `shikigami-migrations/sql-migrations/migrations.lock`, regenerate `shikigami-migrations/expected-schema.txt` with `SHIKIGAMI_REGENERATE_EXPECTED_SCHEMA=1 cabal test shikigami-migrations-test`, and run `just migration-schema-isolation`.
+Expected: the `WatchdogObservationSpec` group passes, including a case whose name states the contention (`observes locked subjects within the statement timeout`), and the full suites exit zero. The approval-owner association is migration 0045. An additional observation index is needed only if milestone 2's `EXPLAIN` check requires it; create such an index with `just new-migration watchdog-observation-indexes`, append its `sha256` line to `shikigami-migrations/sql-migrations/migrations.lock`, regenerate `shikigami-migrations/expected-schema.txt` with `SHIKIGAMI_REGENERATE_EXPECTED_SCHEMA=1 cabal test shikigami-migrations-smoke`, then rebuild and rerun `cabal test shikigami-migrations-smoke` without the flag, and run `just migration-schema-isolation`.
 
 Commit at each milestone boundary with the trailers:
 
@@ -319,12 +336,30 @@ The early producer/consumer check named by the MasterPlan is the contention case
 
 ## Idempotence and Recovery
 
-Every read here is side-effect free and may be repeated. The only durable change is the optional index migration, which is additive and idempotent (`CREATE INDEX IF NOT EXISTS`). Adding the `Watchdog` root to the module policy and the settings object to the configuration record are additive; omitting the settings object changes no existing behavior. If a follow-up read turns out to need a lock to be correct, stop and record the finding in Surprises & Discoveries rather than adding `FOR UPDATE`: the contract of this plan is that observation never blocks a writer, and the classifier in plan 110 is designed to tolerate a slightly stale fact.
+Every read here is side-effect free and may be repeated. The approval association migration and any optional index migration are additive and idempotent. An exact association replay converges; a different parent for the same review is refused and rolls back. Adding the `Watchdog` root to the module policy and the settings object to the configuration record are additive; omitting the settings object changes no existing behavior. If a follow-up read turns out to need a lock to be correct, stop and record the finding in Surprises & Discoveries rather than adding `FOR UPDATE`: the contract of this plan is that observation never blocks a writer, and the classifier in plan 110 is designed to tolerate a slightly stale fact.
 
 
 ## Interfaces and Dependencies
 
 This plan owns `Shikigami.Watchdog.Types`, `Shikigami.Watchdog.Grant`, `Shikigami.Watchdog.Observation`, the `WatchdogSettings` record and loader fields `principal`, `scope`, `stuckWindowSeconds`, `parkedWindowSeconds`, `coordinatorWindowSeconds` and `subjectsPerSweep`, the `Watchdog` module root, the probe `tests/types/watchdog-values.py`, and the additive observation reads in `Shikigami.Objective.Store`, `Shikigami.Objective.Inspection`, `Shikigami.WorkerSession.Store`, `Shikigami.Execution.Store`, `Shikigami.Execution.ResourcesStore`, `Shikigami.Workspace.ProcessStore` and `Shikigami.Coordination.Sql`. It defines `Subject`, `SubjectKey`, `ActivityMark`, `MarkDigest`, `WaitingReason`, `WaitingFact`, `Verdict` includes `Waiting`, `Terminal` and `ObservationUnknown`; `DetectionKind` uses `StuckWork`, `StuckCoordinatorWork`, `UnresolvedOutcome` and `DriftWork` (distinct constructor names from verdicts). `EvidenceRef`, `ObservedWindow`, `ObservationLimit`, `Windows`, `WatchdogLimit`, `FindingView`, `CoverageCursor`, `SubjectObservation` and `ObservationPage` exactly as plans 110, 111 and 112 consume them; a change to any of these after plan 110 starts is recorded in the MasterPlan's Integration Points first. It does not define the sealed `Finding` (plan 110), the ledger tables (plan 110), the drift decision (plan 111), any Flow or capability effect (plan 112), or any operator command (plan 113). It depends on no unfinished plan. Dependency source lookup starts with Mori: `mori registry show shinzui/keiro --full` for the public pending-timer and workflow-header reads, and `mori registry docs keiro-runtime-patterns` for the scalar, vertical-slice and test-layout standards.
+
+The M3 implementation adds owner modules `Shikigami.Execution.RootObservation`,
+`Shikigami.Workspace.ProcessObservation` and `Shikigami.Approval.Observation`, plus
+`Shikigami.Watchdog.Waiting` for public Keiro reads. `observeRoots` and
+`observeUnsettledProcesses` retain row ids and row-local typed refusal results;
+`observeApprovalAssociations` returns only exact parent/review coordinates.
+`SubjectObservation` retains those four supplementary metadata lists explicitly.
+The core transaction has at most fifteen statements, each with the default two-second
+statement timeout and 250 ms lock timeout (thirty seconds of statement allowance).
+Public reads are separately capped at 32 parent headers, 32 approval child headers
+and 32 exact timer calls, each with at most two seconds (192 seconds of public-call
+allowance); omitted, timed-out or ambiguous reads remain unknown. These are finite
+operation allowances, not a promise of one cross-owner snapshot. Owner inventories
+cap at 256, historical operations at 32 and live/uncertain attempts at four per
+operation. Each owner metadata document caps at 256 KiB where it can grow, and the
+final supplemented page caps at 32 MiB. Scope changes reset coverage; only a
+refusal-free traversal yields `PassCompleted`.
+
 
 Revision 2026-11-05: corrected public timer transaction/filter assumptions, owner projection and scope contracts, and bounded nested coverage. Add tests for a budget of one, scope filtering before LIMIT, truncated relationships, SQL timeout recovery and no false stuck verdict from incomplete approval evidence.
 

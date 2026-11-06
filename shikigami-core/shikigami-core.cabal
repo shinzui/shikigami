@@ -75,6 +75,7 @@ library
     Shikigami.App.Config.Load
     Shikigami.App.Role
     Shikigami.App.Version
+    Shikigami.Approval.Observation
     Shikigami.Attestation.Agent
     Shikigami.Attestation.CallFacts
     Shikigami.Attestation.Compliance
@@ -151,6 +152,7 @@ library
     Shikigami.Execution.Request
     Shikigami.Execution.Resources
     Shikigami.Execution.ResourcesStore
+    Shikigami.Execution.RootObservation
     Shikigami.Execution.Runner
     Shikigami.Execution.Selection
     Shikigami.Execution.SelectionRuntime
@@ -315,6 +317,7 @@ library
     Shikigami.Watchdog.Observation
     Shikigami.Watchdog.Settings
     Shikigami.Watchdog.Types
+    Shikigami.Watchdog.Waiting
     Shikigami.WorkerSession.Capability
     Shikigami.WorkerSession.Catalog
     Shikigami.WorkerSession.Checkpoint
@@ -340,6 +343,7 @@ library
     Shikigami.Workspace.GitTypes
     Shikigami.Workspace.Instructions
     Shikigami.Workspace.Process
+    Shikigami.Workspace.ProcessObservation
     Shikigami.Workspace.ProcessPolicy
     Shikigami.Workspace.ProcessProfileStore
     Shikigami.Workspace.ProcessStore

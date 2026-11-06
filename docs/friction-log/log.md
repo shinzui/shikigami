@@ -1,5 +1,9 @@
 # Bundle Update Log
 
+## 2026-11-06
+* **Update**: FRIC-63 resolved: The documented smoke-suite sequence regenerates and verifies the schema; the unit suite cannot perform that work.
+* **Addition**: FRIC-63 records detour documentation friction with mori://shinzui/shikigami/plans/109-observe-active-work-through-bounded-lock-free-reads-under-a-watchdog-grant: Plan 109 points schema regeneration at the unit suite
+
 ## 2026-11-05
 * **Update**: FRIC-62 resolved: Repaired the stale fixture constructors without enabling initiative behavior.
 * **Update**: FRIC-61 accepted: Accepted shared-worktree concurrency with scoped staging and committed-input qualification.

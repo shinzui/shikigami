@@ -184,7 +184,8 @@ data SessionActivity = SessionActivity
     nextSequence :: !(StateRevision "worker-message"),
     epoch :: !(StateRevision "worker-owner"),
     phase :: !SessionPhase,
-    assignmentPhase :: !(Maybe AssignmentPhase)
+    assignmentPhase :: !(Maybe AssignmentPhase),
+    executions :: ![ExecutionActivity]
   }
   deriving stock (Eq, Show, Generic)
 
@@ -329,10 +330,10 @@ instance FromJSON (WatchdogLimit scope) where
   parseJSON value = parseJSON @Int value >>= either (fail . Text.unpack) pure . parseWatchdogLimit
 
 instance ToJSON SessionActivity where
-  toJSON value = object ["revision" .= value.revision, "eventCursor" .= value.eventCursor, "consumedCursor" .= value.consumedCursor, "nextSequence" .= value.nextSequence, "epoch" .= value.epoch, "phase" .= value.phase, "assignmentPhase" .= value.assignmentPhase]
+  toJSON value = object ["revision" .= value.revision, "eventCursor" .= value.eventCursor, "consumedCursor" .= value.consumedCursor, "nextSequence" .= value.nextSequence, "epoch" .= value.epoch, "phase" .= value.phase, "assignmentPhase" .= value.assignmentPhase, "executions" .= value.executions]
 
 instance FromJSON SessionActivity where
-  parseJSON = withObject "SessionActivity" \fields -> SessionActivity <$> fields .: "revision" <*> fields .: "eventCursor" <*> fields .: "consumedCursor" <*> fields .: "nextSequence" <*> fields .: "epoch" <*> fields .: "phase" <*> fields .: "assignmentPhase"
+  parseJSON = withObject "SessionActivity" \fields -> SessionActivity <$> fields .: "revision" <*> fields .: "eventCursor" <*> fields .: "consumedCursor" <*> fields .: "nextSequence" <*> fields .: "epoch" <*> fields .: "phase" <*> fields .: "assignmentPhase" <*> fields .: "executions"
 
 instance ToJSON ExecutionActivity where
   toJSON value = object ["revision" .= value.revision, "cursor" .= value.cursor, "phase" .= value.phase, "activeOperation" .= value.activeOperation, "uncertainOperations" .= value.uncertainOperations, "pendingReceipts" .= value.pendingReceipts]
