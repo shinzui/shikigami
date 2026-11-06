@@ -43,7 +43,7 @@ You can see it working by running the qualification group, `cabal test shikigami
 
 - [x] Milestone 1: Bounded ledger readers, the inspection views and the `shikigami watchdog` command family exist; `shikigami watchdog inspect --fail-when-overdue` exits nonzero on a stale ledger and zero on a fresh one.
 - [x] Milestone 2: Metrics instruments and the sampler exist; `TelemetrySpec` proves the sweep-age gauge is exported from the ledger alone and the counters from the `Observe` hooks.
-- [ ] Milestone 3: The operations guide, capability record, user guide and coverage tables exist and validate; the integrated qualification group passes all eight acceptance cases with evidence under `docs/evidence/plan-113/`; IR-19 is completed; ADR distillation is done.
+- [x] Milestone 3: The operations guide, capability record, user guide and coverage tables exist and validate; the integrated qualification group passes all eight acceptance cases with evidence under `docs/evidence/plan-113/`; IR-19 is completed; ADR distillation is done.
 
 
 ## Surprises & Discoveries
@@ -62,7 +62,13 @@ Migration 0048 adds claim-scoped latest-attempt/completion indexes and episode/f
 
 ## Outcomes & Retrospective
 
-Milestone 1 is implemented. Six PostgreSQL inspection cases, all 113 server tests, 91 built CLI contracts, migration unit/smoke checks and the Haskell convention/schema-isolation gates pass. A newer unfinished attempt does not conceal the last completion, and missing coverage remains unavailable. Milestone 2 implements the four instruments, fixed-tag runtime hooks and independent fifteen-second sampling of scoped completion age from the database clock. Force-flush controls cover counters, no-completion absence and failure isolation. All eight integrated qualification cases pass through scheduler, generated queue worker and resume, including an additional lost-append accounting control. Final package regression/build/native-gate validation and lifecycle closure remain open.
+Complete on 2026-11-06. Inspection is implemented in `23949ce5`; `1c48b31a` adds independent telemetry, the eight-case scheduled qualification and operator/user guides. Scoped readers expose the latest attempt separately from completion, retain unavailable coverage, bound keyset pages and refuse corrupt metadata. A stale or missing completion exits 2 with the overdue flag. Age is sampled independently using the database clock; fixed-tag runtime counters are at least once and the ledger remains the audit authority.
+
+All eight IR-19 cases and the additional lost-append control pass through real scheduler, generated queue worker and resume paths. Final validation passes 1,994 package tests (784 core unit, 665 PostgreSQL, 351 worker, 37 agent, 35 API, 9 client, 113 server), 91 built CLI contracts, the complete build, Haskell conventions, migration isolation, documentation/profile/graph checks and 183 native conformance checks. `just keiro-gate c68af1a5` reports replay-neutral impact and clean generated sources. Migration unit/smoke acceptance at milestone 1 passes 9/11 cases. The generated OpenAPI artifact is refreshed to match existing adaptive objective views; no route is added.
+
+[Acceptance evidence](../evidence/plan-113/acceptance.md) and [machine-readable facts](../evidence/plan-113/acceptance.json) retain the results. CAP-32, DOC-20, the coverage census and roadmap describe adoption and limits. IR-19 is completed. The ADR distillation pass over plans 109–113 and the parent confirms ADRs 0115–0119 and adds [ADR 0120](../adr/0120-watchdog-liveness-is-an-operator-facing-ledger-verdict.md) for independent ledger liveness. Timers must use their production multi-kind dispatcher in coupled qualification. One logical decision does not promise one actual provider call across a lost append.
+
+Optional native Linux watchdog and live-model trials were not run; Apple containers are available. This is a visible additional-evidence gap, not a claim of native containment or model-quality qualification.
 
 
 ## Context and Orientation
@@ -189,3 +195,5 @@ The reviewed coordination constraints are recorded in [ADR 0116](../adr/0116-wat
 EP-5 implementation note: reuse the existing ledger views and claim-scoped readers without introducing duplicate `SweepView`/`CoverageView` types. `InspectionView` retains unavailable coverage and a separate latest attempt. Refusals are bounded retained counts; runtime metrics are at least once and use no identifiers. The eight-case runner records current-run facts atomically in `acceptance.json`; permission and command subjects have independent workflow parents so one wait cannot mask the other.
 
 Qualification discovery: when advancing to an approval deadline, another schedule timer can be due first. The integrated fixture uses the production multi-kind dispatcher, temporarily refuses incidental schedule admission, and admits the following tick under the original policy. A single-timer call against only the approval handler would leave the approval pending and would not qualify expiration. This is fixture construction, not a production timeout-policy change.
+
+Final regression discovery: the checked-in OpenAPI artifact lagged the existing objective inspection schema. Regeneration adds AdaptiveView/decision/observation, placement and resource view definitions plus the existing ObjectiveView.adaptive property; it adds no route. The API artifact equality test exposed this documentation drift. Regenerate with the owning `shikigami-openapi` executable and rerun API/client/server checks; the passed core, PostgreSQL, worker and agent suites need no repeat for that generated-document correction.

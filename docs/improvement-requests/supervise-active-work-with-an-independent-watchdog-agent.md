@@ -2,12 +2,13 @@
 type: Improvement Request
 title: Supervise active work with an independent watchdog agent
 description: Detect stuck or drifting coordinators and workers from authoritative durable state, and raise bounded, deduplicated findings without gaining authority over the work observed.
-timestamp: "2026-11-04T04:09:59Z"
+timestamp: "2026-11-06T17:52:42Z"
 generated:
   by: process:claude-code
   at: "2026-11-04T04:09:59Z"
 requestId: IR-19
-status: accepted
+status: completed
+completedAt: "2026-11-06T17:52:42Z"
 targetPlan: docs/masterplans/19-supervise-active-work-with-an-independent-watchdog-agent.md
 origin: mori://shinzui/shikigami
 ---
@@ -16,7 +17,7 @@ origin: mori://shinzui/shikigami
 
 ## Status
 
-**Accepted; implementation planned but not started.**
+**Completed on 2026-11-06.**
 [MasterPlan 19](../masterplans/19-supervise-active-work-with-an-independent-watchdog-agent.md)
 coordinates this request through five child plans: lock-free bounded observation under a
 watchdog grant ([plan 109](../plans/109-observe-active-work-through-bounded-lock-free-reads-under-a-watchdog-grant.md)),
@@ -26,24 +27,25 @@ a registered typed drift decision ([plan 111](../plans/111-assess-drift-with-a-r
 the scheduled Flow agent with its own principal, allowance and sinks
 ([plan 112](../plans/112-run-the-watchdog-as-a-scheduled-flow-agent-with-its-own-principal-allowance-and-sinks.md)),
 and operator observability with the integrated acceptance runner that closes this request
-([plan 113](../plans/113-make-the-watchdog-observable-and-qualify-ir-19.md)). No child has
-started. The MasterPlan records why staleness is measured against the watchdog's own sweep
+([plan 113](../plans/113-make-the-watchdog-observable-and-qualify-ir-19.md)). Plans 109–113 are Complete. All eight acceptance cases pass through scheduled ticks, generated queue admission and resume; the additional lost-append control charges both actual calls. The MasterPlan records why staleness is measured against the watchdog's own sweep
 marks rather than owner timestamps, why observation is a read-only grant served by lock-free
 owner reads, and why the watchdog is a Flow inside the agent run with no intervention
 authority.
+
+[Acceptance evidence](../evidence/plan-113/acceptance.md) records 1,994 passing package tests, 91 built CLI contracts, a replay-neutral workflow gate and the complete build. The [operations guide](../operations/watchdog.md) covers enablement and independent liveness inspection; [CAP-32](../capabilities/active-work-watchdog.md) records the shipped experimental capability. Optional native and live-model watchdog trials were not run.
 
 This request adopts the watchdog element of DeepSeek Harness's "Exploring Super-agent
 Design" notes (1 November 2026), read from a summary diagram rather than the source text.
 Those notes describe a design and prototype, so they motivate this request but do not
 establish its contract.
 
-## Problem and current coverage
+## Problem and prior coverage
 
-Shikigami can keep work durable without anyone noticing that the work has stopped being
-useful. A coordinator is the only component that reasons about its workers' progress, so
-nothing reasons about a coordinator that is itself stuck or off course.
+This request arose because Shikigami could keep work durable without anyone noticing
+that it had stopped being useful. Coordination alone did not supervise a coordinator
+that was itself stuck or off course.
 
-Existing mechanisms each answer a narrower question:
+The pre-watchdog mechanisms each answer a narrower question:
 
 - [Worker health](../capabilities/worker-operations-and-telemetry.md) reports whether a
   process loop is alive (`Shikigami.Health.Worker`), not whether an objective is advancing.
@@ -53,7 +55,7 @@ Existing mechanisms each answer a narrower question:
   and the workspace deadline guard stop work at a limit. Work can waste most of its allowance
   before reaching one, and a limit does not explain what went wrong.
 - Worker sessions retain `Active`, `Parked` and `Unresolved` phases and accepted operations.
-  These are the facts a watchdog needs, but no component evaluates them over time.
+  These supply the semantic marks now evaluated across watchdog sweeps.
 - [Adaptive coordination](support-adaptive-durable-orchestration.md) reflects at meaningful
   boundaries, which a coordinator that has stopped making progress may never reach.
 

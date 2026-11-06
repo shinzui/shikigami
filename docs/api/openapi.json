@@ -1,6 +1,113 @@
 {
   "components": {
     "schemas": {
+      "AdaptiveDecisionView": {
+        "properties": {
+          "changes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "checkpointRevision": {
+            "type": "integer"
+          },
+          "expectedBenefit": {
+            "type": "string"
+          },
+          "friction": {
+            "type": "string"
+          },
+          "laterEvidence": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string"
+          },
+          "rationale": {
+            "type": "string"
+          },
+          "validator": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "operationId",
+          "checkpointRevision",
+          "validator",
+          "rationale",
+          "expectedBenefit",
+          "laterEvidence",
+          "changes"
+        ],
+        "type": "object"
+      },
+      "AdaptiveObservationView": {
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string"
+          },
+          "refusal": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "operationId",
+          "kind",
+          "revision",
+          "status"
+        ],
+        "type": "object"
+      },
+      "AdaptiveView": {
+        "properties": {
+          "decisions": {
+            "items": {
+              "$ref": "#/components/schemas/AdaptiveDecisionView"
+            },
+            "type": "array"
+          },
+          "graph": {
+            "items": {
+              "$ref": "#/components/schemas/PlacementView"
+            },
+            "type": "array"
+          },
+          "next": {
+            "maximum": 9223372036854775807,
+            "minimum": -9223372036854775808,
+            "type": "integer"
+          },
+          "observations": {
+            "items": {
+              "$ref": "#/components/schemas/AdaptiveObservationView"
+            },
+            "type": "array"
+          },
+          "resources": {
+            "items": {
+              "$ref": "#/components/schemas/ResourceView"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "graph",
+          "decisions",
+          "resources",
+          "observations"
+        ],
+        "type": "object"
+      },
       "AgentRunAccepted": {
         "properties": {
           "acceptedAt": {
@@ -1518,6 +1625,9 @@
       },
       "ObjectiveView": {
         "properties": {
+          "adaptive": {
+            "$ref": "#/components/schemas/AdaptiveView"
+          },
           "assignmentCount": {
             "maximum": 9223372036854775807,
             "minimum": -9223372036854775808,
@@ -1649,6 +1759,34 @@
         "required": [
           "hasNextPage",
           "hasPreviousPage"
+        ],
+        "type": "object"
+      },
+      "PlacementView": {
+        "properties": {
+          "assignmentId": {
+            "type": "string"
+          },
+          "dependencies": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "parent": {
+            "type": "string"
+          },
+          "sessionId": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "assignmentId",
+          "target",
+          "dependencies"
         ],
         "type": "object"
       },
@@ -1790,6 +1928,146 @@
           "operationId",
           "digest",
           "artifacts"
+        ],
+        "type": "object"
+      },
+      "ResourceView": {
+        "properties": {
+          "rootId": {
+            "type": "string"
+          },
+          "state": {
+            "properties": {
+              "active": {
+                "maximum": 9223372036854775807,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "activeLimit": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "cancelled": {
+                "type": "boolean"
+              },
+              "envelope": {
+                "properties": {
+                  "cutoff": {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  "limits": {
+                    "additionalProperties": {
+                      "oneOf": [
+                        {
+                          "properties": {
+                            "tag": {
+                              "enum": [
+                                "ExplicitlyUnbounded"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "tag"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "contents": {
+                              "maximum": 9223372036854775807,
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "tag": {
+                              "enum": [
+                                "Limited"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "tag",
+                            "contents"
+                          ],
+                          "type": "object"
+                        }
+                      ]
+                    },
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "limits",
+                  "cutoff"
+                ],
+                "type": "object"
+              },
+              "known": {
+                "additionalProperties": {
+                  "maximum": 9223372036854775807,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              "overage": {
+                "type": "boolean"
+              },
+              "revision": {
+                "maximum": 9223372036854775807,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "unknown": {
+                "maximum": 9223372036854775807,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "usage": {
+                "properties": {
+                  "held": {
+                    "additionalProperties": {
+                      "maximum": 9223372036854775807,
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "type": "object"
+                  },
+                  "settled": {
+                    "additionalProperties": {
+                      "maximum": 9223372036854775807,
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "settled",
+                  "held"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "envelope",
+              "revision",
+              "cancelled",
+              "activeLimit",
+              "overage",
+              "active",
+              "unknown",
+              "known",
+              "usage"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "rootId",
+          "state"
         ],
         "type": "object"
       },

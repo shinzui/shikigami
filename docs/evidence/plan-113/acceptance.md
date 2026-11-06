@@ -40,8 +40,29 @@ unfinished attempt. Telemetry force-flush tests cover fixed counter attributes,
 ledger-only database-clock age, no age point before completion, and failure
 isolation. Built CLI contracts include help and pre-configuration bounds checks.
 
-Final package regressions, full build and native workflow gate are recorded below
-when complete. ADR distillation retains the observation/family boundaries in
+Final runtime candidate: `1c48b31a` (inspection milestone `23949ce5`); final
+closure also refreshes the generated OpenAPI document for existing adaptive
+objective views. The initial API equality check found that stale artifact; after
+regeneration all API/client/server cases pass.
+
+Validation on 2026-11-06:
+
+| Check | Result |
+| --- | --- |
+| Core unit | 784 passed |
+| Core PostgreSQL | 665 passed |
+| Worker, including eight qualification and four telemetry cases | 351 passed |
+| Agent | 37 passed |
+| API / client / server | 35 / 9 / 113 passed |
+| Total package tests | 1,994 passed |
+| Full `cabal build all`, including workspace prototype | Passed |
+| `just keiro-gate c68af1a5` | Replay-neutral; 183 conformance checks; generated sources clean |
+| Built CLI contracts | 91 real-process checks passed |
+| Migration unit / smoke (inspection milestone) | 9 / 11 passed |
+| Haskell conventions / migration schema isolation | Passed |
+| Capability / user / improvement-request profiles, graph and Mori manifest | Passed |
+
+ADR distillation retains the observation/family boundaries in
 [0116](../../adr/0116-watchdog-observation-preserves-completeness-and-detector-boundaries.md),
 semantic marks in [0117](../../adr/0117-watchdog-staleness-is-measured-against-its-own-sweep-marks.md),
 advisory authority in [0118](../../adr/0118-the-watchdog-is-an-advisory-flow-agent-without-intervention-authority.md),
