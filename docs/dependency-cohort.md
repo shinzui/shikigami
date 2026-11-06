@@ -208,7 +208,7 @@ referring to them from anywhere durable.
 | `kikan-en-contract`, `kikan-en-client` | `mori://shinzui/kikan-en` |
 | `en-core`, `en-biscuit` | `mori://shinzui/en` |
 | `shomei*` | `mori://shinzui/shomei` |
-| `biscuit` | `mori://shinzui/biscuit-haskell` |
+| `biscuit-haskell` | `mori://eclipse-biscuit/biscuit-haskell` |
 
 
 ## Historical Plan 65 release matrix
@@ -369,7 +369,7 @@ were excluded by keiro 0.11's own bounds and are admissible under keiro 0.13.
 | `danwa-core`, `danwa-api`, `danwa-client` | No Hackage release. Conversation substrate behind the `DanwaConversation` sink. | Danwa publishes. |
 | `en-core`, `en-biscuit` | En has no upstream tag or Hackage release. The exact commit `51edaab17473f7b9310f8802ccffd23bac5e4a9e` supplies the generic proof verifier used by the Kikan client. | En publishes a compatible release. |
 | `shomei-core`, `shomei-jwt`, `shomei-servant`, `shomei-client` | Shomei's 0.1.0.0 source tags resolve to exact commit `65551cb120336b53695c0dd30ebe0e473d6efcb2`, but the packages are not on Hackage. | Shomei publishes those packages. |
-| `biscuit` | Exact commit `8c0b3c5a13ce4a310737c0336f2ae167a1597588` is En's current proof-parser dependency. | En adopts a released compatible Biscuit package. |
+| `biscuit-haskell` | Upstream commit `469eaedc66be6e7629954bfd631b1842a968a33a` includes the Crypton 1.1 / `ram` fix required by En's proof parser. Hackage 0.5.0.0 revision 1 still requires Crypton <1.1 and `memory`. | A Hackage release supports the selected Crypton / `ram` cohort. |
 
 `kikan-en-contract` and `kikan-en-client` are temporarily listed as sibling packages from the
 `mori://shinzui/kikan-en` checkout at commit

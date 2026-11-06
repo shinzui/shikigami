@@ -986,6 +986,7 @@ in  Schema.Project::{
       , "UnkindPartition/tasty:tasty-hunit"
       , "composewell/streamly:streamly-core"
       , "dhall-lang/dhall-haskell:dhall"
+      , "eclipse-biscuit/biscuit-haskell:biscuit-haskell"
       , "effectful/effectful:effectful"
       , "effectful/effectful:effectful-core"
       , "ekmett/lens:generic-lens"
@@ -1011,7 +1012,6 @@ in  Schema.Project::{
       , "shinzui/baikai:baikai"
       , "shinzui/baikai:baikai-claude"
       , "shinzui/baikai:baikai-trace-otel"
-      , "shinzui/biscuit-haskell:biscuit-haskell"
       , "shinzui/danwa:danwa-api"
       , "shinzui/danwa:danwa-client"
       , "shinzui/en:en-biscuit"
@@ -1087,6 +1087,12 @@ in  Schema.Project::{
         , name = "dhall-haskell"
         , kind = Some Schema.MoriArtifactKind.Package
         , key = Some "dhall"
+        }
+      , Schema.MoriRef::{
+        , namespace = "eclipse-biscuit"
+        , name = "biscuit-haskell"
+        , kind = Some Schema.MoriArtifactKind.Package
+        , key = Some "biscuit-haskell"
         }
       , Schema.MoriRef::{
         , namespace = "effectful"
@@ -1237,12 +1243,6 @@ in  Schema.Project::{
         , name = "baikai"
         , kind = Some Schema.MoriArtifactKind.Package
         , key = Some "baikai-trace-otel"
-        }
-      , Schema.MoriRef::{
-        , namespace = "shinzui"
-        , name = "biscuit-haskell"
-        , kind = Some Schema.MoriArtifactKind.Package
-        , key = Some "biscuit-haskell"
         }
       , Schema.MoriRef::{
         , namespace = "shinzui"

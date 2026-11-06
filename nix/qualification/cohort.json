@@ -558,11 +558,11 @@
       ],
       "flags": {},
       "source": {
-        "repository": "shinzui/biscuit-haskell/8c0b3c5a13ce4a310737c0336f2ae167a1597588",
+        "repository": "eclipse-biscuit/biscuit-haskell/469eaedc66be6e7629954bfd631b1842a968a33a",
         "subdir": "biscuit",
         "type": "github"
       },
-      "version": "0.4.0.0"
+      "version": "0.5.0.0"
     },
     "bitvec": {
       "components": [
@@ -5266,11 +5266,11 @@
     }
   },
   "repositories": {
-    "shinzui/biscuit-haskell/8c0b3c5a13ce4a310737c0336f2ae167a1597588": {
-      "narHash": "sha256-BtqFq5O48892O2y4M+FyC4npA0mxRo9Zv2jJrWjfCIY=",
-      "owner": "shinzui",
+    "eclipse-biscuit/biscuit-haskell/469eaedc66be6e7629954bfd631b1842a968a33a": {
+      "narHash": "sha256-52ZS8uAchOY4pBEzq3J4nNtZX2jTGTCTWYzb9ROOJfU=",
+      "owner": "eclipse-biscuit",
       "repo": "biscuit-haskell",
-      "rev": "8c0b3c5a13ce4a310737c0336f2ae167a1597588",
+      "rev": "469eaedc66be6e7629954bfd631b1842a968a33a",
       "type": "github"
     },
     "shinzui/danwa/301bc1b381fb1baa253b9ba5fce5735e6d0a8ca9": {

@@ -401,12 +401,13 @@ source-repository-package
   tag: 65551cb120336b53695c0dd30ebe0e473d6efcb2
   subdir: shomei-core shomei-jwt shomei-servant shomei-client
 
--- en-biscuit's current proof parser dependency.
--- mori://shinzui/biscuit-haskell
+-- Upstream includes the crypton 1.1 / ram fix required by en-biscuit.
+-- Hackage 0.5.0.0 revision 1 still requires crypton < 1.1 and memory.
+-- mori://eclipse-biscuit/biscuit-haskell/packages/biscuit-haskell
 source-repository-package
   type: git
-  location: https://github.com/shinzui/biscuit-haskell.git
-  tag: 8c0b3c5a13ce4a310737c0336f2ae167a1597588
+  location: https://github.com/eclipse-biscuit/biscuit-haskell.git
+  tag: 469eaedc66be6e7629954bfd631b1842a968a33a
   subdir: biscuit
 
 -- blake3 (through shikumi-cache) is built with its portable C implementation.
