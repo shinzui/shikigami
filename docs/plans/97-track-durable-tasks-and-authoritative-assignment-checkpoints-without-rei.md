@@ -27,6 +27,11 @@ provenance:
       at: 2026-10-29T00:33:08Z
       mode: "update"
       note: "Superseded by MasterPlan 17 and child plans 98-102 with the record renamed Objective; body replaced by a superseded notice"
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-11-06T18:29:22Z
+      mode: "update"
+      note: "Record supersession as a closed progress item with a successor so incomplete plan lists exclude plan 97."
 ---
 
 # Track durable tasks and authoritative assignment checkpoints without Rei
@@ -41,7 +46,9 @@ Superseded. The purpose, the two demonstrations and the relationship to MasterPl
 
 ## Progress
 
-No milestones. Superseded on 2026-10-28 before implementation; the only commit that references this plan is its creation, `3900c0e634d9b559e92a6989bb10f9943e0beab1`.
+- [-] (2026-10-28) Durable task tracking and authoritative assignment checkpoints were re-chartered as Objective tracking under MasterPlan 17 and child plans 98–102 before implementation. {disposition=superseded-by, by=docs/masterplans/17-track-durable-objectives-and-authoritative-assignment-checkpoints-without-rei.md}
+
+No implementation was started under this plan. The closed progress item records its supersession so plan tooling excludes it from unfinished work.
 
 
 ## Surprises & Discoveries
