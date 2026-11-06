@@ -1,7 +1,9 @@
-module Shikigami.FlowLifecycleSpec (tests) where
+module Shikigami.FlowLifecycleSpec (tests, runFlowBodyWithDecision, spikeRuntime) where
 
+import Control.Lens ((&), (.~))
 import Data.Aeson (Value (Bool, Object, String), object, toJSON, (.=))
 import Data.Aeson.KeyMap qualified as KeyMap
+import Data.Generics.Labels ()
 import Data.IORef (IORef, newIORef, readIORef, writeIORef)
 import Data.Map.Strict qualified as Map
 import Data.Set (Set)
@@ -12,7 +14,7 @@ import Data.Time (UTCTime (..), addUTCTime, fromGregorian, getCurrentTime, secon
 import Effectful (Eff, IOE, runEff, (:>))
 import Effectful.Error.Static (runErrorNoCallStack)
 import Keiro.Outbox (listOutbox)
-import Keiro.Workflow (StepName (..), Workflow, WorkflowId (..), WorkflowName (..), WorkflowOutcome (..), loadStepIndex, runWorkflowWith, step)
+import Keiro.Workflow (StepName (..), Workflow, WorkflowId (..), WorkflowName (..), WorkflowOutcome (..), WorkflowRunOptions (..), loadStepIndex, runWorkflowWith, step)
 import Keiro.Workflow.Awakeable (AwakeableId)
 import Keiro.Workflow.Awakeable.Schema (countPendingAwakeables)
 import Keiro.Workflow.Sleep (runWorkflowTimerWorker, sleepNamed)
@@ -543,7 +545,15 @@ runFlowBody ::
   WorkflowId ->
   Value ->
   IO (Either StoreError (WorkflowOutcome Value))
-runFlowBody appEnv runtime flowAgent FlowDef {run} workflowId input =
+runFlowBody = runFlowBodyUsing Nothing Nothing
+
+runFlowBodyWithDecision ::
+  FlowDecision.DecisionEnv -> Maybe (IO ()) -> AppEnv -> FlowRuntime -> Text -> FlowDef -> WorkflowId -> Value -> IO (Either StoreError (WorkflowOutcome Value))
+runFlowBodyWithDecision decision onAppend = runFlowBodyUsing (Just decision) onAppend
+
+runFlowBodyUsing ::
+  Maybe FlowDecision.DecisionEnv -> Maybe (IO ()) -> AppEnv -> FlowRuntime -> Text -> FlowDef -> WorkflowId -> Value -> IO (Either StoreError (WorkflowOutcome Value))
+runFlowBodyUsing decision onAppend appEnv runtime flowAgent FlowDef {run} workflowId input =
   newBehaviorEnv >>= \behaviorEnv ->
     runEff
       . runTracingNoop
@@ -551,14 +561,14 @@ runFlowBody appEnv runtime flowAgent FlowDef {run} workflowId input =
       . withKirokuStore (appEnv.connectionSettings)
       . runStoreResource
       $ runWorkflowWith
-        (shikigamiWorkflowRunOptions appEnv)
+        (shikigamiWorkflowRunOptions appEnv & #onJournalAppend .~ onAppend)
         (WorkflowName "shikigami.flow.spike")
         workflowId
         ( runActivity sampleActivity
             . runMemory memoryEnv
             . runSink sinkEnv
             . Adaptive.runAdaptiveDeliveryDisabled
-            . FlowDecision.runDecisionDisabled
+            . (case decision of Nothing -> FlowDecision.runDecisionDisabled; Just environment -> FlowDecision.runDecision environment)
             . FlowDelegate.runDelegate delegateEnv
             . FlowObjectives.runObjectives Nothing (Right Nothing)
             . FlowInitiative.unavailableInitiative

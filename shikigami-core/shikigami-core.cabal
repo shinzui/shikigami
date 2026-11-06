@@ -734,6 +734,7 @@ test-suite shikigami-core-postgres-test
     Shikigami.SpikeWorkflowSpec
     Shikigami.TypeSafeDecisionWorkflowSpec
     Shikigami.WatchdogClassifySpec
+    Shikigami.WatchdogDriftSpec
     Shikigami.WatchdogObservationSpec
     Shikigami.WatchdogStoreSpec
     Shikigami.WorkerSessionCapabilitySpec

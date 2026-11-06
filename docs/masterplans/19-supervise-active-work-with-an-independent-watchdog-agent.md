@@ -141,6 +141,9 @@ EP-1 is Complete: vocabulary/grant, bounded metadata pages, roots, processes and
 The 2026-11-05 API review against `cd4c36df` found a newer `Propose` decision label and its explicit root-accounting dispatch, a metadata-only `OperationSpec` with no repository target, and public Keiro timer reads that own their transactions. The children now distinguish these existing APIs from proposed additions. Ledger clearing is scoped by detection family, and incomplete coverage cannot establish that work vanished. This was a pre-implementation review; current child status is recorded in the registry.
 
 
+EP-3 integration discovery (2026-11-06): `Decision.ModelCatalog.resolvePolicy` requires every inventory slot's aliases to be declared before any Flow body runs. A static Drift slot would therefore prevent stuck-only watchdog runs when the drift alias is absent. EP-4 must centralize a watchdog-specific effective slot inventory for declaration validation and the AgentRun Decision interpreter: absent drift alias omits that optional slot; existing Flows retain their complete required inventories. The patch-false watchdog path must also install no Decision inventory and write no watchdog/Drift labels. The ordinary Drift slot still refuses a missing alias/root in the standalone harness. This is required to deliver the already accepted optional-drift behavior; it does not change other slot semantics.
+
+
 ## Decision Log
 
 - Decision: Measure staleness against the watchdog's own sweep marks, not owner timestamps.

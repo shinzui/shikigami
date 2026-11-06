@@ -42,7 +42,7 @@ You can see it working in `cabal test shikigami-core-postgres-test --test-option
 ## Progress
 
 - [x] (2026-11-06) Milestone 1: The `Drift` decision label, the `shikigami.watchdog-drift` program with its input and output types, root-accounting classification and validators are registered, and the unit group proves subject substitution, invented evidence and missing subjects are refused.
-- [ ] Milestone 2: A test Flow invokes the slot against the stub provider through the real journaled decision path, replay after a crash makes no second call, and provider calls are accounted against a fixture root.
+- [x] (2026-11-06) Milestone 2: A test Flow invokes the slot against the stub provider through the real journaled decision path, replay after a crash makes no second call, and provider calls are accounted against a fixture root.
 - [ ] Milestone 3: Cadence selection, the `watchdog_drift_checks` table and the conversion of assessments into `Drift` detections exist, with the settings fields and the authoring guide updated.
 
 
@@ -51,7 +51,12 @@ unit suite pass (774 tests). Conventions pass. Compiler controls refuse direct,
 Generic, decoded and representation-coerced DriftAssessment construction and
 unchecked Rationale construction. The registered descriptor golden is
 `sha256:d8d47c490849c498c7b251378221af9eeb47a89b204fde64d60f563aa4ae0705`.
-M2's real journal/accounting harness and M3's cadence/settings remain.
+M2 is accepted: all six real Flow cases pass, along with 69 existing decision and
+17 FlowLifecycle PostgreSQL cases and conventions. Committed-result replay
+reuses the original provider outcome with one accounted call; lost append
+recovery makes and charges two calls and retains unknown token usage. The
+objective metadata/receipts and its root remain unchanged. M3 cadence/settings
+and final full regressions remain.
 
 
 ## Surprises & Discoveries
@@ -70,6 +75,11 @@ Adding the uninvoked Drift label under `Flow/Decision.hs` preserves all existing
 labels, result types and branches under workflow-versioning rules 4 and 7. The
 production caller, patch and declaration remain EP-4 work. Harness-only callers
 use their own undeclared test workflow.
+
+
+The real Flow harness passes all six cases, including committed-result replay after a native append witness crash, two accounted calls after a lost result append, exact input-bound refusal, no alias/root IO and an exhausted envelope. All 69 existing PostgreSQL cases matching `decision` pass. A finite token envelope requires a pinned model context ceiling and `maxTokens`; the harness supplies both and the normal resource owner reserves their sum conservatively.
+
+`resolvePolicy` rejects undeclared aliases for every static slot before entering a Flow body. EP-4 must use one watchdog-specific effective-inventory helper both at declaration validation and at AgentRun construction, omitting the optional Drift slot when its alias is absent. Its patch-false path also carries no Decision inventory. This preserves stuck-only operation and leaves ordinary/harness required-slot refusal unchanged. The parent Integration Points/Discoveries record this handoff before EP-4 starts.
 
 
 ## Decision Log

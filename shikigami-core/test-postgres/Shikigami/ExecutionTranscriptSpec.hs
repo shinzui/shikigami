@@ -1,6 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 
-module Shikigami.ExecutionTranscriptSpec (tests, withFixture, withFixtureIn, withPermissionFixture, withToolFixtureForRootIn, withConfiguredFixtureIn, withHistoryFixture, withConfiguredResourceFixture, driverRuntime, pumpDriver, pendingReference, summaryConfiguration, run) where
+module Shikigami.ExecutionTranscriptSpec (tests, withFixture, withFixtureIn, withPermissionFixture, withToolFixtureForRootIn, withNamedToolFixtureForRootIn, withConfiguredFixtureIn, withHistoryFixture, withConfiguredResourceFixture, driverRuntime, pumpDriver, pendingReference, summaryConfiguration, run) where
 
 import Baikai.Api (Api (OpenAIResponses))
 import Baikai.Content qualified as Content
@@ -1452,10 +1452,13 @@ commitToolRequest :: AppEnv -> ExecutionSnapshot -> Store.ReplayAccess -> IO (Pa
 commitToolRequest = commitToolRequestWith terminal
 
 commitToolRequestWith :: Calls.CallOutcome -> AppEnv -> ExecutionSnapshot -> Store.ReplayAccess -> IO (PayloadRef, ReplayAssistant)
-commitToolRequestWith callOutcome env snapshot access = do
+commitToolRequestWith = commitNamedToolRequestWith "observe"
+
+commitNamedToolRequestWith :: Text -> Calls.CallOutcome -> AppEnv -> ExecutionSnapshot -> Store.ReplayAccess -> IO (PayloadRef, ReplayAssistant)
+commitNamedToolRequestWith toolName callOutcome env snapshot access = do
   (_, operation) <- expectRight =<< run env (Store.acceptOperation access (fixtureRevision 0) (spec snapshot 0) secretInput)
   receipt <- reserveCall env snapshot operation
-  let assistant = ReplayAssistant LegacyAssistant [ToolBlock (ToolInvocation (ProviderValue.providerCoordinate "first") (ExecutionValue.executionCoordinate "observe") (object [])), ToolBlock (ToolInvocation (ProviderValue.providerCoordinate "second") (ExecutionValue.executionCoordinate "observe") (object []))] ToolUse Nothing Nothing (object []) Nothing
+  let assistant = ReplayAssistant LegacyAssistant [ToolBlock (ToolInvocation (ProviderValue.providerCoordinate "first") (ExecutionValue.executionCoordinate toolName) (object [])), ToolBlock (ToolInvocation (ProviderValue.providerCoordinate "second") (ExecutionValue.executionCoordinate toolName) (object []))] ToolUse Nothing Nothing (object []) Nothing
       outcome = ModelReturned assistant Nothing
   ref <- expectRight (Store.outcomeReference outcome)
   run env (Store.recordOutcomeAndAdvance access (fixtureRevision 1) operation.specification.operationId outcome (NeedTool ref (fixtureToolPosition 0)) (Just (receipt, callOutcome))) >>= (@?= Right R.Accepted)
@@ -1514,12 +1517,19 @@ withHistoryFixture fixture use = withConfiguredFixture fixture (\snapshot -> sna
   use env snapshot active
 
 withToolFixtureForRootIn :: AppEnv -> ExecutionRootId -> (AppEnv -> ExecutionSnapshot -> Operation -> IO a) -> IO a
-withToolFixtureForRootIn env root use = withRootFixtureIn env root toolConfiguration id \environment snapshot access -> do
-  (response, assistant) <- commitToolRequest environment snapshot access
-  let input = ToolOperationInput response (fixtureToolPosition 0) (head (toolInvocations assistant)) observationBinding
+withToolFixtureForRootIn env root = withNamedToolFixtureForRootIn env root "observe" id
+
+withNamedToolFixtureForRootIn :: AppEnv -> ExecutionRootId -> Text -> (ExecutionSnapshot -> ExecutionSnapshot) -> (AppEnv -> ExecutionSnapshot -> Operation -> IO a) -> IO a
+withNamedToolFixtureForRootIn env root toolName configure use = withRootFixtureIn env root configured id \environment snapshot access -> do
+  (response, assistant) <- commitNamedToolRequestWith toolName terminal environment snapshot access
+  invocation <- case toolInvocations assistant of first : _ -> pure first; [] -> assertFailure "fixture tool invocation missing"
+  let input = ToolOperationInput response (fixtureToolPosition 0) invocation binding
       specification = toolSpec snapshot 1 input
   (_, operation) <- expectRight =<< run environment (Store.acceptOperation access (fixtureRevision 2) specification (toJSON input))
   use environment snapshot operation
+  where
+    binding = observationBinding & #name .~ ExecutionValue.executionCoordinate toolName
+    configured snapshot = configure (snapshot & #toolBindings .~ [binding] & #offeredTools .~ toJSON [BaikaiTool.mkTool toolName "Observe fixture." (object [])])
 
 withConfiguredFixture :: DatabaseFixture -> (ExecutionSnapshot -> ExecutionSnapshot) -> (AppEnv -> ExecutionSnapshot -> Store.ReplayAccess -> IO a) -> IO a
 withConfiguredFixture fixture configure = withConfiguredResourceFixture fixture configure id
