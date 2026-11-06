@@ -14,6 +14,11 @@ module Shikigami.Watchdog.Store
     readCoverage,
     writeCoverage,
     completePass,
+    readLastCompletedSweep,
+    readSweepAgeSeconds,
+    inspectWatchdog,
+    listEpisodes,
+    listFindings,
   )
 where
 
@@ -22,14 +27,15 @@ import Control.Monad.Trans.Class (lift)
 import Control.Monad.Trans.Except (throwE)
 import Data.Aeson (FromJSON, Value, object, toJSON, (.=))
 import Data.Aeson qualified as Aeson
+import Data.Int (Int64)
 import Data.List (nub, sortOn)
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.List.NonEmpty qualified as NonEmpty
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
-import Data.Maybe (catMaybes, isNothing)
+import Data.Maybe (catMaybes, isJust, isNothing)
 import Data.Text (Text)
-import Data.Time (UTCTime)
+import Data.Time (UTCTime, diffUTCTime)
 import Hasql.Transaction (Transaction)
 import Hasql.Transaction qualified as Tx
 import Keiro.Workflow.Types (WorkflowId (..), WorkflowName (..))
@@ -43,6 +49,7 @@ import Shikigami.Watchdog.Classify
 import Shikigami.Watchdog.Episode (Finding, findingView)
 import Shikigami.Watchdog.Episode qualified as Episode
 import Shikigami.Watchdog.Grant
+import Shikigami.Watchdog.Inspection (EpisodeFilter (..), InspectionView (..))
 import Shikigami.Watchdog.Ledger
 import Shikigami.Watchdog.Observation
 import Shikigami.Watchdog.Store.Internal
@@ -266,3 +273,68 @@ saveReceipt sweep operation digest outcome = execute "INSERT INTO shikigami.watc
 
 sweepProjection :: Text
 sweepProjection = "SELECT jsonb_build_object('sweepId',sweep_id,'origin',origin,'grant',grant_snapshot,'claimKey',claim_key,'openedAt',opened_at,'completedAt',completed_at,'summary',summary) FROM shikigami.watchdog_sweeps"
+
+-- Inspection never locks owner or watchdog rows. Each query is scoped to the
+-- configured principal/scope claim and has a fixed server-side time budget.
+inspectionBudget :: Checked ()
+inspectionBudget = lift (Tx.sql "SET LOCAL statement_timeout='2000ms'")
+
+readLastCompletedSweep :: AgentIdentity -> ObservationScope -> Transaction (Either WatchdogError (Maybe SweepView))
+readLastCompletedSweep principal scope = atomic do
+  inspectionBudget
+  lastCompletedFor (claimKeyFor principal scope)
+
+lastCompletedFor :: Text -> Checked (Maybe SweepView)
+lastCompletedFor claim = row (sweepProjection <> " WHERE claim_key=$1->>'claim' AND completed_at IS NOT NULL ORDER BY completed_at DESC,sweep_id DESC LIMIT 1") (object ["claim" .= claim]) >>= traverse (inspectionSweep claim)
+
+inspectionSweep :: Text -> Value -> Checked SweepView
+inspectionSweep claim value = do
+  saved <- decoded value
+  unless (saved.claimKey == claim && claimKeyFor saved.origin.principal saved.grant.scope == claim && isJust saved.completedAt == isJust saved.summary) (throwE LedgerCorrupt)
+  pure saved
+
+inspectWatchdog :: AgentIdentity -> ObservationScope -> Transaction (Either WatchdogError InspectionView)
+inspectWatchdog principal scope = atomic do
+  inspectionBudget
+  let claim = claimKeyFor principal scope
+      args = object ["claim" .= claim]
+  instant <- row "SELECT to_jsonb(clock_timestamp()) WHERE $1::jsonb IS NOT NULL" Aeson.Null >>= maybe (throwE LedgerCorrupt) decoded
+  latest <- row (sweepProjection <> " WHERE claim_key=$1->>'claim' ORDER BY opened_at DESC,sweep_id DESC LIMIT 1") args >>= traverse (inspectionSweep claim)
+  completed <- lastCompletedFor claim
+  coverage <- coverageFor claim
+  count <- row "SELECT to_jsonb(count(*)) FROM shikigami.watchdog_episodes WHERE closed_at IS NULL AND last_seen_sweep IN (SELECT sweep_id FROM shikigami.watchdog_sweeps WHERE claim_key=$1->>'claim')" args >>= maybe (throwE LedgerCorrupt) decoded
+  pure (InspectionView latest completed coverage count instant)
+
+listEpisodes :: AgentIdentity -> ObservationScope -> EpisodeFilter -> Maybe EpisodeId -> Int -> Transaction (Either WatchdogError [EpisodeView])
+listEpisodes principal scope filter after limit = atomic do
+  unless (limit >= 1 && limit <= 100) (throwE LedgerBounds)
+  inspectionBudget
+  rows
+    (Episode.episodeProjection <> " WHERE last_seen_sweep IN (SELECT sweep_id FROM shikigami.watchdog_sweeps WHERE claim_key=$1->>'claim') AND (NOT ($1->>'open')::boolean OR closed_at IS NULL) AND ($1->'objective'='null'::jsonb OR objective_id=$1->>'objective') AND ($1->'objectives'='null'::jsonb OR $1->'objectives' @> jsonb_build_array(objective_id)) AND episode_id>COALESCE($1->>'after','') ORDER BY episode_id LIMIT ($1->>'limit')::integer")
+    (object ["claim" .= claimKeyFor principal scope, "open" .= filter.openOnly, "objective" .= filter.objective, "objectives" .= scopeObjectives scope, "after" .= after, "limit" .= limit])
+    >>= mapM decoded
+
+listFindings :: AgentIdentity -> ObservationScope -> EpisodeId -> Maybe FindingId -> Int -> Transaction (Either WatchdogError [FindingView])
+listFindings principal scope episode after limit = atomic do
+  unless (limit >= 1 && limit <= 100) (throwE LedgerBounds)
+  inspectionBudget
+  rows
+    "SELECT f.finding FROM shikigami.watchdog_findings f JOIN shikigami.watchdog_episodes e USING(episode_id) JOIN shikigami.watchdog_sweeps s ON s.sweep_id=f.sweep_id WHERE s.claim_key=$1->>'claim' AND f.episode_id=$1->>'episode' AND ($1->'objectives'='null'::jsonb OR $1->'objectives' @> jsonb_build_array(e.objective_id)) AND f.finding_id>COALESCE($1->>'after','') ORDER BY f.finding_id LIMIT ($1->>'limit')::integer"
+    (object ["claim" .= claimKeyFor principal scope, "episode" .= episode, "objectives" .= scopeObjectives scope, "after" .= after, "limit" .= limit])
+    >>= mapM decoded
+
+scopeObjectives :: ObservationScope -> Maybe Value
+scopeObjectives AllObjectives = Nothing
+scopeObjectives (SelectedObjectives identifiers) = Just (toJSON identifiers)
+
+-- | Independent sampler input. No completion is unavailable, never age zero.
+-- Both timestamps come from the database clock domain.
+readSweepAgeSeconds :: AgentIdentity -> ObservationScope -> Transaction (Either WatchdogError (Maybe Int64))
+readSweepAgeSeconds principal scope = atomic do
+  inspectionBudget
+  completed <- lastCompletedFor (claimKeyFor principal scope)
+  case completed >>= (.completedAt) of
+    Nothing -> pure Nothing
+    Just at -> do
+      instant <- row "SELECT to_jsonb(clock_timestamp()) WHERE $1::jsonb IS NOT NULL" Aeson.Null >>= maybe (throwE LedgerCorrupt) decoded
+      pure (Just (max 0 (floor (diffUTCTime instant at))))

@@ -33,7 +33,10 @@ import Shikigami.Server.Command (adminInfo, adminPrefs, adminSubcommands)
 import Shikigami.Server.Command.Ops (redactDatabaseUrl)
 import Shikigami.Server.Command.ResolveApproval (resolutionResult, resolveApprovalOptionsParser)
 import Shikigami.Server.Command.Resources (resourceView)
+import Shikigami.Server.Command.Watchdog (overdueExitCode)
 import Shikigami.StateRevision (StateRevision, parseRevision)
+import Shikigami.Watchdog.Inspection (OverdueVerdict (..))
+import Shikigami.Watchdog.Types (episodeIdText, newEpisodeId)
 import System.Exit (ExitCode (..))
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, testCase, (@?=))
@@ -59,8 +62,26 @@ tests =
                 "executions",
                 "workers",
                 "objectives",
+                "watchdog",
                 "proposals"
               ],
+      testCase "watchdog verbs parse bounded inspection and pagination" do
+        episode <- Text.unpack . episodeIdText <$> newEpisodeId
+        mapM_
+          (\args -> case execParserPure adminPrefs adminInfo args of Success (Just _, _) -> pure (); _ -> assertBool (unwords args) False)
+          [ ["watchdog", "inspect", "--agents", "agents/proof", "--grace", "0", "--fail-when-overdue", "--json"],
+            ["watchdog", "episodes", "--open", "--limit", "100", "--json"],
+            ["watchdog", "findings", episode, "--limit", "1", "--json"]
+          ],
+      testCase "watchdog refuses invalid page bounds and negative grace before IO" do
+        mapM_
+          (\args -> case execParserPure adminPrefs adminInfo args of Failure _ -> pure (); _ -> assertBool (unwords args) False)
+          [["watchdog", "episodes", "--limit", "0"], ["watchdog", "episodes", "--limit", "101"], ["watchdog", "inspect", "--grace", "-1"], ["watchdog", "findings", "invalid"]],
+      testCase "watchdog overdue check exits two for missing or overdue completion" do
+        overdueExitCode True SweepFresh @?= ExitSuccess
+        overdueExitCode True NoSweepYet @?= ExitFailure 2
+        overdueExitCode True ScheduleUnknown @?= ExitFailure 2
+        overdueExitCode False NoSweepYet @?= ExitSuccess,
       testCase "proposals verbs parse their documented options" do
         mapM_
           ( \args -> case execParserPure adminPrefs adminInfo args of

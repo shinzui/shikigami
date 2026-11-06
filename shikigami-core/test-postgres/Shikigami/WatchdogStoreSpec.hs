@@ -1,6 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 
-module Shikigami.WatchdogStoreSpec (tests) where
+module Shikigami.WatchdogStoreSpec (tests, withSeed, open, close, observation, transaction) where
 
 import Control.Concurrent.Async (concurrently)
 import Control.Lens ((&), (.~))

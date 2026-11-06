@@ -93,6 +93,7 @@
     "Shikigami.Server.Command.StubKanmon",
     "Shikigami.Server.Command.StubKawa",
     "Shikigami.Server.Command.Validate",
+    "Shikigami.Server.Command.Watchdog",
     "Shikigami.Server.Command.Workers",
     "Shikigami.Server.Command.Objectives",
     "Shikigami.Server.Command.Proposals",

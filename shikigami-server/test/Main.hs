@@ -29,6 +29,7 @@ import Shikigami.Server.KawaStubSpec qualified as KawaStubSpec
 import Shikigami.Server.ProblemSpec qualified as ProblemSpec
 import Shikigami.Server.RequestLogSpec qualified as RequestLogSpec
 import Shikigami.Server.TelemetrySpec qualified as TelemetrySpec
+import Shikigami.Server.WatchdogCommandSpec qualified as WatchdogCommandSpec
 import Test.Tasty (defaultMain, testGroup)
 
 main :: IO ()
@@ -46,6 +47,7 @@ main = withShikigamiMigratedSuite \databaseFixture ->
           ObjectiveSpec.tests databaseFixture,
           TrackerHandlerSpec.tests databaseFixture,
           VerifierSpec.tests,
+          WatchdogCommandSpec.tests databaseFixture,
           CommandSpec.tests,
           DispatchSpec.tests,
           KawaStubSpec.tests,

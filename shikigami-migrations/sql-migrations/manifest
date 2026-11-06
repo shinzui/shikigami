@@ -44,3 +44,4 @@
 0045-watchdog-approval-observations.sql
 0046-watchdog-ledger.sql
 0047-watchdog-drift-checks.sql
+0048-watchdog-inspection-indexes.sql

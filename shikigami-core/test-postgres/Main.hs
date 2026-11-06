@@ -33,6 +33,7 @@ import Shikigami.SinkDeliverySpec qualified as SinkDeliverySpec
 import Shikigami.SpikeWorkflowSpec qualified as SpikeWorkflowSpec
 import Shikigami.TypeSafeDecisionWorkflowSpec qualified as TypeSafeDecisionWorkflowSpec
 import Shikigami.WatchdogDriftSpec qualified as WatchdogDriftSpec
+import Shikigami.WatchdogInspectionSpec qualified as WatchdogInspectionSpec
 import Shikigami.WatchdogObservationSpec qualified as WatchdogObservationSpec
 import Shikigami.WatchdogStoreSpec qualified as WatchdogStoreSpec
 import Shikigami.WatchdogSweepSpec qualified as WatchdogSweepSpec
@@ -84,6 +85,7 @@ suite = withShikigamiMigratedSuite \databaseFixture ->
           ExecutionTranscriptSpec.tests databaseFixture,
           WorkerSessionStoreSpec.tests databaseFixture,
           WatchdogObservationSpec.tests databaseFixture,
+          WatchdogInspectionSpec.tests databaseFixture,
           WatchdogSweepSpec.tests databaseFixture,
           WatchdogDriftSpec.tests databaseFixture,
           WatchdogStoreSpec.tests databaseFixture,

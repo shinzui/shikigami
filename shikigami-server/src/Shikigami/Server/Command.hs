@@ -76,6 +76,7 @@ import Shikigami.Server.Command.Runs (runRunsShow)
 import Shikigami.Server.Command.StubKanmon (runStubKanmonCmd)
 import Shikigami.Server.Command.StubKawa (runStubKawaCmd)
 import Shikigami.Server.Command.Validate (runValidate)
+import Shikigami.Server.Command.Watchdog (watchdogInfo)
 import Shikigami.Server.Command.Workers (runWorkersControl, runWorkersInspect, runWorkersInterrupt, runWorkersSend)
 import Shikigami.StateRevision (StateRevision, parseRevision)
 import Shikigami.Trigger.RequestKey qualified as Addressed
@@ -176,6 +177,7 @@ adminSubcommands =
     ("executions", command "executions" executionsInfo),
     ("workers", command "workers" workersInfo),
     ("objectives", command "objectives" objectivesInfo),
+    ("watchdog", command "watchdog" watchdogInfo),
     ("proposals", command "proposals" proposalsInfo)
   ]
 

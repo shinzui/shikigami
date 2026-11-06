@@ -17,6 +17,11 @@ provenance:
       at: 2026-11-06T04:40:28Z
       mode: "update"
       note: "Reconciled proposed APIs, ownership and acceptance with current source review."
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-11-06T16:46:14Z
+      mode: "implement"
+      note: "Add scoped operator inspection, independent telemetry sampling and integrated watchdog qualification after accepted EP-4."
 ---
 
 # Make the watchdog observable and qualify IR-19
@@ -36,14 +41,16 @@ You can see it working by running the qualification group, `cabal test shikigami
 
 ## Progress
 
-- [ ] Milestone 1: Bounded ledger readers, the inspection views and the `shikigami watchdog` command family exist; `shikigami watchdog inspect --fail-when-overdue` exits nonzero on a stale ledger and zero on a fresh one.
+- [x] Milestone 1: Bounded ledger readers, the inspection views and the `shikigami watchdog` command family exist; `shikigami watchdog inspect --fail-when-overdue` exits nonzero on a stale ledger and zero on a fresh one.
 - [ ] Milestone 2: Metrics instruments and the sampler exist; `TelemetrySpec` proves the sweep-age gauge is exported from the ledger alone and the counters from the `Observe` hooks.
 - [ ] Milestone 3: The operations guide, capability record, user guide and coverage tables exist and validate; the integrated qualification group passes all eight acceptance cases with evidence under `docs/evidence/plan-113/`; IR-19 is completed; ADR distillation is done.
 
 
 ## Surprises & Discoveries
 
-(None yet.)
+The existing ledger already supplies `SweepView`, `EpisodeView`, `Coverage` and coarse refusal counts. Inspection reuses those views and shows a separate latest attempt; it does not duplicate codecs or scan workflow bodies. Scope is the configured principal/scope claim, including for pages and sampled age. Missing coverage remains `Nothing`, rather than an empty completed population.
+
+Migration 0048 adds claim-scoped latest-attempt/completion indexes and episode/finding keyset indexes. Schema regeneration follows the documented two-run smoke procedure. The overdue command reads the actual declaration cron: the proof watchdog runs every five minutes, so its stale fixture must age the last completion by two such intervals.
 
 
 ## Decision Log
@@ -55,7 +62,7 @@ You can see it working by running the qualification group, `cabal test shikigami
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Milestone 1 is implemented. Six PostgreSQL inspection cases, all 113 server tests, 91 built CLI contracts, migration unit/smoke checks and the Haskell convention/schema-isolation gates pass. A newer unfinished attempt does not conceal the last completion, and missing coverage remains unavailable. Metrics and the eight integrated qualification cases remain open.
 
 
 ## Context and Orientation

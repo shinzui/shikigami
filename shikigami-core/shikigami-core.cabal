@@ -322,6 +322,7 @@ library
     Shikigami.Watchdog.Drift
     Shikigami.Watchdog.Episode
     Shikigami.Watchdog.Grant
+    Shikigami.Watchdog.Inspection
     Shikigami.Watchdog.Ledger
     Shikigami.Watchdog.Observation
     Shikigami.Watchdog.Settings
@@ -741,6 +742,7 @@ test-suite shikigami-core-postgres-test
     Shikigami.TypeSafeDecisionWorkflowSpec
     Shikigami.WatchdogClassifySpec
     Shikigami.WatchdogDriftSpec
+    Shikigami.WatchdogInspectionSpec
     Shikigami.WatchdogObservationSpec
     Shikigami.WatchdogStoreSpec
     Shikigami.WatchdogSweepSpec
