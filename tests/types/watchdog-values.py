@@ -22,6 +22,7 @@ import GHC.Generics qualified as Generics
 import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.Watchdog.Types qualified as Types
 import Shikigami.Watchdog.Grant qualified as Grant
+import Shikigami.Watchdog.Classify qualified as Classify
 '''
 POSITIVE = '''
 sweep :: Text -> Either Text Types.SweepId
@@ -34,6 +35,8 @@ restore :: Grant.GrantSnapshot -> AgentIdentity -> Maybe Grant.WatchdogSettings 
 restore = Grant.restoreGrant
 codec :: Types.FindingView -> Aeson.Value
 codec = Aeson.toJSON
+summary :: Text -> Either Text Classify.SummaryDigest
+summary = Classify.parseSummaryDigest
 '''
 with tempfile.TemporaryDirectory(prefix="shikigami-watchdog-values-") as directory:
     source = Path(directory) / "WatchdogBoundary.hs"
@@ -45,7 +48,7 @@ with tempfile.TemporaryDirectory(prefix="shikigami-watchdog-values-") as directo
     assert result.returncode == 0, (result.stdout, result.stderr)
     print("watchdog values: public parsers and views compile", flush=True)
     for module, name in [("Types", "SweepId"), ("Types", "EpisodeId"), ("Types", "FindingId"),
-                         ("Types", "MarkDigest"), ("Types", "SubjectKey"), ("Grant", "ObservationGrant")]:
+                         ("Types", "MarkDigest"), ("Classify", "SummaryDigest"), ("Types", "SubjectKey"), ("Grant", "ObservationGrant")]:
         owner = f"{module}.{name}"
         for label, body in [
             ("constructor", f"bypass = {owner}\n"),

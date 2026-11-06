@@ -108,3 +108,14 @@ snapshot run coordinate. Session activity marks include child execution activity
 The execution owner separately reports bounded historical sampling and complete
 current activity; long settled histories alone do not imply incomplete activity.
 Live/uncertain operation and attempt overflow remains unknown.
+
+## Deterministic classifier boundary
+
+The classifier uses only the journaled observation time and frozen prior mark.
+Terminal owner facts precede incomplete relationships; incomplete evidence yields
+ObservationUnknown and cannot close an episode. First/changed marks precede waits,
+persistent uncertainty, the independent coordinator rule and ordinary stuck work.
+Observed retains the exact prior used, enabling the ledger to reject stale inputs.
+Material summaries exclude sweep identity, evidence revisions and elapsed time,
+while retaining lapsed deadline kinds, owner epoch, root controls, uncertainty and
+the optional drift category.

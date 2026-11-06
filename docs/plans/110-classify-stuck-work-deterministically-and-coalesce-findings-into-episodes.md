@@ -17,6 +17,11 @@ provenance:
       at: 2026-11-06T04:40:28Z
       mode: "update"
       note: "Reconciled proposed APIs, ownership and acceptance with current source review."
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-11-06T14:24:06Z
+      mode: "implement"
+      note: "Implement deterministic classifier and replay-safe episode ledger against completed EP-1."
 ---
 
 # Classify stuck work deterministically and coalesce findings into episodes
@@ -36,14 +41,24 @@ You can see it working in two suites. `cabal test shikigami-core-test --test-opt
 
 ## Progress
 
-- [ ] Milestone 1: The pure classifier exists with exhaustive verdict tables covering every subject kind, every waiting fact and the coordinator rule; `cabal test shikigami-core-test` passes with the new group.
+- [x] (2026-11-06) Milestone 1: The pure classifier exists with exhaustive verdict tables covering every subject kind, every waiting fact and the coordinator rule; `cabal test shikigami-core-test` passes with the new group.
 - [ ] Milestone 2: Migration `NNNN-watchdog-ledger` and `Shikigami.Watchdog.Store` exist; recording a page twice converges on one finding per opened episode, and the PostgreSQL group passes.
 - [ ] Milestone 3: Material-change notices, episode closure on progress or disappearance, pass-completion closure and the coverage singleton work end to end; the staleness-by-marks ADR is written and `cabal test` for core and PostgreSQL passes in full.
 
 
+Acceptance 2026-11-06: M1 passes all ten classifier table groups and the full core unit suite (766 tests). `just haskell-conventions` passes. The rules use explicit observation times and frozen priors, recognize complete current activity rather than sampled history, retain unknown episodes, and keep coordinator detection independent of worker outcomes. M2/M3 ledger, receipts, claims and absence rechecks remain.
+
+
 ## Surprises & Discoveries
 
-(None yet.)
+EP-1 is accepted at `e1804cb8`. Its actual vocabulary includes
+`ObservationUnknown`, `PassIncomplete`, `StuckCoordinatorWork` and `DriftWork`.
+`ObservedWindow` retains first-seen, last-change and observation instants;
+`ObservationLimit` retains subject budget and scope/relationship completeness.
+Session marks include child execution marks. The classifier consumes those
+implemented records without redefining them. The schema snapshot regeneration
+sequence is the smoke suite followed by an unflagged rebuild/verification (the
+EP-1 documentation correction recorded in FRIC-63).
 
 
 ## Decision Log
@@ -66,13 +81,13 @@ You can see it working in two suites. `cabal test shikigami-core-test --test-opt
 
 Shikigami is a Cabal multi-package Haskell service; `shikigami-core` owns domain code and store adapters, `shikigami-migrations` owns append-only SQL migrations and the `test-support` sublibrary that supplies an isolated migrated PostgreSQL database to every test. Modules are grouped by concept under `Shikigami.<Concept>.*`; this plan lives entirely under `Shikigami.Watchdog.*`, a concept root that plan 109 admits to `tools/style/module-ownership.json`.
 
-Plan 109 supplies the inputs. A `SubjectObservation` (`shikigami-core/src/Shikigami/Watchdog/Observation.hs`) is one observed unit of active work: its `subject :: Subject` (`ObjectiveCoordinator ObjectiveId`, `WorkerSession WorkerSessionId` or `Execution ExecutionId`), its optional `objective`, its `mark :: ActivityMark` (the owner revisions and cursors that advance only when work is accepted, with `markDigest :: ActivityMark -> MarkDigest`), its `waits :: [WaitingFact]` (an approval or permission deadline, a running command's deadline, a parked phase, or an explicitly blocked objective) and the `evidence :: NonEmpty EvidenceRef` it was built from. An `ObservationPage` carries `observedAt :: UTCTime` read from the database clock inside the observation transaction, the `CoverageCursor`, a `PassCompletion` (`PassContinuing | PassCompleted`) and the subjects. `Windows` carries `Duration "watchdog-stuck"`, `Duration "watchdog-parked"` and `Duration "watchdog-coordinator"` (from `shikigami-core/src/Shikigami/Duration.hs`, whose `durationTime` lowers to `NominalDiffTime`). `Verdict` is the closed sum `Progressing | Waiting WaitingReason | Unresolved | Stuck | StuckCoordinator | Terminal`; `DetectionKind` is `StuckWork | StuckCoordinator | UnresolvedOutcome | Drift`. `FindingView` is the public read record of a finding; `SweepId`, `EpisodeId` and `FindingId` are private `KindID` UUIDv7 newtypes with `newSweepId`, `newEpisodeId`, `newFindingId :: IO ...` and checked parsers. `SubjectKey` is the stable storage rendering of a `Subject`.
+Plan 109 supplies the inputs. A `SubjectObservation` (`shikigami-core/src/Shikigami/Watchdog/Observation.hs`) is one observed unit of active work: its `subject :: Subject` (`ObjectiveCoordinator ObjectiveId`, `WorkerSession WorkerSessionId` or `Execution ExecutionId`), its optional `objective`, its `mark :: ActivityMark` (the owner revisions and cursors that advance only when work is accepted, with `markDigest :: ActivityMark -> MarkDigest`), its `waits :: [WaitingFact]` (an approval or permission deadline, a running command's deadline, a parked phase, or an explicitly blocked objective) and the `evidence :: NonEmpty EvidenceRef` it was built from. An `ObservationPage` carries `observedAt :: UTCTime` read from the database clock inside the observation transaction, the `CoverageCursor`, a `PassCompletion` (`PassContinuing | PassCompleted | PassIncomplete`) and the subjects. `Windows` carries `Duration "watchdog-stuck"`, `Duration "watchdog-parked"` and `Duration "watchdog-coordinator"` (from `shikigami-core/src/Shikigami/Duration.hs`, whose `durationTime` lowers to `NominalDiffTime`). `Verdict` is the closed sum `Progressing | Waiting WaitingReason | Unresolved | Stuck | StuckCoordinator | Terminal | ObservationUnknown`; `DetectionKind` is `StuckWork | StuckCoordinatorWork | UnresolvedOutcome | DriftWork`. `FindingView` is the public read record of a finding; `SweepId`, `EpisodeId` and `FindingId` are private `KindID` UUIDv7 newtypes with `newSweepId`, `newEpisodeId`, `newFindingId :: IO ...` and checked parsers. `SubjectKey` is the stable storage rendering of a `Subject`.
 
 What the owner semantics mean for verdicts. [ADR 0061](../adr/0061-continuing-sessions-own-ordered-assignments-and-retained-receipts.md) states that parking and unresolved observations retain the active assignment and child and do not establish that an external effect ended, and that a lease expiry never proves a process stopped; [ADR 0051](../adr/0051-resource-roots-own-conservative-reservations-and-actual-attempts.md) states that unknown completion holds capacity and expiry never proves an effect did not happen. Those are why `Unresolved` is its own verdict that is never folded into `Stuck` or into a failure. [ADR 0067](../adr/0067-objective-checkpoints-use-assignment-scoped-preconditions.md) states that an objective instruction or status change advances every assignment revision, so an operator editing instructions changes a subject's mark; that is correct, because the edit is new input the worker and coordinator should respond to within the window. [ADR 0108](../adr/0108-adaptive-decisions-commit-with-authoritative-checkpoints.md) and [ADR 0111](../adr/0111-adaptive-delivery-carries-native-admission-and-reference-only-seeds.md) describe the coordinator: it decides by committing an accepted proposal at an objective checkpoint revision, waits through a checkpoint listener whose `after` revision names the checkpoint it needs, is woken by worker result events and objective publications, reflects on findings and never on silence, and records a `terminal` observation when it ends. A coordinator whose listener waits for a revision above the current one while every worker session is idle with nothing queued has nothing left that will wake it; that is the stuck coordinator the request describes in acceptance 3. [ADR 0091](../adr/0091-operation-uncertainty-and-call-ordinals-retain-their-meanings.md) is the precedent for closed sums instead of booleans, and [ADR 0080](../adr/0080-opaque-checked-values-do-not-expose-generic-construction.md) and [ADR 0081](../adr/0081-validated-results-use-private-seals-and-public-read-views.md) govern the sealed finding. [ADR 0094](../adr/0094-accounting-entities-use-allocated-identities-and-root-origin-receipts.md) sets the identity rule this plan follows: allocate UUIDv7 values in IO, write them behind a durable receipt that makes retries idempotent, and refuse a changed binding.
 
 Prior art for staleness verdicts is `shikigami-workers/src/Shikigami/Health/Worker.hs`: `loopLivenessAt :: Heartbeats -> UTCTime -> IO ProbeVerdict` and `processorStateVerdictWithStaleness` take an explicit instant and a last-activity record and return a verdict, with `Idle` counting as healthy. That is the shape to follow, lifted to durable state.
 
-Migrations: `shikigami-migrations/sql-migrations/manifest` lists one file per line in apply order; `just new-migration name=<slug>` writes `NNNN-slug.sql` with the standard header and appends it. Every object must be schema-qualified (`shikigami.`); `just migration-schema-isolation` and the migrations test both enforce it. After adding a file, append its `sha256  <file>` line to `shikigami-migrations/sql-migrations/migrations.lock` (no tool writes it) and regenerate `shikigami-migrations/expected-schema.txt` with `SHIKIGAMI_REGENERATE_EXPECTED_SCHEMA=1 cabal test shikigami-migrations-test`. Research found the lock listing 36 files while the manifest lists 41 (`0038` through `0042` absent); run `cabal test shikigami-migrations-test` before editing and, if it fails on the lock, repair the missing lines in a separate commit and record the friction. The latest migration at research time is `0042-adaptive-delivery-observations.sql`; allocate the next available number at implementation time. Store modules in this repository are `Hasql.Transaction.Transaction` values or `Eff` computations over the `Store` effect; `shikigami-core/src/Shikigami/Coordination/Sql.hs` (`saveDecision`, `saveObservation`, `readObservations` with its 4096-row cap) is the closest model for an application-owned metadata table written in the same transaction as other facts. Tests use tasty and tasty-hunit only; register unit specs in `shikigami-core/test/Main.hs` and PostgreSQL specs in `shikigami-core/test-postgres/Main.hs`, each also in the suite's `other-modules` in `shikigami-core.cabal`. PostgreSQL suites have exhausted fixture connections under default parallelism (FRIC-2, FRIC-5, FRIC-17, FRIC-51); use `--num-threads 1` when that recurs.
+Migrations: `shikigami-migrations/sql-migrations/manifest` lists one file per line in apply order; `just new-migration <slug>` writes `NNNN-slug.sql` with the standard header and appends it. Every object must be schema-qualified (`shikigami.`); `just migration-schema-isolation` and the migrations test both enforce it. After adding a file, append its `sha256  <file>` line to `shikigami-migrations/sql-migrations/migrations.lock` (no tool writes it) and regenerate `shikigami-migrations/expected-schema.txt` with `SHIKIGAMI_REGENERATE_EXPECTED_SCHEMA=1 cabal test shikigami-migrations-smoke`. Research found the lock listing 36 files while the manifest lists 41 (`0038` through `0042` absent); run `cabal test shikigami-migrations-test` before editing and, if it fails on the lock, repair the missing lines in a separate commit and record the friction. The latest migration at research time is `0042-adaptive-delivery-observations.sql`; allocate the next available number at implementation time. Store modules in this repository are `Hasql.Transaction.Transaction` values or `Eff` computations over the `Store` effect; `shikigami-core/src/Shikigami/Coordination/Sql.hs` (`saveDecision`, `saveObservation`, `readObservations` with its 4096-row cap) is the closest model for an application-owned metadata table written in the same transaction as other facts. Tests use tasty and tasty-hunit only; register unit specs in `shikigami-core/test/Main.hs` and PostgreSQL specs in `shikigami-core/test-postgres/Main.hs`, each also in the suite's `other-modules` in `shikigami-core.cabal`. PostgreSQL suites have exhausted fixture connections under default parallelism (FRIC-2, FRIC-5, FRIC-17, FRIC-51); use `--num-threads 1` when that recurs.
 
 
 ## Plan of Work
@@ -110,6 +125,7 @@ data Observed = Observed
   { subject :: !Subject
   , objective :: !(Maybe ObjectiveId)
   , mark :: !ActivityMark
+  , prior :: !(Maybe PriorMark)
   , outcome :: !Outcome
   }
   deriving stock (Eq, Show, Generic)
@@ -127,7 +143,7 @@ Create `shikigami-core/test/Shikigami/WatchdogClassifySpec.hs`. Use fixed instan
 
 ### Milestone 2: The ledger
 
-Allocate the next available migration (do not reserve 0043) through `just new-migration name=watchdog-ledger`. Observation timestamps come from the journaled page. Opening and completion retain their own database timestamps on first insert so retries recover the same values:
+Allocate the next available migration (do not reserve 0043) through `just new-migration watchdog-ledger`. Observation timestamps come from the journaled page. Opening and completion retain their own database timestamps on first insert so retries recover the same values:
 
 ```sql
 -- Watchdog sweep, mark, episode and finding ledger. Metadata and references only;
@@ -255,12 +271,12 @@ cabal test shikigami-core-test --test-show-details=direct --test-options='-p Cla
 After milestone 2:
 
 ```bash
-just new-migration name=watchdog-ledger
+just new-migration watchdog-ledger
 # edit shikigami-migrations/sql-migrations/NNNN-watchdog-ledger.sql
 sha256sum shikigami-migrations/sql-migrations/NNNN-watchdog-ledger.sql
 # append "<digest>  NNNN-watchdog-ledger.sql" to shikigami-migrations/sql-migrations/migrations.lock
 just migration-schema-isolation
-SHIKIGAMI_REGENERATE_EXPECTED_SCHEMA=1 cabal test shikigami-migrations-test
+SHIKIGAMI_REGENERATE_EXPECTED_SCHEMA=1 cabal test shikigami-migrations-smoke
 cabal test shikigami-migrations-test shikigami-core-postgres-test --test-show-details=direct --test-options='-p WatchdogStore --num-threads 1'
 ```
 
@@ -302,6 +318,13 @@ EP-2 owns the sweep claim and transaction receipts. Retain a claim keyed by watc
 `PageOutcome` is an internal value containing sealed `Finding`s. Define a separate explicit-codec `PageOutcomeView` containing `[FindingView]` for journal results; do not add `FromJSON` to sealed findings. Allocate the identity pool per subject and family. Liveness records update activity marks; drift records update only drift episodes and cadence, never reset activity timestamps or close liveness episodes. A progressing liveness sweep between two adverse drift assessments must leave one drift episode open and send no duplicate notice. Test replay after the ledger commit but before journal append, overlapping ticks with reversed completion order, and incomplete passes without episode closure.
 
 Opening requires a journaled successful grant and timestamp. Grant refusal emits no authorized sweep row; expose it through refusal telemetry and the native run outcome. Completion time is a fresh database time retained by the idempotent close receipt, rather than the earlier page observation time.
+
+The classifier additionally retains its frozen prior mark in `Observed`, enabling
+record-time stale-input refusal. `Clear ObservationUnknown` preserves episodes.
+Material lapsed-deadline kinds are derived from retained permission, process and
+approval metadata even when the live wait has expired. `classifyPage` records the
+actual subject count and pass completeness in each detection's limit view.
+
 
 ## Interfaces and Dependencies
 
