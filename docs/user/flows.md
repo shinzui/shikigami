@@ -327,6 +327,21 @@ The diagram is not just documentation. It is generated from the keiki transducer
 test suite validates, so unreachable states, hidden inputs, and overlapping transitions can
 be caught before the flow ships.
 
+## Delivered Flow guides
+
+These registered Flows have dedicated setup or operating guidance:
+
+| Flow | Guide | Admission boundary |
+| --- | --- | --- |
+| `shikumi-decision-example` | [Typed decisions](typed-decisions.md) | Admitted model aliases and per-decision permissions |
+| `adaptive-delivery` | [Finite adaptive delivery](adaptive-delivery.md) | Objective/assignment association, finite root and cutoff, permitted worker catalog |
+| `propose-work` | [Unrequested work](unrequested-work.md) | Verified observer, bounded source allowance, human acceptance or standing policy |
+| `watchdog-sweep` | [Watchdog notices](watchdog.md) | Scheduled verified principal, bounded observation scope and independent allowance |
+
+The watchdog observes work and emits advisory findings. It cannot intervene in an
+objective or grant a recurring mandate. The proposer may create an objective after
+acceptance; autonomous funding and dispatch require a matching standing policy.
+
 ## At-risk customer
 
 The first registered flow is `at-risk-customer`, declared at:

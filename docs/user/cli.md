@@ -42,7 +42,14 @@ shikigami runs show <WORKFLOW-NAME> <WORKFLOW-ID> [--json]
 shikigami resources inspect <ROOT> [--json]
 shikigami executions inspect <EXECUTION> [--json] [--after <POSITION>] [--limit <N>]
 shikigami workers inspect <SESSION> [--json] [--after <POSITION>] [--limit <N>]
-shikigami workers send|interrupt|cancel|transfer|reconcile|integrate ...
+shikigami workers send|interrupt|cancel|transfer|reconcile|reconcile-checkpoint|integrate ...
+shikigami objectives create|inspect|history|command ...
+shikigami objectives trackers bind|command|inspect|proposals|deliveries|operation ...
+shikigami proposals inspect|list|candidates|admissions|prune ...
+shikigami proposals policy install|list|revoke ...
+shikigami watchdog inspect [--agents DIR] [--grace SECONDS] [--fail-when-overdue] [--json]
+shikigami watchdog episodes [--open] [--objective ID] [--after ID] [--limit N] [--json]
+shikigami watchdog findings EPISODE_ID [--after ID] [--limit N] [--json]
 ```
 
 The administrative binary also mounts Keiro's `wf`, `timer`, `outbox`, `inbox`,
@@ -128,6 +135,61 @@ For local database inspection, `shikigami runs show shikigami.agent-run RUN_ID
 --json` includes the same derived lifecycle alongside workflow and session
 objects. It also works for HTTP acceptances before a workflow exists, with those
 objects null. See the [operator runbook](../operations/operator-cli.md).
+
+## Objectives, proposals and watchdog inspection
+
+These local administrative commands use the migrated database and shared
+configuration flags. Objective and tracker mutations act as the configured local
+operator. The remote `shikigami-client` commands above cover agents and runs;
+use the documented local commands for these additional surfaces.
+
+```bash
+shikigami --config config.json objectives inspect OBJECTIVE_ID --after 0 --limit 20 --json
+shikigami --config config.json objectives history OBJECTIVE_ID --limit 20 --json
+shikigami --config config.json objectives trackers inspect OBJECTIVE_ID --json
+```
+
+Objective creation and conditional commands use JSON documents, stable operation
+keys and expected revisions. Tracker commands retain their own operation keys,
+proposal pages and delivery receipts. See [objectives](objectives.md) and
+[external trackers](objective-trackers.md) for the exact documents and retry rules.
+Objective inspection includes bounded adaptive hierarchy, decision and accounting
+metadata; follow both page cursors as described in
+[finite adaptive delivery](adaptive-delivery.md).
+
+```bash
+shikigami --config config.json proposals inspect --fail-when-exhausted --json
+shikigami --config config.json proposals list --status pending --json
+shikigami --config config.json proposals candidates --principal agent_shikigami_proposer --json
+shikigami --config config.json proposals admissions --json
+shikigami --config config.json proposals policy list --json
+```
+
+Proposal inspection includes configured observers even when they have no usage,
+and reports live policy capacity. `--fail-when-exhausted` exits nonzero when an
+observer window is full. Policy installation takes `--file FILE`; revocation takes
+`POLICY_ID --expected-revision N`. Revocation stops fresh admission and leaves
+already admitted work under its objective/root controls. See
+[proposal operations](../operations/unrequested-work.md) for setup, policy
+documents, filtering and pruning, and [unrequested work](unrequested-work.md) for
+the person's acceptance path.
+
+```bash
+shikigami --config config.json watchdog inspect --agents agents --fail-when-overdue --json
+shikigami --config config.json watchdog episodes --open --limit 20 --json
+shikigami --config config.json watchdog findings EPISODE_ID --limit 20 --json
+```
+
+Watchdog reads use the configured principal and observation scope. `inspect`
+requires the actual scheduled `watchdog-sweep` declaration (`--agents` defaults
+to `agents`). It distinguishes the latest attempt from the last completion.
+`--grace` defaults to 60 seconds and must be nonnegative. With
+`--fail-when-overdue`, exit 2 means overdue, no completion or an uncomputable
+schedule. Configuration/storage failures fail the command. Episode and finding
+pages default to 20 and accept 1–100 entries with `--after` cursors; episodes also
+filter by objective and open state. See [watchdog notices](watchdog.md) and
+[watchdog operations](../operations/watchdog.md). These checks can run independently
+of the supervised workflows; HTTP readiness and liveness do not include them.
 
 ---
 
@@ -382,6 +444,10 @@ See [resource accounting](../operations/execution-resources.md),
 [operator command forms](../operations/operator-cli.md).
 
 Worker mutations require stable operation keys, fresh parent authority and the
-relevant revision/epoch. The default CLI lacks the real objective/checkpoint and
-workspace ownership providers needed for new follow-ups, integration and transfer.
-Its fixtures prove consumer mechanics; they do not enable production mutation.
+relevant revision/epoch. With objective tracking and trusted associations configured,
+the CLI uses the authoritative checkpoint/ownership providers for follow-ups and
+integration. Transfer additionally requires the process-backed workspace supervisor;
+file-only workspace settings cannot fence a former writer. See
+[workspace setup](../operations/workspaces.md) and the
+[accepted worker matrix](../evidence/plan-84/acceptance.md) for the qualified
+configuration and recovery boundaries.

@@ -3,7 +3,7 @@ type: "Navigation"
 title: "Shikigami — User Guide"
 description: "Find the right guide for declaring, running, and operating Shikigami agents."
 docId: "DOC-1"
-timestamp: "2026-11-05T13:11:17Z"
+timestamp: "2026-11-06T18:18:06Z"
 tags: ["navigation", "agents"]
 generated:
   by: process:shikigami-user-docs-okf-migration
@@ -65,7 +65,7 @@ agent declaration in order:
 | **[Getting Started](./getting-started.md)** | Prerequisites, building, the database, your first validate + run |
 | **[Writing Agents](./writing-agents.md)** | The Dhall schema: `name`, `description`, and how the four parts fit together |
 | **[Triggers](./triggers.md)** | The three trigger classes — Schedule, Stream, Event — and the feedback guard |
-| **[Behaviors](./behaviors.md)** | The behavior union — Deterministic, ShikumiProgram, Skill, Flow |
+| **[Behaviors](./behaviors.md)** | The behavior union — Deterministic, ShikumiProgram, Skill, CoordinatingSkill, Flow |
 | **[Flows](./flows.md)** | Durable lifecycle-backed behaviors that can park, resume, and render diagrams |
 | **[Typed decisions in Flows](./typed-decisions.md)** | Model aliases, validated typed results, replay, and actual-attempt evidence |
 | **[HTTP API — agents and runs](./http-api.md)** | Authentication, agent discovery, idempotent submission, status, and acceptance history |
@@ -74,6 +74,9 @@ agent declaration in order:
 | **[Sinks](./sinks.md)** | The producer sink set and the permission gate |
 | **[Durable objectives](./objectives.md)** | Goals, authoritative progress, cross-run continuity and explicit integrated acceptance |
 | **[External objective trackers](./objective-trackers.md)** | Bind Rei, review proposals, and recover uncertain summary delivery |
+| **[Finite adaptive delivery](./adaptive-delivery.md)** | Coordinate continuing workers under one objective, resource root and cutoff |
+| **[Unrequested work](./unrequested-work.md)** | Review proposals or understand admission under an operator's standing policy |
+| **[Active-work watchdog notices](./watchdog.md)** | Interpret advisory findings, inspect coverage and detect overdue sweeps |
 | **[Memory & Sessions](./memory.md)** | How an agent recalls prior learnings and records new ones across runs |
 | **[Detectors](./detectors.md)** | Building the intelligence layer as declared agents |
 | **[The Living Loop](./living-loop.md)** | Running the worker end to end; closing the loop with `stub-kawa` |
@@ -88,7 +91,7 @@ Agent declarations (agents/*.dhall, schema/Agent.dhall)
   ▼
 Trigger fires  ──  Schedule (cron) │ Stream (activity.v1 match) │ Event (public integration event)
   ▼
-Behavior runs  ──  Registered shikumi program (local Shikumi adapter) │ Skill (baikai) │ Flow (keiro)
+Behavior runs  ──  Registered shikumi program (local Shikumi adapter) │ Skill / CoordinatingSkill (baikai) │ Flow (keiro)
   ▼
 Sinks dispatch ──  KawaDigest │ KizashiSignal │ ReiAction │ DanwaConversation │ ChannelEgress (permission-gated)
   ▼
@@ -128,5 +131,14 @@ child. See [execution policy and recovery](../operations/durable-execution.md),
 [root accounting](../operations/execution-resources.md) and
 [worker inspection/control](../operations/operator-cli.md). Manifest `execution`
 selects an admitted whole-assignment model binding; `harness` narrows operator
-policy. Continuing-worker primitives do not yet supply real objective/checkpoint
-or mutable workspace providers. The [roadmap](../roadmap.md) tracks those gates.
+policy. Configured durable workers have authoritative objective/checkpoint providers
+and governed mutable workspaces with process fencing. Continuing sessions retain
+follow-ups and recover governed handoffs. See [durable objectives](objectives.md),
+[workspace operations](../operations/workspaces.md) and
+[finite adaptive delivery](adaptive-delivery.md).
+
+The native adaptive repository and recovery fixture passes; its actual-model trial
+still requires production authorization and approved live limits. Recurring objective
+mandates remain planned. The independently scheduled [watchdog](watchdog.md) provides
+advisory observation, and [unrequested work](unrequested-work.md) requires its own
+observer allowance and acceptance or standing policy.

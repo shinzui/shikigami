@@ -1,6 +1,10 @@
 # Bundle Update Log
 
 ## 2026-11-06
+* **Correction**: Refresh all three HTML artifacts and their supporting Markdown roadmap through plan 124 and IR-21, including completed workspace/objective providers, native adaptive recovery evidence, watchdog delivery, unrequested-work admission, and the planned machine-daemon lane.
+* **Correction**: DOC-1/13 remove obsolete absent-provider wording; DOC-1 links DOC-18–20. DOC-4/5/6 link delivered schedule and Flow paths; DOC-13 covers objective/tracker, proposal and watchdog commands; DOC-19 distinguishes passing native qualification from the remaining actual-model trial; DOC-20 expands scoped inspection and independent overdue monitoring.
+* **Validation scope**: Compare guides with current command parsers, registered Flows, owner plans and retained acceptance reports. Documentation checks do not rerun runtime qualification or close the live-model and recurring-mandate gates.
+* **Checks**: Regenerated user index; strict profile validation passes for all 20 pages. Checked 625 local links/anchors across user guides, HTML artifacts and the Markdown roadmap, HTML structure and diagram labels, and portfolio counts/request lifecycle rows against repository records.
 * **Addition**: DOC-20 explains watchdog notices, trusted recipients, bounded evidence and operator inspection.
 
 ## 2026-11-05

@@ -141,6 +141,11 @@ The registered `shikumi-decision-example` Flow demonstrates triage followed by
 investigation and optional governed specialist delegation. See
 [Typed decisions in Flows](typed-decisions.md) for configuration and replay limits.
 
+Other registered Flows include [finite adaptive delivery](adaptive-delivery.md),
+[unrequested-work proposals](unrequested-work.md), and the
+[active-work watchdog](watchdog.md). Each requires its own configured admission,
+identity and allowance; naming a Flow does not grant those prerequisites.
+
 Use this path when the behavior is not just "compute one JSON value" but a durable process.
 The `at-risk-customer` flow classifies a ticket, raises an alert for high risk, waits for
 acknowledgement, and escalates on timeout. See **[Flows](./flows.md)**.

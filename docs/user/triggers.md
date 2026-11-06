@@ -38,6 +38,12 @@ A standard five-field cron expression. `shikigami-scheduler` arms schedule timer
 timer firing enqueues a due-time job that `shikigami-worker` executes. Use this for recurring work — a digest every morning, a heartbeat every
 minute, a weekly rollup.
 
+The [active-work watchdog](watchdog.md) uses this schedule path with its own
+verified principal and operator-funded allowance for each admitted tick. Configure
+the same watchdog settings in scheduler and worker; the declaration alone grants
+no spend. Scheduled observation does not enable recurring objective mandates,
+which remain planned separately from ordinary cron agents.
+
 ## Stream — observe `activity.v1`
 
 ```dhall

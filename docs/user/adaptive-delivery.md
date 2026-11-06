@@ -60,5 +60,21 @@ used as an artifact check. Record actual combined checks and user-journey eviden
 through their owning verifier or authorized human-completer path. The Flow may
 then propose the exact artifact/check set. Completion still requires the
 objective owner's explicit acceptance at the matching revisions, with all
-outstanding source work and uncertainty settled. Plan 86 separately qualifies a
-real integrated repository artifact and live trial.
+outstanding source work and uncertainty settled.
+
+## Qualification and related automation
+
+The [native qualification](../evidence/adaptive-delivery/native-qualification.md)
+passes the full repository, recovery and refusal matrix using deterministic model
+providers. Both exact combined repository trees pass their checks and the returned
+pair's user journey; terminal replay preserves model bindings, call receipts and
+settled root accounting. The separate actual-model trial under production
+authorization and approved live limits remains open in
+[plan 86](../plans/86-qualify-integrated-adaptive-autonomous-delivery.md).
+
+An independently scheduled [watchdog](watchdog.md) can report quiet work or drift
+using its own allowance. It has no authority to cancel or reorganize your workers.
+[Unrequested-work proposals](unrequested-work.md) use a separate admission path;
+only a configured standing policy can fund and dispatch their coordinator
+automatically. Neither path enables recurring objective mandates, which remain
+planned under plan 87.

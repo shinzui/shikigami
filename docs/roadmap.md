@@ -1,8 +1,9 @@
 # Shikigami roadmap
 
-Refreshed 2026-11-04 UTC against implementation checkpoint `73ce5be0`, Cabal manifests,
+Refreshed 2026-11-06 UTC against implementation checkpoint `6d3a7076`, Cabal manifests,
 MasterPlan registries, child Progress/Outcomes, request metadata and retained
-qualification evidence, including plan 85 adaptive coordination. Recorded acceptance
+qualification evidence, including plan 86 native recovery, watchdog/proposal acceptance
+and plan 124 Shikumi adapter ownership. Recorded acceptance
 applies to its named candidate and environment; plan 84 retains separate host
 and native operator-recovery results.
 See the [HTML roadmap](artifacts/roadmap.html),
@@ -22,6 +23,24 @@ and [113](plans/113-make-the-watchdog-observable-and-qualify-ir-19.md) owns insp
 [IR-19](improvement-requests/supervise-active-work-with-an-independent-watchdog-agent.md).
 Native and live-model watchdog trials remain additional evidence.
 
+## Unrequested-work admission and machine-daemon planning
+
+[MasterPlan 20](masterplans/20-propose-unrequested-work-from-observed-activity-under-governed-standing-policies.md)
+and [IR-21](improvement-requests/propose-unrequested-work-from-observed-activity.md)
+are complete through plans 114–118. Observer allowances, pure pre-filtering, typed
+assessment and durable human acceptance create linked objectives. Only an explicit
+revocable standing policy can fund and dispatch a coordinator automatically.
+[Nine deterministic acceptance cases](evidence/plan-118/acceptance.md) pass; live
+channel/model behavior and the optional native admitted-objective trial remain
+separate evidence. See [user guidance](user/unrequested-work.md) and
+[operator setup](operations/unrequested-work.md).
+
+[MasterPlan 21](masterplans/21-execute-governed-work-through-enrolled-machine-daemons.md)
+plans machine enrollment, local command policy, retained receipts and partition
+fencing. All five children (119–123) are not started; IR-20 remains proposed.
+Watchdog schedules and proposal admission do not implement recurring objective
+mandates (87) or multi-machine execution.
+
 ## Current delivery boundary
 
 Implemented: typed Flow decisions and actual-attempt evidence (plans 73–76),
@@ -38,12 +57,14 @@ and controller restart, successor writes and former-owner refusal.
 
 Authoritative objectives and checkpoint/ownership/scope providers are complete
 (MasterPlan 17), as is optional provider-neutral external tracker synchronization
-with the Rei adapter (MasterPlan 18). Full autonomous coding delivery still needs
-integrated qualification/live coding proof (86). Plan 85 completes validated
+with the Rei adapter (MasterPlan 18). Plan 86 passes the full native repository,
+recovery and refusal matrix; full autonomous coding delivery still needs its actual-model trial under production
+authorization and approved live limits. Plan 85 completes validated
 native adaptive coordination, actual typed-call accounting, shared capacity and
 bounded inspection; its finite fixtures pass exact combined acceptance. Plan 84
 completes continuing-worker consumer acceptance and IR-15.
-Recurring supervision (87) is a separate optional phase. Provider qualification does not close those consumers.
+Recurring supervision (87) is a separate optional phase. Provider qualification
+and deterministic consumer evidence do not close actual-model acceptance.
 
 The configured cohort selects Keiro 0.22, Baikai 0.10, Shikumi 0.5.1 and Kioku
 0.12.0.2. MasterPlan 16's six-child Keiro upgrade is complete for its bounded
@@ -52,7 +73,8 @@ Plan 80 has integrated structured TypeSafe answers, durable replay and public
 complete/stream parity, with 15 real-adapter checks and three PostgreSQL cases.
 Its broader wire/error matrix, Linux CLI qualification, deadline/output/confinement
 gates and fresh immutable packaging remain open. The current export contains
-387 runtime packages and seven immutable repositories; Nix role dry runs do not
+382 runtime packages and six immutable repositories after plan 124 removes
+Handan and its exclusive dependencies; Nix role dry runs do not
 qualify installed binaries. See the [streaming checkpoint](evidence/baikai-execution/streaming-consumer-checkpoint.json),
 [Keiro qualification](evidence/keiro-0.22/macos-final-qualification.json) and
 [domain inventory](architecture/shikigami-domain-inventory.md). The
@@ -60,9 +82,10 @@ qualify installed binaries. See the [streaming checkpoint](evidence/baikai-execu
 
 ## Portfolio snapshot
 
-This audit covers 18 coordinated MasterPlans (1–18) and 108 ExecPlan files.
-Thirteen MasterPlans are complete: 1–5, 8, 11–13 and 15–18.
-The five active coordination documents are below.
+This audit covers 21 coordinated MasterPlans (1–21) and 124 ExecPlan files.
+Fifteen MasterPlans are complete: 1–5, 8, 11–13 and 15–20.
+Six coordination documents have remaining work, including the not-started
+machine-daemon lane below.
 Plan 97 is a superseded design, replaced by MasterPlan 17 and plans 98–102;
 it is not a second objective implementation lane. Counts describe artifacts,
 not feature readiness or effort percentages.
@@ -73,7 +96,8 @@ not feature readiness or effort percentages.
 | [7](masterplans/7-platform-feature-completion-egress-schema-memory-lifecycle-delegation.md) | 3 of 5 complete | Plan 34 memory lifecycle and plan 12 MCP-specific integration |
 | [9](masterplans/9-architecture-practice-review-flow.md) | 3 of 4 complete; plan 46 partial | Safety and closeout plans 60–63, then plan 46 acceptance |
 | [10](masterplans/10-sanctioned-execution-attestation-for-agent-runs.md) | 3 of 4 complete | Plan 52 shared signed envelope, read API/verifier and live proof |
-| [14](masterplans/14-deliver-adaptive-autonomous-objectives-with-durable-workers.md) | 5 of 7 complete; plans 86/87 eligible | Integrated repository/live proof and optional recurrence |
+| [14](masterplans/14-deliver-adaptive-autonomous-objectives-with-durable-workers.md) | 5 of 7 complete; plan 86 native milestones pass | Actual-model trial and optional recurrence (87 not started) |
+| [21](masterplans/21-execute-governed-work-through-enrolled-machine-daemons.md) | 0 of 5 complete; all not started | Enrollment, local policy, machine-hosted operations, relay/partition fencing and qualification |
 
 Recent completed work:
 
@@ -82,8 +106,11 @@ Recent completed work:
 | [MasterPlan 16](masterplans/16-upgrade-shikigami-to-keiro-0-22-and-retire-superseded-runtime-workarounds.md) | Six children (92–95, 106–107): Keiro 0.22, fresh schema, guarded commands, native recovery, administrative CLI/HTTP/live inspection and Haskell/service practices; bounded macOS acceptance |
 | [MasterPlan 17](masterplans/17-track-durable-objectives-and-authoritative-assignment-checkpoints-without-rei.md) | Five children (98–102): authoritative objectives, trusted providers, API/CLI, durable capabilities and no-Rei serving continuity; IR-13 complete |
 | [MasterPlan 18](masterplans/18-integrate-durable-objectives-with-external-trackers-through-provider-neutral-contracts-and-rei.md) | Three children (103–105): provider-neutral tracker bindings, real Rei adapter and served synchronization/restart qualification; uncertain delivery requires exact attestation before settlement |
+| [MasterPlan 19](masterplans/19-supervise-active-work-with-an-independent-watchdog-agent.md) | All five children (109–113) complete; scheduled advisory observation, scoped inspection, independent telemetry and eight-case deterministic IR-19 qualification |
+| [MasterPlan 20](masterplans/20-propose-unrequested-work-from-observed-activity-under-governed-standing-policies.md) | All five children (114–118) complete; bounded observation, human acceptance, revocable standing-policy admission and nine-case deterministic IR-21 qualification |
+| [Plan 124](plans/124-remove-handan-by-owning-the-shikumi-execution-adapter-in-shikigami.md) | Complete/streaming Shikumi adapter owned locally; Handan removed; committed-result replay and native immutable-role regression pass; plan 80 qualification remains separate |
 | [Plan 84](plans/84-coordinate-continuing-worker-sessions-and-fenced-handoffs.md) | Continuing-worker consumer acceptance complete; 1,703 package cases, 177 conformance controls and nine native ownership/restart cases including actual operator recovery; IR-15 complete; plans 85/86 remain separate |
-| [Plan 85](plans/85-adapt-durable-delivery-through-validated-coordinator-decisions.md) | Adaptive coordinator, actual typed-call accounting, shared capacity and inspection complete; 1,711 package cases and 183 conformance controls; additive-only gate; [evidence](evidence/plan-85/acceptance.md); repository/live trial remains plan 86 |
+| [Plan 85](plans/85-adapt-durable-delivery-through-validated-coordinator-decisions.md) | Adaptive coordinator, actual typed-call accounting, shared capacity and inspection complete; 1,711 package cases and 183 conformance controls; additive-only gate; [evidence](evidence/plan-85/acceptance.md); native repository/recovery matrix passes in plan 86; actual-model trial remains |
 | [Plan 96](plans/96-provide-governed-mutable-repository-workspaces-for-durable-agents.md) | All six milestones and 25 native Linux cases pass; IR-11 complete; plan 84 separately closes IR-15; integrated adaptive acceptance remains in plan 86 |
 | [Plan 108](plans/108-complete-the-remaining-domain-scalar-identity-and-decoder-audit.md) | All milestones complete; 4,253 census keys resolved with zero pending dispositions or violations and 531 compiler controls; no new Linux runtime claim |
 
@@ -95,14 +122,16 @@ plan 46 closes. Production evidence acquisition still depends on
 `mori://shinzui/kikan/okf/improvement-requests/concepts/IR-5`.
 
 For adaptive delivery, plans 84 and 85 are complete against the delivered provider
-contracts; plans 86 and 87 are eligible. Plan 96 owns actual repository process fencing;
+contracts; plan 86 is in progress and plan 87 is not started. Plan 96 owns actual
+repository process fencing;
 MasterPlan 17 owns authoritative objective/assignment state, trusted associations
 and checkpoint/ownership/scope providers. Plan 84's
 [consumer acceptance matrix](evidence/plan-84/acceptance.md) combines those real
 providers with governed Flow/Skill/operator mechanics, continuing compaction and
 replay, and native administrative recovery. IR-15 is complete. Plan 85 owns
-validated adaptive coordination and shared capacity; plan 86 owns integrated
-qualification and the live coding trial; plan 87 adds explicitly admitted
+validated adaptive coordination and shared capacity; plan 86 passes
+[native repository/recovery qualification](evidence/adaptive-delivery/native-qualification.md)
+and retains its actual-model trial; plan 87 adds explicitly admitted
 recurring mandates. The objective API/CLI and native/durable capabilities remain
 complete under plans 98–102; provider and consumer evidence retain their own
 named candidates and environments.
@@ -152,13 +181,18 @@ surfaces, not prerequisites for every autonomous workload.
 | [78](plans/78-run-external-operations-from-durable-flows-through-idempotent-shiki-jobs.md) | Not started; external executor, authorization and crash contracts |
 | [79](plans/79-qualify-local-agent-execution-and-prioritize-production-readiness.md) | Partial packaging qualification; live workload/fault/human-wait gates remain |
 | [80](plans/80-configure-model-providers-and-agent-launches-through-baikai.md) | In progress; HTTP/foreground, structured judgments and streaming delivered at recorded checkpoints; remaining wire/error matrix, Linux CLI, deadline/output/confinement and fresh immutable-role qualification |
-| [86](plans/86-qualify-integrated-adaptive-autonomous-delivery.md) | Not started; combined artifacts, actual checks and live finite coding proof |
+| [86](plans/86-qualify-integrated-adaptive-autonomous-delivery.md) | In progress; native repository/recovery/refusal milestones pass, actual-model trial remains |
 | [87](plans/87-supervise-recurring-objectives-from-current-durable-checkpoints.md) | Not started; recurring mandate admission and current-checkpoint supervision |
+| [119](plans/119-enroll-machines-and-hold-outbound-daemon-sessions-with-revocable-identities.md) | Not started; machine enrollment, revocable identities and outbound daemon sessions |
+| [120](plans/120-enforce-local-machine-policy-over-typed-bound-commands-with-a-retained-ledger.md) | Not started; local policy over typed bound commands and retained ledgers |
+| [121](plans/121-host-workspace-operations-on-the-machine-with-local-deadlines-and-retained-receipts.md) | Not started; machine-hosted workspace operations, local deadlines and receipts |
+| [122](plans/122-place-assignments-on-machines-and-relay-durable-commands-with-absence-and-partition-fencing.md) | Not started; placement, relay, absence/partition fencing and recovery |
+| [123](plans/123-make-machines-observable-to-operators-and-qualify-ir-20-across-severable-machines.md) | Not started; machine inspection and severable-machine qualification |
 
 ## Improvement-request lifecycle and implementation coverage
 
-Lifecycle below mirrors request metadata checked on 2026-11-03: nine completed,
-five in progress, one accepted and three proposed. Some request prose still
+Lifecycle below mirrors request metadata checked on 2026-11-06: eleven completed,
+five in progress, one accepted and four proposed. Some request prose still
 predates provider acceptance; current child outcomes and parent registries supply
 the implementation boundary.
 Completed implementation slices do not close requests with remaining acceptance
@@ -181,9 +215,12 @@ gates; the owning plans and parent completion matrix define those gates.
 | [IR-13](improvement-requests/support-optional-major-task-tracking.md) | completed | Plans 98–102 complete: no-Rei restart/continuity and explicit integrated acceptance qualified; workspace qualification and adaptive/recurring acceptance remain separate |
 | [IR-14](improvement-requests/record-durable-model-tool-turns-and-compose-harness-policies.md) | in-progress | Plans 83/84 complete; integrated UC-1 recheck remains in plan 86 |
 | [IR-15](improvement-requests/support-continuing-worker-sessions.md) | completed | Plan 84 complete: continuing follow-ups, compaction/replay, governed controls and real native ownership/restart acceptance |
-| [IR-16](improvement-requests/support-adaptive-durable-orchestration.md) | in-progress | Plan 85 mechanics and capacity complete; plan 86 integrated repository/live acceptance remains |
+| [IR-16](improvement-requests/support-adaptive-durable-orchestration.md) | in-progress | Plan 85 complete; plan 86 native repository/recovery milestones pass, actual-model acceptance remains |
 | [IR-17](improvement-requests/select-governed-models-for-agent-runs.md) | in-progress | Plans 82–85 qualify selection, continuation, escalation and decision permissions; integrated delivery remains in plan 86 |
 | [IR-18](improvement-requests/support-recurring-objective-supervision.md) | accepted | Plan 87 not started |
+| [IR-19](improvement-requests/supervise-active-work-with-an-independent-watchdog-agent.md) | completed | MasterPlan 19 / plans 109–113 complete; deterministic scheduled acceptance, scoped inspection and independent telemetry |
+| [IR-20](improvement-requests/execute-governed-work-through-machine-daemons.md) | proposed | MasterPlan 21 / plans 119–123 define a delivery lane; all children not started, no machine-daemon runtime |
+| [IR-21](improvement-requests/propose-unrequested-work-from-observed-activity.md) | completed | MasterPlan 20 / plans 114–118 complete; bounded observation, human acceptance and standing-policy admission with deterministic qualification |
 
 ## Review disposition
 
