@@ -51,6 +51,8 @@ module Shikigami.App.Config
     inspectionKey,
     InitiativeSettings (..),
     initiativesKey,
+    WatchdogSettings (..),
+    watchdogKey,
     httpAuthModeKey,
     httpAuthTokenKey,
     httpAuthCallerKey,
@@ -221,6 +223,7 @@ import Shikigami.RuntimePolicy
 import Shikigami.Sink.Permission (SinkKind)
 import Shikigami.Trigger.Schedule (CatchUpPolicy (..))
 import Shikigami.Trigger.Stream (IncludeAgentActors (..), agentActorInclusion, agentActorsIncluded)
+import Shikigami.Watchdog.Settings (WatchdogSettings (..))
 import Shikigami.Workspace.Settings (WorkspaceSettings, WorkspaceSupervisorSettings)
 
 -- ── Value types ─────────────────────────────────────────────────────────────
@@ -521,6 +524,7 @@ data AppConfig = AppConfig
     workspaceSupervisorSettings :: !(Maybe WorkspaceSupervisorSettings),
     objectiveSettings :: !ObjectiveSettings,
     trackerSettings :: !TrackerSettings,
+    watchdog :: !(Maybe WatchdogSettings),
     initiativeSettings :: !(Maybe InitiativeSettings)
   }
   deriving stock (Generic, Eq)
@@ -584,6 +588,7 @@ appConfig =
     <*> optional (secretSetting workspaceSupervisorKey "Private systemd socket and bounded peer-checked workspace supervisor intake" jsonDecoder)
     <*> withDefault (secretSetting (stableKey "objectives") "Objective enablement, local operator and default-deny recorded agent creation grants" jsonDecoder) (constant "objectives-disabled" "Objective tracking requires explicit enablement" defaultObjectiveSettings)
     <*> withDefault (secretSetting (stableKey "objective_trackers") "Provider-neutral objective tracker connections and explicit use/export grants" jsonDecoder) (constant "trackers-disabled" "External objective tracking requires explicit enablement" defaultTrackerSettings)
+    <*> optional (publicSettingWithRenderer watchdogKey "Read-only active work observation: exact principal, scope, windows and bounded sweep size" jsonDecoder renderJson)
     <*> optional (publicSettingWithRenderer initiativesKey "Observer allowances: which principals may observe which sources, at what evaluation envelope and attention limits" jsonDecoder renderJson)
 
 -- | Which provider runs a Skill behavior, and what the real branch needs.
@@ -1574,6 +1579,7 @@ environmentBindings =
           binding (EnvName "SHIKIGAMI_BEHAVIOR_HARNESS") behaviorHarnessKey,
           binding (EnvName "SHIKIGAMI_OBJECTIVES") (stableKey "objectives"),
           binding (EnvName "SHIKIGAMI_OBJECTIVE_TRACKERS") (stableKey "objective_trackers"),
+          binding (EnvName "SHIKIGAMI_WATCHDOG") watchdogKey,
           binding (EnvName "SHIKIGAMI_INITIATIVES") initiativesKey,
           binding (EnvName "SHIKIGAMI_WORKSPACES") workspacesKey,
           binding (EnvName "SHIKIGAMI_WORKSPACE_SUPERVISOR") workspaceSupervisorKey,
@@ -1763,3 +1769,6 @@ httpAuthTokenSetting = secretSetting httpAuthTokenKey "Inbound API bearer token 
   decoder \key raw -> case runDecoder textDecoder key raw of
     Right value | Text.length value >= 16 -> Right (SecretText value)
     _ -> Left (decodeFailure key "a bearer token of at least sixteen characters")
+
+watchdogKey :: Key
+watchdogKey = stableKey "watchdog"

@@ -308,6 +308,9 @@ library
     Shikigami.Trigger.RequestKey
     Shikigami.Trigger.Schedule
     Shikigami.Trigger.Stream
+    Shikigami.Watchdog.Grant
+    Shikigami.Watchdog.Settings
+    Shikigami.Watchdog.Types
     Shikigami.WorkerSession.Capability
     Shikigami.WorkerSession.Catalog
     Shikigami.WorkerSession.Checkpoint
@@ -598,6 +601,7 @@ test-suite shikigami-core-test
     Shikigami.SinkHonestySpec
     Shikigami.SinkIntentSpec
     Shikigami.TypeSafeDecisionSpec
+    Shikigami.WatchdogTypesSpec
     Shikigami.WireCompatSpec
     Shikigami.WorkerSessionPositionSpec
     Shikigami.WorkspaceActionProofSpec

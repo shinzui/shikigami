@@ -48,3 +48,17 @@ IO. These are design requirements, not claims of runtime qualification.
 
 See [MasterPlan 19](../masterplans/19-supervise-active-work-with-an-independent-watchdog-agent.md)
 and [ADR 0115](0115-evaluation-spend-is-a-root-enrolled-at-the-trigger-and-accounted-slots-refuse-without-one.md).
+
+## Initial observation boundary
+
+The Watchdog module root owns a domain concept under ADR 0075: observing active
+work and describing evidence. Owner verticals retain their metadata projections;
+Watchdog composes those projections and grants no objective or session command.
+
+The implemented grant is an opaque, non-Generic value bound to the admitted
+identity. It has no JSON decoder or public record fields. A principal-free
+snapshot retains admitted scope, windows and budget; restoration checks current
+enablement and the exact configured identity without replacing the retained
+policy. Compatibility names and verified principals remain distinct modes.
+Omitted operator configuration returns WatchdogDisabled. This is the implemented
+vocabulary/grant boundary only; sweep and runtime qualification remain open.

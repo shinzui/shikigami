@@ -57,7 +57,7 @@ import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Approval (ApprovalChannel (ViaDanwa, ViaKizashi))
 import Shikigami.Agent.Decl (delegationBudgetNatural)
 import Shikigami.Agent.DeclarationValue
-import Shikigami.Agent.Principal (principalText)
+import Shikigami.Agent.Principal (AgentIdentity (VerifiedIdentity), mkAgentPrincipal, principalText)
 import Shikigami.App.Config
 import Shikigami.App.Config.Load
 import Shikigami.Duration (parseDuration)
@@ -82,7 +82,8 @@ tests :: TestTree
 tests =
   testGroup
     "application configuration"
-    [ objectiveConfigurationTests,
+    [ watchdogConfigurationTests,
+      objectiveConfigurationTests,
       initiativeConfigurationTests,
       httpAuthTests,
       surfaceTests,
@@ -177,6 +178,7 @@ surfaceTests =
                 "sinks.kizashi.base_url",
                 "sinks.kizashi.default_recipient",
                 "sinks.rei.base_url",
+                "watchdog",
                 "worker.capacity",
                 "worker.run_timeout_seconds",
                 "workspace.supervisor",
@@ -225,6 +227,7 @@ surfaceTests =
               ("SHIKIGAMI_OBJECTIVES", "objectives"),
               ("SHIKIGAMI_OBJECTIVE_TRACKERS", "objective_trackers"),
               ("SHIKIGAMI_INITIATIVES", "initiatives"),
+              ("SHIKIGAMI_WATCHDOG", "watchdog"),
               ("SHIKIGAMI_WORKSPACES", "workspaces"),
               ("SHIKIGAMI_WORKSPACE_SUPERVISOR", "workspace.supervisor"),
               ("SHIKIGAMI_BEHAVIOR_MODEL", "behavior.model"),
@@ -1046,3 +1049,22 @@ objectiveConfigurationTests =
 
 fixturePolicy :: (PolicyNumber a) => Integer -> a
 fixturePolicy number = either (error . show) id (parsePolicyNumber number)
+
+watchdogConfigurationTests :: TestTree
+watchdogConfigurationTests =
+  testGroup
+    "watchdog configuration"
+    [ testCase "omission disables observation" do
+        isNothing defaultAppConfig.watchdog @?= True,
+      testCase "environment object resolves and is visible in the schema" do
+        config <- resolveOrFail (optionsWith [] []) [] [("SHIKIGAMI_WATCHDOG", document)]
+        principal <- either (assertFailure . Text.unpack) pure (mkAgentPrincipal "agent_watchdog")
+        fmap (.principal) config.watchdog @?= Just (VerifiedIdentity principal)
+        assertBool "schema describes watchdog" ("watchdog" `Text.isInfixOf` renderSchemaText appConfigSchema),
+      testCase "bad limits refuse the watchdog key" do
+        forM_
+          [Text.replace "60" "0" document, Text.replace "60" "-1" document, Text.replace "10" "0" document, Text.replace "\"scope\":\"all\"" "\"scope\":{\"objectives\":[]}" document]
+          \value -> (runWith (diagnosticOptions CheckConfig) [] [("SHIKIGAMI_WATCHDOG", value)]).exitCode @?= resolutionExitCode
+    ]
+  where
+    document = "{\"principal\":\"agent_watchdog\",\"scope\":\"all\",\"stuckWindowSeconds\":60,\"parkedWindowSeconds\":60,\"coordinatorWindowSeconds\":60,\"subjectsPerSweep\":10}"

@@ -8,6 +8,7 @@
 module Shikigami.Execution.Coordinate
   ( ExecutionId,
     executionIdentity,
+    executionIdText,
     ExecutionCoordinate,
     executionCoordinate,
     executionCoordinateText,
@@ -51,6 +52,9 @@ newtype ExecutionId = ExecutionId Text
 
 executionIdentity :: Text -> ExecutionId
 executionIdentity = ExecutionId
+
+executionIdText :: ExecutionId -> Text
+executionIdText (ExecutionId value) = value
 
 instance CanonicalTypeName ExecutionId where
   canonicalTypeName _ = "shikigami.ExecutionId.v1"

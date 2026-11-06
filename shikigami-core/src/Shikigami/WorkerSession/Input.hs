@@ -6,6 +6,7 @@
 module Shikigami.WorkerSession.Input
   ( WorkerSessionId,
     workerSessionId,
+    workerSessionIdText,
     sessionIdForScopeDigest,
     AssignmentId,
     parseAssignmentId,
@@ -266,6 +267,9 @@ newtype WorkerSessionId = WorkerSessionId Text
 
 workerSessionId :: Text -> WorkerSessionId
 workerSessionId = WorkerSessionId
+
+workerSessionIdText :: WorkerSessionId -> Text
+workerSessionIdText (WorkerSessionId value) = value
 
 sessionIdForScopeDigest :: WorkerCommitment "session-scope" -> WorkerSessionId
 sessionIdForScopeDigest digest = WorkerSessionId (UUID.toText (UUIDv5.generateNamed UUIDv5.namespaceURL (ByteString.unpack (TextEncoding.encodeUtf8 ("shikigami.worker-session:" <> workerCommitmentText digest)))))

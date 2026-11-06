@@ -17,6 +17,11 @@ provenance:
       at: 2026-11-06T04:40:28Z
       mode: "update"
       note: "Reconciled proposed APIs, ownership and acceptance with current source review."
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-11-06T12:29:40Z
+      mode: "implement"
+      note: "Implement watchdog vocabulary and observation boundary."
 ---
 
 # Observe active work through bounded lock-free reads under a watchdog grant
@@ -38,14 +43,19 @@ You can see it working in the PostgreSQL suite: `cabal test shikigami-core-postg
 
 ## Progress
 
-- [ ] Milestone 1: The watchdog vocabulary, settings and grant exist in `shikigami-core`, the `Watchdog` module root is admitted by the module policy, and `just haskell-conventions`, `just domain-value-types` and `cabal test shikigami-core-test` pass with the new value and codec cases.
+- [x] (2026-11-06) Milestone 1: The watchdog vocabulary, settings and grant exist in `shikigami-core`, the `Watchdog` module root is admitted by the module policy, and `just haskell-conventions`, `just domain-value-types` and `cabal test shikigami-core-test` pass with the new value and codec cases.
 - [ ] Milestone 2: Lock-free observation reads exist for objectives, coordinators, sessions and executions, `observePage` composes them, and the PostgreSQL contention case completes under competing `FOR UPDATE` locks with both subjects present and no body fields.
 - [ ] Milestone 3: Roots, unsettled processes, tool permissions and pending approval timers are attached as waiting facts, the coverage cursor wraps around the population, and bounds, refusals and corruption cases are covered in the PostgreSQL suite.
 
 
+Handoff 2026-11-06: milestone 1 is accepted: `just haskell-conventions` passed, `just domain-value-types` passed all compiler controls including the new watchdog clients, and `cabal test shikigami-core-test --test-show-details=direct` passed all 754 tests. Milestone 2 owner projections and the composed page are next. The joint objective/session contention gate, complete scope/bounds coverage, and milestone 3 remain unfinished.
+
+
 ## Surprises & Discoveries
 
-(None yet.)
+The execution owner's `activeOperation` is an `OperationId`, not an operation-position revision. The observation activity record now retains that exact owner type. The grant admission API accepts `Maybe WatchdogSettings` so omitted configuration has a typed `WatchdogDisabled` result. Settings live in `Watchdog.Settings` and are re-exported by `App.Config` to avoid a configuration/grant import cycle.
+
+The session's objective reference is a digest of objective and assignment coordinates, not the objective id. Scoped session enumeration therefore takes owner-local `SessionObservationScope` references; objective composition must resolve its assignment references before enumerating sessions. Corrupt rows retain their primary key with a per-row typed refusal, allowing other rows and keyset coverage to proceed.
 
 
 ## Decision Log
@@ -119,7 +129,7 @@ data ExecutionActivity = ExecutionActivity
   { revision :: !(StateRevision "execution")
   , cursor :: !(StateRevision "execution-operation")
   , phase :: !ExecutionPhase
-  , activeOperation :: !(Maybe (StateRevision "execution-operation"))
+  , activeOperation :: !(Maybe OperationId)
   , uncertainOperations :: !Word
   , pendingReceipts :: !PendingReceiptCount
   }
@@ -148,7 +158,7 @@ newtype MarkDigest = MarkDigest Text
 markDigest :: ActivityMark -> MarkDigest
 ```
 
-`CoordinatorTerminal` is a closed sum (`CoordinatorOpen | CoordinatorTerminal`), not a `Bool`. `WaitingReason` has exactly five constructors: `AwaitingApproval {until, review}`, `AwaitingPermission {until}`, `RunningCommand {until, operationId}`, `ParkedAssignment {since}` and `ObjectiveBlocked` (an objective whose `status` is `Blocked` was marked so by an explicit `SetBlocked` command and is waiting on purpose). `Verdict`, `DetectionKind`, `EvidenceRef`, `ObservedWindow` and `ObservationLimit` are closed sums or small records with explicit JSON codecs; `EvidenceRef` constructors carry only structured coordinates (an `ObjectiveId` with a `StateRevision "objective"`, an `ObjectiveAssignmentId` with its revision and owner epoch, a `WorkerSessionId` with a `StateRevision "worker-event"`, an `ExecutionId` with a `StateRevision "execution-operation"`, an `OperationId` for an adaptive decision or a process, an `ExecutionRootId` with a `StateRevision "execution-root"`, a `ReviewRequestId`). `FindingView` is an ordinary `Generic` record with an explicit object codec and the fields the request names: finding, episode and sweep identities, optional objective, subject, detection kind, non-empty evidence, observed window and observation limit. Windows are `Duration "watchdog-stuck"`, `Duration "watchdog-parked"`, `Duration "watchdog-coordinator"` and `Duration "watchdog-drift"`; limits are a new `WatchdogLimit (scope :: Symbol)` positive bounded `Int` modelled on `InspectionLimit`, with `parseWatchdogLimit` and `limitValue`.
+`CoordinatorTerminal` is a closed sum (`CoordinatorOpen | CoordinatorTerminal`), not a `Bool`. `WaitingReason` has exactly five constructors: `AwaitingApproval {until, review}`, `AwaitingPermission {until}`, `RunningCommand {until, operationId}`, `ParkedAssignment {since}` and `ObjectiveBlocked` (an objective whose `status` is `Blocked` was marked so by an explicit `SetBlocked` command and is waiting on purpose). `Verdict` includes `Waiting`, `Terminal` and `ObservationUnknown`; `DetectionKind` uses `StuckWork`, `StuckCoordinatorWork`, `UnresolvedOutcome` and `DriftWork` (distinct constructor names from verdicts). `EvidenceRef`, `ObservedWindow` and `ObservationLimit` are closed sums or small records with explicit JSON codecs; `EvidenceRef` constructors carry only structured coordinates (an `ObjectiveId` with a `StateRevision "objective"`, an `ObjectiveAssignmentId` with its revision and owner epoch, a `WorkerSessionId` with a `StateRevision "worker-event"`, an `ExecutionId` with a `StateRevision "execution-operation"`, an `OperationId` for an adaptive decision or a process, an `ExecutionRootId` with a `StateRevision "execution-root"`, a `ReviewRequestId`). `FindingView` is an ordinary `Generic` record with an explicit object codec and the fields the request names: finding, episode and sweep identities, optional objective, subject, detection kind, non-empty evidence, observed window and observation limit. Windows are `Duration "watchdog-stuck"`, `Duration "watchdog-parked"`, `Duration "watchdog-coordinator"` and `Duration "watchdog-drift"`; limits are a new `WatchdogLimit (scope :: Symbol)` positive bounded `Int` modelled on `InspectionLimit`, with `parseWatchdogLimit` and `limitValue`.
 
 Add `WatchdogSettings` to `shikigami-core/src/Shikigami/App/Config.hs` and its loader as an optional object under the key `watchdog` (environment binding `SHIKIGAMI_WATCHDOG`) with fields `principal` (an `AgentPrincipal`, or an agent name in directory-disabled mode, mirroring how the objective settings name a local operator), `scope` (`all`, or an object with a non-empty `objectives` list), `stuckWindowSeconds`, `parkedWindowSeconds`, `coordinatorWindowSeconds` and `subjectsPerSweep`. Plans 111 and 112 add fields to this record additively. Invalid or nonpositive values fail configuration with the key named, like every other settings object; omission leaves the field `Nothing`, which means the watchdog is disabled. Settei diagnostics must redact nothing here because the object holds no secret, but confirm `--describe-config` renders it.
 
@@ -161,7 +171,7 @@ data ObservationScope = AllObjectives | SelectedObjectives !(NonEmpty ObjectiveI
 data ObservationGrant
 
 resolveObservationGrant
-  :: WatchdogSettings -> AgentIdentity -> Either GrantRefusal ObservationGrant
+  :: Maybe WatchdogSettings -> AgentIdentity -> Either GrantRefusal ObservationGrant
 
 grantScope :: ObservationGrant -> ObservationScope
 grantWindows :: ObservationGrant -> Windows
@@ -172,7 +182,7 @@ grantBudget :: ObservationGrant -> WatchdogLimit "subjects"
 data GrantSnapshot
 
 snapshotGrant :: ObservationGrant -> GrantSnapshot
-restoreGrant :: GrantSnapshot -> AgentIdentity -> WatchdogSettings -> Either GrantRefusal ObservationGrant
+restoreGrant :: GrantSnapshot -> AgentIdentity -> Maybe WatchdogSettings -> Either GrantRefusal ObservationGrant
 ```
 
 `GrantSnapshot` is an ordinary `Generic` record with an explicit object codec; `restoreGrant` rebuilds the sealed grant from the snapshot's scope, windows and budget and rechecks only that the identity is still the configured watchdog principal, so a sweep that replays after a settings change keeps the windows it was admitted with, in the manner of the run-local policy snapshots of [ADR 0007](../adr/0007-a-resolved-profile-is-a-run-local-policy-snapshot.md). `GrantRefusal` is a closed sum (`NotTheWatchdogPrincipal`, `WatchdogDisabled`, `UnresolvedIdentity`). A `CompatibilityIdentity` is accepted only when the settings name an agent name rather than a principal, exactly as [ADR 0033](../adr/0033-recorded-agent-principals-key-durable-state.md) separates the two modes; an `UnresolvedLegacyIdentity` is always refused.
@@ -309,7 +319,7 @@ Every read here is side-effect free and may be repeated. The only durable change
 
 ## Interfaces and Dependencies
 
-This plan owns `Shikigami.Watchdog.Types`, `Shikigami.Watchdog.Grant`, `Shikigami.Watchdog.Observation`, the `WatchdogSettings` record and loader fields `principal`, `scope`, `stuckWindowSeconds`, `parkedWindowSeconds`, `coordinatorWindowSeconds` and `subjectsPerSweep`, the `Watchdog` module root, the probe `tests/types/watchdog-values.py`, and the additive observation reads in `Shikigami.Objective.Store`, `Shikigami.Objective.Inspection`, `Shikigami.WorkerSession.Store`, `Shikigami.Execution.Store`, `Shikigami.Execution.ResourcesStore`, `Shikigami.Workspace.ProcessStore` and `Shikigami.Coordination.Sql`. It defines `Subject`, `SubjectKey`, `ActivityMark`, `MarkDigest`, `WaitingReason`, `WaitingFact`, `Verdict`, `DetectionKind`, `EvidenceRef`, `ObservedWindow`, `ObservationLimit`, `Windows`, `WatchdogLimit`, `FindingView`, `CoverageCursor`, `SubjectObservation` and `ObservationPage` exactly as plans 110, 111 and 112 consume them; a change to any of these after plan 110 starts is recorded in the MasterPlan's Integration Points first. It does not define the sealed `Finding` (plan 110), the ledger tables (plan 110), the drift decision (plan 111), any Flow or capability effect (plan 112), or any operator command (plan 113). It depends on no unfinished plan. Dependency source lookup starts with Mori: `mori registry show shinzui/keiro --full` for the public pending-timer and workflow-header reads, and `mori registry docs keiro-runtime-patterns` for the scalar, vertical-slice and test-layout standards.
+This plan owns `Shikigami.Watchdog.Types`, `Shikigami.Watchdog.Grant`, `Shikigami.Watchdog.Observation`, the `WatchdogSettings` record and loader fields `principal`, `scope`, `stuckWindowSeconds`, `parkedWindowSeconds`, `coordinatorWindowSeconds` and `subjectsPerSweep`, the `Watchdog` module root, the probe `tests/types/watchdog-values.py`, and the additive observation reads in `Shikigami.Objective.Store`, `Shikigami.Objective.Inspection`, `Shikigami.WorkerSession.Store`, `Shikigami.Execution.Store`, `Shikigami.Execution.ResourcesStore`, `Shikigami.Workspace.ProcessStore` and `Shikigami.Coordination.Sql`. It defines `Subject`, `SubjectKey`, `ActivityMark`, `MarkDigest`, `WaitingReason`, `WaitingFact`, `Verdict` includes `Waiting`, `Terminal` and `ObservationUnknown`; `DetectionKind` uses `StuckWork`, `StuckCoordinatorWork`, `UnresolvedOutcome` and `DriftWork` (distinct constructor names from verdicts). `EvidenceRef`, `ObservedWindow`, `ObservationLimit`, `Windows`, `WatchdogLimit`, `FindingView`, `CoverageCursor`, `SubjectObservation` and `ObservationPage` exactly as plans 110, 111 and 112 consume them; a change to any of these after plan 110 starts is recorded in the MasterPlan's Integration Points first. It does not define the sealed `Finding` (plan 110), the ledger tables (plan 110), the drift decision (plan 111), any Flow or capability effect (plan 112), or any operator command (plan 113). It depends on no unfinished plan. Dependency source lookup starts with Mori: `mori registry show shinzui/keiro --full` for the public pending-timer and workflow-header reads, and `mori registry docs keiro-runtime-patterns` for the scalar, vertical-slice and test-layout standards.
 
 Revision 2026-11-05: corrected public timer transaction/filter assumptions, owner projection and scope contracts, and bounded nested coverage. Add tests for a budget of one, scope filtering before LIMIT, truncated relationships, SQL timeout recovery and no false stuck verdict from incomplete approval evidence.
 
