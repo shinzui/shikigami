@@ -315,6 +315,7 @@ library
     Shikigami.Trigger.Schedule
     Shikigami.Trigger.Stream
     Shikigami.Watchdog.Classify
+    Shikigami.Watchdog.Drift
     Shikigami.Watchdog.Episode
     Shikigami.Watchdog.Grant
     Shikigami.Watchdog.Ledger
@@ -618,6 +619,7 @@ test-suite shikigami-core-test
     Shikigami.SinkIntentSpec
     Shikigami.TypeSafeDecisionSpec
     Shikigami.WatchdogClassifySpec
+    Shikigami.WatchdogDriftCadenceSpec
     Shikigami.WatchdogTypesSpec
     Shikigami.WireCompatSpec
     Shikigami.WorkerSessionPositionSpec

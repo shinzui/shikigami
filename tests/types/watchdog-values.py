@@ -78,7 +78,7 @@ with tempfile.TemporaryDirectory(prefix="shikigami-watchdog-values-") as directo
     assert result.returncode != 0 and "FromJSON" in result.stderr, result.stderr
     result = compile("bypass :: NonEmpty Drift.DriftSubjectAssessment -> Drift.DriftAssessment\nbypass = coerce\n")
     assert result.returncode != 0, result.stdout
-    for target in ['Types.WatchdogLimit "subjects"', 'Types.WatchdogLimit "bytes"']:
+    for target in ['Types.WatchdogLimit "subjects"', 'Types.WatchdogLimit "bytes"', 'Types.WatchdogLimit "drift-subjects"']:
         result = compile(f'bypass :: Types.WatchdogLimit "rows" -> {target}\nbypass = coerce\n')
         assert result.returncode != 0, result.stdout
     print("watchdog values: grant/finding decoding, finding-view coercion and scoped limit substitution refused", flush=True)

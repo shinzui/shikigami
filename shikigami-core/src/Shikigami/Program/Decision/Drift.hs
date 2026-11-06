@@ -12,6 +12,7 @@ module Shikigami.Program.Decision.Drift
     DriftSubjectAssessment (..),
     DriftAssessment,
     assessmentView,
+    assessmentMatchesInput,
     Rationale,
     parseRationale,
     rationaleText,
@@ -112,10 +113,13 @@ data DriftSubjectAssessment = DriftSubjectAssessment
   deriving stock (Eq, Show, Generic)
 
 -- Positional private representation: no Generic, decoder or updatable fields.
-newtype DriftAssessment = DriftAssessment (NonEmpty DriftSubjectAssessment) deriving stock (Eq, Show)
+data DriftAssessment = DriftAssessment !Text !(NonEmpty DriftSubjectAssessment) deriving stock (Eq, Show)
 
 assessmentView :: DriftAssessment -> NonEmpty DriftSubjectAssessment
-assessmentView (DriftAssessment subjects) = subjects
+assessmentView (DriftAssessment _ subjects) = subjects
+
+assessmentMatchesInput :: DriftInput -> DriftAssessment -> Bool
+assessmentMatchesInput input (DriftAssessment digest _) = digest == versionedDigest "shikigami.watchdog-drift-input/1" input
 
 catalogSubjectMaximum :: Int
 catalogSubjectMaximum = 16
@@ -156,7 +160,7 @@ validateDriftAssessment input proposal = first (decisionFailure OutputValidation
       actual = sort (map (.subject) proposal.assessments)
   rule (actual == expected) "assessed subjects differ from the exact input subject set"
   validated <- mapM assess (NonEmpty.toList input.subjects)
-  maybe (Left "assessment is empty") (Right . DriftAssessment) (NonEmpty.nonEmpty validated)
+  maybe (Left "assessment is empty") (Right . DriftAssessment (versionedDigest "shikigami.watchdog-drift-input/1" input)) (NonEmpty.nonEmpty validated)
   where
     assess subject = do
       answer <- case filter ((== subjectKeyText (subjectKey subject.subject)) . (.subject)) proposal.assessments of

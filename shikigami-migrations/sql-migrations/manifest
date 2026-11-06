@@ -43,3 +43,4 @@
 0044-initiative-standing-policies.sql
 0045-watchdog-approval-observations.sql
 0046-watchdog-ledger.sql
+0047-watchdog-drift-checks.sql

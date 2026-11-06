@@ -4,9 +4,10 @@
 module Shikigami.Watchdog.Settings (WatchdogSettings (..), ObservationScope (..)) where
 
 import Control.Monad (unless)
-import Data.Aeson (FromJSON (..), ToJSON (..), Value (String), object, withObject, withText, (.:), (.=))
+import Data.Aeson (FromJSON (..), ToJSON (..), Value (String), object, withObject, withText, (.:), (.:?), (.=))
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.List.NonEmpty (NonEmpty)
+import Data.Maybe (isJust)
 import Data.Text (Text)
 import Data.Text qualified as Text
 import GHC.Generics (Generic)
@@ -14,7 +15,7 @@ import Shikigami.Agent.Name (agentNameText, mkAgentName)
 import Shikigami.Agent.Principal (AgentIdentity (..), mkAgentPrincipal, principalText)
 import Shikigami.Duration (Duration, durationTime)
 import Shikigami.Objective.Types (ObjectiveId)
-import Shikigami.Watchdog.Types (WatchdogLimit)
+import Shikigami.Watchdog.Types (WatchdogLimit, limitValue)
 
 data ObservationScope = AllObjectives | SelectedObjectives !(NonEmpty ObjectiveId)
   deriving stock (Eq, Show, Generic)
@@ -40,13 +41,15 @@ data WatchdogSettings = WatchdogSettings
     stuckWindowSeconds :: !(Duration "watchdog-stuck"),
     parkedWindowSeconds :: !(Duration "watchdog-parked"),
     coordinatorWindowSeconds :: !(Duration "watchdog-coordinator"),
-    subjectsPerSweep :: !(WatchdogLimit "subjects")
+    subjectsPerSweep :: !(WatchdogLimit "subjects"),
+    driftIntervalSeconds :: !(Maybe (Duration "watchdog-drift")),
+    driftSubjectsPerSweep :: !(Maybe (WatchdogLimit "drift-subjects"))
   }
   deriving stock (Eq, Show, Generic)
 
 instance FromJSON WatchdogSettings where
   parseJSON = withObject "watchdog" \fields -> do
-    unless (all (`elem` ["principal", "scope", "stuckWindowSeconds", "parkedWindowSeconds", "coordinatorWindowSeconds", "subjectsPerSweep"]) (KeyMap.keys fields)) (fail "unknown watchdog setting")
+    unless (all (`elem` ["principal", "scope", "stuckWindowSeconds", "parkedWindowSeconds", "coordinatorWindowSeconds", "subjectsPerSweep", "driftIntervalSeconds", "driftSubjectsPerSweep"]) (KeyMap.keys fields)) (fail "unknown watchdog setting")
     principal <-
       fields .: "principal"
         >>= withText
@@ -60,8 +63,9 @@ instance FromJSON WatchdogSettings where
                     else CompatibilityIdentity <$> mkAgentName value
                 )
           )
-    settings <- WatchdogSettings principal <$> fields .: "scope" <*> fields .: "stuckWindowSeconds" <*> fields .: "parkedWindowSeconds" <*> fields .: "coordinatorWindowSeconds" <*> fields .: "subjectsPerSweep"
+    settings <- WatchdogSettings principal <$> fields .: "scope" <*> fields .: "stuckWindowSeconds" <*> fields .: "parkedWindowSeconds" <*> fields .: "coordinatorWindowSeconds" <*> fields .: "subjectsPerSweep" <*> fields .:? "driftIntervalSeconds" <*> fields .:? "driftSubjectsPerSweep"
     unless (durationTime settings.stuckWindowSeconds > 0 && durationTime settings.parkedWindowSeconds > 0 && durationTime settings.coordinatorWindowSeconds > 0) (fail "watchdog windows must be positive")
+    unless (isJust settings.driftIntervalSeconds == isJust settings.driftSubjectsPerSweep && maybe True ((> 0) . durationTime) settings.driftIntervalSeconds && maybe True ((<= 16) . limitValue) settings.driftSubjectsPerSweep) (fail "drift needs a positive interval and a subject limit in 1..16 together")
     pure settings
 
 instance ToJSON WatchdogSettings where
@@ -75,5 +79,7 @@ instance ToJSON WatchdogSettings where
         "stuckWindowSeconds" .= value.stuckWindowSeconds,
         "parkedWindowSeconds" .= value.parkedWindowSeconds,
         "coordinatorWindowSeconds" .= value.coordinatorWindowSeconds,
-        "subjectsPerSweep" .= value.subjectsPerSweep
+        "subjectsPerSweep" .= value.subjectsPerSweep,
+        "driftIntervalSeconds" .= value.driftIntervalSeconds,
+        "driftSubjectsPerSweep" .= value.driftSubjectsPerSweep
       ]

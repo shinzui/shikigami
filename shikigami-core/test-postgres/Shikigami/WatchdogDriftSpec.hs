@@ -9,6 +9,7 @@ import Baikai.Options qualified as Options
 import Baikai.Provider.Registry (ApiProvider (..))
 import Baikai.Response (Response (..))
 import Baikai.Stream (liftCompleteToStream)
+import Control.Concurrent.Async (concurrently)
 import Control.Exception (SomeException, try)
 import Control.Lens ((&), (.~))
 import Control.Monad (when)
@@ -47,6 +48,7 @@ import Shikigami.Decision.Contract
 import Shikigami.Decision.Evidence
 import Shikigami.Decision.ModelCatalog
 import Shikigami.Decision.StubProvider (decisionStubProvider)
+import Shikigami.Duration (remainingDuration)
 import Shikigami.Execution.Admission (enrollRootRun)
 import Shikigami.Execution.Identity (ExecutionRootId)
 import Shikigami.Execution.Observation qualified as Execution
@@ -72,7 +74,10 @@ import Shikigami.Program.Decision.Drift
 import Shikigami.RouterWorkflowSpec qualified as RouterFixture
 import Shikigami.RuntimePolicy (DefaultModelRequirement (DefaultModelOptional))
 import Shikigami.StateRevision (initialRevision)
+import Shikigami.Watchdog.Drift qualified as Cadence
+import Shikigami.Watchdog.Observation qualified as Observation
 import Shikigami.Watchdog.Types
+import Shikigami.WatchdogObservationSpec (fixtureGrant)
 import Shikigami.WorkerSession.Input (workerSessionId)
 import Shikigami.WorkerSession.Types qualified as WorkerSessionOwner
 import Test.Tasty (TestTree, testGroup)
@@ -163,7 +168,42 @@ tests fixture =
         assertBool "root refused the call" (either (const True) (const False) refused)
         h.calls >>= (@?= 0)
         charged <- inspect h root
-        amount charged.usage.settled Resources.ModelAttempts @?= Nothing
+        amount charged.usage.settled Resources.ModelAttempts @?= Nothing,
+      testCase "stored checks converge concurrently, enforce cadence and refuse stale or changed retries" $ withHarness fixture \h -> do
+        (input, subject, page) <- boundedInput h
+        assessment <- right (validateDriftAssessment input (proposal input))
+        checks <- right (Cadence.checksForAssessment page.observedAt input (subject :| []) assessment)
+        sweep <- newSweepId
+        (first, replayed) <-
+          concurrently
+            (run h.env (runTransaction (Cadence.recordDriftChecks sweep page.observedAt checks)))
+            (run h.env (runTransaction (Cadence.recordDriftChecks sweep page.observedAt checks)))
+        first @?= Right ()
+        replayed @?= Right ()
+        retained <- right =<< run h.env (runTransaction (Cadence.readDriftChecks (subjectKey subject.subject :| [])))
+        Map.elems retained @?= NonEmpty.toList checks
+        limit <- right (parseWatchdogLimit 1)
+        let cadence = Cadence.DriftCadence (remainingDuration 600) limit
+        Cadence.dueForDrift cadence (addUTCTime 599 page.observedAt) retained [subject] @?= Nothing
+        fmap (map (.subject) . NonEmpty.toList . snd) (Cadence.dueForDrift cadence (addUTCTime 600 page.observedAt) retained [subject]) @?= Just [subject.subject]
+        let altered = fmap (\check -> check & #checkedAt .~ addUTCTime 1 page.observedAt) checks
+        run h.env (runTransaction (Cadence.recordDriftChecks sweep (addUTCTime 1 page.observedAt) altered)) >>= (@?= Left Cadence.DriftBindingConflict)
+        stale <- newSweepId
+        let old = fmap (\check -> check & #checkedAt .~ addUTCTime (-1) page.observedAt) checks
+        run h.env (runTransaction (Cadence.recordDriftChecks stale (addUTCTime (-1) page.observedAt) old)) >>= (@?= Left Cadence.DriftStale)
+        unchanged <- right =<< run h.env (runTransaction (Cadence.readDriftChecks (subjectKey subject.subject :| [])))
+        unchanged @?= retained,
+      testCase "metadata builder excludes protected bodies; corrupted cadence metadata is a typed refusal" $ withHarness fixture \h -> do
+        (input, subject, page) <- boundedInput h
+        let encoded = decodeUtf8 (Lazy.toStrict (encode input))
+        assertBool "owner prompt/replay body excluded" (not ("PRIVATE_REPLAY_MARKER" `Text.isInfixOf` encoded))
+        assertBool "accepted tool metadata retained" ("unrelated-export" `Text.isInfixOf` encoded)
+        assessment <- right (validateDriftAssessment input (proposal input))
+        checks <- right (Cadence.checksForAssessment page.observedAt input (subject :| []) assessment)
+        sweep <- newSweepId
+        right =<< run h.env (runTransaction (Cadence.recordDriftChecks sweep page.observedAt checks))
+        run h.env (runTransaction (Tx.sql "UPDATE shikigami.watchdog_drift_checks SET mark_digest='invalid'"))
+        run h.env (runTransaction (Cadence.readDriftChecks (subjectKey subject.subject :| []))) >>= (@?= Left Cadence.DriftCorrupt)
     ]
 
 data Harness = Harness
@@ -295,3 +335,14 @@ right = either (assertFailure . show) pure
 
 must :: (Show e) => Either e a -> a
 must = either (error . show) id
+
+boundedInput :: Harness -> IO (DriftInput, Observation.SubjectObservation, Observation.ObservationPage)
+boundedInput h = do
+  grant <- fixtureGrant
+  page <- right =<< run h.env (Observation.observePage grant Observation.defaultObservationBounds Observation.initialCursor)
+  let expected = (NonEmpty.head h.input.subjects).subject
+  subject <- case filter ((== expected) . (.subject)) page.subjects of [value] -> pure value; _ -> assertFailure "execution absent from observation page"
+  (objective, _) <- objectiveState h
+  limit <- right (parseWatchdogLimit 1)
+  input <- right (Cadence.buildDriftInput limit objective (subject :| []))
+  pure (input, subject, page)

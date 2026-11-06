@@ -130,3 +130,20 @@ indexes, checks category/rationale bounds and alone mints an opaque assessment.
 Owner identifiers need no orphan model-schema instances. Goal and criteria prose
 remain untrusted input. The new Drift slot is explicitly root-accounted; no
 registered production Flow invokes it until plan 112's guarded integration.
+
+## Optional drift cadence and retained policy
+
+Drift cadence settings are an optional pair. Omission disables drift; a positive
+interval and catalog-bounded subject budget are admitted together and retained
+in the grant snapshot. Historical snapshots missing the optional budget decode
+as disabled. A mark change never bypasses the minimum assessment interval.
+The selector receives only liveness-eligible subjects and chooses one oldest due
+objective with a bounded deterministic batch. Failed/incomplete observations
+produce no assessment.
+
+The assessment seal retains its full input commitment. Its downstream adapter
+checks the same goal, revision and reference input before deriving cadence facts.
+Cadence receipts return the first accepted write and refuse stale timestamps or
+changed bindings. Check persistence and drift episode persistence must be one
+EP-4 transaction. The ordinary resource owner retains unmeasured token usage;
+a lost result append cannot refund the earlier attempt.

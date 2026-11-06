@@ -207,7 +207,7 @@ and map it to literal preparation/result labels. A Flow calls
 `decide staticStep authorizedAlias typedInput`; it never receives IO, a provider
 handler or credentials. The whole-Flow policy pins every slot before the first
 call, including a branch that has not yet executed. Decision-only Flows declare
-`requiresDefaultModel = False`; flows using Routing or PracticeReview keep the
+`requiresDefaultModel = DefaultModelOptional`; flows using Routing or PracticeReview keep the
 default-model profile check.
 
 Pure output validation precedes the next protected effect. A proposed specialist
@@ -218,8 +218,10 @@ no permission.
 
 ## Replay and version retention
 
-The new segment is guarded by `shikigami-structured-judgments-v1`. An old patch snapshot
-keeps the old interpreter and cannot enter decision steps. The static labels and
+The supplied-ticket Judgment segment is guarded by
+`shikigami-structured-judgments-v1`; historical snapshots cannot enter its new
+steps. Generative triage/investigation labels belong to the current baseline,
+and Propose is guarded by `shikigami-initiative-v1`. The static labels and
 envelope contracts are recorded in [workflow versioning](workflow-versioning.md).
 Each slot may run once per generation. Repeating a slot is refused. Unbounded
 decision loops need a rotating workflow with `restoreSeed` and `continueAsNew`.
@@ -296,8 +298,59 @@ see its input, so the choice rules run in the Flow and a bad answer is a recorde
 refusal rather than a failed run.
 
 Its slot is root-accounted. `decisionAccounting` returns `RootAccountedCall` for
-`Propose` and `UnaccountedCall` for every other label: each actual provider call
+`Propose` and `Drift`, and `UnaccountedCall` for the earlier labels: each actual provider call
 reserves and settles an attempt on the run's enrolled resource root, a root that
 refuses stops the call before dispatch, and a run without a root refuses before the
 prepare step is journaled. Add a label to that total function when a new slot must pay
 for its calls; no existing slot changes behavior.
+
+
+## Assessing drift from bounded metadata
+
+[Program.Decision.Drift](../shikigami-core/src/Shikigami/Program/Decision/Drift.hs)
+registers `shikigami.watchdog-drift`, version `1`. Its input is one objective's
+public goal and criteria plus bounded subject references and accepted operation
+specifications. Tool arguments, instructions, transcript and result bodies are
+absent. Goal and criteria prose remain untrusted evidence.
+
+The program returns an untrusted `DriftProposal`. Each answer copies a canonical
+subject key, chooses `within-scope`, `possible-drift` or `outside-scope`, supplies
+a rationale of 1–512 characters without controls, and cites indexes into that
+subject's deduplicated artifact/evidence references. The registered validator
+checks structure and bounds. It cannot see invocation input. Immediately after
+`decide`, validate the proposal against the retained typed input:
+
+```haskell
+proposal <- decide driftStep alias input
+assessment <- either refuseDecision pure (validateDriftAssessment input proposal)
+```
+
+The validator requires exactly the input subjects once each, resolves every
+citation within its own subject's references, and requires evidence for an
+adverse category. Only it can construct `DriftAssessment`; the seal has no JSON
+reader or Generic representation. Public views are readable metadata.
+`assessmentMatchesInput` checks the seal's retained input commitment before
+adaptation, including goal, revision and reference membership. Replay reads the
+committed proposal without another provider call and deterministically validates
+it against the same retained input.
+
+The fixed catalog maximum is sixteen subjects; each input retains the lower
+configured limit, at most 32 operation specifications per subject and a goal of
+at most 4 KiB. Changing deployment limits does not change the program descriptor.
+Cadence chooses one oldest due objective and one bounded batch. A changed mark
+never bypasses the minimum interval. Checks and their sweep receipts retain the
+original assessment time and reject changed or stale retries.
+
+Optional `driftIntervalSeconds` and `driftSubjectsPerSweep` watchdog settings must
+appear together; omission disables drift and limits above sixteen refuse loading.
+The grant snapshot retains the admitted interval and optional subject bound.
+The production watchdog caller, optional slot inventory and workflow declarations
+are integrated by [plan 112](plans/112-run-the-watchdog-as-a-scheduled-flow-agent-with-its-own-principal-allowance-and-sinks.md).
+Existing required slots still require every declared alias before provider IO.
+
+`Drift` uses the ordinary root-accounted decision path. It requires the run's own
+enrolled root, and an exhausted root refuses before provider dispatch. A finite
+token envelope also requires a pinned positive `maxTokens` and model context
+ceiling; the resource owner reserves their sum conservatively. A committed
+result replays with one call. A lost result append may call again, with each
+actual attempt charged and unmeasured usage retained rather than refunded.

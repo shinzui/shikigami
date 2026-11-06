@@ -43,7 +43,7 @@ You can see it working in `cabal test shikigami-core-postgres-test --test-option
 
 - [x] (2026-11-06) Milestone 1: The `Drift` decision label, the `shikigami.watchdog-drift` program with its input and output types, root-accounting classification and validators are registered, and the unit group proves subject substitution, invented evidence and missing subjects are refused.
 - [x] (2026-11-06) Milestone 2: A test Flow invokes the slot against the stub provider through the real journaled decision path, replay after a crash makes no second call, and provider calls are accounted against a fixture root.
-- [ ] Milestone 3: Cadence selection, the `watchdog_drift_checks` table and the conversion of assessments into `Drift` detections exist, with the settings fields and the authoring guide updated.
+- [x] (2026-11-06) Milestone 3: Cadence selection, the `watchdog_drift_checks` table and the conversion of assessments into `Drift` detections exist, with the settings fields and the authoring guide updated.
 
 
 M1 acceptance 2026-11-06: all eight drift-program unit groups and the full core
@@ -55,8 +55,10 @@ M2 is accepted: all six real Flow cases pass, along with 69 existing decision an
 17 FlowLifecycle PostgreSQL cases and conventions. Committed-result replay
 reuses the original provider outcome with one accounted call; lost append
 recovery makes and charges two calls and retains unknown token usage. The
-objective metadata/receipts and its root remain unchanged. M3 cadence/settings
-and final full regressions remain.
+objective metadata/receipts and its root remain unchanged. M3 is accepted: the final full suites pass 782 core unit, 642 core PostgreSQL,
+339 worker and 107 server tests, plus 9 migration unit and 11 smoke tests.
+Schema isolation, conventions and the expanded grant/assessment compiler controls
+pass. Migration 0047 retains checks and sweep receipts.
 
 
 ## Surprises & Discoveries
@@ -95,7 +97,26 @@ The real Flow harness passes all six cases, including committed-result replay af
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+All three milestones are complete. The registered program has a fixed descriptor,
+bounded metadata-only input, an untrusted proposal and an opaque assessment bound
+to the exact retained input. Subject/citation substitution, missing evidence,
+control characters and oversized inputs refuse validation. No model output can
+name a recipient or create authority.
+
+The real Flow harness demonstrates owner projection privacy, independent root
+accounting, committed-result replay with one call, charged resampling after a lost
+append and preserved unknown token usage. Objective metadata, receipts and usage
+remain unchanged. Cadence is optional, retained in the admitted grant, bounded to
+one objective and one batch, and never bypasses its interval on mark changes.
+Stored checks converge under concurrent retries and refuse stale writes or corrupt
+metadata. All final unit, PostgreSQL, worker, server, migration, convention and
+compiler checks pass as recorded above.
+
+No friction entries were recorded under this plan; the completion query returned
+none. Durable input/cadence boundaries are recorded in
+[ADR 0116](../adr/0116-watchdog-observation-preserves-completeness-and-detector-boundaries.md).
+EP-4 owns the production Flow, optional effective slot inventory, allowance,
+delivery and family-scoped ledger adapter; these are not enabled by this plan.
 
 
 ## Context and Orientation
@@ -120,12 +141,13 @@ data CriterionSummary = CriterionSummary
   { key :: !CriterionKey
   , description :: !Text
   , kind :: !CriterionKind
+  , journeyRequired :: !JourneyRequirement
   }
   deriving stock (Eq, Show, Generic)
 
 data OperationSummary = OperationSummary
   { position :: !(StateRevision "execution-operation")
-  , kind :: !OperationKindSummary
+  , specification :: !OperationSpec
   }
   deriving stock (Eq, Show, Generic)
 
@@ -144,6 +166,7 @@ data DriftInput = DriftInput
   , goal :: !Text
   , criteria :: ![CriterionSummary]
   , subjects :: !(NonEmpty DriftSubjectInput)
+  , limit :: !(WatchdogLimit "drift-subjects")
   }
   deriving stock (Eq, Show, Generic)
 
@@ -157,8 +180,9 @@ data DriftSubjectAssessment = DriftSubjectAssessment
   }
   deriving stock (Eq, Show, Generic)
 
-newtype DriftAssessment = DriftAssessment (NonEmpty DriftSubjectAssessment)
-  deriving stock (Eq, Show)
+-- DriftAssessment has a private input commitment and private assessment list.
+assessmentView :: DriftAssessment -> NonEmpty DriftSubjectAssessment
+assessmentMatchesInput :: DriftInput -> DriftAssessment -> Bool
 
 driftProgram :: RegisteredProgram DriftInput DriftProposal
 
@@ -179,11 +203,11 @@ Allocate the next migration with `just new-migration watchdog-drift-checks`; do 
 -- Last drift assessment per subject. Metadata only.
 CREATE TABLE IF NOT EXISTS shikigami.watchdog_drift_checks (
   subject_key text PRIMARY KEY,
-  objective_id uuid NOT NULL,
+  objective_id text NOT NULL,
   checked_at timestamptz NOT NULL,
   mark_digest text NOT NULL,
   category text NOT NULL,
-  sweep_id uuid NOT NULL
+  sweep_id text NOT NULL
 );
 ```
 
@@ -217,8 +241,8 @@ buildDriftInput :: WatchdogLimit "drift-subjects" -> ObjectiveObservation -> Non
 -- EP-4 implements the ledger adapter after both prerequisite children complete.
 -- EP-3 returns validated DriftCheck values and assessments only.
 
-readDriftChecks :: NonEmpty SubjectKey -> Transaction (Either WatchdogError (Map SubjectKey DriftCheck))
-recordDriftChecks :: SweepId -> UTCTime -> NonEmpty DriftCheck -> Transaction (Either WatchdogError ())
+readDriftChecks :: NonEmpty SubjectKey -> Transaction (Either DriftStoreError (Map SubjectKey DriftCheck))
+recordDriftChecks :: SweepId -> UTCTime -> NonEmpty DriftCheck -> Transaction (Either DriftStoreError ())
 ```
 
 Add `driftIntervalSeconds` and `driftSubjectsPerSweep` to `WatchdogSettings` (plan 109's record in `shikigami-core/src/Shikigami/App/Config.hs`) and its loader, defaulting to disabled when absent so that a deployment without a drift alias runs stuck detection only. Use EP-1's shared `DriftCategory`; EP-2 includes `driftCategory :: Maybe DriftCategory` from its initial schema in `EvidenceSummary` so a category change is a material change and a return to `WithinScope` closes the episode. Extend `WatchdogDriftSpec`: `dueForDrift` picks nothing when every check is fresh and the marks are unchanged, requires the configured interval to have elapsed even when the mark changed, picks the objective with the oldest check otherwise, and never returns more than the limit; `driftOutcomes` records a `Detected Drift` outcome through plan 110's family-scoped `recordSweepPage` in the EP-4 integration fixture and the resulting finding's evidence equals the assessment's citations; a later `WithinScope` assessment closes the episode. Update `docs/shikumi-flow-decisions.md` with a section on the drift program as the first program whose output is a structured per-subject assessment with an evidence-subset validator, and correct the stale patch sentence.
@@ -285,12 +309,22 @@ The request's acceptance 4, with the deterministic provider: a fixture worker th
 Registering a program is a pure catalog change; the retained codec must stay even if the program is later retired (ADR 0045). The migration is additive. `recordDriftChecks` upserts by subject key and is safe to repeat. If a provider call's terminal write is lost, the ledger shows an unresolved expectation and the next sweep's `dueForDrift` sees a stale check and may try again under its own new attempt; that is the documented behavior of the decision ledger, not something this plan changes. Rolling back the code leaves the program's journaled outcomes decodable through the retained codec.
 
 
+M3 refines retained policy before EP-4 consumes it. Drift settings are optional as
+a pair and bounded to the catalog maximum. `GrantSnapshot.driftBudget` retains the
+admitted optional subject bound; missing historical fields decode as disabled.
+`Windows.drift` retains the admitted interval. `grantDriftBudget` projects the
+sealed grant's bound. An assessment retains its full input commitment and exposes
+`assessmentMatchesInput` for safe adaptation. Cadence persistence has its own
+sweep-bound receipts and refuses stale check times or a changed objective binding.
+EP-4 combines check recording with its ledger update in one transaction.
+
+
 ## Interfaces and Dependencies
 
 This plan owns the `Drift` constructor of `Shikigami.Flow.Decision.DecisionLabel` and its step names, `Shikigami.Program.Decision.Drift` (`DriftInput`, `DriftSubjectInput`, `OperationSummary`, `CriterionSummary`, `DriftSubjectAssessment`, `DriftAssessment`, `Rationale`, `driftProgram`), the registry entries, `Shikigami.Watchdog.Drift` (`DriftCadence`, `DriftCheck`, `dueForDrift`, `buildDriftInput`, `readDriftChecks`, `recordDriftChecks`), migration `NNNN-watchdog-drift-checks`, the settings fields `driftIntervalSeconds` and `driftSubjectsPerSweep`; EP-2 owns its own `EvidenceSummary` field. Plan 112 declares `decision-prepare-drift` and `decision-result-drift` in the agent-run patch, lists the slot in the `watchdog-sweep` `FlowDef`, lists the alias in `agents/proof/watchdog.dhall`, and refuses the slot when the run has no root. It consumes plan 109 unchanged and must be Complete before plan 112 starts. It does not add a Flow to `flowRegistry`, change `runDecisionAccepted`, or declare any step in `domain/`.
 
 Revision 2026-11-05: aligned operation metadata and per-label accounting with current APIs; moved ledger conversion to EP-4 to preserve the soft dependency; distinguished committed-result replay from an uncommitted provider attempt. Test a lost result append separately: recovery may call again, but every call must remain accounted and uncertainty must not be refunded.
 
-The current `Program.Decision.registerProgram` result validator has type `o -> Either Text o`; it cannot compare an output to the invocation input. Register a structurally validated, codec-safe `DriftProposal`, then call pure `validateDriftAssessment input proposal` immediately after `decide` to mint the opaque `DriftAssessment`. This check enforces exact subject cardinality, no duplicates, per-subject evidence membership and nonempty adverse evidence. EP-4 accepts only that seal for conversion to findings. A replay decodes the retained proposal and deterministically revalidates it against the journaled input. Do not claim that the existing registry API provides input-dependent validation, and do not construct a fresh registered program for each sweep. Add tests at this actual proposal-to-assessment boundary.
+The `Program.Decision.registerProgram` result validator has type `o -> Either Text o`; it cannot compare an output to the invocation input. Register a structurally validated, codec-safe `DriftProposal`, then call pure `validateDriftAssessment input proposal` immediately after `decide` to mint the opaque `DriftAssessment`. This check enforces exact subject cardinality, no duplicates, per-subject evidence membership and nonempty adverse evidence. EP-4 accepts only that seal for conversion to findings. A replay decodes the retained proposal and deterministically revalidates it against the journaled input. Do not claim that the existing registry API provides input-dependent validation, and do not construct a fresh registered program for each sweep. Add tests at this actual proposal-to-assessment boundary.
 
 The reviewed coordination constraints are recorded in [ADR 0116](../adr/0116-watchdog-observation-preserves-completeness-and-detector-boundaries.md); operator-owned spend follows [ADR 0115](../adr/0115-evaluation-spend-is-a-root-enrolled-at-the-trigger-and-accounted-slots-refuse-without-one.md).

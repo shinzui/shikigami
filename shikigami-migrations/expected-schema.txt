@@ -336,6 +336,15 @@ column	watchdog_coverage.claim_key	text not null
 column	watchdog_coverage.cursor	jsonb not null
 column	watchdog_coverage.last_pass_completed_at	timestamp with time zone
 column	watchdog_coverage.pass_started_at	timestamp with time zone not null
+column	watchdog_drift_checks.category	text not null
+column	watchdog_drift_checks.checked_at	timestamp with time zone not null
+column	watchdog_drift_checks.mark_digest	text not null
+column	watchdog_drift_checks.objective_id	text not null
+column	watchdog_drift_checks.subject	jsonb not null
+column	watchdog_drift_checks.subject_key	text not null
+column	watchdog_drift_checks.sweep_id	text not null
+column	watchdog_drift_receipts.input_digest	text not null
+column	watchdog_drift_receipts.sweep_id	text not null
 column	watchdog_episodes.closed_at	timestamp with time zone
 column	watchdog_episodes.closed_reason	text
 column	watchdog_episodes.episode_id	text not null
@@ -902,6 +911,18 @@ constraint	watchdog_coverage.watchdog_coverage_claim_key_not_null	NOT NULL claim
 constraint	watchdog_coverage.watchdog_coverage_cursor_not_null	NOT NULL cursor
 constraint	watchdog_coverage.watchdog_coverage_pass_started_at_not_null	NOT NULL pass_started_at
 constraint	watchdog_coverage.watchdog_coverage_pkey	PRIMARY KEY (claim_key)
+constraint	watchdog_drift_checks.watchdog_drift_checks_category_check	CHECK ((category = ANY (ARRAY['within-scope'::text, 'possible-drift'::text, 'outside-scope'::text])))
+constraint	watchdog_drift_checks.watchdog_drift_checks_category_not_null	NOT NULL category
+constraint	watchdog_drift_checks.watchdog_drift_checks_checked_at_not_null	NOT NULL checked_at
+constraint	watchdog_drift_checks.watchdog_drift_checks_mark_digest_not_null	NOT NULL mark_digest
+constraint	watchdog_drift_checks.watchdog_drift_checks_objective_id_not_null	NOT NULL objective_id
+constraint	watchdog_drift_checks.watchdog_drift_checks_pkey	PRIMARY KEY (subject_key)
+constraint	watchdog_drift_checks.watchdog_drift_checks_subject_key_not_null	NOT NULL subject_key
+constraint	watchdog_drift_checks.watchdog_drift_checks_subject_not_null	NOT NULL subject
+constraint	watchdog_drift_checks.watchdog_drift_checks_sweep_id_not_null	NOT NULL sweep_id
+constraint	watchdog_drift_receipts.watchdog_drift_receipts_input_digest_not_null	NOT NULL input_digest
+constraint	watchdog_drift_receipts.watchdog_drift_receipts_pkey	PRIMARY KEY (sweep_id)
+constraint	watchdog_drift_receipts.watchdog_drift_receipts_sweep_id_not_null	NOT NULL sweep_id
 constraint	watchdog_episodes.watchdog_episodes_episode_id_not_null	NOT NULL episode_id
 constraint	watchdog_episodes.watchdog_episodes_family_check	CHECK ((family = ANY (ARRAY['liveness'::text, 'drift'::text])))
 constraint	watchdog_episodes.watchdog_episodes_family_not_null	NOT NULL family
@@ -1184,6 +1205,8 @@ index	sink_grants_verified_identity_key	CREATE UNIQUE INDEX sink_grants_verified
 index	watchdog_claims_pkey	CREATE UNIQUE INDEX watchdog_claims_pkey ON shikigami.watchdog_claims USING btree (claim_key)
 index	watchdog_completed_sweeps	CREATE INDEX watchdog_completed_sweeps ON shikigami.watchdog_sweeps USING btree (completed_at DESC) WHERE (completed_at IS NOT NULL)
 index	watchdog_coverage_pkey	CREATE UNIQUE INDEX watchdog_coverage_pkey ON shikigami.watchdog_coverage USING btree (claim_key)
+index	watchdog_drift_checks_pkey	CREATE UNIQUE INDEX watchdog_drift_checks_pkey ON shikigami.watchdog_drift_checks USING btree (subject_key)
+index	watchdog_drift_receipts_pkey	CREATE UNIQUE INDEX watchdog_drift_receipts_pkey ON shikigami.watchdog_drift_receipts USING btree (sweep_id)
 index	watchdog_episodes_pkey	CREATE UNIQUE INDEX watchdog_episodes_pkey ON shikigami.watchdog_episodes USING btree (episode_id)
 index	watchdog_findings_episode_id_sweep_id_key	CREATE UNIQUE INDEX watchdog_findings_episode_id_sweep_id_key ON shikigami.watchdog_findings USING btree (episode_id, sweep_id)
 index	watchdog_findings_pkey	CREATE UNIQUE INDEX watchdog_findings_pkey ON shikigami.watchdog_findings USING btree (finding_id)
@@ -1281,6 +1304,8 @@ table	sink_deliveries	kind=r
 table	sink_grants	kind=r
 table	watchdog_claims	kind=r
 table	watchdog_coverage	kind=r
+table	watchdog_drift_checks	kind=r
+table	watchdog_drift_receipts	kind=r
 table	watchdog_episodes	kind=r
 table	watchdog_findings	kind=r
 table	watchdog_marks	kind=r

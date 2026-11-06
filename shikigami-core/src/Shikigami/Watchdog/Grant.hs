@@ -10,6 +10,7 @@ module Shikigami.Watchdog.Grant
     grantScope,
     grantWindows,
     grantBudget,
+    grantDriftBudget,
     GrantSnapshot (..),
     snapshotGrant,
     GrantRefusal (..),
@@ -17,7 +18,7 @@ module Shikigami.Watchdog.Grant
   )
 where
 
-import Data.Aeson (FromJSON (..), ToJSON (..), object, withObject, withText, (.:), (.=))
+import Data.Aeson (FromJSON (..), ToJSON (..), object, withObject, withText, (.:), (.:?), (.=))
 import Data.Text (Text)
 import GHC.Generics (Generic)
 import Shikigami.Agent.Principal (AgentIdentity (..))
@@ -26,35 +27,39 @@ import Shikigami.Watchdog.Settings
 import Shikigami.Watchdog.Types (WatchdogLimit, Windows (..))
 
 -- Positional private fields prevent public record updates. No Generic or decoder.
-data ObservationGrant = ObservationGrant !AgentIdentity !ObservationScope !Windows !(WatchdogLimit "subjects")
+data ObservationGrant = ObservationGrant !AgentIdentity !ObservationScope !Windows !(WatchdogLimit "subjects") !(Maybe (WatchdogLimit "drift-subjects"))
 
 grantPrincipal :: ObservationGrant -> AgentIdentity
-grantPrincipal (ObservationGrant principal _ _ _) = principal
+grantPrincipal (ObservationGrant principal _ _ _ _) = principal
 
 grantScope :: ObservationGrant -> ObservationScope
-grantScope (ObservationGrant _ scope _ _) = scope
+grantScope (ObservationGrant _ scope _ _ _) = scope
 
 grantWindows :: ObservationGrant -> Windows
-grantWindows (ObservationGrant _ _ windows _) = windows
+grantWindows (ObservationGrant _ _ windows _ _) = windows
 
 grantBudget :: ObservationGrant -> WatchdogLimit "subjects"
-grantBudget (ObservationGrant _ _ _ budget) = budget
+grantBudget (ObservationGrant _ _ _ budget _) = budget
+
+grantDriftBudget :: ObservationGrant -> Maybe (WatchdogLimit "drift-subjects")
+grantDriftBudget (ObservationGrant _ _ _ _ budget) = budget
 
 data GrantSnapshot = GrantSnapshot
   { scope :: !ObservationScope,
     windows :: !Windows,
-    budget :: !(WatchdogLimit "subjects")
+    budget :: !(WatchdogLimit "subjects"),
+    driftBudget :: !(Maybe (WatchdogLimit "drift-subjects"))
   }
   deriving stock (Eq, Show, Generic)
 
 instance ToJSON GrantSnapshot where
-  toJSON value = object ["scope" .= value.scope, "windows" .= value.windows, "budget" .= value.budget]
+  toJSON value = object ["scope" .= value.scope, "windows" .= value.windows, "budget" .= value.budget, "driftBudget" .= value.driftBudget]
 
 instance FromJSON GrantSnapshot where
-  parseJSON = withObject "GrantSnapshot" \fields -> GrantSnapshot <$> fields .: "scope" <*> fields .: "windows" <*> fields .: "budget"
+  parseJSON = withObject "GrantSnapshot" \fields -> GrantSnapshot <$> fields .: "scope" <*> fields .: "windows" <*> fields .: "budget" <*> fields .:? "driftBudget"
 
 snapshotGrant :: ObservationGrant -> GrantSnapshot
-snapshotGrant (ObservationGrant _ scope windows budget) = GrantSnapshot scope windows budget
+snapshotGrant (ObservationGrant _ scope windows budget driftBudget) = GrantSnapshot scope windows budget driftBudget
 
 data GrantRefusal = NotTheWatchdogPrincipal | WatchdogDisabled | UnresolvedIdentity
   deriving stock (Eq, Show)
@@ -83,12 +88,12 @@ checkIdentity (Just settings) identity
 resolveObservationGrant :: Maybe WatchdogSettings -> AgentIdentity -> Either GrantRefusal ObservationGrant
 resolveObservationGrant settings identity = do
   admitted <- checkIdentity settings identity
-  -- Drift is disabled until the cadence owner adds its explicit setting. Its
-  -- positive placeholder is never used for a model call by this observation slice.
-  drift <- either (const (Left WatchdogDisabled)) Right (parseDuration (durationTime admitted.stuckWindowSeconds))
-  pure (ObservationGrant identity admitted.scope (Windows admitted.stuckWindowSeconds admitted.parkedWindowSeconds admitted.coordinatorWindowSeconds drift) admitted.subjectsPerSweep)
+  drift <- case admitted.driftIntervalSeconds of
+    Just interval -> Right interval
+    Nothing -> either (const (Left WatchdogDisabled)) Right (parseDuration (durationTime admitted.stuckWindowSeconds))
+  pure (ObservationGrant identity admitted.scope (Windows admitted.stuckWindowSeconds admitted.parkedWindowSeconds admitted.coordinatorWindowSeconds drift) admitted.subjectsPerSweep admitted.driftSubjectsPerSweep)
 
 restoreGrant :: GrantSnapshot -> AgentIdentity -> Maybe WatchdogSettings -> Either GrantRefusal ObservationGrant
 restoreGrant snapshot identity settings = do
   _ <- checkIdentity settings identity
-  pure (ObservationGrant identity snapshot.scope snapshot.windows snapshot.budget)
+  pure (ObservationGrant identity snapshot.scope snapshot.windows snapshot.budget snapshot.driftBudget)

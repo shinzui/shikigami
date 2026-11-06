@@ -51,6 +51,12 @@ tests =
         map (.subject) (NonEmpty.toList (assessmentView assessment)) @?= map (.subject) (NonEmpty.toList input.subjects)
         map (.category) (NonEmpty.toList (assessmentView assessment)) @?= [OutsideScope]
         map (.evidence) (NonEmpty.toList (assessmentView assessment)) @?= map (NonEmpty.toList . (.evidence)) (NonEmpty.toList input.subjects),
+      testCase "an assessment is committed to the exact input goal and revision" do
+        input <- fixtureInput
+        assessment <- checked (validateDriftAssessment input (fixtureProposal input))
+        assessmentMatchesInput input assessment @?= True
+        assessmentMatchesInput (input & #goal .~ "A changed scope") assessment @?= False
+        assessmentMatchesInput (input & #revision .~ Objective.advanceRevision initialRevision) assessment @?= False,
       testCase "substituted, missing, duplicate and extra subjects cannot mint assessments" do
         input <- fixtureInput
         let proposal = fixtureProposal input
