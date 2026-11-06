@@ -23,6 +23,7 @@ import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.Watchdog.Types qualified as Types
 import Shikigami.Watchdog.Grant qualified as Grant
 import Shikigami.Watchdog.Classify qualified as Classify
+import Shikigami.Watchdog.Episode qualified as Episode
 '''
 POSITIVE = '''
 sweep :: Text -> Either Text Types.SweepId
@@ -37,6 +38,8 @@ codec :: Types.FindingView -> Aeson.Value
 codec = Aeson.toJSON
 summary :: Text -> Either Text Classify.SummaryDigest
 summary = Classify.parseSummaryDigest
+finding :: Episode.Finding -> Types.FindingView
+finding = Episode.findingView
 '''
 with tempfile.TemporaryDirectory(prefix="shikigami-watchdog-values-") as directory:
     source = Path(directory) / "WatchdogBoundary.hs"
@@ -48,7 +51,7 @@ with tempfile.TemporaryDirectory(prefix="shikigami-watchdog-values-") as directo
     assert result.returncode == 0, (result.stdout, result.stderr)
     print("watchdog values: public parsers and views compile", flush=True)
     for module, name in [("Types", "SweepId"), ("Types", "EpisodeId"), ("Types", "FindingId"),
-                         ("Types", "MarkDigest"), ("Classify", "SummaryDigest"), ("Types", "SubjectKey"), ("Grant", "ObservationGrant")]:
+                         ("Types", "MarkDigest"), ("Classify", "SummaryDigest"), ("Types", "SubjectKey"), ("Grant", "ObservationGrant"), ("Episode", "Finding")]:
         owner = f"{module}.{name}"
         for label, body in [
             ("constructor", f"bypass = {owner}\n"),
@@ -61,7 +64,11 @@ with tempfile.TemporaryDirectory(prefix="shikigami-watchdog-values-") as directo
             print(f"watchdog values: {owner} {label} refused", flush=True)
     result = compile("bypass :: Aeson.Value -> Aeson.Result Grant.ObservationGrant\nbypass = Aeson.fromJSON\n")
     assert result.returncode != 0 and "FromJSON" in result.stderr, result.stderr
+    result = compile("bypass :: Aeson.Value -> Aeson.Result Episode.Finding\nbypass = Aeson.fromJSON\n")
+    assert result.returncode != 0 and "FromJSON" in result.stderr, result.stderr
+    result = compile("bypass :: Types.FindingView -> Episode.Finding\nbypass = coerce\n")
+    assert result.returncode != 0, result.stdout
     for target in ['Types.WatchdogLimit "subjects"', 'Types.WatchdogLimit "bytes"']:
         result = compile(f'bypass :: Types.WatchdogLimit "rows" -> {target}\nbypass = coerce\n')
         assert result.returncode != 0, result.stdout
-    print("watchdog values: grant decoding and scoped limit substitution refused", flush=True)
+    print("watchdog values: grant/finding decoding, finding-view coercion and scoped limit substitution refused", flush=True)

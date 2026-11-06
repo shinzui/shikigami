@@ -1,6 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 
-module Shikigami.WatchdogObservationSpec (tests) where
+module Shikigami.WatchdogObservationSpec (tests, fixtureGrant, start) where
 
 import Control.Concurrent.Async (wait, withAsync)
 import Control.Concurrent.MVar (newEmptyMVar, putMVar, takeMVar)

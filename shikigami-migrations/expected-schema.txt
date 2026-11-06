@@ -328,6 +328,55 @@ column	sink_grants.revoked_at	timestamp with time zone
 column	sink_grants.revoked_by	text
 column	sink_grants.sink_kind	text not null
 column	sink_grants.updated_at	timestamp with time zone not null default now()
+column	watchdog_claims.active_sweep	text
+column	watchdog_claims.claim_key	text not null
+column	watchdog_claims.principal	jsonb not null
+column	watchdog_claims.scope	jsonb not null
+column	watchdog_coverage.claim_key	text not null
+column	watchdog_coverage.cursor	jsonb not null
+column	watchdog_coverage.last_pass_completed_at	timestamp with time zone
+column	watchdog_coverage.pass_started_at	timestamp with time zone not null
+column	watchdog_episodes.closed_at	timestamp with time zone
+column	watchdog_episodes.closed_reason	text
+column	watchdog_episodes.episode_id	text not null
+column	watchdog_episodes.family	text not null
+column	watchdog_episodes.kind	text not null
+column	watchdog_episodes.last_seen_sweep	text not null
+column	watchdog_episodes.last_summary_digest	text not null
+column	watchdog_episodes.notified_count	integer not null
+column	watchdog_episodes.objective_id	text
+column	watchdog_episodes.opened_at	timestamp with time zone not null
+column	watchdog_episodes.opened_sweep	text not null
+column	watchdog_episodes.subject	jsonb not null
+column	watchdog_episodes.subject_key	text not null
+column	watchdog_findings.episode_id	text not null
+column	watchdog_findings.finding	jsonb not null
+column	watchdog_findings.finding_id	text not null
+column	watchdog_findings.recorded_at	timestamp with time zone not null
+column	watchdog_findings.sweep_id	text not null
+column	watchdog_marks.first_seen_at	timestamp with time zone not null
+column	watchdog_marks.last_changed_at	timestamp with time zone not null
+column	watchdog_marks.last_seen_at	timestamp with time zone not null
+column	watchdog_marks.last_seen_sweep	text not null
+column	watchdog_marks.mark	jsonb not null
+column	watchdog_marks.mark_digest	text not null
+column	watchdog_marks.objective_id	text
+column	watchdog_marks.subject	jsonb not null
+column	watchdog_marks.subject_key	text not null
+column	watchdog_receipts.input_digest	text not null
+column	watchdog_receipts.operation	text not null
+column	watchdog_receipts.outcome	jsonb not null
+column	watchdog_receipts.sweep_id	text not null
+column	watchdog_sweeps.claim_key	text not null
+column	watchdog_sweeps.completed_at	timestamp with time zone
+column	watchdog_sweeps.due_at	timestamp with time zone not null
+column	watchdog_sweeps.grant_snapshot	jsonb not null
+column	watchdog_sweeps.opened_at	timestamp with time zone not null default clock_timestamp()
+column	watchdog_sweeps.origin	jsonb not null
+column	watchdog_sweeps.summary	jsonb
+column	watchdog_sweeps.sweep_id	text not null
+column	watchdog_sweeps.workflow_id	text not null
+column	watchdog_sweeps.workflow_name	text not null
 column	worker_session_commands.fingerprint	text not null
 column	worker_session_commands.operation_id	text not null
 column	worker_session_commands.session_id	text not null
@@ -844,6 +893,66 @@ constraint	sink_grants.sink_grants_granted_not_null	NOT NULL granted
 constraint	sink_grants.sink_grants_sink_kind_check	CHECK ((sink_kind = ANY (ARRAY['KawaDigest'::text, 'KizashiSignal'::text, 'ReiAction'::text, 'DanwaConversation'::text, 'ChannelEgress'::text])))
 constraint	sink_grants.sink_grants_sink_kind_not_null	NOT NULL sink_kind
 constraint	sink_grants.sink_grants_updated_at_not_null	NOT NULL updated_at
+constraint	watchdog_claims.watchdog_claims_claim_key_not_null	NOT NULL claim_key
+constraint	watchdog_claims.watchdog_claims_pkey	PRIMARY KEY (claim_key)
+constraint	watchdog_claims.watchdog_claims_principal_not_null	NOT NULL principal
+constraint	watchdog_claims.watchdog_claims_scope_not_null	NOT NULL scope
+constraint	watchdog_coverage.watchdog_coverage_claim_key_fkey	FOREIGN KEY (claim_key) REFERENCES shikigami.watchdog_claims(claim_key)
+constraint	watchdog_coverage.watchdog_coverage_claim_key_not_null	NOT NULL claim_key
+constraint	watchdog_coverage.watchdog_coverage_cursor_not_null	NOT NULL cursor
+constraint	watchdog_coverage.watchdog_coverage_pass_started_at_not_null	NOT NULL pass_started_at
+constraint	watchdog_coverage.watchdog_coverage_pkey	PRIMARY KEY (claim_key)
+constraint	watchdog_episodes.watchdog_episodes_episode_id_not_null	NOT NULL episode_id
+constraint	watchdog_episodes.watchdog_episodes_family_check	CHECK ((family = ANY (ARRAY['liveness'::text, 'drift'::text])))
+constraint	watchdog_episodes.watchdog_episodes_family_not_null	NOT NULL family
+constraint	watchdog_episodes.watchdog_episodes_kind_not_null	NOT NULL kind
+constraint	watchdog_episodes.watchdog_episodes_last_seen_sweep_fkey	FOREIGN KEY (last_seen_sweep) REFERENCES shikigami.watchdog_sweeps(sweep_id)
+constraint	watchdog_episodes.watchdog_episodes_last_seen_sweep_not_null	NOT NULL last_seen_sweep
+constraint	watchdog_episodes.watchdog_episodes_last_summary_digest_not_null	NOT NULL last_summary_digest
+constraint	watchdog_episodes.watchdog_episodes_notified_count_check	CHECK ((notified_count >= 1))
+constraint	watchdog_episodes.watchdog_episodes_notified_count_not_null	NOT NULL notified_count
+constraint	watchdog_episodes.watchdog_episodes_opened_at_not_null	NOT NULL opened_at
+constraint	watchdog_episodes.watchdog_episodes_opened_sweep_fkey	FOREIGN KEY (opened_sweep) REFERENCES shikigami.watchdog_sweeps(sweep_id)
+constraint	watchdog_episodes.watchdog_episodes_opened_sweep_not_null	NOT NULL opened_sweep
+constraint	watchdog_episodes.watchdog_episodes_pkey	PRIMARY KEY (episode_id)
+constraint	watchdog_episodes.watchdog_episodes_subject_key_not_null	NOT NULL subject_key
+constraint	watchdog_episodes.watchdog_episodes_subject_not_null	NOT NULL subject
+constraint	watchdog_findings.watchdog_findings_episode_id_fkey	FOREIGN KEY (episode_id) REFERENCES shikigami.watchdog_episodes(episode_id)
+constraint	watchdog_findings.watchdog_findings_episode_id_not_null	NOT NULL episode_id
+constraint	watchdog_findings.watchdog_findings_episode_id_sweep_id_key	UNIQUE (episode_id, sweep_id)
+constraint	watchdog_findings.watchdog_findings_finding_id_not_null	NOT NULL finding_id
+constraint	watchdog_findings.watchdog_findings_finding_not_null	NOT NULL finding
+constraint	watchdog_findings.watchdog_findings_pkey	PRIMARY KEY (finding_id)
+constraint	watchdog_findings.watchdog_findings_recorded_at_not_null	NOT NULL recorded_at
+constraint	watchdog_findings.watchdog_findings_sweep_id_fkey	FOREIGN KEY (sweep_id) REFERENCES shikigami.watchdog_sweeps(sweep_id)
+constraint	watchdog_findings.watchdog_findings_sweep_id_not_null	NOT NULL sweep_id
+constraint	watchdog_marks.watchdog_marks_first_seen_at_not_null	NOT NULL first_seen_at
+constraint	watchdog_marks.watchdog_marks_last_changed_at_not_null	NOT NULL last_changed_at
+constraint	watchdog_marks.watchdog_marks_last_seen_at_not_null	NOT NULL last_seen_at
+constraint	watchdog_marks.watchdog_marks_last_seen_sweep_fkey	FOREIGN KEY (last_seen_sweep) REFERENCES shikigami.watchdog_sweeps(sweep_id)
+constraint	watchdog_marks.watchdog_marks_last_seen_sweep_not_null	NOT NULL last_seen_sweep
+constraint	watchdog_marks.watchdog_marks_mark_digest_not_null	NOT NULL mark_digest
+constraint	watchdog_marks.watchdog_marks_mark_not_null	NOT NULL mark
+constraint	watchdog_marks.watchdog_marks_pkey	PRIMARY KEY (subject_key)
+constraint	watchdog_marks.watchdog_marks_subject_key_not_null	NOT NULL subject_key
+constraint	watchdog_marks.watchdog_marks_subject_not_null	NOT NULL subject
+constraint	watchdog_receipts.watchdog_receipts_input_digest_not_null	NOT NULL input_digest
+constraint	watchdog_receipts.watchdog_receipts_operation_not_null	NOT NULL operation
+constraint	watchdog_receipts.watchdog_receipts_outcome_not_null	NOT NULL outcome
+constraint	watchdog_receipts.watchdog_receipts_pkey	PRIMARY KEY (sweep_id, operation)
+constraint	watchdog_receipts.watchdog_receipts_sweep_id_fkey	FOREIGN KEY (sweep_id) REFERENCES shikigami.watchdog_sweeps(sweep_id)
+constraint	watchdog_receipts.watchdog_receipts_sweep_id_not_null	NOT NULL sweep_id
+constraint	watchdog_sweeps.watchdog_sweeps_claim_key_fkey	FOREIGN KEY (claim_key) REFERENCES shikigami.watchdog_claims(claim_key)
+constraint	watchdog_sweeps.watchdog_sweeps_claim_key_not_null	NOT NULL claim_key
+constraint	watchdog_sweeps.watchdog_sweeps_due_at_not_null	NOT NULL due_at
+constraint	watchdog_sweeps.watchdog_sweeps_grant_snapshot_not_null	NOT NULL grant_snapshot
+constraint	watchdog_sweeps.watchdog_sweeps_opened_at_not_null	NOT NULL opened_at
+constraint	watchdog_sweeps.watchdog_sweeps_origin_not_null	NOT NULL origin
+constraint	watchdog_sweeps.watchdog_sweeps_pkey	PRIMARY KEY (sweep_id)
+constraint	watchdog_sweeps.watchdog_sweeps_sweep_id_not_null	NOT NULL sweep_id
+constraint	watchdog_sweeps.watchdog_sweeps_workflow_id_not_null	NOT NULL workflow_id
+constraint	watchdog_sweeps.watchdog_sweeps_workflow_name_not_null	NOT NULL workflow_name
+constraint	watchdog_sweeps.watchdog_sweeps_workflow_name_workflow_id_key	UNIQUE (workflow_name, workflow_id)
 constraint	worker_session_commands.worker_session_commands_fingerprint_not_null	NOT NULL fingerprint
 constraint	worker_session_commands.worker_session_commands_operation_id_check	CHECK (((length(operation_id) >= 1) AND (length(operation_id) <= 256)))
 constraint	worker_session_commands.worker_session_commands_operation_id_not_null	NOT NULL operation_id
@@ -1072,6 +1181,17 @@ index	sink_deliveries_run_id_idx	CREATE INDEX sink_deliveries_run_id_idx ON shik
 index	sink_grants_agent_name_idx	CREATE INDEX sink_grants_agent_name_idx ON shikigami.sink_grants USING btree (agent_name, sink_kind)
 index	sink_grants_compatibility_identity_key	CREATE UNIQUE INDEX sink_grants_compatibility_identity_key ON shikigami.sink_grants USING btree (agent_name, sink_kind) WHERE (principal_id IS NULL)
 index	sink_grants_verified_identity_key	CREATE UNIQUE INDEX sink_grants_verified_identity_key ON shikigami.sink_grants USING btree (principal_id, sink_kind) WHERE (principal_id IS NOT NULL)
+index	watchdog_claims_pkey	CREATE UNIQUE INDEX watchdog_claims_pkey ON shikigami.watchdog_claims USING btree (claim_key)
+index	watchdog_completed_sweeps	CREATE INDEX watchdog_completed_sweeps ON shikigami.watchdog_sweeps USING btree (completed_at DESC) WHERE (completed_at IS NOT NULL)
+index	watchdog_coverage_pkey	CREATE UNIQUE INDEX watchdog_coverage_pkey ON shikigami.watchdog_coverage USING btree (claim_key)
+index	watchdog_episodes_pkey	CREATE UNIQUE INDEX watchdog_episodes_pkey ON shikigami.watchdog_episodes USING btree (episode_id)
+index	watchdog_findings_episode_id_sweep_id_key	CREATE UNIQUE INDEX watchdog_findings_episode_id_sweep_id_key ON shikigami.watchdog_findings USING btree (episode_id, sweep_id)
+index	watchdog_findings_pkey	CREATE UNIQUE INDEX watchdog_findings_pkey ON shikigami.watchdog_findings USING btree (finding_id)
+index	watchdog_marks_pkey	CREATE UNIQUE INDEX watchdog_marks_pkey ON shikigami.watchdog_marks USING btree (subject_key)
+index	watchdog_open_episodes	CREATE UNIQUE INDEX watchdog_open_episodes ON shikigami.watchdog_episodes USING btree (subject_key, kind) WHERE (closed_at IS NULL)
+index	watchdog_receipts_pkey	CREATE UNIQUE INDEX watchdog_receipts_pkey ON shikigami.watchdog_receipts USING btree (sweep_id, operation)
+index	watchdog_sweeps_pkey	CREATE UNIQUE INDEX watchdog_sweeps_pkey ON shikigami.watchdog_sweeps USING btree (sweep_id)
+index	watchdog_sweeps_workflow_name_workflow_id_key	CREATE UNIQUE INDEX watchdog_sweeps_workflow_name_workflow_id_key ON shikigami.watchdog_sweeps USING btree (workflow_name, workflow_id)
 index	worker_session_child_mapping	CREATE INDEX worker_session_child_mapping ON shikigami.worker_session_messages USING btree (((state ->> 'childWorkflowId'::text))) WHERE ((state ->> 'childWorkflowId'::text) IS NOT NULL)
 index	worker_session_commands_pkey	CREATE UNIQUE INDEX worker_session_commands_pkey ON shikigami.worker_session_commands USING btree (session_id, operation_id)
 index	worker_session_events_pkey	CREATE UNIQUE INDEX worker_session_events_pkey ON shikigami.worker_session_events USING btree (session_id, cursor)
@@ -1159,6 +1279,13 @@ table	run_skips	kind=r
 table	sanctioned_execution_profiles	kind=r
 table	sink_deliveries	kind=r
 table	sink_grants	kind=r
+table	watchdog_claims	kind=r
+table	watchdog_coverage	kind=r
+table	watchdog_episodes	kind=r
+table	watchdog_findings	kind=r
+table	watchdog_marks	kind=r
+table	watchdog_receipts	kind=r
+table	watchdog_sweeps	kind=r
 table	worker_session_commands	kind=r
 table	worker_session_events	kind=r
 table	worker_session_messages	kind=r

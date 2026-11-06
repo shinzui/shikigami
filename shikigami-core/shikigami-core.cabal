@@ -314,9 +314,12 @@ library
     Shikigami.Trigger.Schedule
     Shikigami.Trigger.Stream
     Shikigami.Watchdog.Classify
+    Shikigami.Watchdog.Episode
     Shikigami.Watchdog.Grant
+    Shikigami.Watchdog.Ledger
     Shikigami.Watchdog.Observation
     Shikigami.Watchdog.Settings
+    Shikigami.Watchdog.Store
     Shikigami.Watchdog.Types
     Shikigami.Watchdog.Waiting
     Shikigami.WorkerSession.Capability
@@ -434,6 +437,7 @@ library
     Shikigami.RunJobs.Generated.QueueCodec
     Shikigami.RunJobs.Generated.QueuePolicy
     Shikigami.Sink.Auth.Internal
+    Shikigami.Watchdog.Store.Internal
     Shikigami.WorkerSession.Bindings
     Shikigami.WorkerSession.CheckpointAuthority
     Shikigami.WorkerSessionLifecycle.BehaviorHoles
@@ -727,7 +731,9 @@ test-suite shikigami-core-postgres-test
     Shikigami.SinkDeliverySpec
     Shikigami.SpikeWorkflowSpec
     Shikigami.TypeSafeDecisionWorkflowSpec
+    Shikigami.WatchdogClassifySpec
     Shikigami.WatchdogObservationSpec
+    Shikigami.WatchdogStoreSpec
     Shikigami.WorkerSessionCapabilitySpec
     Shikigami.WorkerSessionHandoffSpec
     Shikigami.WorkerSessionSpec

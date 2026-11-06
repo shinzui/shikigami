@@ -42,8 +42,8 @@ You can see it working in two suites. `cabal test shikigami-core-test --test-opt
 ## Progress
 
 - [x] (2026-11-06) Milestone 1: The pure classifier exists with exhaustive verdict tables covering every subject kind, every waiting fact and the coordinator rule; `cabal test shikigami-core-test` passes with the new group.
-- [ ] Milestone 2: Migration `NNNN-watchdog-ledger` and `Shikigami.Watchdog.Store` exist; recording a page twice converges on one finding per opened episode, and the PostgreSQL group passes.
-- [ ] Milestone 3: Material-change notices, episode closure on progress or disappearance, pass-completion closure and the coverage singleton work end to end; the staleness-by-marks ADR is written and `cabal test` for core and PostgreSQL passes in full.
+- [x] (2026-11-06) Milestone 2: Migration `NNNN-watchdog-ledger` and `Shikigami.Watchdog.Store` exist; recording a page twice converges on one finding per opened episode, and the PostgreSQL group passes.
+- [x] (2026-11-06) Milestone 3: Material-change notices, episode closure on progress or disappearance, pass-completion closure and scope-keyed coverage work end to end; the staleness-by-marks ADR is written and `cabal test` for core and PostgreSQL passes in full.
 
 
 Acceptance 2026-11-06: M1 passes all ten classifier table groups and the full core unit suite (766 tests). `just haskell-conventions` passes. The rules use explicit observation times and frozen priors, recognize complete current activity rather than sampled history, retain unknown episodes, and keep coordinator detection independent of worker outcomes. M2/M3 ledger, receipts, claims and absence rechecks remain.
@@ -63,7 +63,7 @@ EP-1 documentation correction recorded in FRIC-63).
 
 ## Decision Log
 
-- Decision: Time enters the classifier only as the page's journaled `observedAt` and the ledger's recorded `firstSeenAt` and `lastChangedAt`; the classifier never reads a clock and the ledger never writes `now()`.
+- Decision: Time enters the classifier only as the page's journaled `observedAt` and the ledger's recorded `firstSeenAt` and `lastChangedAt`; the classifier never reads a clock and mark and episode times are retained from the journaled observation; sweep opening and completion retain fresh database times once.
   Rationale: The watchdog runs inside a replayed durable workflow (plan 112), so a fresh clock read inside classification would make replay diverge from the first run. Owner `updated_at` columns are written by two different clock functions and do not cover the facts that matter, so they are hints, not authority.
   Date: 2026-11-04
 
@@ -74,7 +74,38 @@ EP-1 documentation correction recorded in FRIC-63).
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+The deterministic classifier and retained ledger are complete. Accepted marks,
+first-seen limits and journaled observation times govern staleness. Persistent
+uncertainty is reported as unresolved. Unknown observations preserve episodes.
+Only material summary changes notify again, and liveness progress leaves drift
+episodes untouched.
+
+Same-origin replay retains sweep identity and policy. Principal/scope claims,
+frozen-prior checks, subject serialization and operation receipts protect retries
+and overlapping ticks. Exact receipt recovery returns the first notices and their
+identities. Coverage changes cannot be overwritten by an old replay. Completed
+passes recheck owner state before closing missing subjects; idle and corrupt
+owners remain unknown. All ten ledger integration cases pass, including real
+owner-page composition and concurrent recording.
+
+No friction entries were recorded under this plan; the friction query returned
+none. The existing EP-1 schema documentation correction was applied before the
+migration work. Durable staleness context is recorded in
+[ADR 0117](../adr/0117-watchdog-staleness-is-measured-against-its-own-sweep-marks.md).
+The agent, drift provider integration, operator surface and integrated IR-19
+qualification remain in later children.
+
+
+M2 acceptance 2026-11-06: all ten watchdog ledger PostgreSQL cases pass, including
+same-origin replay, claim overlap refusal, original receipt recovery after commit,
+concurrent recording, material owner-epoch/deadline changes, family isolation,
+stale-prior refusal, real observation/classification composition and conservative
+pass completion. All eleven schema smoke cases, schema isolation and conventions
+pass. M3 is accepted: full regressions pass 766 core unit, 634 core PostgreSQL, 339
+worker and 107 server tests, plus 9 migration unit and 11 migrations smoke tests.
+The watchdog compiler controls pass, including refusal of Finding construction,
+Generic, JSON decoding and coercion from its exact FindingView representation. The staleness decision is recorded in
+[ADR 0117](../adr/0117-watchdog-staleness-is-measured-against-its-own-sweep-marks.md).
 
 
 ## Context and Orientation
@@ -87,7 +118,7 @@ What the owner semantics mean for verdicts. [ADR 0061](../adr/0061-continuing-se
 
 Prior art for staleness verdicts is `shikigami-workers/src/Shikigami/Health/Worker.hs`: `loopLivenessAt :: Heartbeats -> UTCTime -> IO ProbeVerdict` and `processorStateVerdictWithStaleness` take an explicit instant and a last-activity record and return a verdict, with `Idle` counting as healthy. That is the shape to follow, lifted to durable state.
 
-Migrations: `shikigami-migrations/sql-migrations/manifest` lists one file per line in apply order; `just new-migration <slug>` writes `NNNN-slug.sql` with the standard header and appends it. Every object must be schema-qualified (`shikigami.`); `just migration-schema-isolation` and the migrations test both enforce it. After adding a file, append its `sha256  <file>` line to `shikigami-migrations/sql-migrations/migrations.lock` (no tool writes it) and regenerate `shikigami-migrations/expected-schema.txt` with `SHIKIGAMI_REGENERATE_EXPECTED_SCHEMA=1 cabal test shikigami-migrations-smoke`. Research found the lock listing 36 files while the manifest lists 41 (`0038` through `0042` absent); run `cabal test shikigami-migrations-test` before editing and, if it fails on the lock, repair the missing lines in a separate commit and record the friction. The latest migration at research time is `0042-adaptive-delivery-observations.sql`; allocate the next available number at implementation time. Store modules in this repository are `Hasql.Transaction.Transaction` values or `Eff` computations over the `Store` effect; `shikigami-core/src/Shikigami/Coordination/Sql.hs` (`saveDecision`, `saveObservation`, `readObservations` with its 4096-row cap) is the closest model for an application-owned metadata table written in the same transaction as other facts. Tests use tasty and tasty-hunit only; register unit specs in `shikigami-core/test/Main.hs` and PostgreSQL specs in `shikigami-core/test-postgres/Main.hs`, each also in the suite's `other-modules` in `shikigami-core.cabal`. PostgreSQL suites have exhausted fixture connections under default parallelism (FRIC-2, FRIC-5, FRIC-17, FRIC-51); use `--num-threads 1` when that recurs.
+Migrations: `shikigami-migrations/sql-migrations/manifest` lists one file per line in apply order; `just new-migration <slug>` writes `NNNN-slug.sql` with the standard header and appends it. Every object must be schema-qualified (`shikigami.`); `just migration-schema-isolation` and the migrations test both enforce it. After adding a file, append its `sha256  <file>` line to `shikigami-migrations/sql-migrations/migrations.lock` (no tool writes it) and regenerate `shikigami-migrations/expected-schema.txt` with `SHIKIGAMI_REGENERATE_EXPECTED_SCHEMA=1 cabal test shikigami-migrations-smoke`. The pre-edit migrations unit suite passes all nine cases, and the ledger is allocated as migration 0046 after the approval association in 0045. The regenerated schema is verified by rebuilding and rerunning `cabal test shikigami-migrations-smoke` without the regeneration flag. Store modules in this repository are `Hasql.Transaction.Transaction` values or `Eff` computations over the `Store` effect; `shikigami-core/src/Shikigami/Coordination/Sql.hs` (`saveDecision`, `saveObservation`, `readObservations` with its 4096-row cap) is the closest model for an application-owned metadata table written in the same transaction as other facts. Tests use tasty and tasty-hunit only; register unit specs in `shikigami-core/test/Main.hs` and PostgreSQL specs in `shikigami-core/test-postgres/Main.hs`, each also in the suite's `other-modules` in `shikigami-core.cabal`. PostgreSQL suites have exhausted fixture connections under default parallelism (FRIC-2, FRIC-5, FRIC-17, FRIC-51); use `--num-threads 1` when that recurs.
 
 
 ## Plan of Work
@@ -137,7 +168,7 @@ classifyPage :: Windows -> ObservationPage -> Map SubjectKey PriorMark -> [Obser
 
 `classify` applies rules in a fixed order and the module documents them in that order. First, a subject whose mark says it is finished (a session in `Failed` or `Cancelled`, an execution in `Succeeded`, `Failed` or `Cancelled`, a coordinator whose `terminal` is `CoordinatorTerminal` or whose objective status is `Completed` or `Cancelled`) is `Clear Terminal`. Second, with no prior mark, or with a prior whose digest differs from the current mark's digest, the subject is `Clear Progressing`; the caller records the new mark with `lastChangedAt = observedAt`. Third, the quiet duration is `observedAt` minus `lastChangedAt`. A waiting fact whose deadline is after `observedAt` yields `Clear (Waiting reason)`; a parked session or assignment is `Waiting (ParkedAssignment since)` with `since = lastChangedAt` while the quiet duration is below the parked window and the subject's root cutoff, if known, is after `observedAt`; an objective with status `Blocked` yields `Waiting ObjectiveBlocked` for its coordinator. Fourth, a subject whose mark reports uncertain operations, an `Unresolved` phase or an `AssignmentUnresolved` assignment, quiet for at least the stuck window, is `Detected` with kind `UnresolvedOutcome` and verdict `Unresolved`; below the window it is `Clear Progressing`. Fifth, a session or execution quiet for at least the stuck window with no live waiting fact is `Detected` with kind `StuckWork` and verdict `Stuck`; a waiting fact whose deadline has passed is included in the evidence so the finding can say which deadline lapsed. Sixth, a coordinator of an `Open` objective is `Clear Progressing` while any of the objective's assignment sessions is active or progressing, `Clear (Waiting ...)` while any of them is legitimately waiting, and `Detected` with kind `StuckCoordinator` and verdict `StuckCoordinator` when every assignment session is `Idle` with nothing queued or absent, no execution under the objective is active, the mark has been quiet for at least the coordinator window, and either a listener exists or neither a listener nor a decision in flight exists. The coordinator rule reads only coordinator and session facts from the page; a worker's own `Stuck` outcome never contributes to it, which is what acceptance 3 of the request requires. Below the coordinator window, the same situation is `Clear Progressing`.
 
-`EvidenceSummary` is the closed record whose equality defines a material change: the detection kind, the kind of waiting fact that lapsed if any, the subject's owner epoch, the root control facts (`Cancellation`, `Overage` and whether the cutoff has passed), the count of uncertain operations, and for drift (plan 111) the drift category. Elapsed time, sweep identity and evidence revisions are deliberately excluded. `summaryDigest :: EvidenceSummary -> SummaryDigest` hashes its canonical JSON under the version tag `shikigami.watchdog-summary/1`. `ObservedWindow` is `since = lastChangedAt`, `until = observedAt`; `ObservationLimit` is `FirstObservedAt firstSeenAt`, which is how a finding reports that the watchdog cannot know what happened before it first saw the subject.
+`EvidenceSummary` is the closed record whose equality defines a material change: the detection kind, the kind of waiting fact that lapsed if any, the subject's owner epoch, the root control facts (`Cancellation`, `Overage` and whether the cutoff has passed), the count of uncertain operations, and for drift (plan 111) the drift category. Elapsed time, sweep identity and evidence revisions are deliberately excluded. `summaryDigest :: EvidenceSummary -> SummaryDigest` hashes its canonical JSON under the version tag `shikigami.watchdog-summary/1`. `ObservedWindow` retains `firstSeenAt`, `lastChangedAt` and `observedAt`. `ObservationLimit` retains the actual observed subject count and scope/relationship completeness; the first-seen instant reports that the watchdog cannot know what happened before it first saw the subject.
 
 Create `shikigami-core/test/Shikigami/WatchdogClassifySpec.hs`. Use fixed instants (`UTCTime (fromGregorian 2026 11 4) 0` plus offsets) and table-driven cases, one table per rule, naming each row. Required rows: an unchanged mark below and above the stuck window; a changed mark; each of the five waiting facts before and after its deadline, including a parked session crossing the parked window and a parked session whose cutoff has passed; an uncertain operation below and above the window; a terminal subject with an open prior; a coordinator with an active worker, with a waiting worker, with all workers idle below and above the coordinator window, with a `terminal` observation, with no listener and no decision; and a table proving `summaryDigest` is unchanged by `observedAt` and sweep changes and changed by owner epoch, lapsed-deadline kind and root control. Register the module in `shikigami-core/test/Main.hs` and the cabal file.
 
@@ -149,7 +180,7 @@ Allocate the next available migration (do not reserve 0043) through `just new-mi
 -- Watchdog sweep, mark, episode and finding ledger. Metadata and references only;
 -- no instruction, result or transcript bodies are stored here.
 CREATE TABLE IF NOT EXISTS shikigami.watchdog_sweeps (
-  sweep_id uuid PRIMARY KEY,
+  sweep_id text PRIMARY KEY,
   workflow_name text NOT NULL,
   workflow_id text NOT NULL,
   due_at timestamptz NOT NULL,
@@ -162,58 +193,61 @@ CREATE TABLE IF NOT EXISTS shikigami.watchdog_sweeps (
 CREATE TABLE IF NOT EXISTS shikigami.watchdog_marks (
   subject_key text PRIMARY KEY,
   subject jsonb NOT NULL,
-  objective_id uuid,
+  objective_id text,
   mark_digest text NOT NULL,
   mark jsonb NOT NULL,
   first_seen_at timestamptz NOT NULL,
   last_changed_at timestamptz NOT NULL,
   last_seen_at timestamptz NOT NULL,
-  last_seen_sweep uuid NOT NULL REFERENCES shikigami.watchdog_sweeps (sweep_id)
+  last_seen_sweep text NOT NULL REFERENCES shikigami.watchdog_sweeps (sweep_id)
 );
 CREATE TABLE IF NOT EXISTS shikigami.watchdog_episodes (
-  episode_id uuid PRIMARY KEY,
+  episode_id text PRIMARY KEY,
   subject_key text NOT NULL,
-  objective_id uuid,
+  objective_id text,
   kind text NOT NULL,
   opened_at timestamptz NOT NULL,
-  opened_sweep uuid NOT NULL REFERENCES shikigami.watchdog_sweeps (sweep_id),
+  opened_sweep text NOT NULL REFERENCES shikigami.watchdog_sweeps (sweep_id),
   closed_at timestamptz,
   closed_reason text,
   last_summary_digest text NOT NULL,
-  last_seen_sweep uuid NOT NULL REFERENCES shikigami.watchdog_sweeps (sweep_id),
+  last_seen_sweep text NOT NULL REFERENCES shikigami.watchdog_sweeps (sweep_id),
   notified_count integer NOT NULL
 );
 CREATE UNIQUE INDEX IF NOT EXISTS watchdog_open_episodes
   ON shikigami.watchdog_episodes (subject_key, kind) WHERE closed_at IS NULL;
 CREATE TABLE IF NOT EXISTS shikigami.watchdog_findings (
-  finding_id uuid PRIMARY KEY,
-  episode_id uuid NOT NULL REFERENCES shikigami.watchdog_episodes (episode_id),
-  sweep_id uuid NOT NULL REFERENCES shikigami.watchdog_sweeps (sweep_id),
+  finding_id text PRIMARY KEY,
+  episode_id text NOT NULL REFERENCES shikigami.watchdog_episodes (episode_id),
+  sweep_id text NOT NULL REFERENCES shikigami.watchdog_sweeps (sweep_id),
   recorded_at timestamptz NOT NULL,
   finding jsonb NOT NULL,
   UNIQUE (episode_id, sweep_id)
 );
 CREATE TABLE IF NOT EXISTS shikigami.watchdog_coverage (
-  singleton boolean PRIMARY KEY DEFAULT TRUE CHECK (singleton),
+  claim_key text PRIMARY KEY REFERENCES shikigami.watchdog_claims(claim_key),
   cursor jsonb NOT NULL,
   pass_started_at timestamptz NOT NULL,
   last_pass_completed_at timestamptz
 );
+-- The complete implemented migration also retains watchdog_claims and
+-- watchdog_receipts; see 0046-watchdog-ledger.sql for all columns and indexes.
 ```
 
-Create `shikigami-core/src/Shikigami/Watchdog/Episode.hs`, which owns the sealed finding and the coalescing rule, and `shikigami-core/src/Shikigami/Watchdog/Store.hs`, which owns the SQL. The finding is a private newtype over its view with no `Generic` and no `FromJSON`; `findingView :: Finding -> FindingView` is the only way out and `Episode.mint` the only way in. The store API, with every write keyed so that a replay converges:
+Create `shikigami-core/src/Shikigami/Watchdog/Episode.hs`, which owns the sealed finding and the coalescing rule, and `shikigami-core/src/Shikigami/Watchdog/Store.hs`, which owns the SQL. The finding is a private newtype over its view with no `Generic` and no `FromJSON`; `findingView :: Finding -> FindingView` is the only way out and the checked episode persistence/coalescing path the only way in. The store API, with every write keyed so that a replay converges:
 
 ```haskell
 data SweepOrigin = SweepOrigin
   { workflowName :: !WorkflowName
   , workflowId :: !WorkflowId
   , dueAt :: !UTCTime
+  , principal :: !AgentIdentity
   }
   deriving stock (Eq, Show, Generic)
 
 -- | Opens the sweep for this run or returns the one already opened for the same
 -- workflow coordinates; the supplied identity is used only on first open.
-openSweep :: SweepId -> SweepOrigin -> GrantSnapshot -> UTCTime -> Transaction (Either WatchdogError SweepId)
+openSweep :: SweepId -> SweepOrigin -> GrantSnapshot -> Transaction (Either WatchdogError SweepId)
 
 data PageOutcome = PageOutcome
   { notices :: ![Finding]
@@ -229,13 +263,13 @@ data PageOutcome = PageOutcome
 recordSweepPage :: SweepId -> DetectionFamily -> UTCTime -> IdentityPool -> [Observed] -> Transaction (Either WatchdogError PageOutcome)
 
 -- | Closes open episodes whose subject was not seen since the pass began.
-completePass :: SweepId -> UTCTime -> Transaction (Either WatchdogError [EpisodeId])
+completePass :: SweepId -> ObservationPage -> Transaction (Either WatchdogError PassOutcome)
 
-closeSweep :: SweepId -> UTCTime -> SweepSummary -> Transaction (Either WatchdogError ())
+closeSweep :: SweepId -> SweepSummary -> Transaction (Either WatchdogError UTCTime)
 
 readPriorMarks :: NonEmpty SubjectKey -> Transaction (Either WatchdogError (Map SubjectKey PriorMark))
-readCoverage :: Transaction (Either WatchdogError (Maybe Coverage))
-writeCoverage :: Coverage -> Transaction (Either WatchdogError ())
+readCoverage :: AgentIdentity -> ObservationScope -> Transaction (Either WatchdogError (Maybe Coverage))
+writeCoverage :: SweepId -> UTCTime -> CoverageCursor -> PassCompletion -> Transaction (Either WatchdogError Coverage)
 ```
 
 `IdentityPool` holds `EpisodeId` and `FindingId` values allocated in IO before the transaction, at most one of each per observed subject; `recordSweepPage` refuses a pool smaller than the page rather than allocating inside the transaction. `recordSweepPage` upserts the mark row (`last_changed_at` advances only when the digest differs; `first_seen_at` is kept), then for each `Detected` outcome either continues the open episode for `(subject_key, kind)` or inserts a new one, and inserts a finding only when the episode is new or the summary digest differs from `last_summary_digest`; for each `Clear` outcome it closes only episodes for the subject in the supplied detector family with `closed_reason` `progressing`, `waiting` or `terminal`. A finding insert that conflicts on `(episode_id, sweep_id)` returns the existing row, which is what makes a crash between the transaction's commit and the caller's journal append safe (plan 112 relies on this). `completePass` identifies unseen candidates only after a complete, refusal-free pass in the same scope. It does not infer termination from absence: active-population scans omit idle and terminal subjects and race with transitions. Close only after a bounded direct owner recheck confirms terminal/deleted state; unknown or inaccessible subjects retain episodes and report incomplete coverage. Advance the pass boundary once via a retained receipt.
@@ -277,7 +311,9 @@ sha256sum shikigami-migrations/sql-migrations/NNNN-watchdog-ledger.sql
 # append "<digest>  NNNN-watchdog-ledger.sql" to shikigami-migrations/sql-migrations/migrations.lock
 just migration-schema-isolation
 SHIKIGAMI_REGENERATE_EXPECTED_SCHEMA=1 cabal test shikigami-migrations-smoke
-cabal test shikigami-migrations-test shikigami-core-postgres-test --test-show-details=direct --test-options='-p WatchdogStore --num-threads 1'
+# Rebuild after the expected snapshot changes, then verify the embedded snapshot.
+cabal test shikigami-migrations-smoke --test-show-details=direct
+cabal test shikigami-core-postgres-test --test-show-details=direct --test-options='-p WatchdogStore --num-threads 1'
 ```
 
 Expected: the schema isolation check prints nothing and exits zero; the migrations test passes after the schema regeneration; the PostgreSQL group prints `All N tests passed`.
@@ -325,6 +361,21 @@ Material lapsed-deadline kinds are derived from retained permission, process and
 approval metadata even when the live wait has expired. `classifyPage` records the
 actual subject count and pass completeness in each detection's limit view.
 
+
+Persistence implementation reconciles the proposed sketch with actual owner types:
+sweep, episode and finding ids are text KindIDs, and objective ids are text. The
+origin includes the admitted principal. Coverage is per `(principal, scope)` with
+a retained non-expiring active-sweep claim. `openSweep` allocates its database time
+on first insertion and needs no caller clock parameter; `closeSweep` similarly
+retains and returns a fresh database completion time. The explicit calls are
+`readCoverage principal scope`, `writeCoverage sweep observedAt cursor completion`,
+and `completePass sweep page`; the last requires a clean complete pass and bounded
+owner rechecks before closure. An operation receipt returns the first outcome
+before recomputing. Frozen priors reject stale liveness inputs. Shared persistence
+views live in `Watchdog.Ledger`; Store owns sweep/mark/coverage SQL and Episode owns
+coalescing and finding SQL so only its checked persistence path can mint/recover a
+sealed finding. These changes are recorded in the parent Integration Points before
+implementation; no later child has begun.
 
 ## Interfaces and Dependencies
 
