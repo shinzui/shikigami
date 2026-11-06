@@ -179,10 +179,12 @@ library
     Shikigami.Flow.Lifecycle.AtRiskCustomer
     Shikigami.Flow.ObjectiveExample
     Shikigami.Flow.Objectives
+    Shikigami.Flow.Observe
     Shikigami.Flow.OpenTelemetryPracticeReview
     Shikigami.Flow.Routing
     Shikigami.Flow.ShikumiDecisionExample
     Shikigami.Flow.ShikumiJudgmentExample
+    Shikigami.Flow.Watchdog
     Shikigami.Flow.Workers
     Shikigami.FormatVersion
     Shikigami.Generated.Conformance
@@ -314,7 +316,9 @@ library
     Shikigami.Trigger.RequestKey
     Shikigami.Trigger.Schedule
     Shikigami.Trigger.Stream
+    Shikigami.Watchdog.Admission
     Shikigami.Watchdog.Classify
+    Shikigami.Watchdog.Delivery
     Shikigami.Watchdog.Drift
     Shikigami.Watchdog.Episode
     Shikigami.Watchdog.Grant
@@ -739,6 +743,7 @@ test-suite shikigami-core-postgres-test
     Shikigami.WatchdogDriftSpec
     Shikigami.WatchdogObservationSpec
     Shikigami.WatchdogStoreSpec
+    Shikigami.WatchdogSweepSpec
     Shikigami.WorkerSessionCapabilitySpec
     Shikigami.WorkerSessionHandoffSpec
     Shikigami.WorkerSessionSpec

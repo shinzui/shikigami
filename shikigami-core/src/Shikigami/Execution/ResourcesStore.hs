@@ -6,6 +6,7 @@ module Shikigami.Execution.ResourcesStore
   ( module Shikigami.Execution.RootObservation,
     allocateRootForWorkflow,
     allocateRootForWorkflowTx,
+    recoverRootForWorkflowTx,
     enrollRoot,
     reserveOperation,
     reserveOperationsTx,
@@ -27,8 +28,9 @@ module Shikigami.Execution.ResourcesStore
 where
 
 import Contravariant.Extras (contrazip2, contrazip3)
-import Data.Aeson ((.=))
+import Data.Aeson ((.:), (.=))
 import Data.Aeson qualified as Aeson
+import Data.Aeson.Types qualified as Aeson
 import Data.Functor.Contravariant ((>$<))
 import Data.Generics.Labels ()
 import Data.Map.Strict qualified as Map
@@ -77,6 +79,21 @@ allocateRootForWorkflowTx candidate creator agent (WorkflowId workflow) supplied
           Right identifier
             | storedBinding /= binding || maybe False (/= identifier) supplied -> pure (Left IdentityConflict)
             | otherwise -> fmap (const identifier) <$> enrollRootTx identifier envelope
+  case result of Left _ -> Tx.condemn; Right _ -> pure ()
+  pure result
+
+-- | Trigger-owned enrollment retains the first admitted envelope. The native
+-- origin, creator and agent remain immutable, including under concurrent retries.
+recoverRootForWorkflowTx :: ExecutionRootId -> ResolvedAgentIdentity -> AgentName -> WorkflowId -> Envelope -> Transaction (Either ResourceError ExecutionRootId)
+recoverRootForWorkflowTx candidate creator agent workflow@(WorkflowId key) proposed = do
+  let binding envelope = Aeson.object ["format" .= (1 :: Int), "creator" .= resolvedIdentity creator, "agent" .= agent, "envelope" .= envelope]
+  Tx.statement (key, executionRootIdText candidate, binding proposed) insertOrigin
+  existing <- Tx.statement key selectOrigin
+  result <- case existing of
+    Just (_, stored) -> case Aeson.parseMaybe (Aeson.withObject "root origin" (.: "envelope")) stored of
+      Just retained | stored == binding retained -> allocateRootForWorkflowTx candidate creator agent workflow Nothing retained
+      _ -> pure (Left IdentityConflict)
+    Nothing -> pure (Left ResourceStateCorrupt)
   case result of Left _ -> Tx.condemn; Right _ -> pure ()
   pure result
 

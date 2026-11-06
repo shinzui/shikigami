@@ -66,6 +66,7 @@ import Shikigami.Execution.Capacity (RuntimeLimits)
 import Shikigami.Execution.Policy.Types (HarnessPolicy)
 import Shikigami.Flow.Decision qualified as FlowDecision
 import Shikigami.Flow.Initiative qualified as FlowInitiative
+import Shikigami.Flow.Observe qualified as FlowObserve
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Health.Worker (Heartbeats, LoopName (DirectoryLoop), LoopStaleness, beat, loopStaleness)
 import Shikigami.Inspection.Consumer (ConsumerInspection)
@@ -162,6 +163,7 @@ data WorkerEnv = WorkerEnv
     directoryRefresher :: !(Maybe (IO ())),
     objectiveSettings :: !ObjectiveSettings,
     initiatives :: !FlowInitiative.InitiativeSeed,
+    observe :: !FlowObserve.ObserveSeed,
     trackers :: !(Maybe Tracker.TrackerHost),
     practiceReviewAttentionRecipients :: !PracticeReviewCapability.AttentionRecipientMap
   }
@@ -234,6 +236,7 @@ agentRunDeps env =
       AgentWorkflow.coordination = Just (Objectives.coordinationHost env.appEnv env.objectiveSettings env.directory env.actionAuthorizer env.agents env.delegationBudget env.workspaceTransfers),
       AgentWorkflow.objectives = Just (objectiveRuntime env),
       AgentWorkflow.initiatives = env.initiatives,
+      AgentWorkflow.observe = env.observe,
       AgentWorkflow.agents = (.agents) env,
       AgentWorkflow.kizashi = (.kizashi) env,
       AgentWorkflow.kawa = (.kawa) env,
@@ -321,7 +324,9 @@ schedulerSchedules logger strictMode declarations = do
 schedulerEnv :: WorkerEnv -> Scheduler.SchedulerEnv
 schedulerEnv env =
   Scheduler.SchedulerEnv
-    { Scheduler.pool = (.pool) env,
+    { Scheduler.declarations = env.agents,
+      Scheduler.watchdog = env.observe.settings,
+      Scheduler.pool = (.pool) env,
       Scheduler.schedules = envSchedules env,
       Scheduler.principalIds = principalIdsByAgent ((.agents) env),
       Scheduler.directory = envDirectory env,

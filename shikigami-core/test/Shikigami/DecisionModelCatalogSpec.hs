@@ -37,7 +37,7 @@ import Shikigami.Coordination.Decision (adaptiveSlots)
 import Shikigami.Decision.Contract
 import Shikigami.Decision.ModelAlias qualified as Alias
 import Shikigami.Decision.ModelCatalog
-import Shikigami.Flow (FlowDef (..), flowRegistry)
+import Shikigami.Flow (FlowDef (..), flowDecisionSlotsFor, flowRegistry)
 import Shikigami.Program.Decision
 import Shikigami.Trigger.Schedule (parseCron)
 import Shikumi.Program (Program (Embed))
@@ -94,7 +94,12 @@ tests =
         assertBool "duplicate slot labels" (not (null (slotErrors registry declaration [slot, slot])))
         assertBool "unknown contract" (not (null (slotErrors (mustRight (programRegistry [])) declaration [slot])))
         assertBool "undeclared alias" (not (null (slotErrors registry ((declaration & #decisionModels .~ ([]))) [slot])))
-        assertBool "other flows have empty inventories" (all (\flow -> flow.name `elem` map declarationCoordinate ["propose-work", "adaptive-delivery", "shikumi-decision-example", "shikumi-judgment-example"] || null flow.decisionSlots) flowRegistry)
+        watchdog <- case [flow | flow <- flowRegistry, flow.name == declarationCoordinate "watchdog-sweep"] of
+          [flow] -> pure flow
+          _ -> assertFailure "watchdog Flow registration is absent or duplicated"
+        flowDecisionSlotsFor (declaration & #decisionModels .~ []) watchdog @?= []
+        assertBool "declared optional Drift retains its inventory" (not (null (flowDecisionSlotsFor (declaration & #decisionModels .~ [fixtureModelAlias "drift"]) watchdog)))
+        assertBool "other flows have empty inventories" (all (\flow -> flow.name `elem` map declarationCoordinate ["watchdog-sweep", "propose-work", "adaptive-delivery", "shikumi-decision-example", "shikumi-judgment-example"] || null flow.decisionSlots) flowRegistry)
         map (.decisionSlots) (filter (\flow -> flow.name == declarationCoordinate "adaptive-delivery") flowRegistry) @?= [adaptiveSlots],
       testCase "historical declaration JSON defaults to no permission and keeps its bytes" do
         declaration <- mustRight <$> loadAgent "../agents/heartbeat.dhall"

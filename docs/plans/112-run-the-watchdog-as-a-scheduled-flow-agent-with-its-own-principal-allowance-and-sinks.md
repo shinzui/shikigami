@@ -17,6 +17,11 @@ provenance:
       at: 2026-11-06T04:40:28Z
       mode: "update"
       note: "Reconciled proposed APIs, ownership and acceptance with current source review."
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-11-06T15:48:30Z
+      mode: "implement"
+      note: "Integrate completed observation, ledger and drift slices into the guarded scheduled watchdog Flow."
 ---
 
 # Run the watchdog as a scheduled Flow agent with its own principal, allowance and sinks
@@ -37,8 +42,8 @@ You can see it working in `cabal test shikigami-workers-test --test-options='-p 
 ## Progress
 
 - [ ] Milestone 1: The `Observe` capability effect and interpreter, the `watchdog-sweep` Flow, the `shikigami-watchdog-v1` patch and the conformance expectations exist; `just keiro-gate` passes and a PostgreSQL run of the Flow under the harness records one sweep and one finding.
-- [ ] Milestone 2: A operator-configured resource envelope is enrolled per scheduled tick, `agents/proof/watchdog.dhall` exists, and the worker suite proves a tick produces a root, a run and a sweep.
-- [ ] Milestone 3: Batched addressed sink delivery, the authority refusal cases, the planted-instruction case and the crash-and-resume case pass; the agent-and-authority ADR and the operator-allowance ADR are written.
+- [x] (2026-11-06) Milestone 2: A operator-configured resource envelope is enrolled per scheduled tick, `agents/proof/watchdog.dhall` exists, and the worker suite proves a tick produces a root, a run and a sweep.
+- [x] (2026-11-06) Milestone 3: Batched addressed sink delivery, the authority refusal cases, the planted-instruction case and the crash-and-resume case pass; the agent-and-authority ADR and the operator-allowance ADR are written.
 
 
 ## Surprises & Discoveries
@@ -189,10 +194,10 @@ After each milestone:
 
 ```bash
 just haskell-conventions
-cabal test shikigami-core-test shikigami-core-postgres-test --test-show-details=direct --test-options='-p "Watchdog|Flow" --num-threads 1'
-cabal test shikigami-workers-test --test-show-details=direct --test-options='-p "Scheduler|WatchdogSweep"'
+cabal test shikigami-core-test shikigami-core-postgres-test --test-show-details=direct --test-options='-p /Watchdog/||/Flow/ --num-threads 1'
+cabal test shikigami-workers-test --test-show-details=direct --test-options='-p /Scheduler/||/Watchdog/'
 cabal test shikigami-core-test shikigami-core-postgres-test shikigami-workers-test shikigami-server-test shikigami-agent-test --test-show-details=direct
-cabal run shikigami -- validate agents/proof
+cabal run shikigami -- validate agents/proof/watchdog.dhall
 ```
 
 Expected: the agent validation accepts `agents/proof/watchdog.dhall`; every named group passes; the one-off `shikigami-agent-test` still passes with the unavailable `Observe` runtime installed.
@@ -202,7 +207,7 @@ Commit at milestone boundaries with the trailers shown above.
 
 ## Validation and Acceptance
 
-The request's acceptance 5: cancel and transfer attempted under the watchdog identity through the ordinary commands are refused and the observed work is unaffected. Acceptance 6: planted instructions change neither a finding's subject nor its recipient nor the watchdog's authority. Acceptance 7: an objective whose root is cancelled or exhausted is still observed and reported, and the watchdog's usage appears only on its own root. Acceptance 8, the workflow half: a crash after the record step and after the deliver step, followed by resume, yields one finding per episode, one intent per notice and one drift attempt. The integrated scheduled path: one cron tick for the watchdog declaration produces one root, one run, one sweep row, one finding for the stalled fixture and one addressed intent. Required acceptance is the PostgreSQL and worker groups named above, `just keiro-gate` passing against the plan's baseline, the full suites exiting zero and `shikigami validate agents/proof` accepting the declaration. A trial against a real model and a live Danwa conversation is plan 113's optional evidence, not acceptance here.
+The request's acceptance 5: cancel and transfer attempted under the watchdog identity through the ordinary commands are refused and the observed work is unaffected. Acceptance 6: planted instructions change neither a finding's subject nor its recipient nor the watchdog's authority. Acceptance 7: an objective whose root is cancelled or exhausted is still observed and reported, and the watchdog's usage appears only on its own root. Acceptance 8, the workflow half: a crash after the record step and after the deliver step, followed by resume, yields one finding per episode, one intent per notice and one drift attempt. The integrated scheduled path: one cron tick for the watchdog declaration produces one root, one run, one sweep row, one finding for the stalled fixture and one addressed intent. Required acceptance is the PostgreSQL and worker groups named above, `just keiro-gate` passing against the plan's baseline, the full suites exiting zero and `shikigami validate agents/proof/watchdog.dhall` accepting the declaration. A trial against a real model and a live Danwa conversation is plan 113's optional evidence, not acceptance here.
 
 
 ## Idempotence and Recovery
@@ -219,3 +224,21 @@ Revision 2026-11-05: corrected grant-before-open order, the patch-false interpre
 The generic batch value `AddressedSignal` belongs with the Sink capability, not in `Watchdog.Delivery`; Watchdog only constructs it. A Danwa target and an explicit recipient are separate arguments to `prepareSinkIntentForRecipientWithMessageId`, so use a typed address sum and supply both only where the sink requires them. Reuse the existing journal-plus-outbox enqueue primitive after preparation; preparation alone does not enqueue. Snapshot validated delivery settings and resolved addresses before emission so a pending retry cannot silently change recipients. Test denial of each per-intent gate and changed settings across replay.
 
 The reviewed coordination constraints are recorded in [ADR 0116](../adr/0116-watchdog-observation-preserves-completeness-and-detector-boundaries.md); operator-owned spend follows [ADR 0115](../adr/0115-evaluation-spend-is-a-root-enrolled-at-the-trigger-and-accounted-slots-refuse-without-one.md).
+
+Implementation update 2026-11-06 (in progress): baseline `eacb6414` builds cleanly. EP-1 through EP-3 are Complete. The runtime seed now binds identity and native origin at each invocation; read snapshots contain no authority over another sweep. Optional Drift inventory is centralized in `flowDecisionSlotsFor` and omitted when the declaration has no drift alias. The patch-false interpreter has no application labels or Drift inventory. Drift eligibility is restricted to `Clear Progressing`; stopped or exhausted observed roots do not fund the watchdog.
+
+The scheduled root cutoff is receipt time plus the configured window (ADR 0115), correcting the due-time fixture wording above: a late tick still receives the admitted window. Resource-owner `recoverRootForWorkflowTx` retains the first complete envelope while the existing strict allocator keeps its exact-binding contract. Root and job publication share a transaction. Approval owner association publication composes with the existing unconditional child ingest append in one transaction, without changing its step label or codec; this is derived observation metadata, not a new workflow step or authority.
+
+Delivery uses optional `delivery` settings containing `operatorRecipient`, `operatorSink` and a checked `DanwaConversation` template. The grant result retains that policy, and the bounded observation result retains objective conversation bindings. The Sink-owned address sum separates an explicit recipient from a Danwa target. Batch journal spelling is `emit-signals-watchdog-deliver` throughout. The run's root/alias eligibility is retained in the grant result, avoiding a new field or step in the existing ExecutionContext capability.
+
+Integration discovery: the real native AgentRun name (`shikigami.agent-run`) and run ids containing schedule-key colons are historical coordinates accepted by the runtime, but rejected by Keiro's constructors for new workflow families. EP-2's origin decoder used those stricter constructors and refused real AgentRun ledger recovery. The decoder now preserves bounded nonempty native coordinates with no controls; exact origin binding remains mandatory. The real AgentRun sweep cases are the regression control.
+
+Decision-refusal integration control found that eager `runDecision` policy resolution occurred outside the Flow's typed `DecisionAbort` catch. The watchdog now selects `runDecisionAdvisory`: it retains the identical policy result but raises a policy refusal at the Decision capability request, inside the advisory boundary. Existing required-decision Flows retain eager failure. The test combines a genuinely quiet session with a policy-unavailable Drift call and requires the stuck notice to be delivered and the sweep closed.
+
+Acceptance checkpoint: all 15 focused PostgreSQL sweep cases pass, including real AgentRun, two-address batching, each sink gate, exact conversation addressing, protected-input exclusion, separate stopped-root accounting, fresh command denials, and committed Drift replay. The generated queue-worker integration and scheduler group pass 16 cases, including late receipt and changed-policy envelope recovery. Full regression and native gate are pending. Review strengthened delivery crash injection: a fresh journal-plus-outbox commit invokes a process-only sink hook before Flow continuation; tests now require `watchdog-close` to be absent at the injected crash. The generic Keiro append witness alone could otherwise trigger at the following step.
+
+Compatibility review preserves the approval publisher's previous already-present ingest behavior: replay keeps the child input already in its journal even if a reconstructed argument differs. The new transaction adds only the exact parent association; it does not reinterpret the retained input. One-off adapter availability is separate from a production disabled policy, so the former emits no application labels and the latter journals its grant refusal.
+
+Regression acceptance (2026-11-06): 784 core unit, 659 core PostgreSQL, 341 worker, 107 server and 37 one-off agent tests pass. The PostgreSQL total includes 17 watchdog sweep cases; the worker test drives a real timer and generated PGMQ consumer, uses a DB-backed C11 grant, publishes one new advisory intent and receipt, and charges one Drift attempt only to the scheduled watchdog's root. The old objective root is unchanged. Haskell conventions pass. Full-build and native `keiro-gate eacb6414` checks remain pending; milestone 1 stays open until the native gate passes.
+
+Final pre-gate checks: `cabal build all` passes, including both workspace prototype dependency records; all 17 proof manifests validate individually through the built CLI. The compiler boundary script `python3 tests/types/watchdog-values.py` passes. The plan's directory-shaped validation command was corrected to its file-shaped CLI contract; FRIC-64 records the mismatch and its resolution. The source, declaration and generated patch are ready to commit; `keiro-gate eacb6414` must then verify the committed layer.

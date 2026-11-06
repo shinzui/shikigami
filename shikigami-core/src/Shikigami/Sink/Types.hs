@@ -6,16 +6,20 @@ module Shikigami.Sink.Types
   ( SinkContext (..),
     DeliveryGuard (..),
     DanwaTarget (..),
+    SignalAddress (..),
+    AddressedSignal (..),
     SinkOutcome (..),
     SinkResult (..),
     mkSourceEventId,
   )
 where
 
+import Data.Aeson (Value)
 import Data.Text qualified as Text
 import Kioku.Id (SessionId, idText)
 import Network.HTTP.Types.Header (Header)
 import Shikigami.Activity.Coordinate
+import Shikigami.Agent.Decl (Sink)
 import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Principal (AgentIdentity, identityText)
 import Shikigami.Directory (DirectoryHandle)
@@ -33,6 +37,15 @@ data DanwaTarget = DanwaTarget
   { conversationId :: !(DeclarationCoordinate "danwa-conversation"),
     parentMessageId :: !(Maybe (DeclarationCoordinate "danwa-message"))
   }
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (ToJSON, FromJSON)
+
+-- | Destinations resolved from trusted configuration/owner metadata, never payloads.
+data SignalAddress = Recipient !(DeclarationCoordinate "recipient") | Conversation !DanwaTarget
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (ToJSON, FromJSON)
+
+data AddressedSignal = AddressedSignal {address :: !SignalAddress, sink :: !Sink, output :: !Value}
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 

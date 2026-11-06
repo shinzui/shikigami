@@ -63,6 +63,7 @@ import Shikigami.Fixture.SinkHttp (testSinkHttp)
 import Shikigami.Flow.Capability (SinkEnv (..), runSink)
 import Shikigami.Flow.Decision qualified as FlowDecision
 import Shikigami.Flow.Initiative qualified as FlowInitiative
+import Shikigami.Flow.Observe qualified as FlowObserve
 import Shikigami.Flow.OpenTelemetryPracticeReview (opentelemetryPracticeReviewFlow)
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Log qualified as Log
@@ -704,6 +705,7 @@ specialistAgentRunDeps appEnv behaviorEnv practiceReview =
       AgentWorkflow.coordination = Nothing,
       AgentWorkflow.objectives = Nothing,
       AgentWorkflow.initiatives = FlowInitiative.disabledInitiatives,
+      AgentWorkflow.observe = FlowObserve.disabledObserve,
       AgentWorkflow.workspace = Nothing,
       AgentWorkflow.agents = [reviewerDecl],
       AgentWorkflow.kizashi = KizashiConfig {baseUrl = "http://localhost:1", defaultRecipient = (declarationCoordinate "recipient_unused")},
@@ -928,7 +930,8 @@ executionContextFixture =
 sinkEnvFixture :: SessionId -> SinkEnv
 sinkEnvFixture session =
   SinkEnv
-    { agent = fixtureAgentName reviewerAgent,
+    { onBatchCommitted = const (pure ()),
+      agent = fixtureAgentName reviewerAgent,
       runId = session,
       occurredAt = Nothing,
       danwaTarget = Nothing,

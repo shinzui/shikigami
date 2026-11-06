@@ -35,6 +35,7 @@ import Shikigami.TypeSafeDecisionWorkflowSpec qualified as TypeSafeDecisionWorkf
 import Shikigami.WatchdogDriftSpec qualified as WatchdogDriftSpec
 import Shikigami.WatchdogObservationSpec qualified as WatchdogObservationSpec
 import Shikigami.WatchdogStoreSpec qualified as WatchdogStoreSpec
+import Shikigami.WatchdogSweepSpec qualified as WatchdogSweepSpec
 import Shikigami.WorkerSessionCapabilitySpec qualified as WorkerSessionCapabilitySpec
 import Shikigami.WorkerSessionHandoffSpec qualified as WorkerSessionHandoffSpec
 import Shikigami.WorkerSessionSpec qualified as WorkerSessionSpec
@@ -83,6 +84,7 @@ suite = withShikigamiMigratedSuite \databaseFixture ->
           ExecutionTranscriptSpec.tests databaseFixture,
           WorkerSessionStoreSpec.tests databaseFixture,
           WatchdogObservationSpec.tests databaseFixture,
+          WatchdogSweepSpec.tests databaseFixture,
           WatchdogDriftSpec.tests databaseFixture,
           WatchdogStoreSpec.tests databaseFixture,
           WorkerSessionSpec.tests databaseFixture,

@@ -9,6 +9,7 @@ module Shikigami.Sink.Intent
     enqueueSinkIntents,
     enqueueSinkIntentStep,
     enqueueSinkIntentStepForRecipient,
+    enqueueSinkIntentBatch,
     enqueuePreparedSinkIntentTx,
     prepareSinkIntent,
     prepareSinkIntentForRecipient,
@@ -29,6 +30,8 @@ import Data.Aeson (Value, withObject, (.:), (.:?), (.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Types (parseEither)
 import Data.Foldable (traverse_)
+import Data.List.NonEmpty (NonEmpty)
+import Data.List.NonEmpty qualified as NonEmpty
 import Data.Text qualified as Text
 import Data.UUID.V5 qualified as UUID.V5
 import Effectful (Eff, IOE, (:>))
@@ -85,6 +88,7 @@ import Shikigami.Sink.Permission
     SinkKind,
   )
 import Shikigami.Sink.Recipient (resolveSinkRecipient)
+import Shikigami.Sink.Types (AddressedSignal (..), SignalAddress (..))
 
 -- | Everything the publisher needs to dispatch one sink after the producing
 -- workflow has committed. Optional fields are omitted so rows written before
@@ -279,6 +283,34 @@ enqueueSinkIntentStepForRecipient directoryHandle grantSource identity stepName 
   now <- liftIO getCurrentTime
   prepared <- liftIO (prepareSinkIntentForRecipient directoryHandle grantSource identity workflowId stepName agentName runIdText ordinal occurredAt danwaTarget activity recipient sink output now)
   journalPreparedSinkIntent stepName now prepared
+
+-- | One static journal record and one atomic outbox/receipt batch. Admission is
+-- checked afresh for every intent; replay returns the committed batch verbatim.
+enqueueSinkIntentBatch :: (Workflow :> es, Store :> es, IOE :> es) => IO () -> DirectoryHandle -> GrantSource -> AgentIdentity -> StepName -> AgentName -> SessionId -> Int -> Maybe UTCTime -> NonEmpty AddressedSignal -> Eff es [SinkResult]
+enqueueSinkIntentBatch onCommitted directory grants identity label agent run first occurredAt signals = do
+  when (NonEmpty.length signals > 192) (liftIO (ioError (userError "sink batch exceeds 192")))
+  (_, workflowId) <- currentWorkflow
+  now <- liftIO getCurrentTime
+  prepared <- liftIO (traverse (prepare workflowId now) (zip [first ..] (NonEmpty.toList signals)))
+  (workflowName, _) <- currentWorkflow
+  generation <- currentRunGeneration
+  let results = map preparedSinkResult prepared
+  appendTx <- prepareJournalAppend workflowName workflowId generation (StepRecorded (unStepName label) (Aeson.toJSON results) now)
+  outcome <- runTransaction do
+    appendTx >>= \case
+      JournalAppended {} -> traverse_ enqueuePreparedSinkIntentTx prepared >> pure (Right (True, results))
+      JournalAlreadyPresent stored -> pure ((False,) <$> parseEither Aeson.parseJSON stored)
+      JournalRefusedTerminal marker -> pure (Left (Text.unpack marker))
+      JournalAppendConflict err -> pure (Left (show err))
+  (fresh, retained) <- either (liftIO . ioError . userError) pure outcome
+  when fresh (liftIO onCommitted)
+  pure retained
+  where
+    prepare workflow now (ordinal, signal) =
+      let message = Delivery.sinkMessageId (workflow.unWorkflowId <> ":" <> unStepName label <> ":" <> Text.pack (show ordinal))
+       in case signal.address of
+            Recipient recipient -> prepareSinkIntentForRecipientWithMessageId directory grants identity workflow label agent run ordinal occurredAt Nothing Nothing message recipient signal.sink signal.output now
+            Conversation target -> prepareSinkIntentWithRecipient directory grants identity workflow label agent run ordinal occurredAt (Just target) Nothing (Just message) Nothing signal.sink signal.output now
 
 journalPreparedSinkIntent :: (Workflow :> es, Store :> es, IOE :> es) => StepName -> UTCTime -> PreparedSinkIntent -> Eff es SinkResult
 journalPreparedSinkIntent stepName now prepared = do

@@ -39,6 +39,7 @@ import Shikigami.Execution.SelectionRuntime (assignmentIdFor)
 import Shikigami.Execution.Transcript (executionIdFor)
 import Shikigami.Flow.Decision qualified as FlowDecision
 import Shikigami.Flow.Initiative qualified as FlowInitiative
+import Shikigami.Flow.Observe qualified as FlowObserve
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations (verifyShikigamiMigrations)
@@ -150,6 +151,7 @@ runDurableAgent logger KirokuStore {pool} appEnv workspace config decl = do
             AgentWorkflow.coordination = Nothing,
             AgentWorkflow.objectives = Nothing,
             AgentWorkflow.initiatives = FlowInitiative.disabledInitiatives,
+            AgentWorkflow.observe = FlowObserve.disabledObserve,
             AgentWorkflow.workspace = Nothing,
             AgentWorkflow.agents = [decl],
             AgentWorkflow.kizashi = kizashiConfig,

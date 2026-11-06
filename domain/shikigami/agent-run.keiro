@@ -66,6 +66,17 @@ workflow AgentRun
       step emit-signal-initiative-admitted -> SinkResult
       step initiative-admission-failed -> InitiativeAdmissionFailure
     }
+    patch shikigami-watchdog-v1 {
+      step watchdog-grant -> WatchdogGrantResolution
+      step watchdog-open -> WatchdogSweepOpened
+      step watchdog-observe -> WatchdogObservationPage
+      step watchdog-record -> WatchdogPageOutcome
+      step decision-prepare-drift -> PreparedDecisionResolution
+      step decision-result-drift -> DecisionOutcome
+      step watchdog-drift-record -> WatchdogPageOutcome
+      step emit-signals-watchdog-deliver -> SinkBatchResult
+      step watchdog-close -> WatchdogSweepClosed
+    }
     step route-decision-architecture-practice -> RouteDecision
     step recall-risk-history -> RecalledLearnings
     step remember-acknowledged -> RecordedLearning

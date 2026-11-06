@@ -17,6 +17,7 @@ import Shikigami.SchedulerSpec qualified as SchedulerSpec
 import Shikigami.StreamInboxSpec qualified as StreamInboxSpec
 import Shikigami.TelemetrySpec qualified as TelemetrySpec
 import Shikigami.TimerRecoverySpec qualified as TimerRecoverySpec
+import Shikigami.WatchdogSweepSpec qualified as WatchdogSweepSpec
 import Shikigami.Workers.CommandSpec qualified as CommandSpec
 import Shikigami.WorkspaceContainedFileSpec qualified as WorkspaceContainedFileSpec
 import Shikigami.WorkspaceFileProviderSpec qualified as WorkspaceFileProviderSpec
@@ -74,6 +75,7 @@ suite = do
               HealthWorkerSpec.tests,
               RunJobWorkerSpec.tests databaseFixture,
               StatusSpec.tests databaseFixture,
+              WatchdogSweepSpec.tests databaseFixture,
               SchedulerSpec.tests databaseFixture,
               StreamInboxSpec.tests databaseFixture,
               ProposeWorkSpec.tests databaseFixture,

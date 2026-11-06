@@ -20,6 +20,7 @@ module Shikigami.Flow.Decision
     emptyDecisionServices,
     DecisionEnv (..),
     runDecision,
+    runDecisionAdvisory,
     runDecisionAccepted,
     AcceptedDecisionHost (..),
     pinnedDecisionPolicy,
@@ -185,6 +186,23 @@ runDecision env action = do
   pinned <- journal env (StepName "decision-policy") (pure (resolvePolicy env.services.programs env.inventory env.services.catalog env.agent env.profile))
   policy <- either (throwIO . DecisionAbort) pure pinned
   runDecisionUsing env Nothing policy action
+
+-- | Advisory callers must be able to retain deterministic findings even when
+-- model-policy resolution refuses. Keep the same pinned policy result, but
+-- raise its typed refusal at the capability request so the Flow can handle it.
+-- Required decision Flows retain 'runDecision' and its eager refusal semantics.
+runDecisionAdvisory :: (Workflow :> es, Store :> es, IOE :> es) => DecisionEnv -> Eff (Decision : es) a -> Eff es a
+runDecisionAdvisory env action = do
+  pinned <- journal env (StepName "decision-policy") (pure (resolvePolicy env.services.programs env.inventory env.services.catalog env.agent env.profile))
+  case pinned of
+    Right policy -> runDecisionUsing env Nothing policy action
+    Left refusal ->
+      interpret
+        ( \_ -> \case
+            RefuseDecision failure -> throwIO (DecisionAbort failure)
+            _ -> throwIO (DecisionAbort refusal)
+        )
+        action
 
 -- | Only the new adaptive call site uses accepted work. Its caller carries the
 -- original policy through generations; it cannot expand from live declarations.

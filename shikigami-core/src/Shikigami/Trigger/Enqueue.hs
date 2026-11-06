@@ -17,6 +17,7 @@ module Shikigami.Trigger.Enqueue
     addressedRunJob,
     scheduleRunIdempotencyKey,
     enqueueScheduledRun,
+    scheduledRunJob,
   )
 where
 
@@ -187,32 +188,33 @@ addressedRunJob now identity agent route payload key =
 
 -- | Enqueue a schedule-triggered run for a deterministic due minute.
 enqueueScheduledRun :: Pool -> AgentIdentity -> AgentName -> UTCTime -> IO (Either UsageError MessageId)
-enqueueScheduledRun pool identity agent dueAt =
-  enqueueRunJob
-    pool
-    RunJob
-      { agentName = agent,
-        identity,
-        triggerKind = TriggeredBySchedule,
-        objective = Nothing,
-        routeKind = AgentWorkflowRoute,
-        occurredAt = dueAt,
-        triggerPayload =
-          Aeson.object
-            [ "kind" .= ("shikigami.schedule" :: Text),
-              "agent" .= agent,
-              "dueAt" .= dueAt
-            ],
-        idempotencyKey = scheduleRunIdempotencyKey agent dueAt,
-        parentSessionId = Nothing,
-        parentRunWorkflowId = Nothing,
-        delegationDepth = Nothing,
-        lineage = [agent],
-        executionRequest = Nothing,
-        executionPermissions = Nothing,
-        executionRootId = Nothing,
-        delegationBudgetId = Nothing
-      }
+enqueueScheduledRun pool identity agent dueAt = enqueueRunJob pool (scheduledRunJob identity agent dueAt)
+
+scheduledRunJob :: AgentIdentity -> AgentName -> UTCTime -> RunJob
+scheduledRunJob identity agent dueAt =
+  RunJob
+    { agentName = agent,
+      identity,
+      triggerKind = TriggeredBySchedule,
+      objective = Nothing,
+      routeKind = AgentWorkflowRoute,
+      occurredAt = dueAt,
+      triggerPayload =
+        Aeson.object
+          [ "kind" .= ("shikigami.schedule" :: Text),
+            "agent" .= agent,
+            "dueAt" .= dueAt
+          ],
+      idempotencyKey = scheduleRunIdempotencyKey agent dueAt,
+      parentSessionId = Nothing,
+      parentRunWorkflowId = Nothing,
+      delegationDepth = Nothing,
+      lineage = [agent],
+      executionRequest = Nothing,
+      executionPermissions = Nothing,
+      executionRootId = Nothing,
+      delegationBudgetId = Nothing
+    }
 
 -- | The producer and lifecycle-audit key for one deterministic cron tick.
 scheduleRunIdempotencyKey :: AgentName -> UTCTime -> RunKey

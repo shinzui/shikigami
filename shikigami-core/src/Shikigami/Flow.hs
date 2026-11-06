@@ -9,6 +9,7 @@ module Shikigami.Flow
     LifecycleDiagram (..),
     atRiskCustomerLifecycleDiagram,
     flowDeclarationErrors,
+    flowDecisionSlotsFor,
     flowRegistry,
     lookupFlow,
     registeredFlowNames,
@@ -46,6 +47,7 @@ import Shikigami.Flow.Initiative (Initiative, proposeWork, proposeWorkFlowName, 
 import Shikigami.Flow.Lifecycle.AtRiskCustomer (atRiskCustomerMermaid, atRiskCustomerValidationWarnings)
 import Shikigami.Flow.ObjectiveExample (objectiveExample)
 import Shikigami.Flow.Objectives (Objectives)
+import Shikigami.Flow.Observe (Observe)
 import Shikigami.Flow.OpenTelemetryPracticeReview
   ( opentelemetryPracticeReviewFlow,
     opentelemetryPracticeReviewFlowName,
@@ -55,6 +57,7 @@ import Shikigami.Flow.Routing (Routing)
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Flow.ShikumiDecisionExample (exampleSlots, shikumiDecisionExample)
 import Shikigami.Flow.ShikumiJudgmentExample (judgmentSlots, shikumiJudgmentExample)
+import Shikigami.Flow.Watchdog (driftAlias, watchdogFlowName, watchdogSlots, watchdogSweep)
 import Shikigami.Flow.Workers (Workers)
 import Shikigami.PracticeReview.Capability
   ( ExecutionContext,
@@ -97,6 +100,7 @@ type FlowEffects es =
     AdaptiveDelivery :> es,
     Objectives :> es,
     Initiative :> es,
+    Observe :> es,
     Routing :> es,
     Decision :> es,
     ExecutionContext :> es,
@@ -158,7 +162,8 @@ atRiskCustomerLifecycleDiagram =
 -- now, so the body closes over nothing and the question is answerable directly.
 flowRegistry :: [FlowDef]
 flowRegistry =
-  [ FlowDef
+  [ FlowDef {name = watchdogFlowName, decisionSlots = watchdogSlots, requiresDefaultModel = DefaultModelOptional, lifecycle = LifecycleDiagram "flowchart LR\n Grant --> Observe --> Classify --> Record --> Drift --> Deliver --> Close" [], run = watchdogSweep},
+    FlowDef
       { name = proposeWorkFlowName,
         decisionSlots = proposeWorkSlots,
         requiresDefaultModel = DefaultModelOptional,
@@ -311,10 +316,16 @@ flowDeclarationErrors declaration@AgentDecl {behavior} =
     Flow {name = flowName} ->
       case lookupFlow flowName of
         Nothing -> []
-        Just flow -> slotErrors decisionProgramRegistry declaration flow.decisionSlots
+        Just flow -> slotErrors decisionProgramRegistry declaration (flowDecisionSlotsFor declaration flow)
     _ -> []
 
 -- The typed decision registry is finite and validated at construction. The
 -- example integration adds its immutable registrations here.
 decisionProgramRegistry :: Decision.ProgramRegistry
 decisionProgramRegistry = decisionPrograms
+
+-- Only the watchdog's advisory drift slot is optional. Other inventories stay strict.
+flowDecisionSlotsFor :: AgentDecl -> FlowDef -> [DecisionSlot]
+flowDecisionSlotsFor declaration flow
+  | flow.name == watchdogFlowName && driftAlias `notElem` declaration.decisionModels = []
+  | otherwise = flow.decisionSlots

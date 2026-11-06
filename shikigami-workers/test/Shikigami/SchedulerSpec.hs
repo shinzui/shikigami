@@ -1,10 +1,12 @@
 module Shikigami.SchedulerSpec (tests) where
 
 import Control.Exception (bracket, try)
+import Control.Lens ((&), (.~))
 import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.ByteString (ByteString)
 import Data.ByteString.Char8 qualified as ByteString.Char8
+import Data.Generics.Labels ()
 import Data.IORef (IORef, modifyIORef', newIORef, readIORef)
 import Data.Map.Strict qualified as Map
 import Data.String (fromString)
@@ -25,11 +27,17 @@ import Shikigami.Agent.Approval qualified as Approval
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Trigger (..), defaultMemoryPolicy)
 import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Name (AgentName, mkAgentName)
+import Shikigami.Agent.Principal (AgentIdentity (..), mkAgentPrincipal)
 import Shikigami.Agent.Run.Key (RunKey, parseRunKey)
 import Shikigami.Agent.RunJob (RunJob (..), TriggerKind (..))
 import Shikigami.App (AppEnv (..), noopTracer, runAppIO)
 import Shikigami.Directory (DirectoryHandle, Lifecycle (..), PrincipalRecord (..), disabledDirectoryHandle, newDirectoryHandle, refreshDirectory, staticDirectorySource)
 import Shikigami.Directory.Store qualified as DirectoryStore
+import Shikigami.Duration qualified
+import Shikigami.Execution.Quantity (parseResourceAmount)
+import Shikigami.Execution.Resources qualified as Resources
+import Shikigami.Execution.ResourcesStore qualified as Roots
+import Shikigami.Flow.Watchdog (watchdogFlowName)
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Shikigami.RunJobs qualified as RunJobs
@@ -37,10 +45,11 @@ import Shikigami.RuntimePolicy (ManifestStrictness (..))
 import Shikigami.Trigger.Enqueue (ensureRunQueue, runQueueName)
 import Shikigami.Trigger.Schedule (CatchUpPolicy (..), CronSchedule, cronExpressionClaim, nextDue, parseCron)
 import Shikigami.Trigger.Scheduler (SchedulerEnv (..), armNextRun, parseSchedulePayload, runSchedulerTimerWorker, scheduleFireAction, scheduleTimerId, scheduleTimerPayload, shikigamiTimerFallback)
+import Shikigami.Watchdog.Settings
 import Shikigami.Workers.Config (schedulerSchedules)
 import System.Exit (ExitCode (ExitFailure))
 import Test.Tasty (TestTree, testGroup)
-import Test.Tasty.HUnit (assertBool, assertEqual, assertFailure, testCase)
+import Test.Tasty.HUnit (assertBool, assertEqual, assertFailure, testCase, (@?=))
 
 tests :: DatabaseFixture -> TestTree
 tests databaseFixture =
@@ -123,6 +132,59 @@ tests databaseFixture =
 
             refired <- runAppIO appEnv (runSchedulerTimerWorker appEnv env (atMinute 2))
             assertBool "re-armed next schedule timer fired" (either (const False) (> 0) refired),
+      testCase "watchdog tick enrolls once at receipt and retains the original allowance on retry" do
+        withShikigamiFreshDatabase databaseFixture \connStr ->
+          withStore (defaultConnectionSettings connStr) \store -> do
+            tracer <- noopTracer
+            directory <- directoryWith Active
+            cron <- parseCronOrFail "* * * * *"
+            identity <- VerifiedIdentity <$> either (assertFailure . Text.unpack) pure (mkAgentPrincipal "agent_heartbeat")
+            configured <-
+              either
+                assertFailure
+                pure
+                ( Aeson.eitherDecode
+                    ( Aeson.encode
+                        ( Aeson.object
+                            [ "principal" .= ("agent_heartbeat" :: Text),
+                              "scope" .= ("all" :: Text),
+                              "stuckWindowSeconds" .= (60 :: Int),
+                              "parkedWindowSeconds" .= (30 :: Int),
+                              "coordinatorWindowSeconds" .= (60 :: Int),
+                              "subjectsPerSweep" .= (9 :: Int),
+                              "allowance" .= Aeson.object ["principal" .= ("agent_heartbeat" :: Text), "flow" .= watchdogFlowName, "cutoffSeconds" .= (240 :: Int), "limits" .= Aeson.object ["ActiveWork" .= (1 :: Int), "ModelAttempts" .= (1 :: Int), "Tokens" .= (1000 :: Int), "CostMicroUsd" .= ("unbounded" :: Text), "ToolAttempts" .= (0 :: Int), "LifetimeDescendants" .= (0 :: Int)]]
+                            ]
+                        )
+                    )
+                )
+            let pool = StoreConnection.pool store
+                appEnv = AppEnv (defaultConnectionSettings connStr) tracer Nothing Nothing
+                declaration = scheduledAgent "heartbeat" "* * * * *" & #behavior .~ Flow watchdogFlowName
+                env =
+                  (testSchedulerEnv pool (Map.singleton declaration.name cron) SkipMissed Log.silentLogger)
+                    { declarations = [declaration],
+                      watchdog = Just configured,
+                      principalIds = Map.singleton declaration.name (Just (declarationCoordinate "agent_heartbeat")),
+                      directory
+                    }
+                tick settings now = runAppIO appEnv (scheduleFireAction settings now (staleScheduleRow staleDue))
+            ensureQueue pool
+            tick env aDayLater >>= assertBool "late tick admitted" . either (const False) (maybe False (const True))
+            jobs <- readRunJobs pool
+            original <- case jobs of [job] -> pure job; _ -> assertFailure (show jobs)
+            root <- maybe (assertFailure "watchdog job has no root") pure original.executionRootId
+            state <- runAppIO appEnv (Roots.inspectRoot root) >>= either (assertFailure . show) (either (assertFailure . show) pure)
+            state.envelope.cutoff @?= addUTCTime 240 aDayLater
+            let broadened = configured & #allowance .~ fmap (\allowance -> allowance & #cutoffSeconds .~ either (error . show) id (Shikigami.Duration.parseDuration 480)) configured.allowance
+            tick (env {watchdog = Just broadened}) (addUTCTime 60 aDayLater) >>= assertBool "retry admitted" . either (const False) (maybe False (const True))
+            replayed <- readRunJobs pool
+            map (.executionRootId) replayed @?= [Just root]
+            retained <- runAppIO appEnv (Roots.inspectRoot root) >>= either (assertFailure . show) (either (assertFailure . show) pure)
+            retained.envelope @?= state.envelope
+            tick (env {watchdog = Nothing}) aDayLater >>= assertBool "disabled tick acknowledged as skip" . either (const False) (maybe False (const True))
+            readRunJobs pool >>= (@?= [])
+            skips <- either (assertFailure . Text.unpack) pure =<< DirectoryStore.listRunSkips pool
+            length skips @?= 1,
       testCase "paused schedule commits a trigger skip and enqueues no job" do
         (withShikigamiFreshDatabase databaseFixture) \connStr ->
           withStore (defaultConnectionSettings connStr) \kirokuStore -> do
@@ -335,7 +397,7 @@ scheduledAgent agentName cron =
 -- | A 'SchedulerEnv' with the two fields every case below varies made explicit.
 testSchedulerEnv :: Pool.Pool -> Map.Map AgentName CronSchedule -> CatchUpPolicy -> Log.Logger -> SchedulerEnv
 testSchedulerEnv pool schedules catchUpPolicy logger =
-  SchedulerEnv {pool, schedules, principalIds = Map.empty, directory = disabledDirectoryHandle, catchUpPolicy, logger}
+  SchedulerEnv {pool, schedules, declarations = [], watchdog = Nothing, principalIds = Map.empty, directory = disabledDirectoryHandle, catchUpPolicy, logger}
 
 directoryWith :: Lifecycle -> IO DirectoryHandle
 directoryWith lifecycle = do
@@ -450,3 +512,6 @@ fixtureAgentName = either (error . show) id . mkAgentName
 
 fixtureRunKey :: Text -> RunKey
 fixtureRunKey = either (error . show) id . parseRunKey
+
+limited :: Integer -> Resources.Limit
+limited = Resources.Limited . either (error . show) id . parseResourceAmount

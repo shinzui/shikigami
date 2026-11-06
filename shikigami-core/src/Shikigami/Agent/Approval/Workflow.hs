@@ -24,14 +24,16 @@ import Data.Map.Strict qualified as Map
 import Data.Time (NominalDiffTime)
 import Effectful (Eff, IOE, (:>))
 import Effectful.Exception (throwIO)
+import Hasql.Transaction qualified as Tx
 import Keiro.Workflow
-  ( StepName (..),
+  ( JournalAppendOutcome (..),
+    StepName (..),
     Workflow,
     WorkflowJournalEvent (..),
     WorkflowName,
-    appendJournalEntry,
     currentRunGeneration,
     currentWorkflow,
+    prepareJournalAppend,
     step,
   )
 import Keiro.Workflow.Awakeable (AwakeableId)
@@ -39,6 +41,7 @@ import Keiro.Workflow.Child (awaitChild, spawnChild)
 import Keiro.Workflow.Resume (WorkflowDef (..), WorkflowRegistry)
 import Kioku.Id (SessionId)
 import Kiroku.Store.Effect (Store)
+import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Agent.Approval
   ( ApprovalDecision,
     ApprovalRequest,
@@ -49,6 +52,7 @@ import Shikigami.Agent.Approval
   )
 import Shikigami.App (AppEffects)
 import Shikigami.Approval.Generated.WorkflowRuntime qualified as Generated
+import Shikigami.Approval.Observation (recordApprovalAssociationTx)
 import Shikigami.Duration
 import Shikigami.Prelude
 
@@ -168,14 +172,22 @@ requestBoundApproval reviewRequestId sessionId request deadline = do
       childId
       (pure (ApprovalNotificationFailed "approval child is driven from the workflow registry"))
   now <- liftIO getCurrentTime
-  appendJournalEntry
-    Generated.workflowName
-    childId
-    StepRecorded
-      { stepName = "ingest-approval",
-        result = Aeson.toJSON input,
-        recordedAt = now
-      }
+  (parentName, parentId) <- currentWorkflow
+  appendTx <-
+    prepareJournalAppend
+      Generated.workflowName
+      childId
+      0
+      StepRecorded {stepName = "ingest-approval", result = Aeson.toJSON input, recordedAt = now}
+  admitted <- runTransaction do
+    recordApprovalAssociationTx reviewRequestId parentName parentId >>= \case
+      Left problem -> pure (Left (show problem))
+      Right () ->
+        appendTx >>= \case
+          JournalAppended {} -> pure (Right ())
+          JournalAlreadyPresent _ -> pure (Right ())
+          other -> Tx.condemn >> pure (Left (show other))
+  either (liftIO . ioError . userError) pure admitted
   awaitChild child
 
 ingestApproval :: (IOE :> es) => Maybe ApprovalWorkflowInput -> Eff es ApprovalWorkflowInput

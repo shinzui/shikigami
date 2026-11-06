@@ -344,8 +344,11 @@ original assessment time and reject changed or stale retries.
 Optional `driftIntervalSeconds` and `driftSubjectsPerSweep` watchdog settings must
 appear together; omission disables drift and limits above sixteen refuse loading.
 The grant snapshot retains the admitted interval and optional subject bound.
-The production watchdog caller, optional slot inventory and workflow declarations
-are integrated by [plan 112](plans/112-run-the-watchdog-as-a-scheduled-flow-agent-with-its-own-principal-allowance-and-sinks.md).
+The registered `watchdog-sweep` Flow uses a watchdog-specific optional inventory:
+without the declared `drift` alias it still performs deterministic liveness sweeps.
+Its advisory interpreter retains policy refusals and raises them at the Decision
+request so the Flow can still deliver liveness findings. Required decision Flows
+keep eager policy refusal. Workflow integration is described in [plan 112](plans/112-run-the-watchdog-as-a-scheduled-flow-agent-with-its-own-principal-allowance-and-sinks.md).
 Existing required slots still require every declared alias before provider IO.
 
 `Drift` uses the ordinary root-accounted decision path. It requires the run's own

@@ -1,4 +1,4 @@
-module Shikigami.ObjectiveStoreSpec (tests, crashWriter, withObjective, createFixtureObjective, bindFixtureAssignment) where
+module Shikigami.ObjectiveStoreSpec (tests, ownerHost, crashWriter, withObjective, createFixtureObjective, bindFixtureAssignment) where
 
 import Contravariant.Extras (contrazip2, contrazip3)
 import Control.Concurrent.Async (concurrently, replicateConcurrently)

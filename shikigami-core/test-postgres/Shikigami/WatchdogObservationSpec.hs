@@ -199,6 +199,9 @@ tests fixture =
           run env (runWorkflow agentRunWorkflowName parent parentBody) >>= (@?= Suspended)
           run env (runChildWorkflow defaultWorkflowRunOptions ApprovalWorkflow.approvalWorkflowName (Approval.approvalWorkflowId review) (ApprovalWorkflow.approvalWorkflow childEnv Nothing)) >>= (@?= Suspended)
           grant <- fixtureGrant
+          linked <- right =<< run env (Watchdog.observePage grant Watchdog.defaultObservationBounds Watchdog.initialCursor)
+          assertBool "approval admission publishes its exact parent association" (any (any isApprovalWait . (.waits)) linked.subjects)
+          run env (runTransaction (Tx.statement (Approval.reviewRequestIdText review) (preparable "DELETE FROM shikigami.approval_observation_associations WHERE review_id=$1" (E.param (E.nonNullable E.text)) D.noResult)))
           unknown <- right =<< run env (Watchdog.observePage grant Watchdog.defaultObservationBounds Watchdog.initialCursor)
           assertBool "uncorrelated approval is not a wait" (all (not . any isApprovalWait . (.waits)) unknown.subjects)
           run env (runTransaction (ApprovalMetadata.recordApprovalAssociationTx review agentRunWorkflowName parent)) >>= (@?= Right ())

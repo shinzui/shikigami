@@ -15,6 +15,7 @@ module Shikigami.Flow.Capability
     deterministicFlowMemoryId,
     emitSignal,
     emitSignalTo,
+    emitSignals,
     recall,
     recordFlowMemory,
     remember,
@@ -29,6 +30,8 @@ import Data.Aeson (Value)
 import Data.ByteString qualified as ByteString
 import Data.IORef (atomicModifyIORef', newIORef)
 import Data.KindID.V7 qualified as KindID
+import Data.List.NonEmpty (NonEmpty)
+import Data.List.NonEmpty qualified as NonEmpty
 import Data.Set (Set)
 import Data.Set qualified as Set
 import Data.Text (Text)
@@ -58,8 +61,8 @@ import Shikigami.Directory (DirectoryHandle)
 import Shikigami.Memory.Access (agentActor, shikigamiMemorySpace, shikigamiWriteContext)
 import Shikigami.Memory.Scope (agentScope)
 import Shikigami.Sink (GrantSource)
-import Shikigami.Sink.Intent (enqueueSinkIntentStep, enqueueSinkIntentStepForRecipient)
-import Shikigami.Sink.Types (DanwaTarget, SinkResult)
+import Shikigami.Sink.Intent (enqueueSinkIntentBatch, enqueueSinkIntentStep, enqueueSinkIntentStepForRecipient)
+import Shikigami.Sink.Types (AddressedSignal, DanwaTarget, SinkResult)
 
 newtype MemoryQuery = MemoryQuery {query :: Text}
   deriving stock (Eq, Show)
@@ -73,7 +76,8 @@ data MemoryEnv = MemoryEnv
   }
 
 data SinkEnv = SinkEnv
-  { agent :: !AgentName,
+  { onBatchCommitted :: !(StepName -> IO ()),
+    agent :: !AgentName,
     runId :: !SessionId,
     occurredAt :: !(Maybe UTCTime),
     danwaTarget :: !(Maybe DanwaTarget),
@@ -98,6 +102,7 @@ type instance DispatchOf Memory = Dynamic
 data Sink :: Effect where
   EmitSignal :: DeclarationCoordinate "sink-label" -> Agent.Sink -> Value -> Sink m SinkResult
   EmitSignalTo :: DeclarationCoordinate "sink-label" -> DeclarationCoordinate "recipient" -> Agent.Sink -> Value -> Sink m SinkResult
+  EmitSignals :: DeclarationCoordinate "sink-label" -> NonEmpty AddressedSignal -> Sink m [SinkResult]
 
 type instance DispatchOf Sink = Dynamic
 
@@ -212,6 +217,9 @@ emitSignal label sink output = send (EmitSignal label sink output)
 -- @emit-signal-\<label\>@, a name the declaration language can spell.
 emitSignalTo :: (Sink :> es) => DeclarationCoordinate "sink-label" -> DeclarationCoordinate "recipient" -> Agent.Sink -> Value -> Eff es SinkResult
 emitSignalTo label recipient sink output = send (EmitSignalTo label recipient sink output)
+
+emitSignals :: (Sink :> es) => DeclarationCoordinate "sink-label" -> NonEmpty AddressedSignal -> Eff es [SinkResult]
+emitSignals label = send . EmitSignals label
 
 currentActivity :: (Activity :> es) => Eff es ActivityEnvelope
 currentActivity = send CurrentActivity
@@ -337,10 +345,14 @@ recordFlowMemory
 -- | Journal each emission under its caller's stable label. The payload ordinal
 -- retains emission ordering; it never selects a journal record.
 runSink :: (Workflow :> es, Store :> es, IOE :> es) => SinkEnv -> Eff (Sink : es) a -> Eff es a
-runSink SinkEnv {agent, runId, occurredAt, danwaTarget, activity, grants, directory, identity} action = do
+runSink SinkEnv {onBatchCommitted, agent, runId, occurredAt, danwaTarget, activity, grants, directory, identity} action = do
   ordinalRef <- liftIO (newIORef (0 :: Int))
   interpret
     ( \_ -> \case
+        EmitSignals label signals -> do
+          ordinal <- liftIO (atomicModifyIORef' ordinalRef \current -> (current + NonEmpty.length signals, current))
+          let stepName = StepName ("emit-signals-" <> declarationCoordinateText label)
+          enqueueSinkIntentBatch (onBatchCommitted stepName) directory grants identity stepName agent runId ordinal occurredAt signals
         EmitSignal label sink output -> do
           ordinal <- liftIO (atomicModifyIORef' ordinalRef \current -> (current + 1, current))
           let stepName = StepName ("emit-signal:" <> declarationCoordinateText label)

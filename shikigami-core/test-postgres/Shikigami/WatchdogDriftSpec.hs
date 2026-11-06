@@ -1,7 +1,7 @@
 {-# LANGUAGE DataKinds #-}
 
 -- | A real unregistered Flow, with the normal capability and decision journal.
-module Shikigami.WatchdogDriftSpec (tests) where
+module Shikigami.WatchdogDriftSpec (tests, Harness (..), withHarness, enroll, objectiveState, inspect, amount) where
 
 import Baikai.Content (AssistantContent (AssistantText), TextContent (..))
 import Baikai.Evidence qualified as Evidence
@@ -30,6 +30,7 @@ import Data.Vector qualified as Vector
 import Effectful (Eff)
 import Hasql.Decoders qualified as D
 import Hasql.Encoders qualified as E
+import Hasql.Pool (Pool)
 import Hasql.Statement (preparable)
 import Hasql.Transaction qualified as Tx
 import Keiro.Workflow (StepName (..), WorkflowId (..), WorkflowName (..), WorkflowOutcome (..), loadStepIndex)
@@ -217,7 +218,9 @@ data Harness = Harness
     reply :: !(DriftProposal -> IO ()),
     steps :: !(IO [StepName]),
     recordStep :: !(StepName -> IO ()),
-    objectiveRoot :: !ExecutionRootId
+    objectiveRoot :: !ExecutionRootId,
+    pool :: !Pool,
+    admission :: !WorkerSessionOwner.SessionAdmission
   }
 
 withHarness :: DatabaseFixture -> (Harness -> IO a) -> IO a
@@ -247,7 +250,7 @@ withHarness fixture use = withObjective fixture \env admission objectiveId -> do
             let evidence = (\value -> value & #responseCommitment .~ Evidence.Observed (Evidence.commitmentDigest reply)) <$> response.evidence
             pure (response & #message . #content .~ Vector.singleton (AssistantText (TextContent (decodeUtf8 (Lazy.toStrict (encode reply))))) & #evidence .~ evidence)
           provider = decisionStubProvider & #complete .~ completing & #stream .~ liftCompleteToStream completing
-      use (Harness env runtime (postgresDecisionEvidenceStore store.pool) (Decision.defaultDecisionServices catalog & #providers .~ [provider]) input (readIORef count) (readIORef prompts) (writeIORef replies) (reverse <$> readIORef seen) (\name -> atomicModifyIORef' seen (\values -> (name : values, ()))) objectiveRoot)
+      use (Harness env runtime (postgresDecisionEvidenceStore store.pool) (Decision.defaultDecisionServices catalog & #providers .~ [provider]) input (readIORef count) (readIORef prompts) (writeIORef replies) (reverse <$> readIORef seen) (\name -> atomicModifyIORef' seen (\values -> (name : values, ()))) objectiveRoot store.pool admission)
   where
     scoped :: Objective.ObjectiveId -> Owner.ExecutionSnapshot -> Owner.ExecutionSnapshot
     scoped objective snapshot = snapshot & #objectiveScope .~ Just (Scope.ObjectiveScope V1 snapshot.runId snapshot.identity snapshot.sessionId snapshot.selection.rootId (Just (addUTCTime 3600 snapshot.selection.admittedAt)) (Just snapshot.selection.permittedAliases) (Just objective) (Scope.AgentScope snapshot.selection.assignmentId) Nothing [Scope.InspectObjectives, Scope.ApplyObjectiveCommands] Nothing)

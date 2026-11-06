@@ -69,6 +69,7 @@ import Shikigami.Flow.Decision qualified as FlowDecision
 import Shikigami.Flow.Delegate qualified as FlowDelegate
 import Shikigami.Flow.Initiative qualified as FlowInitiative
 import Shikigami.Flow.Objectives qualified as FlowObjectives
+import Shikigami.Flow.Observe qualified as FlowObserve
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Flow.Workers qualified as FlowWorkers
 import Shikigami.Memory.Access (shikigamiMemorySpace)
@@ -111,7 +112,7 @@ tests databaseFixture =
       testCase "a Flow behavior naming an unregistered flow is a declaration error" do
         assertEqual
           "unknown flow is refused, and the message names what is registered"
-          ["unknown flow no-such-flow; registered flows: propose-work, adaptive-delivery, objective-example, shikumi-decision-example, shikumi-judgment-example, at-risk-customer, delegation-proof, architecture-practice-router, opentelemetry-practice-review"]
+          ["unknown flow no-such-flow; registered flows: watchdog-sweep, propose-work, adaptive-delivery, objective-example, shikumi-decision-example, shikumi-judgment-example, at-risk-customer, delegation-proof, architecture-practice-router, opentelemetry-practice-review"]
           (flowDeclarationErrors (flowBehaviorAgent (Flow {name = declarationCoordinate ("no-such-flow")})))
         assertEqual
           "a registered flow is accepted"
@@ -571,6 +572,7 @@ runFlowBodyUsing decision onAppend appEnv runtime flowAgent FlowDef {run} workfl
             . (case decision of Nothing -> FlowDecision.runDecisionDisabled; Just environment -> FlowDecision.runDecision environment)
             . FlowDelegate.runDelegate delegateEnv
             . FlowObjectives.runObjectives Nothing (Right Nothing)
+            . FlowObserve.unavailableObserve
             . FlowInitiative.unavailableInitiative
             . FlowWorkers.runWorkers Nothing denyAllActionAuthorizer (CoordinatorRun (WorkflowId "disabled-flow-fixture") (compatibilityIdentity (fixtureAgentName flowAgent)) runtime.approval.currentSession Nothing Nothing) (Right Nothing)
             . Routing.runRouting
@@ -630,7 +632,8 @@ runFlowBodyUsing decision onAppend appEnv runtime flowAgent FlowDef {run} workfl
         }
     sinkEnv =
       SinkEnv
-        { agent = fixtureAgentName flowAgent,
+        { onBatchCommitted = const (pure ()),
+          agent = fixtureAgentName flowAgent,
           runId = nominalSessionFixture,
           occurredAt = Just flowOccurredAt,
           danwaTarget = Nothing,

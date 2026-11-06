@@ -32,22 +32,29 @@ import Kiroku.Store.Transaction (runTransaction)
 import Kiroku.Store.Types (EventId (..))
 import Shikigami.Agent.Approval qualified as Approval
 import Shikigami.Agent.Conversation qualified as Conversation
+import Shikigami.Agent.Decl (AgentDecl (..))
 import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Name (AgentName, agentNameText)
 import Shikigami.Agent.Principal (AgentIdentity (..), compatibilityIdentity, mkAgentPrincipal)
+import Shikigami.Agent.RunJob (RunJob (..))
 import Shikigami.App (AppEnv (..))
 import Shikigami.Coordination.Wake qualified as AdaptiveWake
 import Shikigami.Directory qualified as Directory
 import Shikigami.Directory.Store (RunSkip (..), SkipStage (TriggerStage), recordRunSkip, reportedPrincipalClaim)
+import Shikigami.Execution.Identity (newExecutionRootId)
 import Shikigami.Execution.Timer qualified as ExecutionTimer
 import Shikigami.Log qualified as Log
 import Shikigami.Prelude hiding ((.=))
-import Shikigami.Trigger.Enqueue (enqueueScheduledRun, scheduleRunIdempotencyKey)
+import Shikigami.Trigger.Enqueue (enqueueRunJobTx, enqueueScheduledRun, scheduleRunIdempotencyKey, scheduledRunJob)
 import Shikigami.Trigger.Schedule (CatchUpPolicy (..), CronSchedule, nextDue)
+import Shikigami.Watchdog.Admission
+import Shikigami.Watchdog.Settings (WatchdogSettings)
 
 data SchedulerEnv = SchedulerEnv
   { pool :: !Pool,
     schedules :: !(Map AgentName CronSchedule),
+    declarations :: ![AgentDecl],
+    watchdog :: !(Maybe WatchdogSettings),
     -- | Declaration principal ids keyed by scheduled agent name.
     principalIds :: !(Map AgentName (Maybe (DeclarationCoordinate "principal"))),
     directory :: !Directory.DirectoryHandle,
@@ -136,9 +143,23 @@ scheduleFireAction env now TimerRow {payload = timerPayload} =
             for_ (Map.lookup agent ((.schedules) env)) \cron ->
               armNextRun cron agent armFrom
             pure (Just (scheduleFiredEventId agent dueAt))
-      case admittedIdentity agent declaredPrincipalId decision of
-        Right identity -> do
-          enqueued <- liftIO (enqueueScheduledRun ((.pool) env) identity agent dueAt)
+      let admission = do
+            identity <- admittedIdentity agent declaredPrincipalId decision
+            allowance <- case [declaration | declaration <- env.declarations, declaration.name == agent] of
+              [declaration] -> either (Left . (declaredPrincipalId,)) Right (watchdogAllowance env.watchdog declaration identity)
+              _ -> Right Nothing
+            pure (identity, allowance)
+      case admission of
+        Right (identity, allowance) -> do
+          enqueued <- case allowance of
+            Nothing -> fmap (either (Left . Text.pack . show) (const (Right ()))) (liftIO (enqueueScheduledRun ((.pool) env) identity agent dueAt))
+            Just policy -> do
+              candidate <- liftIO newExecutionRootId
+              enrolled <- runTransaction do
+                enrollScheduledWatchdogTx candidate policy now (scheduledRunJob identity agent dueAt) >>= \case
+                  Left problem -> pure (Left problem)
+                  Right job -> Right <$> enqueueRunJobTx job
+              pure (fmap (const ()) enrolled)
           case enqueued of
             -- Returning Nothing leaves the row in Firing for keiro to requeue. The
             -- log line is what makes that retry visible: before it, a failed enqueue

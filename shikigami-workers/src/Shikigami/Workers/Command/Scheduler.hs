@@ -88,7 +88,9 @@ runSchedulerCmd config = do
         let appEnv = AppEnv {connectionSettings = settings, tracer = tr, metrics = keiroMetrics, store = Just st}
             env =
               SchedulerEnv
-                { pool = storePool,
+                { declarations = agents,
+                  watchdog = config.watchdog,
+                  pool = storePool,
                   schedules = scheduleMap,
                   principalIds = principalIdsByAgent agents,
                   directory,

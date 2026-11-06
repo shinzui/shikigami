@@ -19,6 +19,7 @@
 -- tests, and any future server-side validator all ask the same question.
 module Shikigami.Sink.Validate
   ( sinkDeclarationErrors,
+    sinkErrors,
     validateKanmonRouteSegment,
   )
 where

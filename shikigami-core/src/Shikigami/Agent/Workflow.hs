@@ -161,8 +161,10 @@ import Shikigami.Flow.Decision qualified as FlowDecision
 import Shikigami.Flow.Delegate qualified as FlowDelegate
 import Shikigami.Flow.Initiative qualified as FlowInitiative
 import Shikigami.Flow.Objectives qualified as FlowObjectives
+import Shikigami.Flow.Observe qualified as FlowObserve
 import Shikigami.Flow.Routing (RoutingRuntime)
 import Shikigami.Flow.Routing qualified as FlowRouting
+import Shikigami.Flow.Watchdog qualified as WatchdogFlow
 import Shikigami.Flow.Workers qualified as FlowWorkers
 import Shikigami.Log qualified as Log
 import Shikigami.Log.Correlation (runCorrelationId)
@@ -198,6 +200,7 @@ import Shikigami.Sink.Intent
   )
 import Shikigami.Sink.Permission (SinkKind, sinkKindText)
 import Shikigami.Telemetry.TraceContext qualified as TraceContext
+import Shikigami.Watchdog.Ledger qualified as Watchdog
 import Shikigami.WorkerSession.Capability qualified as WorkerCapability
 import Shikigami.WorkerSession.Handoff qualified as WorkerHandoff
 import Shikigami.WorkerSession.Store qualified as WorkerStore
@@ -223,6 +226,7 @@ data AgentRunDeps = AgentRunDeps
     -- | Observer allowances and the repositories a proposal may be offered. Only
     -- what a run's @initiative-open@ step journals crosses a journal boundary.
     initiatives :: !FlowInitiative.InitiativeSeed,
+    observe :: !FlowObserve.ObserveSeed,
     agents :: ![AgentDecl],
     kizashi :: !KizashiConfig,
     kawa :: !KawaConfig,
@@ -1142,6 +1146,8 @@ runFlowBehavior deps activeBehaviorEnv resolvedProfile approvalPolicyForRun reco
                   Left Objective.ObjectiveUnavailable -> throwIO (TransientBehaviorFailure "objective authority unavailable")
                   value -> pure value
           else pure (Right Nothing)
+      (watchdogNativeName, watchdogNativeRun) <- Workflow.currentWorkflow
+      useWatchdog <- Workflow.patch (Workflow.PatchId "shikigami-watchdog-v1")
       useInitiative <- Workflow.patch (Workflow.PatchId "shikigami-initiative-v1")
       useAdmission <- Workflow.patch (Workflow.PatchId "shikigami-initiative-admission-v1")
       let initiativeInterpreter :: (Workflow :> es, Store :> es, IOE :> es) => Eff (FlowInitiative.Initiative : es) a -> Eff es a
@@ -1160,17 +1166,21 @@ runFlowBehavior deps activeBehaviorEnv resolvedProfile approvalPolicyForRun reco
                       objectiveSettings = maybe Objective.defaultObjectiveSettings (.settings) deps.objectives
                     }
             | otherwise = FlowInitiative.unavailableInitiative
+          observeInterpreter action
+            | useWatchdog = FlowObserve.runObserve (FlowObserve.ObserveRuntime deps.observe job.identity (Watchdog.SweepOrigin watchdogNativeName watchdogNativeRun (runJobOccurredAt job) job.identity) (WatchdogFlow.driftAlias `elem` decl.decisionModels && job.executionRootId /= Nothing)) action
+            | otherwise = FlowObserve.unavailableObserve action
+          inventory = if (not useWatchdog || not (FlowObserve.observeAvailable deps.observe)) && flow.name == WatchdogFlow.watchdogFlowName then [] else Flow.flowDecisionSlotsFor decl flow
           decisionTimeout = DecisionContract.parseDecisionTimeout (floor (durationTime (depsRunTimeout deps) * 1000000))
           attentionInterpreter = PracticeReviewAttention.runPracticeReviewAttentionAtomic practiceReviewAttentionEnv
           decisionInterpreter action
-            | null flow.decisionSlots = FlowDecision.runDecisionDisabled action
+            | null inventory = FlowDecision.runDecisionDisabled action
             | Left refusal <- decisionTimeout = EffException.throwIO (DecisionAbort (DecisionContract.decisionFailure DecisionContract.InvalidSlot refusal))
             | Just pool <- (.deliveryPool) deps,
               Right timeout <- decisionTimeout =
-                FlowDecision.runDecision
+                (if flow.name == WatchdogFlow.watchdogFlowName then FlowDecision.runDecisionAdvisory else FlowDecision.runDecision)
                   FlowDecision.DecisionEnv
                     { agent = decl,
-                      inventory = flow.decisionSlots,
+                      inventory = inventory,
                       services = (.decisions) deps,
                       runtime = activeBehaviorEnv.runtime,
                       profile = resolvedProfile,
@@ -1192,6 +1202,7 @@ runFlowBehavior deps activeBehaviorEnv resolvedProfile approvalPolicyForRun reco
               . FlowWorkers.runWorkers deps.coordination deps.actionAuthorizer coordinator coordinationPolicy
               . Adaptive.runAdaptiveDelivery (adaptiveRuntime deps) coordinator resolvedProfile (Harness.narrowHarnessPolicy deps.harness decl.harness)
               . FlowObjectives.runObjectives deps.objectives objectivePolicy
+              . observeInterpreter
               . initiativeInterpreter
               . FlowRouting.runRouting routingEnv
               . decisionInterpreter
@@ -1203,7 +1214,7 @@ runFlowBehavior deps activeBehaviorEnv resolvedProfile approvalPolicyForRun reco
               . attentionInterpreter
               $ run ((.triggerPayload) job)
           )
-      when (not (null flow.decisionSlots)) do
+      when (not (null inventory)) do
         forM_ ((.deliveryPool) deps) \pool -> do
           finalized <- liftIO (DecisionEvidence.finalizeDecisionReport (DecisionEvidence.postgresDecisionEvidenceStore pool) (runCorrelationId (jobIdempotencyKey job)))
           either (EffException.throwIO . DecisionAbort) (const (pure ())) finalized
@@ -1244,7 +1255,8 @@ runFlowBehavior deps activeBehaviorEnv resolvedProfile approvalPolicyForRun reco
         }
     sinkEnv =
       FlowCapability.SinkEnv
-        { FlowCapability.agent = (.agentName) job,
+        { FlowCapability.onBatchCommitted = deps.hooks.afterStepBody,
+          FlowCapability.agent = (.agentName) job,
           FlowCapability.runId = sid,
           FlowCapability.occurredAt = Just (runJobOccurredAt job),
           FlowCapability.danwaTarget = Nothing,

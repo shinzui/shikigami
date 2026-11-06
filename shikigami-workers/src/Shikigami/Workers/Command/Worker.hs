@@ -32,6 +32,7 @@ import Shikigami.Execution.Capacity qualified as Capacity
 import Shikigami.Flow (flowDeclarationErrors)
 import Shikigami.Flow.Decision qualified as FlowDecision
 import Shikigami.Flow.Initiative qualified as FlowInitiative
+import Shikigami.Flow.Observe qualified as FlowObserve
 import Shikigami.Health.Worker (LoopName (OutboxLoop, QueueLoop, TelemetryLoop, TimerLoop), loopStaleAfter, loopStaleness, newHeartbeatsWithStaleness, serveProbesWith)
 import Shikigami.Inspection.Consumer (consumerInspection)
 import Shikigami.Inspection.Store (withObservedStore)
@@ -228,6 +229,7 @@ runWorkerCmdWith resumeBudget config = do
                   directory,
                   directoryRefresher,
                   objectiveSettings = config.objectiveSettings,
+                  observe = FlowObserve.ObserveSeed config.watchdog FlowObserve.noObserveHooks,
                   initiatives =
                     FlowInitiative.InitiativeSeed
                       { settings = config.initiativeSettings,

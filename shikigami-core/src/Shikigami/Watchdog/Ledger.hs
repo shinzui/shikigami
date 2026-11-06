@@ -4,11 +4,13 @@
 module Shikigami.Watchdog.Ledger where
 
 import Data.Aeson (FromJSON (..), ToJSON (..), object, withObject, withText, (.:), (.=))
+import Data.Char (isControl)
 import Data.List (nub)
 import Data.Text (Text)
+import Data.Text qualified as Text
 import Data.Time (UTCTime)
 import GHC.Generics (Generic)
-import Keiro.Workflow.Types (WorkflowId (..), WorkflowName (..), mkWorkflowId, mkWorkflowName)
+import Keiro.Workflow.Types (WorkflowId (..), WorkflowName (..))
 import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Objective.Types (ObjectiveId)
@@ -154,10 +156,17 @@ instance ToJSON SweepOrigin where
 instance FromJSON SweepOrigin where
   parseJSON = withObject "SweepOrigin" \fields ->
     SweepOrigin
-      <$> (fields .: "workflowName" >>= either (fail . show) pure . mkWorkflowName)
-      <*> (fields .: "workflowId" >>= either (fail . show) pure . mkWorkflowId)
+      <$> (WorkflowName <$> (fields .: "workflowName" >>= coordinate 512))
+      <*> (WorkflowId <$> (fields .: "workflowId" >>= coordinate 4096))
       <*> fields .: "dueAt"
       <*> fields .: "principal"
+    where
+      -- Native historical AgentRun names/ids contain separators rejected by
+      -- Keiro's constructors for newly designed families. Preserve their exact
+      -- bytes; this view neither derives an identity nor supplies authority.
+      coordinate maximum value
+        | not (Text.null value) && Text.length value <= maximum && not (Text.any isControl value) = pure value
+        | otherwise = fail "invalid native watchdog origin coordinate"
 
 instance ToJSON ClosureReason where
   toJSON =

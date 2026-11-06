@@ -1,6 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 
-module Shikigami.WorkerSessionCapabilitySpec (tests) where
+module Shikigami.WorkerSessionCapabilitySpec (tests, withConfiguredCapabilityFixture) where
 
 import Baikai.Options (emptyOptions)
 import Control.Exception (SomeException, try)

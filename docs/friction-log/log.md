@@ -1,6 +1,8 @@
 # Bundle Update Log
 
 ## 2026-11-06
+* **Update**: FRIC-64 resolved: The documented validation command now matches the existing file-only CLI contract.
+* **Addition**: FRIC-64 records nuisance documentation friction with mori://shinzui/shikigami/plans/112-run-the-watchdog-as-a-scheduled-flow-agent-with-its-own-principal-allowance-and-sinks: The agent validator accepts a file while the watchdog plan prescribes a directory
 * **Update**: FRIC-63 resolved: The documented smoke-suite sequence regenerates and verifies the schema; the unit suite cannot perform that work.
 * **Addition**: FRIC-63 records detour documentation friction with mori://shinzui/shikigami/plans/109-observe-active-work-through-bounded-lock-free-reads-under-a-watchdog-grant: Plan 109 points schema regeneration at the unit suite
 

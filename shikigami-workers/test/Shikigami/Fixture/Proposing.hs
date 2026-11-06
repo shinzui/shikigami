@@ -105,6 +105,7 @@ import Shikigami.Execution.Identity (parseOperationId)
 import Shikigami.Execution.Policy.Types (defaultHarnessPolicy)
 import Shikigami.Flow.Decision qualified as Decision
 import Shikigami.Flow.Initiative qualified as FlowInitiative
+import Shikigami.Flow.Observe qualified as FlowObserve
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Initiative.Policy qualified as Policy
 import Shikigami.Initiative.Settings (InitiativeSettings)
@@ -157,7 +158,8 @@ defaultOptions =
     }
 
 data Proposing = Proposing
-  { env :: !AppEnv,
+  { connection :: !Text,
+    env :: !AppEnv,
     pool :: !Pool.Pool,
     deps :: !Agent.AgentRunDeps,
     settings :: !InitiativeSettings,
@@ -262,7 +264,8 @@ withProposing fixture options use = withShikigamiFreshDatabase fixture \connecti
     _ <- either (assertFailure . show) pure =<< runAppIO env Catalog.registerProjectionCatalog
     use
       Proposing
-        { env,
+        { connection,
+          env,
           pool = store.pool,
           deps,
           settings,
@@ -303,6 +306,7 @@ proposingDeps env behavior provider binding objectiveRuntime settings repository
       workspace = Nothing,
       coordination = Nothing,
       objectives = Just objectiveRuntime,
+      observe = FlowObserve.disabledObserve,
       initiatives =
         FlowInitiative.InitiativeSeed
           { settings = Just settings,

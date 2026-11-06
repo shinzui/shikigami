@@ -1,4 +1,4 @@
-module Shikigami.AgentWorkflowSpec (tests) where
+module Shikigami.AgentWorkflowSpec (tests, testDepsWithAgents, decl, job) where
 
 import Baikai.Trace (TraceEvent (CallStarted), TraceSink (..))
 import Contravariant.Extras (contrazip5)
@@ -124,6 +124,7 @@ import Shikigami.Fixture.KawaStub (kawaDoorwayApplication)
 import Shikigami.Fixture.SinkHttp (testSinkHttp, testSinkHttpFor)
 import Shikigami.Flow.Decision qualified as FlowDecision
 import Shikigami.Flow.Initiative qualified as FlowInitiative
+import Shikigami.Flow.Observe qualified as FlowObserve
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Integration.Danwa (AddressedMessage (..), addressedMessageEventType)
 import Shikigami.Log qualified as Log
@@ -2002,6 +2003,7 @@ testDepsWithAgents appEnv behaviorEnv hooks agentDecls =
       coordination = Nothing,
       objectives = Nothing,
       initiatives = FlowInitiative.disabledInitiatives,
+      observe = FlowObserve.disabledObserve,
       workspace = Nothing,
       agents = agentDecls,
       kizashi = KizashiConfig {baseUrl = "http://localhost:1", defaultRecipient = (declarationCoordinate "recipient")},
@@ -2040,6 +2042,7 @@ testDepsWithApprovalAndDeadline appEnv behaviorEnv hooks approval deadline =
       coordination = Nothing,
       objectives = Nothing,
       initiatives = FlowInitiative.disabledInitiatives,
+      observe = FlowObserve.disabledObserve,
       workspace = Nothing,
       agents = [decl],
       kizashi = KizashiConfig {baseUrl = "http://localhost:1", defaultRecipient = (declarationCoordinate "recipient")},

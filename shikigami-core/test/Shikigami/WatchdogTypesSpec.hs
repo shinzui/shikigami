@@ -131,6 +131,16 @@ tests =
         _ <- checked (resolveObservationGrant (Just settings) name)
         verified <- VerifiedIdentity <$> checked (mkAgentPrincipal "agent_watchdog")
         either Just (const Nothing) (resolveObservationGrant (Just settings) verified) @?= Just NotTheWatchdogPrincipal,
+      testCase "schedule allowance retains checked principal and bounded spending" do
+        policy <- checked (eitherDecode @WatchdogAllowance "{\"principal\":\"agent_watchdog\",\"flow\":\"watchdog-sweep\",\"cutoffSeconds\":240,\"limits\":{\"ActiveWork\":1,\"ModelAttempts\":1,\"Tokens\":1000,\"CostMicroUsd\":\"unbounded\",\"ToolAttempts\":0,\"LifetimeDescendants\":0}}")
+        roundTrip policy,
+      testCase "schedule allowance refuses unresolved identity and unbounded model spend" do
+        mapM_
+          (\raw -> assertBool "invalid allowance" (isLeft (eitherDecode @WatchdogAllowance raw)))
+          [ "{\"principal\":\"watchdog\",\"flow\":\"watchdog-sweep\",\"cutoffSeconds\":240,\"limits\":{}}",
+            "{\"principal\":\"agent_watchdog\",\"flow\":\"watchdog-sweep\",\"cutoffSeconds\":240,\"limits\":{\"ActiveWork\":1,\"ModelAttempts\":\"unbounded\",\"Tokens\":1000,\"CostMicroUsd\":\"unbounded\"}}",
+            "{\"principal\":\"agent_watchdog\",\"flow\":\"watchdog-sweep\",\"cutoffSeconds\":240,\"limits\":{\"ActiveWork\":1,\"ModelAttempts\":1,\"Tokens\":1000,\"CostMicroUsd\":1}}"
+          ],
       testCase "settings reject zero windows, empty scope, unknown keys and bad limits" do
         mapM_
           (\raw -> assertBool "invalid settings" (isLeft (eitherDecode @WatchdogSettings raw)))

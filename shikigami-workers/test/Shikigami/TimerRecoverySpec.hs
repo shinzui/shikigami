@@ -151,7 +151,9 @@ uuid value = maybe (error ("invalid test UUID: " <> value)) id (UUID.fromString 
 testSchedulerEnv :: Pool.Pool -> SchedulerEnv
 testSchedulerEnv pool =
   SchedulerEnv
-    { pool,
+    { declarations = [],
+      watchdog = Nothing,
+      pool,
       schedules = Map.empty,
       principalIds = Map.empty,
       directory = disabledDirectoryHandle,
