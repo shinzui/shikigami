@@ -48,6 +48,11 @@ provenance:
       at: 2026-11-09T04:28:36Z
       mode: "update"
       note: "Validate remaining live dispatch, admitted-limit and evidence-verifier work; retain historical native acceptance and rerun 50 host controls."
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-11-09T05:01:24Z
+      mode: "implement"
+      note: "Add admission-bound live worker receipt and root-envelope verifier controls; retain the unimplemented live dispatch and trial gate."
 ---
 
 # Qualify integrated adaptive autonomous delivery
@@ -71,6 +76,28 @@ Implementation began on 2026-11-04 UTC at baseline
 - [x] Milestone 1 (2026-11-04): Reproducible two-repository fixture, bounded driver, 50 host controls and native objective admission.
 - [x] Milestone 2 (2026-11-04): Full native integration/recovery/refusal matrix, exact returned artifacts and a passing driver command.
 - [ ] Milestone 3: implement and qualify the guarded live adapter, then run an explicitly configured actual-model/production-authority trial and publish its live evidence and coverage updates.
+
+Implementation resumed on 2026-11-09 UTC at source
+`217dd7bde45743d5ab425434783e479efa92e3a6`. The live worker verifier now accepts
+an independent admitted descriptor map rather than requiring scripted model ids,
+bindings or fixed call counts. It checks stored receipt/assignment/root links,
+actual HTTP provider/API/model/thinking facts, token accounting and known billing.
+A separate root-envelope check requires finite enforceable resource limits,
+an explicit unsupported invoice-ceiling policy, the admitted cutoff and settled
+work. The Linux selection snapshot now retains the owner's complete receipt and
+outcome records. All 54 Python qualification tests pass (13.519 seconds), including
+four new live verifier control groups. These helpers are not yet connected to
+live dispatch: `native_evidence` and the executable driver still qualify only
+the deterministic fixture. No actual model was called and M3 remains open.
+The full fixture driver also passes with the expanded owner snapshots: its native
+phase takes 448.241 seconds on reused immutable runtime `5ee0dd83`, retaining ten
+complete worker receipt/outcome records and independently checking all six Git
+bundles and both exact integrated trees. [Verifier evidence](../evidence/adaptive-delivery/live-verifier-controls.md)
+and [native facts](../evidence/adaptive-delivery/live-verifier-native-facts.json)
+retain this candidate's results. No Haskell rebuild was performed.
+FRIC-66 in `docs/friction-log/` records unavailable Mori dependency discovery:
+the configured PostgreSQL tunnel refuses connections and the host's independent
+PostgreSQL instance has no Mori database. Do not substitute a new empty registry.
 
 Refresh verified on 2026-11-08 at source `091c95abe5ef193d116b62e96298e9e952c731ab`:
 all 50 Python qualification tests pass (12.124 seconds), including the live-mode
@@ -186,6 +213,15 @@ are intentional deterministic controls; merely enabling live dispatch would
 neither exercise actual-model coding through that consumer nor produce evidence
 the current verifier accepts. M3 must supply both real dispatch and a verifier
 bound to its admitted live selections, retaining the deterministic controls.
+
+
+The live verifier work also confirms that an unbounded invoice policy does not
+turn missing invoice facts into settled usage. The existing
+`Execution.SelectionRuntime.outcomeFor` records missing token/cost dimensions,
+and `Execution.SelectionStore` preserves that uncertainty. A future live trial
+must retain measured facts or the owner's independent reconciliation evidence;
+model estimates cannot silently clear the root. This is existing acceptance,
+not a new invoice-ceiling requirement.
 
 
 ## Decision Log

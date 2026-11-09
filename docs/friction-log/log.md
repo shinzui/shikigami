@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-11-09
+* **Addition**: FRIC-66 records blocked environment friction with mori://shinzui/mori: Mori registry unavailable through configured PostgreSQL tunnel
 * **Update**: FRIC-65 accepted: Accept the bounded artifact-restoration workaround for this implementation; all worker assertions passed.
 * **Addition**: FRIC-65 records detour tooling friction with mori://shinzui/shikigami: Full worker suite rewrites another plan’s retained acceptance evidence
 

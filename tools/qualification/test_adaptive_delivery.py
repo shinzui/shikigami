@@ -412,6 +412,109 @@ class AdaptiveDeliveryTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 driver.validate_worker_selections(value, altered, roles)
 
+    def live_worker_records(self):
+        roles = ["producer", "producer-review", "consumer", "consumer-review"]
+        # Deliberately vary calls by role and exceed the scripted four-call bound.
+        value = {"rootId": "same-root", "providerCalls": dict(zip(roles, [1, 3, 5, 2]))}
+        selections = self.worker_selections(value)
+        admitted = {}
+        for record in selections:
+            descriptor = record["selection"]["descriptor"]
+            role = descriptor["alias"]
+            descriptor.update(provider="anthropic", api="messages", endpointClass="https",
+                              modelId="exact-provider-model", bindingId="reviewed-" + role)
+            admitted[role] = copy.deepcopy(descriptor)
+            for call in record["calls"]:
+                call["receipt"] = {"assignmentId": record["assignmentId"], "rootId": value["rootId"],
+                                   "ordinal": call["ordinal"], "fingerprint": "request-commitment",
+                                   "request": {key: call[key] for key in ["attemptId", "operationId"]}}
+                call["outcome"] = {"phase": "CallTerminal", "missing": [],
+                                   "reportedModel": descriptor["modelId"], "providerCallId": call["attemptId"],
+                                   "known": {"Tokens": 31, "CostMicroUsd": 2}, "compliance": {
+                                       "format": 1, "requestedAlias": role,
+                                       "requestedModelId": descriptor["modelId"], "resolvedModelId": descriptor["modelId"],
+                                       "providerCallId": call["attemptId"], "tokens": 31, "costUncertain": False,
+                                       "status": "succeeded", "strength": "model_observed", "thinking": {"requested": None}, "endpoint": {
+                                           "provider": "anthropic", "api": "anthropic-messages",
+                                           "transport": "http_api", "endpoint": "https://api.example.invalid/v1/messages"}}}
+        return value, {"worker_selections": selections}, roles, admitted
+
+    def test_live_workers_match_admission_without_scripted_model_ids_or_call_counts(self):
+        value, recovery, roles, admitted = self.live_worker_records()
+        driver.validate_worker_selections(value, recovery, roles, admitted=admitted)
+        # The fixture path retains its original strict binding requirements.
+        with self.assertRaises(ValueError):
+            driver.validate_worker_selections(value, recovery, roles)
+
+    def test_scripted_bindings_cannot_supply_live_worker_evidence(self):
+        value, recovery, roles, admitted = self.live_worker_records()
+        scripted = {"worker_selections": self.worker_selections(value)}
+        with self.assertRaises(ValueError):
+            driver.validate_worker_selections(value, scripted, roles, admitted=admitted)
+        scripted_admission = {r["selection"]["descriptor"]["alias"]: r["selection"]["descriptor"]
+                              for r in scripted["worker_selections"]}
+        with self.assertRaises(ValueError):
+            driver.validate_worker_selections(value, scripted, roles, admitted=scripted_admission)
+
+    def test_live_worker_evidence_rejects_drift_unknown_billing_and_fabricated_receipt_links(self):
+        value, recovery, roles, admitted = self.live_worker_records()
+        mutations = [lambda r: r["selection"]["descriptor"].update(modelId="other"),
+                     lambda r: r["selection"]["descriptor"].update(bindingVersion="other"),
+                     lambda r: r["calls"][0]["receipt"].update(rootId="other"),
+                     lambda r: r["calls"][0]["receipt"].update(assignmentId="other"),
+                     lambda r: r["calls"][0]["receipt"]["request"].update(attemptId="other"),
+                     lambda r: r["calls"][0]["outcome"].update(phase="CallTransportUnknown"),
+                     lambda r: r["calls"][0]["outcome"].update(missing=["CostMicroUsd"]),
+                     lambda r: r["calls"][0]["outcome"].update(providerCallId=""),
+                     lambda r: r["calls"][0]["outcome"].update(reportedModel="other"),
+                     lambda r: r["calls"][0]["outcome"]["compliance"].update(requestedAlias="other"),
+                     lambda r: r["calls"][0]["outcome"]["compliance"].update(tokens=True),
+                     lambda r: r["calls"][0]["outcome"]["known"].update(Tokens=32),
+                     lambda r: r["calls"][0]["outcome"]["compliance"]["endpoint"].update(provider="other"),
+                     lambda r: r["calls"][0]["outcome"]["compliance"]["endpoint"].update(api="openai-responses"),
+                     lambda r: r["calls"][0]["outcome"]["compliance"]["endpoint"].update(transport="agent_run"),
+                     lambda r: r["calls"][0]["outcome"]["compliance"].update(strength="requested_only"),
+                     lambda r: r["calls"][0]["outcome"]["compliance"].update(costUncertain=True),
+                     lambda r: r["calls"][0]["outcome"]["compliance"]["thinking"].update(requested="high") ]
+        for mutate in mutations:
+            altered = copy.deepcopy(recovery)
+            mutate(altered["worker_selections"][0])
+            with self.assertRaises(ValueError):
+                driver.validate_worker_selections(value, altered, roles, admitted=admitted)
+
+    def test_live_envelope_requires_finite_enforced_limits_and_no_held_work(self):
+        instant = driver.datetime(2026, 11, 9, tzinfo=driver.timezone.utc)
+        limits = {dimension: {"tag": "Limited", "contents": 1000} for dimension in
+                  ["ActiveWork", "LifetimeDescendants", "ModelAttempts", "ToolAttempts", "Tokens"]}
+        limits["CostMicroUsd"] = {"tag": "ExplicitlyUnbounded"}
+        envelope = {"limits": limits, "cutoff": "2026-11-09T00:20:00Z"}
+        root = {"envelope": copy.deepcopy(envelope), "active": 0, "unknown": 0,
+                "cancelled": False, "overage": False, "usage": {"held": {}, "settled": {"Tokens": 31}}}
+        driver.validate_live_root(root, envelope, admitted_at=instant)
+        for field in ["active", "unknown", "cancelled", "overage"]:
+            altered = copy.deepcopy(root)
+            altered[field] = True if field in ["cancelled", "overage"] else 1
+            with self.assertRaises(ValueError):
+                driver.validate_live_root(altered, envelope, admitted_at=instant)
+        for mutate in [lambda e: e["limits"].pop("Tokens"),
+                       lambda e: e["limits"].update(Tokens={"tag": "ExplicitlyUnbounded"}),
+                       lambda e: e["limits"].update(ModelAttempts={"tag": "Limited", "contents": True}),
+                       lambda e: e["limits"].update(CostMicroUsd={"tag": "Limited", "contents": 1}),
+                       lambda e: e.update(cutoff="2026-11-08T00:00:00Z"),
+                       lambda e: e.update(cutoff="2026-11-09T02:00:00Z")]:
+            altered = copy.deepcopy(envelope)
+            mutate(altered)
+            with self.assertRaises(ValueError):
+                driver.validate_live_root(root | {"envelope": altered}, altered, admitted_at=instant)
+        changed = copy.deepcopy(root)
+        changed["envelope"]["limits"]["ModelAttempts"]["contents"] = 1
+        with self.assertRaises(ValueError):
+            driver.validate_live_root(changed, envelope, admitted_at=instant)
+        for usage in [{"held": {"Tokens": 1}, "settled": {}},
+                      {"held": {}, "settled": {"Tokens": 1001}}]:
+            with self.assertRaises(ValueError):
+                driver.validate_live_root(root | {"usage": usage}, envelope, admitted_at=instant)
+
     @staticmethod
     def transfer_probes():
         reference = {"attemptId": "edit-attempt", "operationId": "edit-operation", "executionId": "execution"}

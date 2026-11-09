@@ -1,0 +1,1973 @@
+{
+  "format": 1,
+  "mode": "fixture",
+  "state": "passed",
+  "started_at": "2026-11-09T05:01:23.321150+00:00",
+  "scope": "finite isolated fixture; local edits/tests only; no recurrence or publication",
+  "cases": [
+    {
+      "case": "producer-local",
+      "started_at": "2026-11-09T05:01:23.473286+00:00",
+      "log": "producer-local.log",
+      "expected_exit": 0,
+      "exit_code": 0,
+      "state": "passed",
+      "finished_at": "2026-11-09T05:01:23.493628+00:00",
+      "elapsed_seconds": 0.02
+    },
+    {
+      "case": "consumer-local",
+      "started_at": "2026-11-09T05:01:23.493691+00:00",
+      "log": "consumer-local.log",
+      "expected_exit": 0,
+      "exit_code": 0,
+      "state": "passed",
+      "finished_at": "2026-11-09T05:01:23.513970+00:00",
+      "elapsed_seconds": 0.02
+    },
+    {
+      "case": "initial-combined-refusal",
+      "started_at": "2026-11-09T05:01:23.514131+00:00",
+      "log": "initial-combined-refusal.log",
+      "expected_exit": 1,
+      "exit_code": 1,
+      "state": "passed",
+      "finished_at": "2026-11-09T05:01:23.546457+00:00",
+      "elapsed_seconds": 0.032
+    },
+    {
+      "case": "native",
+      "started_at": "2026-11-09T05:01:23.547062+00:00",
+      "log": "native.log",
+      "expected_exit": 0,
+      "exit_code": 0,
+      "state": "passed",
+      "finished_at": "2026-11-09T05:08:51.789318+00:00",
+      "elapsed_seconds": 448.241
+    }
+  ],
+  "limitations": [
+    "Scripted models and disposable authorization issuer; the live model/production-authority gate remains separate"
+  ],
+  "repositories": [
+    {
+      "identity": "mori://fixture/adaptive-producer",
+      "base": "02dd5ee5e300a00f187d455f5f9edf9d58279c9f",
+      "tree": "de975070714af54cda16b0e90508dcd29b44f4be",
+      "files": {
+        "AGENTS.md": "13c3270462c0c83e5a263327a5f05c5196a04f813ec336674f6f52ae9c167d06",
+        "delivery.txt": "52d26753462488ad21852bc6718e21b84835f53765304d0a1e1b89d05a2a71b1",
+        "local_check.py": "39832d8dfa41a7f7ab80591edd5cc166bf3f3efb32e41a097851d4323d708740",
+        "record.json": "0d80a43539692e8c63d4c207816e2aedae29b74bbc32d0cb4bbc27c3a4cd2222",
+        "review.txt": "52d26753462488ad21852bc6718e21b84835f53765304d0a1e1b89d05a2a71b1"
+      }
+    },
+    {
+      "identity": "mori://fixture/adaptive-consumer",
+      "base": "5040a3c99659fba0355324811a666884c0297217",
+      "tree": "b9f280df0ae47379916ae088fe55b66acd06b0cb",
+      "files": {
+        "AGENTS.md": "8e4fa17955ae19b24faf18d2f090beef8798c1ac47b090ccc583b70c5690c2dd",
+        "contract.json": "4abdb7da6226beb325bc9c8fb50544670955275e3ecd2a7a7b1eb875837c929c",
+        "delivery.txt": "52d26753462488ad21852bc6718e21b84835f53765304d0a1e1b89d05a2a71b1",
+        "local_check.py": "8757040ea54d143dac6277ca93976301d20b34becbd95a1839c7cc6f08a5e993",
+        "review.txt": "52d26753462488ad21852bc6718e21b84835f53765304d0a1e1b89d05a2a71b1"
+      }
+    }
+  ],
+  "runtime": "/nix/store/l1vpalr63dqjbwkisp7s6xhg237lz31x-shikigami-workspace-prototype-0.1.0.0-5ee0dd8",
+  "scenario": "transfer",
+  "source_revision": "217dd7bde45743d5ab425434783e479efa92e3a6",
+  "source_dirty": true,
+  "native": {
+    "aliasPolicy": {
+      "admitted": true,
+      "allowedAlias": "consumer",
+      "dispatches": 0,
+      "forbiddenAlias": "producer",
+      "refused": true,
+      "rootId": "shikigami_execution_root_01j0000000f6xrmjx8bkby3j3g"
+    },
+    "completionHold": {
+      "activeAtCut": 1,
+      "objective": "shikigami_objective_01m6zaz4vye0gbvsgbmppq8xph",
+      "refusal": {
+        "tag": "ObjectiveUnresolved"
+      },
+      "revision": 30,
+      "rootId": "shikigami_execution_root_01j0000000f6xrmjx8bkby3j3g",
+      "scope": "resource admission only; no external dispatch",
+      "unchangedObjective": true,
+      "unknownAtCut": 1,
+      "validProposal": true
+    },
+    "format": 2,
+    "initialProcessDefault": "stub-v1",
+    "integrated": {
+      "journey": {
+        "exitCode": 0,
+        "output": "combined journey passed: hello\n",
+        "scope": "immutable blobs from the two retained combined trees"
+      },
+      "repositories": [
+        {
+          "base": "02dd5ee5e300a00f187d455f5f9edf9d58279c9f",
+          "combined": {
+            "parent": "02dd5ee5e300a00f187d455f5f9edf9d58279c9f",
+            "paths": [
+              "delivery.txt",
+              "review.txt"
+            ],
+            "result": "bb965ceb7ea1bf6b325cb63d31f93b68ca1eac99",
+            "tree": "af81302c9ab6d1ccd298179869cc00970d311f28"
+          },
+          "repository": "mori://fixture/adaptive-producer",
+          "validation": {
+            "attemptId": "shikigami_execution_attempt_01j0000000ek2rgyst177dfnpa",
+            "bindingDigest": "sha256:4e59cf2d63d9271e739b73eb349b8e39ea901ebe221c33c654d5d39544237fe1",
+            "bootId": "c79bf654-d9a2-4509-9998-b147b43c6cbe",
+            "descendantsEmpty": true,
+            "exitCode": 0,
+            "fingerprint": "sha256:70cdc063f1a37ce3af0fb98aad61bb22f5ca8232c9cc5dbb5e609916486b7a77",
+            "generation": 1,
+            "invocationId": "0931fa8a537c4f73b3bcdf9668635311",
+            "operationId": "operation:sha256:f8008c11582644098de5631b81e0afc870c13ef00882b1c1a309d4a6fb8d5cfb",
+            "outputComplete": true,
+            "stderr": {
+              "artifact": "stderr",
+              "bytes": 0,
+              "digest": "sha256:75384fd75cdef76c52b2f4bca3f2a749405a70653924190c5b0f2f26abe614e2",
+              "truncated": false
+            },
+            "stdout": {
+              "artifact": "stdout",
+              "bytes": 59,
+              "digest": "sha256:9513c5846e7ac1a6d8f2d3088f527929df976e7b3e7247ce93adfce6f0c7bddd",
+              "truncated": false
+            },
+            "termination": "ProcessExited",
+            "unit": "shikigami-workspace-064eb5890f8b4a280b4cd33a006bba82b2e0a273cbc6a1d295ee030b6651e1c5.service"
+          },
+          "workers": [
+            {
+              "base": "02dd5ee5e300a00f187d455f5f9edf9d58279c9f",
+              "bindingDigest": "sha256:0a824933df3597ecc9cd107eb33e83538ae58bc7f107a6ca00188e1d46f65bc2",
+              "operationId": "operation:sha256:95d05d4b1574b0406a6794f56b354093232f4316271c8cf78c82434ac7c072b5",
+              "revision": "c3c7453b662c9bc56494f728d3b568e2d51a5648"
+            },
+            {
+              "base": "02dd5ee5e300a00f187d455f5f9edf9d58279c9f",
+              "bindingDigest": "sha256:e3a026036d619d1c5ec8bf0476b2a7cd624ec331ddb6c38c73929c7a573dc356",
+              "operationId": "operation:sha256:fe03079b6599c179bab9e43a06061428635aef0a3daff0aff2a0712a3ff15a2a",
+              "revision": "e6547475ad0684b5b3aa811b02e38e892edbcc98"
+            }
+          ]
+        },
+        {
+          "base": "5040a3c99659fba0355324811a666884c0297217",
+          "combined": {
+            "parent": "5040a3c99659fba0355324811a666884c0297217",
+            "paths": [
+              "contract.json",
+              "delivery.txt",
+              "review.txt"
+            ],
+            "result": "55b9bd8698d1216bcfa83d27f781f0ad18acf73f",
+            "tree": "7068c31fead3c40b9cb8f520f0e7770a7fb3eb35"
+          },
+          "repository": "mori://fixture/adaptive-consumer",
+          "validation": {
+            "attemptId": "shikigami_execution_attempt_01j0000000f24r1rt4bmaprv60",
+            "bindingDigest": "sha256:ae9c3977c6f8749b57f4b8b7414e274e0c23273e2f1ce641903f0b62bce2fc8b",
+            "bootId": "c79bf654-d9a2-4509-9998-b147b43c6cbe",
+            "descendantsEmpty": true,
+            "exitCode": 0,
+            "fingerprint": "sha256:612d77c5a817ecae2c29f2424d619833a9e38780482ef7c7e1377b48231cabce",
+            "generation": 1,
+            "invocationId": "d276fcf772e74c4a8492a039f3f4fdea",
+            "operationId": "operation:sha256:84f112f535df93b9d8f0788d5566d97cf35f4bd233dfe136ed9489249d247e7f",
+            "outputComplete": true,
+            "stderr": {
+              "artifact": "stderr",
+              "bytes": 0,
+              "digest": "sha256:75384fd75cdef76c52b2f4bca3f2a749405a70653924190c5b0f2f26abe614e2",
+              "truncated": false
+            },
+            "stdout": {
+              "artifact": "stdout",
+              "bytes": 59,
+              "digest": "sha256:9513c5846e7ac1a6d8f2d3088f527929df976e7b3e7247ce93adfce6f0c7bddd",
+              "truncated": false
+            },
+            "termination": "ProcessExited",
+            "unit": "shikigami-workspace-11b832b64d2c0a7ae5e7c05e935b32fdb71d676981132ea2ea3e9b23651fa35f.service"
+          },
+          "workers": [
+            {
+              "base": "5040a3c99659fba0355324811a666884c0297217",
+              "bindingDigest": "sha256:0a5cd41ab06e3e968eb56b7702971ff446837c047b4747b29bdef530385cdb26",
+              "operationId": "operation:sha256:30276f822812d71a081f7beddb8e696e61da5ceb583d39177eceed1a4ea3ea07",
+              "revision": "bd017c348f713bb44c5d9d745c342755d0c2cc26"
+            },
+            {
+              "base": "5040a3c99659fba0355324811a666884c0297217",
+              "bindingDigest": "sha256:880fe69c31bf2401678a51424d8d609dbb238abae5cffaba61a42e3d40b36461",
+              "operationId": "operation:sha256:f80d24e12fa7b0dc718f0a0a8de74a8f72671978798f3784bbe80ddd1b4dfe49",
+              "revision": "ce250f10034fe0dda15e98aad4ee7e6f4420f208"
+            }
+          ]
+        }
+      ]
+    },
+    "objective": "shikigami_objective_01m6zaz4vye0gbvsgbmppq8xph",
+    "ownership": {
+      "assignment": {
+        "acceptedResults": [],
+        "definition": {
+          "assignmentId": {
+            "value": "consumer"
+          },
+          "cutoff": "2026-11-09T05:22:20.102553719Z",
+          "dependencies": [],
+          "instructions": "Deliver bounded consumer",
+          "owner": {
+            "kind": "verified",
+            "principalId": "agent_01h000000000000000consumer-successor"
+          },
+          "rootId": "shikigami_execution_root_01j0000000f6xrmjx8bkby3j3g",
+          "sessionId": "7b57d97b-99b8-5497-97e6-0432d82744d7",
+          "state": "Pending"
+        },
+        "instructionsRevision": 0,
+        "ownerEpoch": 1,
+        "revision": 2
+      },
+      "earlySuccessorWriteDenied": true,
+      "fence": {
+        "fingerprint": "sha256:f084d319d9f65676f5c448e1fcd375289bf469ebd101b5bd69cf29b36ec18b12",
+        "format": 1,
+        "newEpoch": 1,
+        "oldEpoch": 0,
+        "operationId": "adaptive:sha256:f4a5735f4de2c3b8e8f26c8bbdd9434f9f7966e6710f50288f7ef927c81e871e",
+        "receipt": "sha256:cf402748e105c31218751a927a58868b144a92b176cdcc825426bca94d386264",
+        "workspace": {
+          "provider": "shikigami.workspace/1",
+          "resource": "c1685ce49983eba6be9e4c22e1ebe5d6d0481b6235615f9c6ba8f9f039971c09"
+        }
+      },
+      "intent": {
+        "actor": {
+          "kind": "verified",
+          "principalId": "agent_01h000000000000000coordinator"
+        },
+        "expected": {
+          "active": true,
+          "assignmentRevision": 1,
+          "criteriaRevision": 0,
+          "cutoff": "2026-11-09T05:22:20.102553719Z",
+          "owner": {
+            "kind": "verified",
+            "principalId": "agent_01h000000000000000consumer"
+          },
+          "ownerEpoch": 0,
+          "revision": 18,
+          "rootId": "shikigami_execution_root_01j0000000f6xrmjx8bkby3j3g"
+        },
+        "format": 1,
+        "newEpoch": 1,
+        "newOwner": {
+          "kind": "verified",
+          "principalId": "agent_01h000000000000000consumer-successor"
+        },
+        "newWorker": "consumer-successor",
+        "objective": {
+          "key": "sha256:841e02e22f73391d3d1916416d6a1da5261837b1040a5b53fd85c1d61fec8542",
+          "provider": "shikigami-objective-v1"
+        },
+        "oldEpoch": 0,
+        "oldOwner": {
+          "kind": "verified",
+          "principalId": "agent_01h000000000000000consumer"
+        },
+        "operationId": "adaptive:sha256:f4a5735f4de2c3b8e8f26c8bbdd9434f9f7966e6710f50288f7ef927c81e871e",
+        "rootId": "shikigami_execution_root_01j0000000f6xrmjx8bkby3j3g",
+        "sessionId": "7b57d97b-99b8-5497-97e6-0432d82744d7",
+        "workspace": {
+          "provider": "shikigami.workspace/1",
+          "resource": "c1685ce49983eba6be9e4c22e1ebe5d6d0481b6235615f9c6ba8f9f039971c09"
+        }
+      },
+      "oldWriteDenied": true,
+      "receipt": {
+        "fingerprint": "sha256:4fa50aad2a5f3643e55268d18249931d44114db917bd3e5279365a3e1cb780b5",
+        "format": 1,
+        "objective": {
+          "key": "sha256:841e02e22f73391d3d1916416d6a1da5261837b1040a5b53fd85c1d61fec8542",
+          "provider": "shikigami-objective-v1"
+        },
+        "operationId": "adaptive:sha256:f4a5735f4de2c3b8e8f26c8bbdd9434f9f7966e6710f50288f7ef927c81e871e",
+        "revision": 19
+      },
+      "sessionEpoch": 0,
+      "sessionOwner": {
+        "kind": "verified",
+        "principalId": "agent_01h000000000000000consumer"
+      }
+    },
+    "providerCalls": {
+      "adaptive": 7,
+      "consumer": 2,
+      "consumer-review": 2,
+      "consumer-successor": 2,
+      "producer": 2,
+      "producer-review": 2
+    },
+    "reportedResults": [
+      {
+        "artifacts": [],
+        "assignmentId": {
+          "value": "producer"
+        },
+        "receipt": {
+          "assignmentId": "3870173a-f92d-5b3e-97a9-fbec45712397",
+          "cursor": 3,
+          "disposition": "AssignmentSucceeded",
+          "fingerprint": "sha256:874eaeeba90bcb44ac236d47a7c9294ee43fb5530b47af4d934f67d005e3f83f",
+          "format": 1,
+          "operationId": "result:3870173a-f92d-5b3e-97a9-fbec45712397",
+          "output": {
+            "bytes": 3701,
+            "digest": "sha256:c96c382dd0ec8bf17ad73434cbf3b68b41589553cde96dd6bc2221156144d55a",
+            "payloadId": "payload:sha256:c96c382dd0ec8bf17ad73434cbf3b68b41589553cde96dd6bc2221156144d55a"
+          },
+          "sessionId": "0ca1c7e6-9a9b-5b30-a6ea-e831b94abc33"
+        }
+      },
+      {
+        "artifacts": [],
+        "assignmentId": {
+          "value": "producer-review"
+        },
+        "receipt": {
+          "assignmentId": "140620e7-275b-550a-9ae9-fff12bd9fb31",
+          "cursor": 3,
+          "disposition": "AssignmentSucceeded",
+          "fingerprint": "sha256:d35d4d9fe5781f518a6075b19ca664b0299d68655908adf5358f853e2fda4c91",
+          "format": 1,
+          "operationId": "result:140620e7-275b-550a-9ae9-fff12bd9fb31",
+          "output": {
+            "bytes": 3695,
+            "digest": "sha256:8e657e446cc738895ce78b287f6a7e929071bb123ac4834136ab43b2f3ecd99c",
+            "payloadId": "payload:sha256:8e657e446cc738895ce78b287f6a7e929071bb123ac4834136ab43b2f3ecd99c"
+          },
+          "sessionId": "76743c2f-8551-5573-98e3-89740a33937f"
+        }
+      },
+      {
+        "artifacts": [],
+        "assignmentId": {
+          "value": "consumer"
+        },
+        "receipt": {
+          "assignmentId": "2d28fd89-907f-531a-987e-94778a54b804",
+          "cursor": 10,
+          "disposition": "AssignmentSucceeded",
+          "fingerprint": "sha256:e3a064ce34fc669455c60f986629f91bb1f5a09c62c654d40c8427f2c4ecfce6",
+          "format": 1,
+          "operationId": "result:2d28fd89-907f-531a-987e-94778a54b804",
+          "output": {
+            "bytes": 3727,
+            "digest": "sha256:4b4a5af61f927d054ea6154b8fb056725f5198a14a5cd217dc1bf49c0ba607c5",
+            "payloadId": "payload:sha256:4b4a5af61f927d054ea6154b8fb056725f5198a14a5cd217dc1bf49c0ba607c5"
+          },
+          "sessionId": "7b57d97b-99b8-5497-97e6-0432d82744d7"
+        }
+      },
+      {
+        "artifacts": [],
+        "assignmentId": {
+          "value": "consumer-review"
+        },
+        "receipt": {
+          "assignmentId": "59ecb6c2-1c02-579d-a2f8-b165c6011019",
+          "cursor": 3,
+          "disposition": "AssignmentSucceeded",
+          "fingerprint": "sha256:5aff7139392815dec5314276902a66ce11a67c7989a4289f900538f6c0013ad1",
+          "format": 1,
+          "operationId": "result:59ecb6c2-1c02-579d-a2f8-b165c6011019",
+          "output": {
+            "bytes": 3695,
+            "digest": "sha256:008f7b089d35f5e79c060e55fd76c369f0e76ae42f8891f7df5f8bffaf75c78f",
+            "payloadId": "payload:sha256:008f7b089d35f5e79c060e55fd76c369f0e76ae42f8891f7df5f8bffaf75c78f"
+          },
+          "sessionId": "e8ea3e90-55df-544e-9f4f-1d06ba1a527b"
+        }
+      }
+    ],
+    "resumedProcessDefault": "forbidden-process-default",
+    "root": {
+      "active": 0,
+      "activeLimit": null,
+      "cancelled": false,
+      "envelope": {
+        "cutoff": "2026-11-09T05:22:20.102553719Z",
+        "limits": [
+          [
+            "ActiveWork",
+            {
+              "tag": "ExplicitlyUnbounded"
+            }
+          ],
+          [
+            "LifetimeDescendants",
+            {
+              "tag": "ExplicitlyUnbounded"
+            }
+          ],
+          [
+            "ModelAttempts",
+            {
+              "contents": 48,
+              "tag": "Limited"
+            }
+          ],
+          [
+            "ToolAttempts",
+            {
+              "tag": "ExplicitlyUnbounded"
+            }
+          ],
+          [
+            "Tokens",
+            {
+              "tag": "ExplicitlyUnbounded"
+            }
+          ],
+          [
+            "CostMicroUsd",
+            {
+              "tag": "ExplicitlyUnbounded"
+            }
+          ]
+        ]
+      },
+      "known": [
+        [
+          "LifetimeDescendants",
+          5
+        ],
+        [
+          "ModelAttempts",
+          21
+        ],
+        [
+          "ToolAttempts",
+          27
+        ],
+        [
+          "Tokens",
+          4
+        ],
+        [
+          "CostMicroUsd",
+          0
+        ]
+      ],
+      "overage": false,
+      "revision": 2,
+      "unknown": 0,
+      "usage": {
+        "held": [
+          [
+            "ActiveWork",
+            0
+          ],
+          [
+            "LifetimeDescendants",
+            0
+          ],
+          [
+            "ModelAttempts",
+            0
+          ],
+          [
+            "ToolAttempts",
+            0
+          ],
+          [
+            "Tokens",
+            0
+          ],
+          [
+            "CostMicroUsd",
+            0
+          ]
+        ],
+        "settled": [
+          [
+            "LifetimeDescendants",
+            5
+          ],
+          [
+            "ModelAttempts",
+            21
+          ],
+          [
+            "ToolAttempts",
+            27
+          ],
+          [
+            "Tokens",
+            4
+          ],
+          [
+            "CostMicroUsd",
+            0
+          ]
+        ]
+      }
+    },
+    "rootId": "shikigami_execution_root_01j0000000f6xrmjx8bkby3j3g",
+    "rootRace": {
+      "accepted": 1,
+      "activeAfter": 0,
+      "activeAtCut": 1,
+      "loser": {
+        "attemptId": "shikigami_execution_attempt_01j0000000fgy8mmnp5yeszjsg",
+        "operationId": "adaptive-root-race-left",
+        "policy": "EnforcedCeiling",
+        "quantities": [
+          [
+            "ActiveWork",
+            1
+          ],
+          [
+            "ToolAttempts",
+            1
+          ]
+        ]
+      },
+      "loserAbsent": true,
+      "refused": 1,
+      "rootId": "shikigami_execution_root_01j0000000f6xrmjx8bkby3j3g",
+      "sameRootAfterRetry": true,
+      "scope": "resource admission only; no external dispatch",
+      "unknownAfter": 0,
+      "winner": {
+        "attemptId": "shikigami_execution_attempt_01j0000000f548htnxzeh9gtnr",
+        "operationId": "adaptive-root-race-right",
+        "policy": "EnforcedCeiling",
+        "quantities": [
+          [
+            "ActiveWork",
+            1
+          ],
+          [
+            "ToolAttempts",
+            1
+          ]
+        ]
+      }
+    },
+    "sessionMessageResultCounts": [
+      4,
+      5,
+      5
+    ],
+    "status": "Completed",
+    "targetRefusal": {
+      "checkpointRevision": 7,
+      "operationId": "adaptive-forbidden-target",
+      "refused": true,
+      "rootId": "shikigami_execution_root_01j0000000f6xrmjx8bkby3j3g",
+      "sessionsAtCut": 0,
+      "target": "forbidden-role",
+      "unchangedCheckpoint": true
+    },
+    "unknown": {
+      "lateReceipt": {
+        "bytes": 1206,
+        "digest": "sha256:1416b6a7fc901b0747d39aa7486791e9ac60b250c310fceda39dc503bc37eb7f",
+        "payloadId": "payload:sha256:1416b6a7fc901b0747d39aa7486791e9ac60b250c310fceda39dc503bc37eb7f"
+      },
+      "observed": {
+        "completionDenied": true,
+        "originalOwnerAdmitted": true,
+        "phase": "Active",
+        "probe": "production workspace owner; publisher paused",
+        "reference": {
+          "attemptId": "shikigami_execution_attempt_01m6zb2jdmety96217qesxh1h0",
+          "executionId": "execution:sha256:f28bc121cdececee1c2139c07cf0c272a6bb50e306ad73cdb8c4e4e487cdf93a",
+          "format": 1,
+          "operationId": "operation:sha256:f4d29a864ef323be06a14ac7f46cb0a4bcc9123ce03336799a8f0f75f110f46f"
+        },
+        "root": {
+          "active": 1,
+          "activeLimit": null,
+          "cancelled": false,
+          "envelope": {
+            "cutoff": "2026-11-09T05:22:20.102553719Z",
+            "limits": [
+              [
+                "ActiveWork",
+                {
+                  "tag": "ExplicitlyUnbounded"
+                }
+              ],
+              [
+                "LifetimeDescendants",
+                {
+                  "tag": "ExplicitlyUnbounded"
+                }
+              ],
+              [
+                "ModelAttempts",
+                {
+                  "contents": 48,
+                  "tag": "Limited"
+                }
+              ],
+              [
+                "ToolAttempts",
+                {
+                  "tag": "ExplicitlyUnbounded"
+                }
+              ],
+              [
+                "Tokens",
+                {
+                  "tag": "ExplicitlyUnbounded"
+                }
+              ],
+              [
+                "CostMicroUsd",
+                {
+                  "tag": "ExplicitlyUnbounded"
+                }
+              ]
+            ]
+          },
+          "known": [
+            [
+              "LifetimeDescendants",
+              3
+            ],
+            [
+              "ModelAttempts",
+              8
+            ],
+            [
+              "ToolAttempts",
+              7
+            ],
+            [
+              "Tokens",
+              0
+            ],
+            [
+              "CostMicroUsd",
+              0
+            ]
+          ],
+          "overage": false,
+          "revision": 2,
+          "unknown": 1,
+          "usage": {
+            "held": [
+              [
+                "ActiveWork",
+                1
+              ],
+              [
+                "LifetimeDescendants",
+                0
+              ],
+              [
+                "ModelAttempts",
+                0
+              ],
+              [
+                "ToolAttempts",
+                1
+              ],
+              [
+                "Tokens",
+                0
+              ],
+              [
+                "CostMicroUsd",
+                0
+              ]
+            ],
+            "settled": [
+              [
+                "LifetimeDescendants",
+                3
+              ],
+              [
+                "ModelAttempts",
+                8
+              ],
+              [
+                "ToolAttempts",
+                7
+              ],
+              [
+                "Tokens",
+                0
+              ],
+              [
+                "CostMicroUsd",
+                0
+              ]
+            ]
+          }
+        },
+        "rootId": "shikigami_execution_root_01j0000000f6xrmjx8bkby3j3g",
+        "sameRootAfterProbe": true,
+        "sessionId": "7b57d97b-99b8-5497-97e6-0432d82744d7",
+        "status": "Open",
+        "successor": {
+          "kind": "verified",
+          "principalId": "agent_01h000000000000000consumer-successor"
+        },
+        "successorEpoch": 1,
+        "successorWriteDenied": true,
+        "workspace": {
+          "provider": "shikigami.workspace/1",
+          "resource": "c1685ce49983eba6be9e4c22e1ebe5d6d0481b6235615f9c6ba8f9f039971c09"
+        }
+      },
+      "outcome": {
+        "bytes": 1200,
+        "digest": "sha256:16c1b005691af3f1e7d49847dce06bb192a15ee7e63d2f7a7fb9121e2ee3b5a5",
+        "payloadId": "payload:sha256:16c1b005691af3f1e7d49847dce06bb192a15ee7e63d2f7a7fb9121e2ee3b5a5"
+      },
+      "phase": "AttemptCommitted",
+      "reference": {
+        "attemptId": "shikigami_execution_attempt_01m6zb2jdmety96217qesxh1h0",
+        "executionId": "execution:sha256:f28bc121cdececee1c2139c07cf0c272a6bb50e306ad73cdb8c4e4e487cdf93a",
+        "format": 1,
+        "operationId": "operation:sha256:f4d29a864ef323be06a14ac7f46cb0a4bcc9123ce03336799a8f0f75f110f46f"
+      }
+    },
+    "recovery": {
+      "format": 1,
+      "adaptation_commit_restart": {
+        "exitCode": 86,
+        "markerObserved": true
+      },
+      "committed_boundary_restarts": {
+        "outcome": {
+          "signal": 9,
+          "controllerStoppedBeforeSnapshot": true,
+          "records": [
+            {
+              "outcome": {
+                "bytes": 936,
+                "digest": "sha256:ea8c144263793baecb6a807bc28e48edf2cb896dab2487b94b58b6ff99246c8e",
+                "payloadId": "payload:sha256:ea8c144263793baecb6a807bc28e48edf2cb896dab2487b94b58b6ff99246c8e"
+              },
+              "executionId": "execution:sha256:95d717bca7f5d659db556d43e6a84e6ac8e3337af78894d88be660d32e92ee0a",
+              "fingerprint": "sha256:4f28dc0a307d92e2ba8e837360553136317e385d496d12b458743efa66eb0415",
+              "operationId": "operation:sha256:4d6711756e202e6987667772ea901276ac83c23048d7847a78e113d2bf628daf"
+            },
+            {
+              "outcome": {
+                "bytes": 1209,
+                "digest": "sha256:4856e66b8e00b7bf78dfb5b0f0818750ad59c655ed44855a4b6b6625cfcb1823",
+                "payloadId": "payload:sha256:4856e66b8e00b7bf78dfb5b0f0818750ad59c655ed44855a4b6b6625cfcb1823"
+              },
+              "executionId": "execution:sha256:95d717bca7f5d659db556d43e6a84e6ac8e3337af78894d88be660d32e92ee0a",
+              "fingerprint": "sha256:7c0687cc93ce086b725fcacc036ada1e2d6def06528512d16a672af4ae2a1524",
+              "operationId": "operation:sha256:5001e8d1afb98a4d5ba7ac4439161beda787cf64bb7f40f2bd76ea77f85125a8"
+            },
+            {
+              "outcome": {
+                "bytes": 903,
+                "digest": "sha256:2a6809ca587d5286a0161c6bb07f59572d7a4c53c1eb6370a8e7e210c1ea2735",
+                "payloadId": "payload:sha256:2a6809ca587d5286a0161c6bb07f59572d7a4c53c1eb6370a8e7e210c1ea2735"
+              },
+              "executionId": "execution:sha256:95d717bca7f5d659db556d43e6a84e6ac8e3337af78894d88be660d32e92ee0a",
+              "fingerprint": "sha256:932a34bf6159d89ef367988c9e05d4015d5d7a9413aed3150efc04d6377622bf",
+              "operationId": "operation:sha256:95d05d4b1574b0406a6794f56b354093232f4316271c8cf78c82434ac7c072b5"
+            },
+            {
+              "outcome": {
+                "bytes": 1209,
+                "digest": "sha256:29ba211bb4d8c0c531a41ab2c063f8fd6dd563df8348166da1431df3d9d0b97e",
+                "payloadId": "payload:sha256:29ba211bb4d8c0c531a41ab2c063f8fd6dd563df8348166da1431df3d9d0b97e"
+              },
+              "executionId": "execution:sha256:3cfea6fb6f25c684fccb83e03e3d062d37f8b5670adcd325a22e82cbce2d9378",
+              "fingerprint": "sha256:6c2e759ea002ea221680684b6a1063f0585b981ae795b0965e334cb252206c36",
+              "operationId": "operation:sha256:caaaa1a2f79d880807c487b2202831baf0bfbe427a1e521dfeec44860d152b75"
+            },
+            {
+              "outcome": {
+                "bytes": 133,
+                "digest": "sha256:9f527b891c27a23cf13d57b6c98331257c80ff2d3631aaffa26d56c1150cd9ba",
+                "payloadId": "payload:sha256:9f527b891c27a23cf13d57b6c98331257c80ff2d3631aaffa26d56c1150cd9ba"
+              },
+              "executionId": "execution:sha256:f28bc121cdececee1c2139c07cf0c272a6bb50e306ad73cdb8c4e4e487cdf93a",
+              "fingerprint": "sha256:5223350360e83fe66f7ee4c9a65ddd1ce6d36ee86b35f19732a76b1df561242e",
+              "operationId": "operation:sha256:f4d29a864ef323be06a14ac7f46cb0a4bcc9123ce03336799a8f0f75f110f46f"
+            },
+            {
+              "outcome": {
+                "bytes": 938,
+                "digest": "sha256:6d5c4febc255d8e10ed2891fe0433bc76caabae3db243821160dce77fd53e36c",
+                "payloadId": "payload:sha256:6d5c4febc255d8e10ed2891fe0433bc76caabae3db243821160dce77fd53e36c"
+              },
+              "executionId": "execution:sha256:3cfea6fb6f25c684fccb83e03e3d062d37f8b5670adcd325a22e82cbce2d9378",
+              "fingerprint": "sha256:2be66dc9649f8873cc366cc7dac2f94e1e3e9f85b6bfe9c2697760e0a38dc4bc",
+              "operationId": "operation:sha256:f58df7f2ca5a1f34d3d9e7c47ce2b78b73c6b629d7cd3e6116ce7fc8a72661ea"
+            },
+            {
+              "outcome": {
+                "bytes": 905,
+                "digest": "sha256:02c6faba85a82667e9e0b0bf475a6633e4090459bba56978be039d498818c689",
+                "payloadId": "payload:sha256:02c6faba85a82667e9e0b0bf475a6633e4090459bba56978be039d498818c689"
+              },
+              "executionId": "execution:sha256:3cfea6fb6f25c684fccb83e03e3d062d37f8b5670adcd325a22e82cbce2d9378",
+              "fingerprint": "sha256:c8b5a59c336b013de2cc06c5e5aca424d9ae8d48f49a1d5be57dae4b24afd847",
+              "operationId": "operation:sha256:fe03079b6599c179bab9e43a06061428635aef0a3daff0aff2a0712a3ff15a2a"
+            }
+          ]
+        },
+        "result": {
+          "signal": 9,
+          "controllerStoppedBeforeSnapshot": true,
+          "records": [
+            {
+              "receipt": {
+                "cursor": 3,
+                "format": 1,
+                "output": {
+                  "bytes": 2732,
+                  "digest": "sha256:8f4722822593765b113c1efa8d482082914074ecad45c51eeee2483fc589cf95",
+                  "payloadId": "payload:sha256:8f4722822593765b113c1efa8d482082914074ecad45c51eeee2483fc589cf95"
+                },
+                "sessionId": "7b57d97b-99b8-5497-97e6-0432d82744d7",
+                "disposition": "AssignmentSucceeded",
+                "fingerprint": "sha256:482274caa4cc8183492d4e130d319eadee559176115b9ca6aaa42731de0bb48c",
+                "operationId": "result:5fe43581-4510-5784-aa80-1089237faac7",
+                "assignmentId": "5fe43581-4510-5784-aa80-1089237faac7"
+              },
+              "sessionId": "7b57d97b-99b8-5497-97e6-0432d82744d7",
+              "assignmentId": "5fe43581-4510-5784-aa80-1089237faac7",
+              "consumedCursor": 0
+            }
+          ]
+        },
+        "followup": {
+          "signal": 9,
+          "controllerStoppedBeforeSnapshot": true,
+          "records": [
+            {
+              "sequence": 1,
+              "sessionId": "7b57d97b-99b8-5497-97e6-0432d82744d7",
+              "operationId": "adaptive:sha256:29bc3d926869a9db0903fb929afc8c44394b43367e1b6bf7a39b09559458e836",
+              "assignmentId": "2d28fd89-907f-531a-987e-94778a54b804"
+            }
+          ]
+        }
+      },
+      "action_denial": {
+        "exitCode": 1,
+        "authorized": {
+          "contents": {
+            "contents": 3,
+            "tag": "EventsCaughtUp"
+          },
+          "tag": "EventsIntegratedReply"
+        },
+        "restored": {
+          "contents": {
+            "contents": 3,
+            "tag": "EventsCaughtUp"
+          },
+          "tag": "EventsIntegratedReply"
+        },
+        "noProviderCalls": true
+      },
+      "worker_selections": [
+        {
+          "calls": [
+            {
+              "phase": "CallTerminal",
+              "rootId": "shikigami_execution_root_01j0000000f6xrmjx8bkby3j3g",
+              "ordinal": 1,
+              "outcome": {
+                "known": [
+                  [
+                    "Tokens",
+                    0
+                  ],
+                  [
+                    "CostMicroUsd",
+                    0
+                  ]
+                ],
+                "phase": "CallTerminal",
+                "missing": [],
+                "compliance": {
+                  "callId": "e8129beb-4173-5ea6-a1d6-6cd26d5f0374/shikigami_execution_attempt_01m6zb2hnjex79kdjsxs6t1p5w/0",
+                  "format": 1,
+                  "status": "succeeded",
+                  "tokens": 0,
+                  "attempt": 1,
+                  "endpoint": {
+                    "api": "stub",
+                    "endpoint": null,
+                    "provider": "stub",
+                    "transport": "agent_run",
+                    "baikai_version": "0.7.0.0",
+                    "implementation_version": "shikigami-stub-v1"
+                  },
+                  "strength": "requested_only",
+                  "thinking": {
+                    "mode": "absent",
+                    "requested": null,
+                    "wire_field": null,
+                    "adjustments": [],
+                    "effort_text": null,
+                    "budget_tokens": null
+                  },
+                  "costMicroUsd": {
+                    "numerator": 0,
+                    "denominator": 1
+                  },
+                  "relationship": {
+                    "tag": "RootCall"
+                  },
+                  "costUncertain": false,
+                  "providerRunId": "e8129beb-4173-5ea6-a1d6-6cd26d5f0374",
+                  "providerCallId": "01a1beb146e7b4915f318a6600000006",
+                  "requestedAlias": "consumer",
+                  "observedModelId": "unobserved",
+                  "resolvedModelId": "consumer",
+                  "requestedModelId": "consumer",
+                  "correlationFields": [
+                    "callid",
+                    "runid"
+                  ],
+                  "relationshipKnown": false
+                },
+                "reportedModel": null,
+                "providerCallId": "01a1beb146e7b4915f318a6600000006"
+              },
+              "receipt": {
+                "rootId": "shikigami_execution_root_01j0000000f6xrmjx8bkby3j3g",
+                "ordinal": 1,
+                "request": {
+                  "policy": "AdmittedUnknownUsage",
+                  "attemptId": "shikigami_execution_attempt_01m6zb2hnjex79kdjsxs6t1p5w",
+                  "quantities": [
+                    [
+                      "ActiveWork",
+                      1
+                    ],
+                    [
+                      "ModelAttempts",
+                      1
+                    ]
+                  ],
+                  "operationId": "operation:sha256:c4c09fcc627a8bf5ea94bada1736f05e2a663a2968528de563aa5131915ab469"
+                },
+                "startedAt": "2026-11-09T05:04:11.453909Z",
+                "fingerprint": "sha256:50ac5f2ab15d065d8b4d1bf9750d11265ff147294895e3db5cfc5ab7ccba21d8",
+                "assignmentId": "assignment:sha256:0476b86b41320459f9f1be345c7679b0d3611e471edeb14395f2e2496d21821a"
+              },
+              "attemptId": "shikigami_execution_attempt_01m6zb2hnjex79kdjsxs6t1p5w",
+              "operationId": "operation:sha256:c4c09fcc627a8bf5ea94bada1736f05e2a663a2968528de563aa5131915ab469"
+            },
+            {
+              "phase": "CallTerminal",
+              "rootId": "shikigami_execution_root_01j0000000f6xrmjx8bkby3j3g",
+              "ordinal": 2,
+              "outcome": {
+                "known": [
+                  [
+                    "Tokens",
+                    0
+                  ],
+                  [
+                    "CostMicroUsd",
+                    0
+                  ]
+                ],
+                "phase": "CallTerminal",
+                "missing": [],
+                "compliance": {
+                  "callId": "e8129beb-4173-5ea6-a1d6-6cd26d5f0374/shikigami_execution_attempt_01m6zb552te24bc6kqz1b6kb6d/0",
+                  "format": 1,
+                  "status": "succeeded",
+                  "tokens": 0,
+                  "attempt": 2,
+                  "endpoint": {
+                    "api": "stub",
+                    "endpoint": null,
+                    "provider": "stub",
+                    "transport": "agent_run",
+                    "baikai_version": "0.7.0.0",
+                    "implementation_version": "shikigami-stub-v1"
+                  },
+                  "strength": "requested_only",
+                  "thinking": {
+                    "mode": "absent",
+                    "requested": null,
+                    "wire_field": null,
+                    "adjustments": [],
+                    "effort_text": null,
+                    "budget_tokens": null
+                  },
+                  "costMicroUsd": {
+                    "numerator": 0,
+                    "denominator": 1
+                  },
+                  "relationship": {
+                    "tag": "RootCall"
+                  },
+                  "costUncertain": false,
+                  "providerRunId": "e8129beb-4173-5ea6-a1d6-6cd26d5f0374",
+                  "providerCallId": "01a1beb2949346f597b939c600000000",
+                  "requestedAlias": "consumer",
+                  "observedModelId": "unobserved",
+                  "resolvedModelId": "consumer",
+                  "requestedModelId": "consumer",
+                  "correlationFields": [
+                    "callid",
+                    "runid"
+                  ],
+                  "relationshipKnown": false
+                },
+                "reportedModel": null,
+                "providerCallId": "01a1beb2949346f597b939c600000000"
+              },
+              "receipt": {
+                "rootId": "shikigami_execution_root_01j0000000f6xrmjx8bkby3j3g",
+                "ordinal": 2,
+                "request": {
+                  "policy": "AdmittedUnknownUsage",
+                  "attemptId": "shikigami_execution_attempt_01m6zb552te24bc6kqz1b6kb6d",
+                  "quantities": [
+                    [
+                      "ActiveWork",
+                      1
+                    ],
+                    [
+                      "ModelAttempts",
+                      1
+                    ]
+                  ],
+                  "operationId": "operation:sha256:07767605c612446f4128d74ed76a67c319cb779da2f63958c218fac45f060b47"
+                },
+                "startedAt": "2026-11-09T05:05:36.870858Z",
+                "fingerprint": "sha256:6dec012e9dac3a52a8fa0532b3cb145e40b42e2f0ad94aac82bd020252ecf368",
+                "assignmentId": "assignment:sha256:0476b86b41320459f9f1be345c7679b0d3611e471edeb14395f2e2496d21821a"
+              },
+              "attemptId": "shikigami_execution_attempt_01m6zb552te24bc6kqz1b6kb6d",
+              "operationId": "operation:sha256:07767605c612446f4128d74ed76a67c319cb779da2f63958c218fac45f060b47"
+            }
+          ],
+          "selection": {
+            "rootId": "shikigami_execution_root_01j0000000f6xrmjx8bkby3j3g",
+            "source": "DeclaredAlias",
+            "descriptor": {
+              "api": "stub",
+              "alias": "consumer",
+              "digest": "sha256:fcaf60f3e9a7c50f332ae17bb256371216bd37b008f85d10c8a39f5220871200",
+              "modelId": "consumer",
+              "version": "1",
+              "provider": "stub",
+              "thinking": null,
+              "bindingId": "adaptive-fixture-consumer",
+              "endpointClass": "in-process",
+              "bindingVersion": "1"
+            },
+            "permittedAliases": [
+              "consumer"
+            ]
+          },
+          "assignmentId": "assignment:sha256:0476b86b41320459f9f1be345c7679b0d3611e471edeb14395f2e2496d21821a"
+        },
+        {
+          "calls": [
+            {
+              "phase": "CallTerminal",
+              "rootId": "shikigami_execution_root_01j0000000f6xrmjx8bkby3j3g",
+              "ordinal": 1,
+              "outcome": {
+                "known": [
+                  [
+                    "Tokens",
+                    0
+                  ],
+                  [
+                    "CostMicroUsd",
+                    0
+                  ]
+                ],
+                "phase": "CallTerminal",
+                "missing": [],
+                "compliance": {
+                  "callId": "aeeaad3d-51b1-54af-a354-fe7f72190963/shikigami_execution_attempt_01m6zb7at4e1ev8xeg7rdhnzkj/0",
+                  "format": 1,
+                  "status": "succeeded",
+                  "tokens": 0,
+                  "attempt": 1,
+                  "endpoint": {
+                    "api": "stub",
+                    "endpoint": null,
+                    "provider": "stub",
+                    "transport": "agent_run",
+                    "baikai_version": "0.7.0.0",
+                    "implementation_version": "shikigami-stub-v1"
+                  },
+                  "strength": "requested_only",
+                  "thinking": {
+                    "mode": "absent",
+                    "requested": null,
+                    "wire_field": null,
+                    "adjustments": [],
+                    "effort_text": null,
+                    "budget_tokens": null
+                  },
+                  "costMicroUsd": {
+                    "numerator": 0,
+                    "denominator": 1
+                  },
+                  "relationship": {
+                    "tag": "RootCall"
+                  },
+                  "costUncertain": false,
+                  "providerRunId": "aeeaad3d-51b1-54af-a354-fe7f72190963",
+                  "providerCallId": "01a1beb3abb0ecf842fb278800000000",
+                  "requestedAlias": "consumer-review",
+                  "observedModelId": "unobserved",
+                  "resolvedModelId": "consumer-review",
+                  "requestedModelId": "consumer-review",
+                  "correlationFields": [
+                    "callid",
+                    "runid"
+                  ],
+                  "relationshipKnown": false
+                },
+                "reportedModel": null,
+                "providerCallId": "01a1beb3abb0ecf842fb278800000000"
+              },
+              "receipt": {
+                "rootId": "shikigami_execution_root_01j0000000f6xrmjx8bkby3j3g",
+                "ordinal": 1,
+                "request": {
+                  "policy": "AdmittedUnknownUsage",
+                  "attemptId": "shikigami_execution_attempt_01m6zb7at4e1ev8xeg7rdhnzkj",
+                  "quantities": [
+                    [
+                      "ActiveWork",
+                      1
+                    ],
+                    [
+                      "ModelAttempts",
+                      1
+                    ]
+                  ],
+                  "operationId": "operation:sha256:c57898b3e78387fd398521a894ceb82cba5aeef459ad03c818c93d2e5256c24a"
+                },
+                "startedAt": "2026-11-09T05:06:48.276429Z",
+                "fingerprint": "sha256:9ce25b3b79683e7b76f0e642402716187d4c8f46512873900b302d35834b69d5",
+                "assignmentId": "assignment:sha256:1b5a0cb6db0d2d61cdbcd86edbfd54759b6aa5ef2439c0af466043ac80ebf260"
+              },
+              "attemptId": "shikigami_execution_attempt_01m6zb7at4e1ev8xeg7rdhnzkj",
+              "operationId": "operation:sha256:c57898b3e78387fd398521a894ceb82cba5aeef459ad03c818c93d2e5256c24a"
+            },
+            {
+              "phase": "CallTerminal",
+              "rootId": "shikigami_execution_root_01j0000000f6xrmjx8bkby3j3g",
+              "ordinal": 2,
+              "outcome": {
+                "known": [
+                  [
+                    "Tokens",
+                    0
+                  ],
+                  [
+                    "CostMicroUsd",
+                    0
+                  ]
+                ],
+                "phase": "CallTerminal",
+                "missing": [],
+                "compliance": {
+                  "callId": "aeeaad3d-51b1-54af-a354-fe7f72190963/shikigami_execution_attempt_01m6zb94p7eyeak5dqwb18w5ae/0",
+                  "format": 1,
+                  "status": "succeeded",
+                  "tokens": 0,
+                  "attempt": 2,
+                  "endpoint": {
+                    "api": "stub",
+                    "endpoint": null,
+                    "provider": "stub",
+                    "transport": "agent_run",
+                    "baikai_version": "0.7.0.0",
+                    "implementation_version": "shikigami-stub-v1"
+                  },
+                  "strength": "requested_only",
+                  "thinking": {
+                    "mode": "absent",
+                    "requested": null,
+                    "wire_field": null,
+                    "adjustments": [],
+                    "effort_text": null,
+                    "budget_tokens": null
+                  },
+                  "costMicroUsd": {
+                    "numerator": 0,
+                    "denominator": 1
+                  },
+                  "relationship": {
+                    "tag": "RootCall"
+                  },
+                  "costUncertain": false,
+                  "providerRunId": "aeeaad3d-51b1-54af-a354-fe7f72190963",
+                  "providerCallId": "01a1beb4931aecf842fb278800000002",
+                  "requestedAlias": "consumer-review",
+                  "observedModelId": "unobserved",
+                  "resolvedModelId": "consumer-review",
+                  "requestedModelId": "consumer-review",
+                  "correlationFields": [
+                    "callid",
+                    "runid"
+                  ],
+                  "relationshipKnown": false
+                },
+                "reportedModel": null,
+                "providerCallId": "01a1beb4931aecf842fb278800000002"
+              },
+              "receipt": {
+                "rootId": "shikigami_execution_root_01j0000000f6xrmjx8bkby3j3g",
+                "ordinal": 2,
+                "request": {
+                  "policy": "AdmittedUnknownUsage",
+                  "attemptId": "shikigami_execution_attempt_01m6zb94p7eyeak5dqwb18w5ae",
+                  "quantities": [
+                    [
+                      "ActiveWork",
+                      1
+                    ],
+                    [
+                      "ModelAttempts",
+                      1
+                    ]
+                  ],
+                  "operationId": "operation:sha256:c8cf84520dc0eff634f258e592cb8cd35178a741d8c774913aaf00b75eba4e17"
+                },
+                "startedAt": "2026-11-09T05:07:47.538199Z",
+                "fingerprint": "sha256:355cd0babe4dbe3eb0c12b22e67bd8596a07ecb608557dae6c272e2f13709a00",
+                "assignmentId": "assignment:sha256:1b5a0cb6db0d2d61cdbcd86edbfd54759b6aa5ef2439c0af466043ac80ebf260"
+              },
+              "attemptId": "shikigami_execution_attempt_01m6zb94p7eyeak5dqwb18w5ae",
+              "operationId": "operation:sha256:c8cf84520dc0eff634f258e592cb8cd35178a741d8c774913aaf00b75eba4e17"
+            }
+          ],
+          "selection": {
+            "rootId": "shikigami_execution_root_01j0000000f6xrmjx8bkby3j3g",
+            "source": "DeclaredAlias",
+            "descriptor": {
+              "api": "stub",
+              "alias": "consumer-review",
+              "digest": "sha256:8deb8bbd487cd47917849641a5b76809404285b4bcdc63f9ce27d81f316562c3",
+              "modelId": "consumer-review",
+              "version": "1",
+              "provider": "stub",
+              "thinking": null,
+              "bindingId": "adaptive-fixture-consumer-review",
+              "endpointClass": "in-process",
+              "bindingVersion": "1"
+            },
+            "permittedAliases": [
+              "consumer-review"
+            ]
+          },
+          "assignmentId": "assignment:sha256:1b5a0cb6db0d2d61cdbcd86edbfd54759b6aa5ef2439c0af466043ac80ebf260"
+        },
+        {
+          "calls": [
+            {
+              "phase": "CallTerminal",
+              "rootId": "shikigami_execution_root_01j0000000f6xrmjx8bkby3j3g",
+              "ordinal": 1,
+              "outcome": {
+                "known": [
+                  [
+                    "Tokens",
+                    0
+                  ],
+                  [
+                    "CostMicroUsd",
+                    0
+                  ]
+                ],
+                "phase": "CallTerminal",
+                "missing": [],
+                "compliance": {
+                  "callId": "59f7f8e8-8aca-5283-afbc-b512c299ac66/shikigami_execution_attempt_01m6zb1mdpe2p8kj70dp0ne3v9/0",
+                  "format": 1,
+                  "status": "succeeded",
+                  "tokens": 0,
+                  "attempt": 1,
+                  "endpoint": {
+                    "api": "stub",
+                    "endpoint": null,
+                    "provider": "stub",
+                    "transport": "agent_run",
+                    "baikai_version": "0.7.0.0",
+                    "implementation_version": "shikigami-stub-v1"
+                  },
+                  "strength": "requested_only",
+                  "thinking": {
+                    "mode": "absent",
+                    "requested": null,
+                    "wire_field": null,
+                    "adjustments": [],
+                    "effort_text": null,
+                    "budget_tokens": null
+                  },
+                  "costMicroUsd": {
+                    "numerator": 0,
+                    "denominator": 1
+                  },
+                  "relationship": {
+                    "tag": "RootCall"
+                  },
+                  "costUncertain": false,
+                  "providerRunId": "59f7f8e8-8aca-5283-afbc-b512c299ac66",
+                  "providerCallId": "01a1beb0d1e8b4915f318a6600000003",
+                  "requestedAlias": "producer-review",
+                  "observedModelId": "unobserved",
+                  "resolvedModelId": "producer-review",
+                  "requestedModelId": "producer-review",
+                  "correlationFields": [
+                    "callid",
+                    "runid"
+                  ],
+                  "relationshipKnown": false
+                },
+                "reportedModel": null,
+                "providerCallId": "01a1beb0d1e8b4915f318a6600000003"
+              },
+              "receipt": {
+                "rootId": "shikigami_execution_root_01j0000000f6xrmjx8bkby3j3g",
+                "ordinal": 1,
+                "request": {
+                  "policy": "AdmittedUnknownUsage",
+                  "attemptId": "shikigami_execution_attempt_01m6zb1mdpe2p8kj70dp0ne3v9",
+                  "quantities": [
+                    [
+                      "ActiveWork",
+                      1
+                    ],
+                    [
+                      "ModelAttempts",
+                      1
+                    ]
+                  ],
+                  "operationId": "operation:sha256:be6722af222617230330c28c3fa8c200d702940a816c1b9036579ddeaebe9acb"
+                },
+                "startedAt": "2026-11-09T05:03:41.506454Z",
+                "fingerprint": "sha256:fadd0db2b3a980211b8f56df7779e27ef7cb37ac185c4cc697447d8e2329d429",
+                "assignmentId": "assignment:sha256:3fb2b357dd286d4dc398be13665c25e4a148cf149c33c5b224de7431d383beb4"
+              },
+              "attemptId": "shikigami_execution_attempt_01m6zb1mdpe2p8kj70dp0ne3v9",
+              "operationId": "operation:sha256:be6722af222617230330c28c3fa8c200d702940a816c1b9036579ddeaebe9acb"
+            },
+            {
+              "phase": "CallTerminal",
+              "rootId": "shikigami_execution_root_01j0000000f6xrmjx8bkby3j3g",
+              "ordinal": 2,
+              "outcome": {
+                "known": [
+                  [
+                    "Tokens",
+                    0
+                  ],
+                  [
+                    "CostMicroUsd",
+                    0
+                  ]
+                ],
+                "phase": "CallTerminal",
+                "missing": [],
+                "compliance": {
+                  "callId": "59f7f8e8-8aca-5283-afbc-b512c299ac66/shikigami_execution_attempt_01m6zb2aavedw9sx5k1ehpcpxg/0",
+                  "format": 1,
+                  "status": "succeeded",
+                  "tokens": 0,
+                  "attempt": 2,
+                  "endpoint": {
+                    "api": "stub",
+                    "endpoint": null,
+                    "provider": "stub",
+                    "transport": "agent_run",
+                    "baikai_version": "0.7.0.0",
+                    "implementation_version": "shikigami-stub-v1"
+                  },
+                  "strength": "requested_only",
+                  "thinking": {
+                    "mode": "absent",
+                    "requested": null,
+                    "wire_field": null,
+                    "adjustments": [],
+                    "effort_text": null,
+                    "budget_tokens": null
+                  },
+                  "costMicroUsd": {
+                    "numerator": 0,
+                    "denominator": 1
+                  },
+                  "relationship": {
+                    "tag": "RootCall"
+                  },
+                  "costUncertain": false,
+                  "providerRunId": "59f7f8e8-8aca-5283-afbc-b512c299ac66",
+                  "providerCallId": "01a1beb12991b4915f318a6600000004",
+                  "requestedAlias": "producer-review",
+                  "observedModelId": "unobserved",
+                  "resolvedModelId": "producer-review",
+                  "requestedModelId": "producer-review",
+                  "correlationFields": [
+                    "callid",
+                    "runid"
+                  ],
+                  "relationshipKnown": false
+                },
+                "reportedModel": null,
+                "providerCallId": "01a1beb12991b4915f318a6600000004"
+              },
+              "receipt": {
+                "rootId": "shikigami_execution_root_01j0000000f6xrmjx8bkby3j3g",
+                "ordinal": 2,
+                "request": {
+                  "policy": "AdmittedUnknownUsage",
+                  "attemptId": "shikigami_execution_attempt_01m6zb2aavedw9sx5k1ehpcpxg",
+                  "quantities": [
+                    [
+                      "ActiveWork",
+                      1
+                    ],
+                    [
+                      "ModelAttempts",
+                      1
+                    ]
+                  ],
+                  "operationId": "operation:sha256:67cbe533637b694a0ca1be3b6902bd5f3a25f2214fab306001a75e48835b8e4f"
+                },
+                "startedAt": "2026-11-09T05:04:03.94323Z",
+                "fingerprint": "sha256:bc8676b7274667e1668fe85b60bc3407bdbae474bad6f9fb1cf8bc2d4c31c3b1",
+                "assignmentId": "assignment:sha256:3fb2b357dd286d4dc398be13665c25e4a148cf149c33c5b224de7431d383beb4"
+              },
+              "attemptId": "shikigami_execution_attempt_01m6zb2aavedw9sx5k1ehpcpxg",
+              "operationId": "operation:sha256:67cbe533637b694a0ca1be3b6902bd5f3a25f2214fab306001a75e48835b8e4f"
+            }
+          ],
+          "selection": {
+            "rootId": "shikigami_execution_root_01j0000000f6xrmjx8bkby3j3g",
+            "source": "DeclaredAlias",
+            "descriptor": {
+              "api": "stub",
+              "alias": "producer-review",
+              "digest": "sha256:cee664819f0708a859c3b36ba4fd61be332df0601c0ea53ccd8002b2bd36216a",
+              "modelId": "producer-review",
+              "version": "1",
+              "provider": "stub",
+              "thinking": null,
+              "bindingId": "adaptive-fixture-producer-review",
+              "endpointClass": "in-process",
+              "bindingVersion": "1"
+            },
+            "permittedAliases": [
+              "producer-review"
+            ]
+          },
+          "assignmentId": "assignment:sha256:3fb2b357dd286d4dc398be13665c25e4a148cf149c33c5b224de7431d383beb4"
+        },
+        {
+          "calls": [
+            {
+              "phase": "CallTerminal",
+              "rootId": "shikigami_execution_root_01j0000000f6xrmjx8bkby3j3g",
+              "ordinal": 1,
+              "outcome": {
+                "known": [
+                  [
+                    "Tokens",
+                    0
+                  ],
+                  [
+                    "CostMicroUsd",
+                    0
+                  ]
+                ],
+                "phase": "CallTerminal",
+                "missing": [],
+                "compliance": {
+                  "callId": "01d4d0e6-66fc-59ba-8f44-5ba0abd25794/shikigami_execution_attempt_01m6zb16pvengvqapby57j3n5n/0",
+                  "format": 1,
+                  "status": "succeeded",
+                  "tokens": 0,
+                  "attempt": 1,
+                  "endpoint": {
+                    "api": "stub",
+                    "endpoint": null,
+                    "provider": "stub",
+                    "transport": "agent_run",
+                    "baikai_version": "0.7.0.0",
+                    "implementation_version": "shikigami-stub-v1"
+                  },
+                  "strength": "requested_only",
+                  "thinking": {
+                    "mode": "absent",
+                    "requested": null,
+                    "wire_field": null,
+                    "adjustments": [],
+                    "effort_text": null,
+                    "budget_tokens": null
+                  },
+                  "costMicroUsd": {
+                    "numerator": 0,
+                    "denominator": 1
+                  },
+                  "relationship": {
+                    "tag": "RootCall"
+                  },
+                  "costUncertain": false,
+                  "providerRunId": "01d4d0e6-66fc-59ba-8f44-5ba0abd25794",
+                  "providerCallId": "01a1beb09b24b4915f318a6600000000",
+                  "requestedAlias": "producer",
+                  "observedModelId": "unobserved",
+                  "resolvedModelId": "producer",
+                  "requestedModelId": "producer",
+                  "correlationFields": [
+                    "callid",
+                    "runid"
+                  ],
+                  "relationshipKnown": false
+                },
+                "reportedModel": null,
+                "providerCallId": "01a1beb09b24b4915f318a6600000000"
+              },
+              "receipt": {
+                "rootId": "shikigami_execution_root_01j0000000f6xrmjx8bkby3j3g",
+                "ordinal": 1,
+                "request": {
+                  "policy": "AdmittedUnknownUsage",
+                  "attemptId": "shikigami_execution_attempt_01m6zb16pvengvqapby57j3n5n",
+                  "quantities": [
+                    [
+                      "ActiveWork",
+                      1
+                    ],
+                    [
+                      "ModelAttempts",
+                      1
+                    ]
+                  ],
+                  "operationId": "operation:sha256:daadec195d4ed7bf8aa828d4fd7815eaee4a47eb927a1d83ff8d87e76a85d962"
+                },
+                "startedAt": "2026-11-09T05:03:27.466456Z",
+                "fingerprint": "sha256:ec467775edb70f15c764a10d85ba0d25f3eb0832d0358425b4ab3e71929746ea",
+                "assignmentId": "assignment:sha256:6805338f1f76ee585f099e5bfbf8863e5b4ff92b44d48f1687c0b851eeb247ce"
+              },
+              "attemptId": "shikigami_execution_attempt_01m6zb16pvengvqapby57j3n5n",
+              "operationId": "operation:sha256:daadec195d4ed7bf8aa828d4fd7815eaee4a47eb927a1d83ff8d87e76a85d962"
+            },
+            {
+              "phase": "CallTerminal",
+              "rootId": "shikigami_execution_root_01j0000000f6xrmjx8bkby3j3g",
+              "ordinal": 2,
+              "outcome": {
+                "known": [
+                  [
+                    "Tokens",
+                    0
+                  ],
+                  [
+                    "CostMicroUsd",
+                    0
+                  ]
+                ],
+                "phase": "CallTerminal",
+                "missing": [],
+                "compliance": {
+                  "callId": "01d4d0e6-66fc-59ba-8f44-5ba0abd25794/shikigami_execution_attempt_01m6zb1d3qeme87nv8rnb6m1nk/0",
+                  "format": 1,
+                  "status": "succeeded",
+                  "tokens": 0,
+                  "attempt": 2,
+                  "endpoint": {
+                    "api": "stub",
+                    "endpoint": null,
+                    "provider": "stub",
+                    "transport": "agent_run",
+                    "baikai_version": "0.7.0.0",
+                    "implementation_version": "shikigami-stub-v1"
+                  },
+                  "strength": "requested_only",
+                  "thinking": {
+                    "mode": "absent",
+                    "requested": null,
+                    "wire_field": null,
+                    "adjustments": [],
+                    "effort_text": null,
+                    "budget_tokens": null
+                  },
+                  "costMicroUsd": {
+                    "numerator": 0,
+                    "denominator": 1
+                  },
+                  "relationship": {
+                    "tag": "RootCall"
+                  },
+                  "costUncertain": false,
+                  "providerRunId": "01d4d0e6-66fc-59ba-8f44-5ba0abd25794",
+                  "providerCallId": "01a1beb0b4aab4915f318a6600000001",
+                  "requestedAlias": "producer",
+                  "observedModelId": "unobserved",
+                  "resolvedModelId": "producer",
+                  "requestedModelId": "producer",
+                  "correlationFields": [
+                    "callid",
+                    "runid"
+                  ],
+                  "relationshipKnown": false
+                },
+                "reportedModel": null,
+                "providerCallId": "01a1beb0b4aab4915f318a6600000001"
+              },
+              "receipt": {
+                "rootId": "shikigami_execution_root_01j0000000f6xrmjx8bkby3j3g",
+                "ordinal": 2,
+                "request": {
+                  "policy": "AdmittedUnknownUsage",
+                  "attemptId": "shikigami_execution_attempt_01m6zb1d3qeme87nv8rnb6m1nk",
+                  "quantities": [
+                    [
+                      "ActiveWork",
+                      1
+                    ],
+                    [
+                      "ModelAttempts",
+                      1
+                    ]
+                  ],
+                  "operationId": "operation:sha256:036e7540318819963d55cf4a8bc3e8e7ba55d2ec9a5df4e66642ab478e5734fe"
+                },
+                "startedAt": "2026-11-09T05:03:34.020117Z",
+                "fingerprint": "sha256:b402e2e42fe940a6909aa2c1ce3f8c9ed6878b642ecda92f15737c1b6344fae3",
+                "assignmentId": "assignment:sha256:6805338f1f76ee585f099e5bfbf8863e5b4ff92b44d48f1687c0b851eeb247ce"
+              },
+              "attemptId": "shikigami_execution_attempt_01m6zb1d3qeme87nv8rnb6m1nk",
+              "operationId": "operation:sha256:036e7540318819963d55cf4a8bc3e8e7ba55d2ec9a5df4e66642ab478e5734fe"
+            }
+          ],
+          "selection": {
+            "rootId": "shikigami_execution_root_01j0000000f6xrmjx8bkby3j3g",
+            "source": "DeclaredAlias",
+            "descriptor": {
+              "api": "stub",
+              "alias": "producer",
+              "digest": "sha256:4723201b49ae675a41043ef6754467a08a4e6b4033197ee91e42c338622b0450",
+              "modelId": "producer",
+              "version": "1",
+              "provider": "stub",
+              "thinking": null,
+              "bindingId": "adaptive-fixture-producer",
+              "endpointClass": "in-process",
+              "bindingVersion": "1"
+            },
+            "permittedAliases": [
+              "producer"
+            ]
+          },
+          "assignmentId": "assignment:sha256:6805338f1f76ee585f099e5bfbf8863e5b4ff92b44d48f1687c0b851eeb247ce"
+        },
+        {
+          "calls": [
+            {
+              "phase": "CallTerminal",
+              "rootId": "shikigami_execution_root_01j0000000f6xrmjx8bkby3j3g",
+              "ordinal": 1,
+              "outcome": {
+                "known": [
+                  [
+                    "Tokens",
+                    0
+                  ],
+                  [
+                    "CostMicroUsd",
+                    0
+                  ]
+                ],
+                "phase": "CallTerminal",
+                "missing": [],
+                "compliance": {
+                  "callId": "1ffac10d-87bf-54ef-bdd9-3f052814d014/shikigami_execution_attempt_01m6zb7avnecyacge0mncp4408/0",
+                  "format": 1,
+                  "status": "succeeded",
+                  "tokens": 0,
+                  "attempt": 1,
+                  "endpoint": {
+                    "api": "stub",
+                    "endpoint": null,
+                    "provider": "stub",
+                    "transport": "agent_run",
+                    "baikai_version": "0.7.0.0",
+                    "implementation_version": "shikigami-stub-v1"
+                  },
+                  "strength": "requested_only",
+                  "thinking": {
+                    "mode": "absent",
+                    "requested": null,
+                    "wire_field": null,
+                    "adjustments": [],
+                    "effort_text": null,
+                    "budget_tokens": null
+                  },
+                  "costMicroUsd": {
+                    "numerator": 0,
+                    "denominator": 1
+                  },
+                  "relationship": {
+                    "tag": "RootCall"
+                  },
+                  "costUncertain": false,
+                  "providerRunId": "1ffac10d-87bf-54ef-bdd9-3f052814d014",
+                  "providerCallId": "01a1beb3abe6ecf842fb278800000001",
+                  "requestedAlias": "consumer-successor",
+                  "observedModelId": "unobserved",
+                  "resolvedModelId": "consumer-successor",
+                  "requestedModelId": "consumer-successor",
+                  "correlationFields": [
+                    "callid",
+                    "runid"
+                  ],
+                  "relationshipKnown": false
+                },
+                "reportedModel": null,
+                "providerCallId": "01a1beb3abe6ecf842fb278800000001"
+              },
+              "receipt": {
+                "rootId": "shikigami_execution_root_01j0000000f6xrmjx8bkby3j3g",
+                "ordinal": 1,
+                "request": {
+                  "policy": "AdmittedUnknownUsage",
+                  "attemptId": "shikigami_execution_attempt_01m6zb7avnecyacge0mncp4408",
+                  "quantities": [
+                    [
+                      "ActiveWork",
+                      1
+                    ],
+                    [
+                      "ModelAttempts",
+                      1
+                    ]
+                  ],
+                  "operationId": "operation:sha256:b270b92905120b767fbd5ef723a279c40cbfca88b234c5da6aaa8e0ac0b5289c"
+                },
+                "startedAt": "2026-11-09T05:06:48.319814Z",
+                "fingerprint": "sha256:44abc8240b9629c98d17834ffaf8686ea703988efa7c2e67e76f977054823141",
+                "assignmentId": "assignment:sha256:a3306ed9115431bd9da1b973621cb74b907c992e7b04e3ac1cf9f91dc5afaaed"
+              },
+              "attemptId": "shikigami_execution_attempt_01m6zb7avnecyacge0mncp4408",
+              "operationId": "operation:sha256:b270b92905120b767fbd5ef723a279c40cbfca88b234c5da6aaa8e0ac0b5289c"
+            },
+            {
+              "phase": "CallTerminal",
+              "rootId": "shikigami_execution_root_01j0000000f6xrmjx8bkby3j3g",
+              "ordinal": 2,
+              "outcome": {
+                "known": [
+                  [
+                    "Tokens",
+                    0
+                  ],
+                  [
+                    "CostMicroUsd",
+                    0
+                  ]
+                ],
+                "phase": "CallTerminal",
+                "missing": [],
+                "compliance": {
+                  "callId": "1ffac10d-87bf-54ef-bdd9-3f052814d014/shikigami_execution_attempt_01m6zb94q8e3jbxks8mseqpde2/0",
+                  "format": 1,
+                  "status": "succeeded",
+                  "tokens": 0,
+                  "attempt": 2,
+                  "endpoint": {
+                    "api": "stub",
+                    "endpoint": null,
+                    "provider": "stub",
+                    "transport": "agent_run",
+                    "baikai_version": "0.7.0.0",
+                    "implementation_version": "shikigami-stub-v1"
+                  },
+                  "strength": "requested_only",
+                  "thinking": {
+                    "mode": "absent",
+                    "requested": null,
+                    "wire_field": null,
+                    "adjustments": [],
+                    "effort_text": null,
+                    "budget_tokens": null
+                  },
+                  "costMicroUsd": {
+                    "numerator": 0,
+                    "denominator": 1
+                  },
+                  "relationship": {
+                    "tag": "RootCall"
+                  },
+                  "costUncertain": false,
+                  "providerRunId": "1ffac10d-87bf-54ef-bdd9-3f052814d014",
+                  "providerCallId": "01a1beb49343ecf842fb278800000003",
+                  "requestedAlias": "consumer-successor",
+                  "observedModelId": "unobserved",
+                  "resolvedModelId": "consumer-successor",
+                  "requestedModelId": "consumer-successor",
+                  "correlationFields": [
+                    "callid",
+                    "runid"
+                  ],
+                  "relationshipKnown": false
+                },
+                "reportedModel": null,
+                "providerCallId": "01a1beb49343ecf842fb278800000003"
+              },
+              "receipt": {
+                "rootId": "shikigami_execution_root_01j0000000f6xrmjx8bkby3j3g",
+                "ordinal": 2,
+                "request": {
+                  "policy": "AdmittedUnknownUsage",
+                  "attemptId": "shikigami_execution_attempt_01m6zb94q8e3jbxks8mseqpde2",
+                  "quantities": [
+                    [
+                      "ActiveWork",
+                      1
+                    ],
+                    [
+                      "ModelAttempts",
+                      1
+                    ]
+                  ],
+                  "operationId": "operation:sha256:6f68485e719f55c44cf24f34d8ae6eefe064041e043e34cebce5bcc003fb5aa8"
+                },
+                "startedAt": "2026-11-09T05:07:47.5705Z",
+                "fingerprint": "sha256:d937d7d067d139a5debfb5ac6b484b16ab42e8487dc33bf34a20fba1e1e7381c",
+                "assignmentId": "assignment:sha256:a3306ed9115431bd9da1b973621cb74b907c992e7b04e3ac1cf9f91dc5afaaed"
+              },
+              "attemptId": "shikigami_execution_attempt_01m6zb94q8e3jbxks8mseqpde2",
+              "operationId": "operation:sha256:6f68485e719f55c44cf24f34d8ae6eefe064041e043e34cebce5bcc003fb5aa8"
+            }
+          ],
+          "selection": {
+            "rootId": "shikigami_execution_root_01j0000000f6xrmjx8bkby3j3g",
+            "source": "DeclaredAlias",
+            "descriptor": {
+              "api": "stub",
+              "alias": "consumer-successor",
+              "digest": "sha256:759ffcbcf4d1e819e5da96acf0500c8ba6ad5f6b1cb6a3d66eab88d71b4a614c",
+              "modelId": "consumer-successor",
+              "version": "1",
+              "provider": "stub",
+              "thinking": null,
+              "bindingId": "adaptive-fixture-consumer-successor",
+              "endpointClass": "in-process",
+              "bindingVersion": "1"
+            },
+            "permittedAliases": [
+              "consumer-successor"
+            ]
+          },
+          "assignmentId": "assignment:sha256:a3306ed9115431bd9da1b973621cb74b907c992e7b04e3ac1cf9f91dc5afaaed"
+        }
+      ],
+      "ownership_commit_restart": {
+        "exitCode": 91,
+        "markerObserved": true
+      },
+      "unknown_effect_restart": {
+        "exitCode": 92,
+        "markerObserved": true
+      },
+      "terminal_replay": {
+        "sameEvidence": true,
+        "providerCallsBefore": "95bf86618bea9303bc3c154bd48b031865786e653419912762dd226438915b13",
+        "providerCallsAfter": "95bf86618bea9303bc3c154bd48b031865786e653419912762dd226438915b13"
+      }
+    },
+    "git_artifacts": {
+      "format": 1,
+      "scope": "forensic local artifacts; no outcome reconciliation implied",
+      "artifacts": [
+        {
+          "repository": "mori://fixture/adaptive-producer",
+          "base": "02dd5ee5e300a00f187d455f5f9edf9d58279c9f",
+          "head": "e6547475ad0684b5b3aa811b02e38e892edbcc98",
+          "bundle": "workspace-0.bundle",
+          "sha256": "2db7f5c81070265aa55808299c11546678faace14ae6b479173898a6aced7180"
+        },
+        {
+          "repository": "mori://fixture/adaptive-producer",
+          "base": "02dd5ee5e300a00f187d455f5f9edf9d58279c9f",
+          "head": "bb965ceb7ea1bf6b325cb63d31f93b68ca1eac99",
+          "bundle": "workspace-1.bundle",
+          "sha256": "f14f086b7604e867d33a55b7d11dde91a81f603744a40bfdda7d59a6655cd580"
+        },
+        {
+          "repository": "mori://fixture/adaptive-consumer",
+          "base": "5040a3c99659fba0355324811a666884c0297217",
+          "head": "bd017c348f713bb44c5d9d745c342755d0c2cc26",
+          "bundle": "workspace-2.bundle",
+          "sha256": "a249aa998d0e0febe6fb0e8a31cfbf091bfcf8d8960817671ab0e203bd94b7a3"
+        },
+        {
+          "repository": "mori://fixture/adaptive-consumer",
+          "base": "5040a3c99659fba0355324811a666884c0297217",
+          "head": "ce250f10034fe0dda15e98aad4ee7e6f4420f208",
+          "bundle": "workspace-3.bundle",
+          "sha256": "70b193ef789e3e7e57c1f8e5c736e48adc4f97a423b65d136d9ecbb24160f676"
+        },
+        {
+          "repository": "mori://fixture/adaptive-consumer",
+          "base": "5040a3c99659fba0355324811a666884c0297217",
+          "head": "55b9bd8698d1216bcfa83d27f781f0ad18acf73f",
+          "bundle": "workspace-4.bundle",
+          "sha256": "8cda4b9fff292c016077c63404fda4f2654a812feb393c8a5347e835c7c4e7a8"
+        },
+        {
+          "repository": "mori://fixture/adaptive-producer",
+          "base": "02dd5ee5e300a00f187d455f5f9edf9d58279c9f",
+          "head": "c3c7453b662c9bc56494f728d3b568e2d51a5648",
+          "bundle": "workspace-5.bundle",
+          "sha256": "963e95abcdeeab5dc3bea42de4f3d776764598037d475249740e2cc192e8a154"
+        }
+      ]
+    },
+    "returned_artifact_verification": {
+      "artifacts": 6,
+      "worker_pairs_recomputed": 2,
+      "journey": {
+        "case": "returned-exact-pair-journey",
+        "started_at": "2026-11-09T05:08:52.581030+00:00",
+        "log": "returned-exact-pair-journey.log",
+        "expected_exit": 0,
+        "exit_code": 0,
+        "state": "passed",
+        "finished_at": "2026-11-09T05:08:52.611262+00:00",
+        "elapsed_seconds": 0.03
+      }
+    }
+  },
+  "finished_at": "2026-11-09T05:08:52.611752+00:00"
+}

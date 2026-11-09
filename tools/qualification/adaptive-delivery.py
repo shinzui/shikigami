@@ -14,6 +14,7 @@ import signal
 import subprocess
 import sys
 import time
+from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURE = ROOT / "tests/adaptive-delivery"
@@ -375,7 +376,11 @@ def validate_transfer_probes(value, recovery):
         raise ValueError("native completion refusal did not isolate the unknown root gate")
 
 
-def validate_worker_selections(value, recovery, roles):
+def validate_worker_selections(value, recovery, roles, *, admitted=None):
+    # Live callers supply credential-free descriptors read at admission. Never
+    # derive this allow-list from the returned evidence being checked.
+    if admitted is not None:
+        validate_live_descriptors(admitted, roles)
     selections = recovery["worker_selections"]
     if not isinstance(selections, list) or not len(roles) <= len(selections) <= 8:
         raise ValueError("native pinned worker selections missing")
@@ -388,12 +393,17 @@ def validate_worker_selections(value, recovery, roles):
         calls = record["calls"]
         if (record["assignmentId"] in assignments or role not in roles or selected["rootId"] != value["rootId"]
                 or selected["source"] != "DeclaredAlias" or selected["permittedAliases"] != [role]
-                or descriptor["modelId"] != role or descriptor["version"] != "1"
-                or descriptor["bindingId"] != "adaptive-fixture-" + role or descriptor["bindingVersion"] != "1"
-                or (descriptor["provider"], descriptor["api"], descriptor["endpointClass"]) != ("stub", "stub", "in-process")
-                or descriptor["thinking"] is not None or not isinstance(descriptor["digest"], str) or not descriptor["digest"]
+                or not isinstance(descriptor["digest"], str) or not descriptor["digest"]
                 or (role in descriptors and descriptor != descriptors[role])
-                or not isinstance(calls, list) or not 1 <= len(calls) <= 4):
+                or not isinstance(calls, list) or not 1 <= len(calls) <= (4 if admitted is None else 128)):
+            raise ValueError("native worker binding differs from its admitted alias")
+        if admitted is None:
+            if (descriptor["modelId"] != role or descriptor["version"] != "1"
+                    or descriptor["bindingId"] != "adaptive-fixture-" + role or descriptor["bindingVersion"] != "1"
+                    or (descriptor["provider"], descriptor["api"], descriptor["endpointClass"]) != ("stub", "stub", "in-process")
+                    or descriptor["thinking"] is not None):
+                raise ValueError("native worker binding differs from its admitted alias")
+        elif descriptor != admitted[role]:
             raise ValueError("native worker binding differs from its admitted alias")
         assignments.add(record["assignmentId"])
         descriptors[role] = descriptor
@@ -404,11 +414,108 @@ def validate_worker_selections(value, recovery, roles):
                     or type(call["ordinal"]) is not int or call["ordinal"] in ordinals
                     or call["rootId"] != value["rootId"] or call["phase"] != "CallTerminal"):
                 raise ValueError("native actual worker call receipt is duplicated or unsettled")
+            if admitted is not None:
+                validate_live_call(call, record["assignmentId"], descriptor, value["rootId"])
             attempts.add(call["attemptId"])
             ordinals.add(call["ordinal"])
         totals[role] += len(calls)
     if any(totals[role] != value["providerCalls"][role] for role in roles):
         raise ValueError("native actual worker calls differ from provider dispatch counters")
+
+
+def validate_live_descriptors(admitted, roles):
+    """A live allow-list contains exact HTTP bindings, never fixture defaults."""
+    if not isinstance(admitted, dict) or set(admitted) != set(roles):
+        raise ValueError("live descriptors must cover the admitted roles exactly")
+    surfaces = {("anthropic", "messages"), ("openai", "chat-completions"), ("openai", "responses")}
+    fields = {"alias", "version", "bindingId", "bindingVersion", "provider", "api",
+              "endpointClass", "modelId", "thinking", "digest"}
+    for role, descriptor in admitted.items():
+        if (not isinstance(descriptor, dict) or set(descriptor) != fields
+                or descriptor["alias"] != role
+                or (descriptor["provider"], descriptor["api"]) not in surfaces
+                or descriptor["endpointClass"] != "https"
+                or any(not isinstance(descriptor[key], str) or not descriptor[key]
+                       for key in fields - {"thinking"})
+                or descriptor["bindingId"].startswith("adaptive-fixture-")
+                or (descriptor["thinking"] is not None and not isinstance(descriptor["thinking"], str))):
+            raise ValueError("live descriptor is not an explicit HTTP model binding")
+
+
+def validate_live_call(call, assignment, descriptor, root):
+    """Check the selection owner's stored receipt/outcome, not model prose.
+
+    This verifies worker selection evidence only. Decision accounting, fresh
+    authority and exact artifact acceptance remain separate live trial gates.
+    """
+    receipt, outcome = call["receipt"], call["outcome"]
+    facts = outcome["compliance"]
+    if not isinstance(facts, dict):
+        raise ValueError("live worker call has no provider compliance facts")
+    endpoint = facts["endpoint"]
+    canonical_api = {"anthropic-messages": "messages", "openai-chat-completions": "chat-completions",
+                     "openai-responses": "responses"}.get(endpoint["api"], endpoint["api"])
+    endpoint_url = endpoint["endpoint"]
+    if (endpoint["provider"] != descriptor["provider"] or canonical_api != descriptor["api"]
+            or endpoint["transport"] != "http_api"
+            or (endpoint_url is not None and urlsplit(endpoint_url).scheme != "https")
+            or facts["thinking"]["requested"] != descriptor["thinking"]
+            or facts["status"] != "succeeded" or facts["strength"] != "model_observed"
+            or facts["costUncertain"] is not False):
+        raise ValueError("live provider facts differ from the admitted HTTP transport")
+    if (receipt["assignmentId"] != assignment or receipt["rootId"] != root
+            or type(receipt["ordinal"]) is not int or receipt["ordinal"] != call["ordinal"]
+            or receipt["request"]["attemptId"] != call["attemptId"]
+            or receipt["request"]["operationId"] != call["operationId"]
+            or not isinstance(receipt["fingerprint"], str) or not receipt["fingerprint"]
+            or outcome["phase"] != "CallTerminal" or outcome["missing"] != []
+            or outcome["reportedModel"] != descriptor["modelId"]
+            or not isinstance(outcome["providerCallId"], str) or not outcome["providerCallId"]
+            or type(facts["format"]) is not int or facts["format"] != 1
+            or facts["requestedAlias"] != descriptor["alias"]
+            or facts["requestedModelId"] != descriptor["modelId"]
+            or facts["resolvedModelId"] != descriptor["modelId"]
+            or facts["providerCallId"] != outcome["providerCallId"]
+            or type(facts["tokens"]) is not int or facts["tokens"] <= 0
+            or type(outcome["known"].get("Tokens")) is not int
+            or outcome["known"]["Tokens"] != facts["tokens"]
+            or type(outcome["known"].get("CostMicroUsd")) is not int
+            or outcome["known"]["CostMicroUsd"] < 0):
+        raise ValueError("live worker call lacks matching settled provider facts")
+
+
+def validate_live_root(root, envelope, *, admitted_at):
+    """Compare the stored root with its independent, admitted resource envelope.
+
+    HTTP APIs cannot enforce invoice ceilings. Require that limitation explicitly
+    and finite limits for all enforceable dimensions, including tokens and tools.
+    An observation timeout is never substituted for the root cutoff.
+    """
+    dimensions = {"ActiveWork", "LifetimeDescendants", "ModelAttempts", "ToolAttempts", "Tokens", "CostMicroUsd"}
+    limits = envelope["limits"]
+    if (set(envelope) != {"limits", "cutoff"} or set(limits) != dimensions
+            or limits["CostMicroUsd"] != {"tag": "ExplicitlyUnbounded"}):
+        raise ValueError("live envelope must state each dimension and unsupported invoice policy")
+    for dimension in dimensions - {"CostMicroUsd"}:
+        limit = limits[dimension]
+        if (not isinstance(limit, dict) or set(limit) != {"tag", "contents"}
+                or limit["tag"] != "Limited" or type(limit["contents"]) is not int
+                or limit["contents"] <= 0):
+            raise ValueError("live enforceable resource limits must be finite positive integers")
+    cutoff = datetime.fromisoformat(envelope["cutoff"].replace("Z", "+00:00"))
+    if (cutoff.tzinfo is None or admitted_at.tzinfo is None
+            or not 0 < (cutoff - admitted_at).total_seconds() <= 3600):
+        raise ValueError("live root cutoff must bound the admitted run to at most one hour")
+    if (json.dumps(root["envelope"], sort_keys=True) != json.dumps(envelope, sort_keys=True)
+            or type(root["active"]) is not int or root["active"] != 0
+            or type(root["unknown"]) is not int or root["unknown"] != 0
+            or root["cancelled"] is not False or root["overage"] is not False
+            or any(type(amount) is not int or amount != 0 for amount in root["usage"]["held"].values())):
+        raise ValueError("live root differs from admission or has unresolved work")
+    for dimension, amount in root["usage"]["settled"].items():
+        if (dimension not in dimensions or type(amount) is not int or amount < 0
+                or (dimension != "CostMicroUsd" and amount > limits[dimension]["contents"])):
+            raise ValueError("live settled usage exceeds its admitted envelope")
 
 
 def qualify(directory, config, mode):

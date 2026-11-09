@@ -195,6 +195,19 @@ bytes, an omitted reviewer change or an obsolete consumer contract cannot
 supply passing artifact evidence. The attempt manifest records the selected
 runtime output separately from the driver's source revision.
 
+Live verifier building blocks are available in
+`tools/qualification/adaptive-delivery.py`. `validate_worker_selections` accepts
+an optional independent `admitted` descriptor map, rejects fixture bindings,
+and checks each stored selection receipt/outcome against it. The Linux snapshot
+exports those complete owner records without credentials. This supports variable
+call counts and exact HTTP model ids. `validate_live_root` compares the stored
+root with the independently admitted envelope and admission time; finite token,
+attempt, tool, descendant and concurrency limits are mandatory. Invoice ceilings
+remain explicitly unbounded because the HTTP path cannot enforce them. Missing
+billing remains unresolved work even under that policy. These functions do not
+supply fresh authorization, decision receipts or live dispatch, and are not yet
+wired into a live driver verdict. Their unit controls are not actual-model proof.
+
 `--mode live` currently returns blocked. No private live provider configuration
 has been supplied and no live adapter is selected. Live acceptance additionally
 requires an actual model-driven coding path, production authorization, explicit
