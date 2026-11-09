@@ -57,6 +57,16 @@ in  Schema.Project::{
           , Schema.Dependency.ByName "effectful/effectful:effectful"
           , Schema.Dependency.ByName "effectful/effectful:effectful-core"
           , Schema.Dependency.ByName "shinzui/en:en-biscuit"
+          -- External mutation runner for the owning core tests; not linked into the library.
+          , Schema.Dependency.WithAugmentation
+              { name = "shinzui/heni:heni-cli"
+              , extraDocs = [] : List Schema.DocRef.Type
+              , localPathOverride = None Text
+              , kind = Some Schema.DependencyKind.ThirdParty
+              , source = Some Schema.DependencySource.Hackage
+              , scope = Some Schema.DependencyScope.Dev
+              , versionConstraint = Some "==0.1.0.0"
+              }
           , Schema.Dependency.WithAugmentation
               { name = "ekmett/lens:generic-lens"
               , extraDocs = [] : List Schema.DocRef.Type
@@ -1015,6 +1025,7 @@ in  Schema.Project::{
       , "shinzui/danwa:danwa-api"
       , "shinzui/danwa:danwa-client"
       , "shinzui/en:en-biscuit"
+      , "shinzui/heni:heni-cli"
       , "haskell-works/hw-kafka-client:hw-kafka-client"
       , "shinzui/kafka-effectful:kafka-effectful"
       , "shinzui/keiki:keiki"
@@ -1261,6 +1272,12 @@ in  Schema.Project::{
         , name = "en"
         , kind = Some Schema.MoriArtifactKind.Package
         , key = Some "en-biscuit"
+        }
+      , Schema.MoriRef::{
+        , namespace = "shinzui"
+        , name = "heni"
+        , kind = Some Schema.MoriArtifactKind.Package
+        , key = Some "heni-cli"
         }
       , Schema.MoriRef::{
         , namespace = "haskell-works"

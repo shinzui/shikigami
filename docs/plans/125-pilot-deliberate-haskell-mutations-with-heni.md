@@ -77,6 +77,12 @@ preserves the tool/dependency boundary and evidence requirements. No friction
 entry required triage for this plan. Further database, ownership-workflow or
 whole-service campaigns remain separate work, requiring their own fixture scope.
 
+The follow-up metadata correction declares `shinzui/heni:heni-cli` in
+`mori.dhall`, with Dev scope and version `==0.1.0.0` on the owning core package,
+plus the project dependency and typed package reference. This records an external
+development executable, not a linked Heni library. Mori validation resolves all
+257 dependencies without changing the schema pin or production dependency cohort.
+
 ## Context and Orientation
 
 `shikigami-core/src/Shikigami/Execution/Resources.hs` owns pure resource admission,
