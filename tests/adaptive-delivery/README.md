@@ -272,10 +272,16 @@ bundles as forensic evidence and never claims acceptance.
 
 Adapter controls use synthetic private values and make no paid model calls:
 
+The eight native preflight controls run in Haskell against the real executable,
+including environment isolation and secret redaction. Both the native controls
+and the remaining Python driver tests use `live-control.json`, which contains
+fake credentials and reserved invalid endpoints. Python integration coverage is
+consolidated in `tools/qualification/test_adaptive_delivery.py`.
+
 ```bash
 nix develop --no-write-lock-file -c cabal build workspace-linux-fixture
 nix develop --no-write-lock-file -c cabal run workspace-linux-fixture -- adaptive-contract
-nix develop --no-write-lock-file -c python3 tools/qualification/test_adaptive_live.py --native-preflight
+nix develop --no-write-lock-file -c cabal run workspace-linux-fixture -- adaptive-live-controls tests/adaptive-delivery/live-control.json
 python3 -m unittest discover -s tools/qualification -p 'test_*.py' -v
 ```
 

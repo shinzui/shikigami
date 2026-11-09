@@ -53,6 +53,11 @@ provenance:
       at: 2026-11-09T05:01:24Z
       mode: "implement"
       note: "Add admission-bound live worker receipt and root-envelope verifier controls; retain the unimplemented live dispatch and trial gate."
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-11-09T13:28:44Z
+      mode: "implement"
+      note: "Consolidate adaptive qualification coverage and prefer Haskell for native controls."
 ---
 
 # Qualify integrated adaptive autonomous delivery
@@ -98,6 +103,17 @@ make those inputs concrete. No actual model call has been made in this work.
 Mori now resolves dependency source/docs; FRIC-66 is resolved. FRIC-67 in
 `docs/friction-log/` records the current baseline's cold Linux dependency cache;
 the final candidate consumes its completed immutable output.
+
+On 2026-11-09, following the user's Haskell preference, the eight native
+preflight controls moved from Python to the Haskell fixture's
+`adaptive-live-controls` command. A shared key-free `live-control.json` replaces
+the Python configuration builder. Live Python integration tests now reside in
+`tools/qualification/test_adaptive_delivery.py`; overlapping helper checks are
+consolidated into full evidence-verifier cases. `AGENTS.md` records Haskell as
+the preferred language for implementation, tooling and tests. The consolidation
+passes eight native CLI controls on macOS, 56 remaining Python tests, shell
+syntax checks and formatting. This test-only change does not rerun or replace
+the historical Linux containment/recovery evidence, and does not close M3.
 
 Implementation resumed on 2026-11-09 UTC at source
 `217dd7bde45743d5ab425434783e479efa92e3a6`. The live worker verifier now accepts
@@ -445,7 +461,7 @@ live validation without model dispatch. The key-free controls are executable:
 ```bash
 nix develop --no-write-lock-file -c cabal build workspace-linux-fixture
 nix develop --no-write-lock-file -c cabal run workspace-linux-fixture -- adaptive-contract
-nix develop --no-write-lock-file -c python3 tools/qualification/test_adaptive_live.py --native-preflight
+nix develop --no-write-lock-file -c cabal run workspace-linux-fixture -- adaptive-live-controls tests/adaptive-delivery/live-control.json
 python3 -m unittest discover -s tools/qualification -p 'test_*.py' -v
 ```
 

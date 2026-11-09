@@ -219,7 +219,7 @@ for _ in {1..200}; do
 done
 jq -Rse 'split("\n") | any(.[]; try (fromjson | .event=="workspace.supervisor.started") catch false)' "$prefix/supervisor.log" >/dev/null
 if [[ "$mode" == --adaptive-only || "$mode" == --adaptive-transfer-only || "$mode" == --adaptive-live-only ]]; then
-  python3 -I "$repo/tools/qualification/test_adaptive_live.py" --native-preflight --executable "$prototype" >"$prefix/live-native-controls.log" 2>&1
+  "$prototype" adaptive-live-controls "$repo/tests/adaptive-delivery/live-control.json" >"$prefix/live-native-controls.log" 2>&1
   cat "$prefix/live-native-controls.log"
 fi
 if [[ "$mode" == --adaptive-live-only ]]; then

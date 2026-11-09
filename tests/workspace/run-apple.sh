@@ -110,7 +110,7 @@ export NIX_SSHOPTS="-F /dev/null -o BatchMode=yes -o StrictHostKeyChecking=yes -
 target="ssh-ng://root@127.0.0.1:$port?ssh-key=$taskdir/key"
 nix copy --no-check-sigs --to "$target" "$runtime" >"$taskdir/copy.log" 2>&1
 # Copy only explicit fixture sources; no host directories or credentials mount.
-tar --exclude='__pycache__' -cf - tests/workspace/run-linux.sh tests/workspace/fixture-oauth.py tests/workspace/prototype-payload.c tests/adaptive-delivery tools/qualification/adaptive-delivery.py tools/qualification/test_adaptive_delivery.py tools/qualification/test_adaptive_live.py nix/workspace-deadline.nix shikigami-workers/cbits/workspace-deadline.c schema/Agent.dhall agents/triage-note.dhall agents/skills/triage-note | container exec --interactive "$name" tar -xf - -C /var/lib/shikigami-workspace-fixture-code
+tar --exclude='__pycache__' -cf - tests/workspace/run-linux.sh tests/workspace/fixture-oauth.py tests/workspace/prototype-payload.c tests/adaptive-delivery nix/workspace-deadline.nix shikigami-workers/cbits/workspace-deadline.c schema/Agent.dhall agents/triage-note.dhall agents/skills/triage-note | container exec --interactive "$name" tar -xf - -C /var/lib/shikigami-workspace-fixture-code
 if [[ "$mode" == --adaptive-live-only ]]; then
   container exec "$name" install -d -m 700 /run/shikigami-live-config
   tar -C "$live_config" -cf - application.json limits.json | container exec --interactive "$name" tar -xf - -C /run/shikigami-live-config

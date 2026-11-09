@@ -4,7 +4,7 @@
 module Main (main) where
 
 import Accepted (Prepared (..), advanceUpgrade, executeGitWithBackend, executePrepared, prepareAccepted, prepareUpgrade)
-import Adaptive (adaptiveCase, adaptiveContract, livePreflight)
+import Adaptive (adaptiveCase, adaptiveContract, liveControls, livePreflight)
 import Auth.Biscuit (toPublic)
 import Continuing (continuingCase)
 import Control.Concurrent (threadDelay)
@@ -128,6 +128,7 @@ main = catch dispatch \(failure :: SomeException) -> do
               runSettings (setHost "127.0.0.1" (setPort number defaultSettings)) authority
         ["continuing", config, prefix, stage] -> checkPrefix prefix >> continuingCase config prefix stage
         ["adaptive-live-preflight", config, limits] -> explicitLiveConfiguration (livePreflight config limits)
+        ["adaptive-live-controls", fixture] -> liveControls fixture
         ["adaptive-contract"] -> adaptiveContract
         ["adaptive", config, prefix, stage] -> (if "-live" `Text.isSuffixOf` Text.pack stage then explicitLiveConfiguration else id) (checkPrefix prefix >> adaptiveCase config prefix stage)
         ["integration", config, prefix] -> checkPrefix prefix >> integrationCase config prefix

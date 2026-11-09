@@ -4,7 +4,7 @@
 -- The native adaptive controller, real continuing workers, configured mutable
 -- host, accepted tools and objective owner. Scripted stages replace model
 -- responses and the C13 issuer; explicit live stages use production composition.
-module Adaptive (adaptiveCase, adaptiveContract, livePreflight) where
+module Adaptive (adaptiveCase, adaptiveContract, livePreflight, liveControls) where
 
 import Accepted (Prepared (..), continueTools, prepareToolsFor)
 import Baikai.Api (Api (..))
@@ -23,6 +23,7 @@ import Baikai.Stream (liftCompleteToStream)
 import Baikai.Usage qualified as Usage
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async (concurrently)
+import Control.Exception (bracket)
 import Control.Monad (forM, forM_, unless, void, when)
 import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
@@ -156,11 +157,15 @@ import Shikigami.Workspace.Types
 import Shikigami.Workspace.Value
 import Shikumi.Tool qualified as Tool
 import Shikumi.Tool.Output (ToolOutput (..))
-import System.Directory (createDirectoryIfMissing, doesFileExist)
+import System.Directory (createDirectoryIfMissing, doesFileExist, getTemporaryDirectory, removeFile)
+import System.Environment (getEnvironment, getExecutablePath)
 import System.Exit (ExitCode (ExitFailure, ExitSuccess))
 import System.FilePath (takeFileName, (</>))
+import System.IO (hClose, openBinaryTempFile)
 import System.Posix.Process (exitImmediately)
-import System.Process (callProcess, readProcess, readProcessWithExitCode)
+import System.Process (callProcess, proc, readCreateProcessWithExitCode, readProcess, readProcessWithExitCode)
+import System.Process qualified as Process
+import System.Timeout (timeout)
 
 data Saved = Saved {objectiveId :: !ObjectiveId, job :: !RunJob}
   deriving stock (Generic)
@@ -706,6 +711,67 @@ livePreflight configPath limitsPath = do
   void (validateLiveConfig config settings ["adaptive", "producer", "producer-review", "consumer", "consumer-review"])
   built <- buildConfiguredActionAuthorizer Log.silentLogger config
   either (const (fail "live authorizer configuration refused")) (const (putStrLn "PASS live configuration preflight; no model dispatch")) built
+
+-- Exercise the actual CLI, including environment isolation and secret redaction.
+-- The shared input contains only fake credentials and reserved invalid endpoints.
+liveControls :: FilePath -> IO ()
+liveControls fixturePath = do
+  fixture <- Lazy.readFile fixturePath >>= either fail pure . Aeson.eitherDecode
+  application <- field "application" fixture
+  settings <- field "settings" fixture
+  executable <- getExecutablePath
+  environment <- getEnvironment
+  let injected = [("OPENAI_API_KEY", "PRIVATE_MARKER"), ("SHIKIGAMI_BEHAVIOR_PROVIDER", "stub")]
+      childEnvironment = injected <> filter (\(variable, _) -> variable `notElem` map fst injected) environment
+      edit [] f value = f value
+      edit (member : members) f (Aeson.Object object) = case KeyMap.lookup member object of
+        Just value -> Aeson.Object (KeyMap.insert member (edit members f value) object)
+        Nothing -> error "missing live control fixture key"
+      edit _ _ _ = error "invalid live control fixture path"
+      first f (Aeson.Array values) = Aeson.Array (Vector.imap (\index value -> if index == 0 then f value else value) values)
+      first _ _ = error "invalid live control model array"
+      remove member (Aeson.Object object) = Aeson.Object (KeyMap.delete member object)
+      remove _ _ = error "invalid live control object"
+      dropRole (Aeson.Array values) = Aeson.Array (Vector.init values)
+      dropRole _ = error "invalid live control role array"
+      limit dimension policy = edit ["limits"] \case
+        Aeson.Array values ->
+          Aeson.Array
+            ( fmap
+                ( \value -> case value of
+                    Aeson.Array pair | Vector.head pair == Aeson.String dimension -> Aeson.toJSON [Aeson.String dimension, policy]
+                    _ -> value
+                )
+                values
+            )
+        _ -> error "invalid live control limits"
+      unbounded = Aeson.object ["tag" .= ("ExplicitlyUnbounded" :: Text)]
+      cases =
+        [ ("configured HTTP", id, id, True),
+          ("stub behavior", edit ["behavior", "provider"] (const (Aeson.String "stub")), id, False),
+          ("disabled authority", edit ["authorization", "actions", "mode"] (const (Aeson.String "disabled")), id, False),
+          ("unbounded tokens", id, limit "Tokens" unbounded, False),
+          ("finite invoice ceiling", id, limit "CostMicroUsd" (Aeson.object ["tag" .= ("Limited" :: Text), "contents" .= (1 :: Int)]), False),
+          ("missing role", edit ["behavior", "decisionModels"] dropRole, id, False),
+          ("missing key", edit ["credentials", "providers", "openai"] (remove "api_key"), id, False),
+          ("missing timeout", edit ["behavior", "decisionModels"] (first (remove "timeout_ms")), id, False)
+        ]
+      temporary = do
+        directory <- getTemporaryDirectory
+        (path, handle) <- openBinaryTempFile directory "shikigami-live-control.json"
+        hClose handle
+        pure path
+  bracket temporary removeFile \appPath -> bracket temporary removeFile \limitsPath ->
+    forM_ cases \(name, changeApp, changeLimits, accepted) -> do
+      Lazy.writeFile appPath (Aeson.encode (changeApp application))
+      Lazy.writeFile limitsPath (Aeson.encode (changeLimits settings))
+      result <- timeout 20000000 (readCreateProcessWithExitCode ((proc executable ["adaptive-live-preflight", appPath, limitsPath]) {Process.env = Just childEnvironment}) "")
+      case result of
+        Just (status, output, errors) -> do
+          unless ((status == ExitSuccess) == accepted) (fail (name <> ": unexpected preflight status " <> show status))
+          when ("PRIVATE_MARKER" `Text.isInfixOf` Text.pack (output <> errors)) (fail (name <> ": secret leaked"))
+        Nothing -> fail (name <> ": preflight timed out")
+  putStrLn ("PASS " <> show (length cases) <> " native live preflight controls; no model dispatch")
 
 liveAuthorityIdentity :: AppConfig -> Aeson.Value
 liveAuthorityIdentity config = case config.actionAuthorization of

@@ -1,0 +1,142 @@
+{
+  "application": {
+    "authorization": {
+      "actions": {
+        "mode": "kikan",
+        "caller_id": "approved-trial",
+        "kikan_en": {
+          "base_url": "https://kikan.example.invalid"
+        },
+        "shomei": {
+          "base_url": "https://shomei.example.invalid",
+          "client_id": "qualification"
+        },
+        "en": {
+          "issuer_public_keys": "1:0000000000000000000000000000000000000000000000000000000000000000",
+          "schema_hashes": "sha256:test"
+        }
+      }
+    },
+    "credentials": {
+      "authorization": {
+        "actions": {
+          "shomei": {
+            "client_secret": "PRIVATE_MARKER"
+          }
+        }
+      },
+      "providers": {
+        "openai": {
+          "api_key": "PRIVATE_MARKER"
+        }
+      }
+    },
+    "behavior": {
+      "provider": "openai",
+      "model": "gpt-4o-mini",
+      "decisionModels": [
+        {
+          "alias": "adaptive",
+          "version": "1",
+          "bindingId": "reviewed-adaptive",
+          "bindingVersion": "1",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "thinking": "default",
+          "max_tokens": 1024,
+          "timeout_ms": 30000
+        },
+        {
+          "alias": "producer",
+          "version": "1",
+          "bindingId": "reviewed-producer",
+          "bindingVersion": "1",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "thinking": "default",
+          "max_tokens": 1024,
+          "timeout_ms": 30000
+        },
+        {
+          "alias": "producer-review",
+          "version": "1",
+          "bindingId": "reviewed-producer-review",
+          "bindingVersion": "1",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "thinking": "default",
+          "max_tokens": 1024,
+          "timeout_ms": 30000
+        },
+        {
+          "alias": "consumer",
+          "version": "1",
+          "bindingId": "reviewed-consumer",
+          "bindingVersion": "1",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "thinking": "default",
+          "max_tokens": 1024,
+          "timeout_ms": 30000
+        },
+        {
+          "alias": "consumer-review",
+          "version": "1",
+          "bindingId": "reviewed-consumer-review",
+          "bindingVersion": "1",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "thinking": "default",
+          "max_tokens": 1024,
+          "timeout_ms": 30000
+        }
+      ]
+    }
+  },
+  "settings": {
+    "durationSeconds": 900,
+    "limits": [
+      [
+        "ActiveWork",
+        {
+          "tag": "Limited",
+          "contents": 8
+        }
+      ],
+      [
+        "LifetimeDescendants",
+        {
+          "tag": "Limited",
+          "contents": 32
+        }
+      ],
+      [
+        "ModelAttempts",
+        {
+          "tag": "Limited",
+          "contents": 48
+        }
+      ],
+      [
+        "ToolAttempts",
+        {
+          "tag": "Limited",
+          "contents": 128
+        }
+      ],
+      [
+        "Tokens",
+        {
+          "tag": "Limited",
+          "contents": 2000000
+        }
+      ],
+      [
+        "CostMicroUsd",
+        {
+          "tag": "ExplicitlyUnbounded"
+        }
+      ]
+    ]
+  }
+}

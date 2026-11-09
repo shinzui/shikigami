@@ -1,3 +1,11 @@
+## Prefer Haskell
+
+Always prefer Haskell for new implementation, tooling, and tests. Test Haskell-owned
+behavior through its native APIs or executable. Consolidate overlapping coverage
+at the owning layer instead of adding a second domain model or validation suite
+in Python. Keep scripting glue small; retain Python tests only where they verify
+remaining Python behavior or an integration boundary that requires it.
+
 ## Haskell Record Fields
 
 Follow [the record patterns guide](mori://shinzui/haskell-jitsurei/docs/core-record-patterns) for Haskell records. In particular, do not prefix record fields with the type, constructor, or module name; rely on `DuplicateRecordFields` and use direct field names such as `status`, `runId`, or `baseUrl`.
