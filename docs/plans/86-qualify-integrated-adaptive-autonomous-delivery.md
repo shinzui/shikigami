@@ -43,6 +43,11 @@ provenance:
       at: 2026-11-06T21:09:33Z
       mode: "update"
       note: "Refresh the missing guarded live adapter, accepted native matrix and explicit production-authority/actual-model acceptance."
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-11-09T04:28:36Z
+      mode: "update"
+      note: "Validate remaining live dispatch, admitted-limit and evidence-verifier work; retain historical native acceptance and rerun 50 host controls."
 ---
 
 # Qualify integrated adaptive autonomous delivery
@@ -66,6 +71,17 @@ Implementation began on 2026-11-04 UTC at baseline
 - [x] Milestone 1 (2026-11-04): Reproducible two-repository fixture, bounded driver, 50 host controls and native objective admission.
 - [x] Milestone 2 (2026-11-04): Full native integration/recovery/refusal matrix, exact returned artifacts and a passing driver command.
 - [ ] Milestone 3: implement and qualify the guarded live adapter, then run an explicitly configured actual-model/production-authority trial and publish its live evidence and coverage updates.
+
+Refresh verified on 2026-11-08 at source `091c95abe5ef193d116b62e96298e9e952c731ab`:
+all 50 Python qualification tests pass (12.124 seconds), including the live-mode
+refusal and exact-artifact tamper controls. Source inspection confirms M3 is
+still unimplemented at the qualification boundary. The driver cannot admit a
+live run; the native consumer scripts both coordinator proposals and worker
+edits; the evidence verifier requires fixture provider bindings and fixed call
+counts. Private production configuration and the actual-model trial remain
+separate outstanding inputs/evidence. No Haskell rebuild, Linux runtime trial
+or paid model call was performed in this refresh. M1/M2 retain their dated
+acceptance below, not a new qualification of the current runtime.
 
 Plans 85, 96 and 99 are complete. They supply the native adaptive controller,
 configured transfer-aware workspace provider and real objective/checkpoint owner.
@@ -120,13 +136,13 @@ records this qualified cache boundary. FRIC-54, FRIC-55 and FRIC-56 in
 `docs/friction-log/` retain the rebuild/interruption costs.
 
 The [live missing-configuration control](../evidence/adaptive-delivery/live-blocked-control.json)
-returns blocked/exit 2 without model work. No live adapter/configuration is
-selected. The operator has been asked to choose the existing guarded API path
-or explicitly expand scope to qualify Codex CLI execution first. The installed
-CLI's authenticated foreground path does not establish durable response
-qualification, and external executor plan 78 remains excluded until scope is
-changed. Production authorization and approved live limits have not been
-supplied. Fixture models and the disposable issuer do not close UC-1/IR-16.
+records blocked/exit 2 without model work. The current tests also verify that a
+valid configuration with `mode: live` cannot fall back to the scripted native
+provider. Missing credentials are therefore not the only blocker: the live
+qualification adapter itself is absent. Implement the guarded API path described
+in M3; Codex CLI execution remains outside this plan's accepted scope. Production
+authorization and approved live limits still need to be supplied for a trial.
+Fixture models and the disposable issuer do not close UC-1/IR-16.
 
 
 ## Surprises & Discoveries
@@ -157,6 +173,19 @@ to kill between. The coupled result probe therefore targets the actual boundary:
 a committed result/wake with its result cursor still beyond `consumedCursor`,
 followed by controller death and reconstruction. It does not fabricate a lost
 wake by changing framework or application projections.
+
+
+The 2026-11-08 audit found a second live integration gap beyond the driver's
+unconditional refusal. `validate_worker_selections` in
+`tools/qualification/adaptive-delivery.py` requires provider/API/endpoint
+`stub`/`stub`/`in-process`, model ids equal to role aliases and
+`adaptive-fixture-` bindings. `native_evidence` also requires exact scripted
+session/result and call counts. `tests/workspace/prototype/Adaptive.hs` constructs
+proposal and tool-call responses itself and installs zero-usage evidence. These
+are intentional deterministic controls; merely enabling live dispatch would
+neither exercise actual-model coding through that consumer nor produce evidence
+the current verifier accepts. M3 must supply both real dispatch and a verifier
+bound to its admitted live selections, retaining the deterministic controls.
 
 
 ## Decision Log
@@ -308,6 +337,31 @@ private configuration validation, actual provider dispatch, fresh authority and 
 limits; prove absent/invalid configuration refuses before model work. Reuse the existing
 HTTP model path; adding Codex CLI execution remains separately scoped and unqualified.
 
+Implement the live qualification composition alongside the scripted consumer in
+`tests/workspace/prototype/Adaptive.hs` and expose its selection through the
+workspace fixture executable and `tests/workspace/run-apple.sh` /
+`tests/workspace/run-linux.sh`. Consume the existing production model and
+authorization composition rather than constructing responses or usage records
+in the fixture. The checked-in script currently enrolls 48 model attempts,
+a 1,200-second native cutoff and explicitly unbounded other resource dimensions;
+the 1,800-second driver timeout is only the host observation bound. A live
+configuration must feed the admitted root and dispatch policy, not merely change
+that host timeout. Validate explicit private configuration before live work and
+record the actual admitted limits alongside observed usage and uncertainty.
+
+Extend `tools/qualification/adaptive-delivery.py` and
+`tools/qualification/test_adaptive_delivery.py` with live configuration and
+evidence handling. Compare each actual transport tuple and receipt with the
+admitted live descriptor and root; do not require fixture aliases to be model ids,
+fixture bindings or exactly two calls per role. Keep exact repository artifacts,
+current acceptance revisions, unique settled call receipts and enforced limits
+mandatory. Preserve the fixture verifier and its full fault matrix unchanged in
+meaning. Add controls proving missing/invalid authority or limits dispatch no
+model work, scripted evidence cannot satisfy live mode, mismatched selections
+and unresolved root work refuse, and the returned exact artifact pair is checked.
+A real live pass must retain actual provider evidence; green adapter tests alone
+cannot close this milestone.
+
 With that adapter accepted and explicitly supplied live configuration, run the same finite fixture using at least one actual model-driven coding path, governed writable workspaces and the actual production authorization boundary. Set bounded attempts, duration, cost/token policy where enforceable, and exact local-edit/test scope; no publication or deployment is required. Validate service availability before starting and report absent configuration as blocked. This planning task does not create a deployment or incur live model work.
 
 Write `docs/evidence/adaptive-delivery/` summaries containing tested service/source versions, operation and selection ids, exact integrated artifacts, check outcomes, observed latency/resources/rework and uncertainty. Distinguish fixture mechanics from live behavior and do not generalize fleet-wide improvement from one trial. A failed live run preserves artifacts and exact unresolved scope and is not a passing gate. Update capability/use-case coverage and owning request status only after the corresponding evidence exists, using their declared OKF profiles and log commands. Complete ADR distillation across this initiative's storage, ownership, scheduling and acceptance decisions.
@@ -333,7 +387,9 @@ python3 -m unittest discover -s tools/qualification -p 'test_*.py' -v
 ```
 
 The build and tests must exit zero; tests report all cases passed. M1/M2 already have the named historical acceptance in Progress. These commands
-are requalification instructions for a changed candidate; this refresh did not rerun them. Add the named new test groups before using their success as evidence. If domain or workflow contracts change, scaffold with the checked workspace, stage/commit generated artifacts so the existing regeneration check compares the intended baseline, then run:
+are requalification instructions for a changed candidate. The 2026-11-08 refresh
+reran only the Python command (50 passed); the Haskell and Linux checks remain
+historical evidence. Add the named new test groups before using their success as evidence. If domain or workflow contracts change, scaffold with the checked workspace, stage/commit generated artifacts so the existing regeneration check compares the intended baseline, then run:
 
 ```bash
 TASTY_NUM_THREADS=2 nix develop --no-write-lock-file -c just keiro-gate "$MP14_BASE"
@@ -388,7 +444,7 @@ Use additive, schema-qualified migrations created through `just new-migration`; 
 ## Interfaces and Dependencies
 
 
-This plan owns only the fixture, qualification driver, evidence format and integration test/report changes. IR-11 owns real workspace tools and fences; IR-13 owns task/checkpoint state; plan 85 owns adaptive decisions and `IntegratedAcceptance`; plan 84 owns session events; plan 83 owns durable turns; plan 82 owns selections; plan 81 owns shared budgets. The providers and coordinator are delivered; a missing operator configuration is a visible blocked trial, not permission to bypass their boundaries. Provider/checkpoint adapter interface mismatches are coordinated in the master plan before changing owners. Generic deployment readiness, external executor plan 78, public HTTP control and signed attestation completion remain separate.
+This plan owns only the fixture, qualification driver, evidence format and integration test/report changes. IR-11 owns real workspace tools and fences; IR-13 owns task/checkpoint state; plan 85 owns adaptive decisions and `IntegratedAcceptance`; plan 84 owns session events; plan 83 owns durable turns; plan 82 owns selections; plan 81 owns shared budgets. The production provider and coordinator components are delivered; their live qualification composition and verifier remain M3 work. Missing operator configuration is a visible blocked trial, not permission to bypass their boundaries. Provider/checkpoint adapter interface mismatches are coordinated in the master plan before changing owners. Generic deployment readiness, external executor plan 78, public HTTP control and signed attestation completion remain separate.
 
 ## Revision Notes
 
@@ -404,3 +460,10 @@ owner transaction. The preserved acceptance is recovery without losing or
 repeating a committed result, now observed before consumer integration.
 
 Revision note (2026-11-06): Preserve accepted native M1/M2 evidence; identify the unconditional live-mode block and missing guarded adapter as real M3 work, reconcile driver/native cutoffs, and keep production authority/approved limits and actual-model proof open.
+
+
+Revision note (2026-11-08): Revalidated all 50 host controls and inspected the
+live driver, scripted consumer and evidence verifier at `091c95ab`. Preserve
+M1/M2 historical acceptance, distinguish missing live implementation from private
+operator inputs, and specify the live dispatch, admitted-limit and verifier work
+needed for M3 without expanding scope or claiming a new runtime qualification.
