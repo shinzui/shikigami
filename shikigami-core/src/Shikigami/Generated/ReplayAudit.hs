@@ -9,6 +9,7 @@
 module Shikigami.Generated.ReplayAudit (auditTargets) where
 
 import Shikigami.ExecutionLifecycle.Generated.EventStream qualified as ExecutionLifecycle
+import Shikigami.MandateLifecycle.Generated.EventStream qualified as MandateLifecycle
 import Shikigami.ObjectiveLifecycle.Generated.EventStream qualified as ObjectiveLifecycle
 import Shikigami.ObjectiveTurnAdmission.Generated.EventStream qualified as ObjectiveTurnAdmission
 import Shikigami.RunEvidence.Generated.EventStream qualified as RunEvidence
@@ -23,6 +24,12 @@ auditTargets =
         { eventStream = ExecutionLifecycle.executionLifecycleEventStream
         , category = Stream.categoryText ExecutionLifecycle.executionLifecycleCategory
         , mkStream = streamInCategory (Stream.categoryText ExecutionLifecycle.executionLifecycleCategory)
+        }
+  , SomeAuditTarget
+      AuditTarget
+        { eventStream = MandateLifecycle.mandateLifecycleEventStream
+        , category = Stream.categoryText MandateLifecycle.mandateLifecycleCategory
+        , mkStream = streamInCategory (Stream.categoryText MandateLifecycle.mandateLifecycleCategory)
         }
   , SomeAuditTarget
       AuditTarget

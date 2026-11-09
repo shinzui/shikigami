@@ -16,6 +16,7 @@ import Kiroku.Store.Effect (runStorePool)
 import Kiroku.Store.Error (StoreError)
 import Shikigami.ExecutionLifecycle.Generated.EventStream (executionLifecycleEventStream)
 import Shikigami.Log qualified as Log
+import Shikigami.MandateLifecycle.Generated.EventStream (mandateLifecycleEventStream)
 import Shikigami.ObjectiveLifecycle.Generated.EventStream (objectiveLifecycleEventStream)
 import Shikigami.RunEvidence.Catalog qualified as Evidence
 import Shikigami.RunEvidence.Generated.EventStream (runEvidenceEventStream)
@@ -28,11 +29,12 @@ registerRuntimeCatalog :: KirokuStore -> IO ()
 registerRuntimeCatalog store = do
   result <-
     runEff . runErrorNoCallStack @StoreError . runStorePool store $
-      executionLifecycleEventStream `seq`
-        workerSessionLifecycleEventStream `seq`
-          objectiveLifecycleEventStream `seq`
-            runEvidenceEventStream `seq`
-              Evidence.registerProjectionCatalog
+      mandateLifecycleEventStream `seq`
+        executionLifecycleEventStream `seq`
+          workerSessionLifecycleEventStream `seq`
+            objectiveLifecycleEventStream `seq`
+              runEvidenceEventStream `seq`
+                Evidence.registerProjectionCatalog
   case result of
     Right (Right _) -> pure ()
     failure -> ioError (userError ("runtime catalog registration failed: " <> show failure))

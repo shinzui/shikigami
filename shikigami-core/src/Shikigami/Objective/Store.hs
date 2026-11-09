@@ -16,6 +16,7 @@ module Shikigami.Objective.Store
     readObjectiveStatusTx,
     resolveAssignment,
     currentCheckpoint,
+    checkpointReceiptTx,
     readMutationReceipt,
     lookupCoordinationScope,
     coordinatorParentScope,
@@ -33,7 +34,9 @@ module Shikigami.Objective.Store
     trackerServiceQuery,
     trackerServiceTransaction,
     locked,
+    lockedEither,
     checkAccess,
+    checkAccessTx,
     lookupCommandReceipt,
     readReceipt,
     versionFor,
@@ -196,8 +199,14 @@ authorized access objective mutation = canRead access objective && (administrate
 
 checkAccess :: Access -> Objective -> Transaction ()
 checkAccess access objective = do
+  checkAccessTx access objective >>= require
+
+-- | Typed transaction-level authority for another application owner composing
+-- under this objective's lock. No owner-private exception crosses the adapter.
+checkAccessTx :: Access -> Objective -> Transaction (Either ObjectiveError ())
+checkAccessTx access objective = do
   now <- Tx.statement () currentTime
-  unless (now < access.expiresAt && canRead access objective) (abort ObjectiveDenied)
+  pure (if now < access.expiresAt && canRead access objective then Right () else Left ObjectiveDenied)
 
 read :: (ObjectiveEffects es) => Access -> ObjectiveId -> Eff es (Either ObjectiveError Objective)
 read access objective = protected do
@@ -410,6 +419,19 @@ history access objective after limit = protected do
     unless (receipt.objectiveId == objective && operationKey receipt.operationId == key && mutationFingerprintText receipt.fingerprint == fingerprint && objectivePayloadDigest payload == receipt.payloadDigest) (abort ObjectiveConflict)
     (actor, tag) <- require (historyAttribution receipt payload)
     pure (HistoryEntry receipt actor tag)
+
+-- | The exact accepted revision reference, for transactional checkpoint
+-- consumers already holding this owner's lock. Payload validation stays here.
+checkpointReceiptTx :: Objective -> Transaction (Either ObjectiveError Receipt)
+checkpointReceiptTx objective = do
+  rows <- Tx.statement (objectiveIdText objective.objectiveId, Text.pack (show (revisionNumber objective.revision - 1)), 1) selectHistory
+  pure case rows of
+    [(key, fingerprint, result, Just payload)] -> do
+      outcome <- either (const (Left ObjectiveConflict)) Right result
+      receipt <- outcome
+      unless (receipt.objectiveId == objective.objectiveId && receipt.revision == objective.revision && operationKey receipt.operationId == key && mutationFingerprintText receipt.fingerprint == fingerprint && objectivePayloadDigest payload == receipt.payloadDigest) (Left ObjectiveConflict)
+      pure receipt
+    _ -> Left ObjectiveConflict
 
 checkPage :: Access -> Int -> Transaction ()
 checkPage access limit = do
@@ -1008,11 +1030,18 @@ referenceFor :: ObjectiveId -> ObjectiveAssignmentId -> WS.ObjectiveRef
 referenceFor objective assignment = WS.ObjectiveRef (WorkerInput.workerCoordinate "shikigami-objective-v1") (WorkerInput.workerCoordinate (versionedDigest "shikigami.objective-assignment-ref/1" (toJSON (objective, assignment))))
 
 locked :: ObjectiveId -> Transaction Objective
-locked identifier = do
-  current <- readRow (objectiveIdText identifier) lockObjective >>= maybe (abort ObjectiveMissing) pure
-  requireDecoded (validateSnapshot current)
-  unless (current.objectiveId == identifier) (abort ObjectiveConflict)
-  pure current
+locked identifier = lockedEither identifier >>= require
+
+-- Typed composition for other application owners sharing this row lock.
+lockedEither :: ObjectiveId -> Transaction (Either ObjectiveError Objective)
+lockedEither identifier = do
+  row <- Tx.statement (objectiveIdText identifier) lockObjective
+  pure do
+    encoded <- maybe (Left ObjectiveMissing) Right row
+    current <- either (const (Left ObjectiveConflict)) Right encoded
+    either (const (Left ObjectiveConflict)) Right (validateSnapshot current)
+    unless (current.objectiveId == identifier) (Left ObjectiveConflict)
+    pure current
 
 saveSnapshot :: Objective -> Transaction ()
 saveSnapshot objective = do

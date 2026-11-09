@@ -7,6 +7,7 @@ module Shikigami.Coordination.Wake
     validateListener,
     prepareListener,
     registerTx,
+    unregisterTx,
     prepareCheckpointWakes,
     cutoffRequest,
     recheckRequest,
@@ -79,6 +80,11 @@ registerTx listener current notify = do
       case retained of
         Just True -> when (current > listener.after) notify >> pure (Right ())
         _ -> pure (Left ObjectiveConflict)
+
+-- Retire only the exact generation being stopped, under its objective lock.
+-- A stale owner cannot remove a replacement generation's subscription.
+unregisterTx :: Listener -> Transaction ()
+unregisterTx listener = Tx.statement (toJSON listener) (preparable "DELETE FROM shikigami.adaptive_checkpoint_listeners WHERE objective_id=$1->>'objectiveId' AND owner_name=$1->>'ownerName' AND owner_id=$1->>'ownerId' AND generation=($1->>'generation')::int AND listener=$1" jsonInput D.noResult)
 
 prepareCheckpointWakes :: (Store :> es, IOE :> es) => ObjectiveId -> Eff es (Either ObjectiveError (StateRevision "objective" -> Transaction ()))
 prepareCheckpointWakes objective = do

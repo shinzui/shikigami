@@ -2,12 +2,12 @@
 type: Improvement Request
 title: Support recurring objective supervision with durable checkpoints
 description: Resume an explicitly authorized ongoing objective from authoritative checkpoints and events, coalesce overlapping wakeups, and enforce cadence, shared limits, expiry, and stop conditions.
-timestamp: "2026-10-29T13:33:46Z"
+timestamp: "2026-11-09T02:36:16Z"
 generated:
   by: process:codex
   at: "2026-10-29T13:33:46Z"
 requestId: IR-18
-status: accepted
+status: completed
 targetPlan: docs/plans/87-supervise-recurring-objectives-from-current-durable-checkpoints.md
 origin: mori://shinzui/shikigami
 ---
@@ -16,14 +16,17 @@ origin: mori://shinzui/shikigami
 
 ## Status
 
-**Accepted; implementation planned but not started.** [MasterPlan 14](../masterplans/14-deliver-adaptive-autonomous-objectives-with-durable-workers.md) assigns
-explicit recurring mandates, checkpoint wakeups, coalescing and stop semantics to
-[plan 87](../plans/87-supervise-recurring-objectives-from-current-durable-checkpoints.md). This is a separate optional phase of
-[UC-1](../use-cases/adaptive-autonomous-delivery.md), following the finite coordinator
-foundations and the IR-13 checkpoint prerequisite. Finite delivery qualification does
-not require recurring automation to be enabled. The plan is not started. Its real checkpoint prerequisite is owned by
-[MasterPlan 17](../masterplans/17-track-durable-objectives-and-authoritative-assignment-checkpoints-without-rei.md) / [plan 99](../plans/99-supply-trusted-objective-associations-and-the-real-checkpoint-ownership-and-scope-providers.md), while [plan 85](../plans/85-adapt-durable-delivery-through-validated-coordinator-decisions.md) supplies the finite coordinator.
-Completed resource and recovery foundations in plans 81–83 do not start this recurring phase.
+**Completed on 2026-11-09 UTC under [plan 87](../plans/87-supervise-recurring-objectives-from-current-durable-checkpoints.md).**
+Explicit finite mandates, current-checkpoint cycles, event/timer coalescing,
+restart recovery, idle backoff, stop controls and retained root usage are
+implemented. Both continuing and fresh native modes provide read-only checkpoint
+supervision against the real objective owner. They do not install model/tool or
+workspace authority. [Acceptance evidence](../evidence/plan-87/acceptance.md)
+records native recovery, separate expiry/revocation/cancellation trials,
+uncertain holds, full package checks and compatible evolution. See
+[operator usage](../operations/recurring-objectives.md). Recurrence remains an
+explicit optional phase of [UC-1](../use-cases/adaptive-autonomous-delivery.md);
+the separate live coding trial remains in plan 86.
 
 ## Problem and current coverage
 

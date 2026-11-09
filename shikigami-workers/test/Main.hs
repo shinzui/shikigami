@@ -10,6 +10,7 @@ import Shikigami.Health.WorkerSpec qualified as HealthWorkerSpec
 import Shikigami.InitiativeAcceptanceSpec qualified as InitiativeAcceptanceSpec
 import Shikigami.Inspection.ConsumerSpec qualified as InspectionSpec
 import Shikigami.Integration.ConsumerRuntimeSpec qualified as ConsumerAppSpec
+import Shikigami.MandateTimerSpec qualified as MandateTimerSpec
 import Shikigami.Migrations.TestSupport (withShikigamiMigratedSuite)
 import Shikigami.ObjectiveTrackerWorkerSpec qualified as ObjectiveTrackerWorkerSpec
 import Shikigami.ProposeWorkSpec qualified as ProposeWorkSpec
@@ -78,6 +79,7 @@ suite = do
               StatusSpec.tests databaseFixture,
               WatchdogSweepSpec.tests databaseFixture,
               WatchdogQualificationSpec.tests databaseFixture,
+              MandateTimerSpec.tests databaseFixture,
               SchedulerSpec.tests databaseFixture,
               StreamInboxSpec.tests databaseFixture,
               ProposeWorkSpec.tests databaseFixture,

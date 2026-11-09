@@ -1,5 +1,9 @@
 # Bundle Update Log
 
+## 2026-11-09
+* **Update**: FRIC-65 accepted: Accept the bounded artifact-restoration workaround for this implementation; all worker assertions passed.
+* **Addition**: FRIC-65 records detour tooling friction with mori://shinzui/shikigami: Full worker suite rewrites another plan’s retained acceptance evidence
+
 ## 2026-11-06
 * **Update**: FRIC-64 resolved: The documented validation command now matches the existing file-only CLI contract.
 * **Addition**: FRIC-64 records nuisance documentation friction with mori://shinzui/shikigami/plans/112-run-the-watchdog-as-a-scheduled-flow-agent-with-its-own-principal-allowance-and-sinks: The agent validator accepts a file while the watchdog plan prescribes a directory

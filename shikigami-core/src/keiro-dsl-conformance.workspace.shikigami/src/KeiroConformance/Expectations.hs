@@ -40,5 +40,17 @@ expectedServiceConformanceFacts =
     ("workflow/ExecutionDriver/idField", "executionId"),
     ("workflow/ExecutionDriver/idVia", "executionWorkflowId"),
     ("workflow/ExecutionDriver/name", "shikigami.execution"),
-    ("workflow/ExecutionDriver/patches", "[]")
+    ("workflow/ExecutionDriver/patches", "[]"),
+    ("workflow/RecurringObjective/name", "shikigami.recurring-objective"),
+    ("workflow/RecurringObjective/idVia", "mandateStartWorkflowId"),
+    ("workflow/RecurringObjective/idField", "input"),
+    ("workflow/RecurringObjective/body", "[\"step:ingest-mandate\",\"step:read-mandate\",\"step:reconcile-mandate\",\"child:checkpoint-cycle\",\"step:publish-mandate-wake\",\"await:mandate-change\",\"continueAsNew:MandateSeed\"]"),
+    ("workflow/RecurringObjective/awaits", "[\"mandate-change\"]"),
+    ("workflow/RecurringObjective/patches", "[]"),
+    ("workflow/RecurringCheckpointCycle/name", "shikigami.recurring-checkpoint-cycle"),
+    ("workflow/RecurringCheckpointCycle/idVia", "cycleWorkflowId"),
+    ("workflow/RecurringCheckpointCycle/idField", "input"),
+    ("workflow/RecurringCheckpointCycle/body", "[\"await:ingest-mandate-cycle\",\"step:reconcile-current-checkpoint\"]"),
+    ("workflow/RecurringCheckpointCycle/awaits", "[\"ingest-mandate-cycle\"]"),
+    ("workflow/RecurringCheckpointCycle/patches", "[]")
   ]

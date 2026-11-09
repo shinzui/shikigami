@@ -1,0 +1,100 @@
+language keiro-dsl 6
+context shikigami
+layout collocated
+
+target mandate_rows {
+  schema = "shikigami"
+  table = "mandates"
+  reset = preserve
+}
+target mandate_receipts {
+  schema = "shikigami"
+  table = "mandate_receipts"
+  reset = preserve
+  depends-on = [ mandate_rows ]
+}
+target mandate_cycles {
+  schema = "shikigami"
+  table = "mandate_cycles"
+  reset = preserve
+  depends-on = [ mandate_rows ]
+}
+rebuild-group mandate_store {
+  targets = [ mandate_rows mandate_receipts mandate_cycles ]
+  order = [ mandate_rows mandate_receipts mandate_cycles ]
+}
+projection-owner mandate_writer {
+  source = aggregate MandateLifecycle
+  delivery = inline
+  group = mandate_store
+  targets = [ mandate_rows mandate_receipts mandate_cycles ]
+  order = 50
+  replay = live-only "Mandate admission requires fresh objective authority and retained roots"
+}
+readmodel mandate_lookup {
+  columns {
+    mandate_id text required
+    objective_id text required
+    state jsonb required
+  }
+  version = 1
+  shape = "fnv1a:13b794810e2a5b0d"
+  freshness = immediate
+  group = mandate_store
+  targets = [ mandate_rows mandate_receipts mandate_cycles ]
+  backing = mandate_rows
+}
+
+aggregate MandateLifecycle
+  regs
+    mandateId Text = ""
+    revision Int = 0
+  states Missing Active Stopped
+  command AdmitMandate { mandateId:Text }
+  command AdvanceMandate { mandateId:Text expected:Int revision:Int }
+  command StopMandate { mandateId:Text expected:Int revision:Int }
+  event MandateAdmitted = fields(AdmitMandate)
+  event MandateAdvanced = fields(AdvanceMandate)
+  event MandateStopped = fields(StopMandate)
+
+  Missing -- AdmitMandate -->
+    write mandateId := cmd.mandateId
+    emit MandateAdmitted
+    goto Active
+
+  Active -- AdvanceMandate -->
+    guard cmd.mandateId == reg.mandateId && cmd.expected == reg.revision && cmd.revision > reg.revision
+    write revision := cmd.revision
+    emit MandateAdvanced
+    goto Active
+
+  Active -- StopMandate -->
+    guard cmd.mandateId == reg.mandateId && cmd.expected == reg.revision && cmd.revision > reg.revision
+    write revision := cmd.revision
+    emit MandateStopped
+    goto Stopped
+
+  wire kind=ctorName fields=camelCase schemaVersion=1
+
+workflow RecurringObjective
+  name "shikigami.recurring-objective"
+  in MandateStart
+  out MandateClosed
+  id from input via mandateStartWorkflowId
+  body
+    step ingest-mandate -> MandateStart
+    step read-mandate -> MandateObservation
+    step reconcile-mandate -> MandateObservation
+    child checkpoint-cycle id input via cycleWorkflowId -> MandateObservation
+    step publish-mandate-wake -> MandateSubscription
+    await mandate-change -> Bool
+    continueAsNew MandateSeed
+
+workflow RecurringCheckpointCycle
+  name "shikigami.recurring-checkpoint-cycle"
+  in MandateCycleStart
+  out MandateObservation
+  id from input via cycleWorkflowId
+  body
+    await ingest-mandate-cycle -> MandateCycleStart
+    step reconcile-current-checkpoint -> MandateObservation

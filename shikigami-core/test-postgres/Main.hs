@@ -19,6 +19,7 @@ import Shikigami.InitiativeAssessmentSpec qualified as InitiativeAssessmentSpec
 import Shikigami.InitiativeInspectionSpec qualified as InitiativeInspectionSpec
 import Shikigami.InitiativeLedgerSpec qualified as InitiativeLedgerSpec
 import Shikigami.InitiativePolicySpec qualified as InitiativePolicySpec
+import Shikigami.MandateStoreSpec qualified as MandateStoreSpec
 import Shikigami.Migrations.TestSupport (withShikigamiMigratedSuite)
 import Shikigami.ObjectiveCheckpointSpec qualified as ObjectiveCheckpointSpec
 import Shikigami.ObjectiveStoreSpec qualified as ObjectiveStoreSpec
@@ -69,6 +70,7 @@ suite = withShikigamiMigratedSuite \databaseFixture ->
           AdaptiveDeliverySpec.tests databaseFixture,
           AdaptiveWorkflowSpec.tests databaseFixture,
           WorkflowInputSpec.tests databaseFixture,
+          MandateStoreSpec.tests databaseFixture,
           ObjectiveStoreSpec.tests databaseFixture,
           ObjectiveTrackerStoreSpec.tests databaseFixture,
           ObjectiveCheckpointSpec.tests databaseFixture,

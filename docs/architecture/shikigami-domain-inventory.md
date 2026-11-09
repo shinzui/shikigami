@@ -342,3 +342,18 @@ Public projections expose bounded previews, full-document digests and scoped
 Relay cursors. [ADR 0069](../adr/0069-external-trackers-propose-objective-changes-and-retain-delivery-uncertainty.md)
 and [operations](../operations/objective-trackers.md) record the authority and
 failure semantics.
+
+
+## Recurring objective supervision
+
+`domain/shikigami/mandate.keiro` owns `MandateLifecycle`, the mandate rows,
+immutable command/cycle receipts and the `mandate_lookup` catalog boundary.
+`Mandate.Store` composes the real objective owner lock, exact accepted checkpoint
+receipt and retained resource root. `RecurringObjective` and
+`RecurringCheckpointCycle` own the continuing and fresh native workflow facts;
+`Mandate.Workflow` executes their static labels and reference seeds. Existing
+objective listeners and the shared 100-row timer dispatcher supply generation-owned
+wake hints. These read-only checkpoint modes admit no model or workspace effects.
+The root and unknown-operation records remain with their current owners.
+[ADR 0121](../adr/0121-recurring-mandates-retain-authority-checkpoint-receipts-and-generation-owned-wakes.md)
+records admission, atomicity, stop and retention rules.

@@ -772,6 +772,40 @@
   - guard (structural): PAnd PInCtor PAnd PEq PEq
   - guard (pretty): (RecordTrackerTransition && (RecordTrackerTransition.objectiveId.ObjectiveId == objectiveId.ObjectiveId && RecordTrackerTransition.expected == revision))
 
+# Mandate lifecycle
+
+# Edge inspector
+
+### MandateLifecycleMissing
+
+- **MandateLifecycleMissing -> MandateLifecycleActive**
+  - edge index: 0
+  - input: AdmitMandate
+  - output: MandateAdmitted
+  - output fields: MandateAdmitted[field 0: AdmitMandate.mandateId]
+  - guard (structural): PInCtor
+  - guard (pretty): AdmitMandate
+  - written slots: mandateId
+
+### MandateLifecycleActive
+
+- **MandateLifecycleActive -> MandateLifecycleActive**
+  - edge index: 0
+  - input: AdvanceMandate
+  - output: MandateAdvanced
+  - output fields: MandateAdvanced[field 0: AdvanceMandate.mandateId; field 1: AdvanceMandate.expected; field 2: AdvanceMandate.revision]
+  - guard (structural): PAnd PInCtor PAnd PAnd PEq PEq PCmp CmpGt
+  - guard (pretty): (AdvanceMandate && ((AdvanceMandate.mandateId == mandateId && AdvanceMandate.expected == revision) && AdvanceMandate.revision > revision))
+  - written slots: revision
+- **MandateLifecycleActive -> MandateLifecycleStopped**
+  - edge index: 1
+  - input: StopMandate
+  - output: MandateStopped
+  - output fields: MandateStopped[field 0: StopMandate.mandateId; field 1: StopMandate.expected; field 2: StopMandate.revision]
+  - guard (structural): PAnd PInCtor PAnd PAnd PEq PEq PCmp CmpGt
+  - guard (pretty): (StopMandate && ((StopMandate.mandateId == mandateId && StopMandate.expected == revision) && StopMandate.revision > revision))
+  - written slots: revision
+
 # Run evidence
 
 # Edge inspector

@@ -13,3 +13,4 @@ spec shikigami/worker-session.keiro
 spec shikigami/continuing-worker.keiro
 spec shikigami/objective.keiro
 spec shikigami/objective-tracker.keiro
+spec shikigami/mandate.keiro

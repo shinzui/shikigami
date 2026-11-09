@@ -6,6 +6,7 @@ import Data.Text qualified as Text
 import Keiki.Core ((!))
 import Keiro.Inspection.Aggregate (AggregateInspectors, SomeAggregateInspector (..), aggregateInspector, aggregateInspectors)
 import Shikigami.ExecutionLifecycle.Generated.EventStream (executionLifecycleCategory, executionLifecycleEventStream)
+import Shikigami.MandateLifecycle.Generated.EventStream (mandateLifecycleCategory, mandateLifecycleEventStream)
 import Shikigami.ObjectiveLifecycle.Generated.EventStream (objectiveLifecycleCategory, objectiveLifecycleEventStream)
 import Shikigami.ObjectiveTurnAdmission.Generated.EventStream (objectiveTurnAdmissionCategory, objectiveTurnAdmissionEventStream)
 import Shikigami.RunEvidence.Generated.EventStream (runEvidenceCategory, runEvidenceEventStream)
@@ -27,6 +28,9 @@ aggregateCatalog =
         SomeAggregateInspector $
           aggregateInspector "WorkerSessionLifecycle" workerSessionLifecycleEventStream workerSessionLifecycleCategory \_ registers ->
             object ["sessionId" .= (registers ! #sessionId), "revision" .= (registers ! #revision)],
+        SomeAggregateInspector $
+          aggregateInspector "MandateLifecycle" mandateLifecycleEventStream mandateLifecycleCategory \_ registers ->
+            object ["mandateId" .= (registers ! #mandateId), "revision" .= (registers ! #revision)],
         SomeAggregateInspector $
           aggregateInspector "ObjectiveLifecycle" objectiveLifecycleEventStream objectiveLifecycleCategory \_ registers ->
             object ["objectiveId" .= (registers ! #objectiveId), "revision" .= (registers ! #revision)],

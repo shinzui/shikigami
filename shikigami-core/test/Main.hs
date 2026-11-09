@@ -61,6 +61,7 @@ import Shikigami.KanmonClientSpec qualified as KanmonClientSpec
 import Shikigami.KeiroSpecificationSpec qualified as KeiroSpecificationSpec
 import Shikigami.Log qualified as Log
 import Shikigami.LogSpec qualified as LogSpec
+import Shikigami.MandateSpec qualified as MandateSpec
 import Shikigami.ObjectiveSpec qualified as ObjectiveSpec
 import Shikigami.ObjectiveToolsSpec qualified as ObjectiveToolsSpec
 import Shikigami.ObjectiveTrackerSpec qualified as ObjectiveTrackerSpec
@@ -132,6 +133,7 @@ main =
           DriftProgramSpec.tests,
           WatchdogDriftCadenceSpec.tests,
           ObjectiveSpec.tests,
+          MandateSpec.tests,
           AdaptiveProposalSpec.tests,
           ObjectiveTrackerSpec.tests,
           ObjectiveToolsSpec.tests,

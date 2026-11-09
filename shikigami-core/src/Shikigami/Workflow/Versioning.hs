@@ -63,6 +63,8 @@ import Shikigami.ContinuingWorker.Generated.WorkflowRuntime qualified as Continu
 import Shikigami.DanwaConversation.Generated.WorkflowRuntime qualified as DanwaConversation
 import Shikigami.Execution.Capacity (RuntimeLimits (..), capacityLimit, defaultRuntimeLimits)
 import Shikigami.ExecutionDriver.Generated.WorkflowRuntime qualified as Execution
+import Shikigami.RecurringCheckpointCycle.Generated.WorkflowRuntime qualified as MandateCycle
+import Shikigami.RecurringObjective.Generated.WorkflowRuntime qualified as Mandate
 
 -- | Every patch id this deployment has active, read from the checked
 -- specification rather than written here.
@@ -89,6 +91,8 @@ shikigamiActivePatches =
     <> Execution.declaredPatches
     <> ContinuingWorker.declaredPatches
     <> Adaptive.declaredPatches
+    <> Mandate.declaredPatches
+    <> MandateCycle.declaredPatches
 
 -- | The options every first run of a Shikigami workflow uses.
 shikigamiWorkflowRunOptions :: AppEnv -> WorkflowRunOptions

@@ -8,6 +8,7 @@ import Shikigami.Agent.Workflow qualified as Agent
 import Shikigami.App (AppEffects)
 import Shikigami.Coordination.Workflow qualified as Adaptive
 import Shikigami.Execution.Driver qualified as Execution
+import Shikigami.Mandate.Workflow qualified as Mandate
 import Shikigami.WorkerSession.Workflow qualified as WorkerSession
 
 -- | AgentRun's registry includes its durable Approval child. Conversation adds
@@ -18,4 +19,5 @@ workflowRegistry agents conversations =
     `Map.union` Conversation.conversationRegistry conversations
     `Map.union` Execution.executionRegistry (Agent.executionRuntime agents)
     `Map.union` Adaptive.registry (Agent.adaptiveRuntime agents)
+    `Map.union` Mandate.registry agents.objectives
     `Map.union` WorkerSession.sessionRegistry (Agent.workerSessionRuntime agents)

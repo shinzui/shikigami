@@ -62,6 +62,7 @@ tests =
                 "executions",
                 "workers",
                 "objectives",
+                "mandates",
                 "watchdog",
                 "proposals"
               ],
@@ -113,6 +114,20 @@ tests =
         case execParserPure adminPrefs adminInfo ["executions", "inspect", "execution-1", "--json", "--after", "20", "--limit", "5"] of
           Success (chosen, _) -> assertBool "execution action selected" (not (isNothing chosen))
           _ -> assertBool "executions did not parse" False,
+      testCase "mandates expose explicit versioned operator controls" do
+        mapM_
+          (\args -> case execParserPure adminPrefs adminInfo args of Success (Just _, _) -> pure (); _ -> assertBool (unwords args) False)
+          [ ["mandates", "create", "--operation-key", "admit", "--file", "mandate.json", "--json"],
+            ["mandates", "inspect", "release-evidence", "--json"],
+            ["mandates", "update", "release-evidence", "--operation-key", "update", "--expected-revision", "3", "--file", "schedule.json"],
+            ["mandates", "cancel", "release-evidence", "--operation-key", "cancel", "--expected-revision", "4"]
+          ]
+        mapM_
+          (\args -> case execParserPure adminPrefs adminInfo args of Failure _ -> pure (); _ -> assertBool (unwords args) False)
+          [ ["mandates", "create", "--file", "mandate.json"],
+            ["mandates", "cancel", "release-evidence", "--operation-key", "cancel"],
+            ["mandates", "cancel", "release-evidence", "--operation-key", "cancel", "--expected-revision", "-1"]
+          ],
       testCase "workers inspect accepts bounded assignment pagination" do
         case execParserPure adminPrefs adminInfo ["workers", "inspect", "session-1", "--json", "--after", "20", "--limit", "5"] of
           Success (chosen, _) -> assertBool "worker action selected" (not (isNothing chosen))

@@ -6,11 +6,13 @@ module Shikigami.Generated.Conformance
 
 import Shikigami.Generated.StructuralConformance qualified as StructuralConformance
 import Shikigami.ExecutionLifecycle.Generated.Harness qualified as ExecutionLifecycle
+import Shikigami.MandateLifecycle.Generated.Harness qualified as MandateLifecycle
 import Shikigami.ObjectiveLifecycle.Generated.Harness qualified as ObjectiveLifecycle
 import Shikigami.ObjectiveTurnAdmission.Generated.Harness qualified as ObjectiveTurnAdmission
 import Shikigami.RunEvidence.Generated.Harness qualified as RunEvidence
 import Shikigami.WorkerSessionLifecycle.Generated.Harness qualified as WorkerSessionLifecycle
 import Shikigami.ExecutionLookup.Generated.ReadModelHarness qualified as ExecutionLookup
+import Shikigami.MandateLookup.Generated.ReadModelHarness qualified as MandateLookup
 import Shikigami.ObjectiveLookup.Generated.ReadModelHarness qualified as ObjectiveLookup
 import Shikigami.ObjectiveTrackerLookup.Generated.ReadModelHarness qualified as ObjectiveTrackerLookup
 import Shikigami.ObjectiveTurnLookup.Generated.ReadModelHarness qualified as ObjectiveTurnLookup
@@ -22,17 +24,21 @@ import Shikigami.Approval.Generated.WorkflowFacts qualified as Approval
 import Shikigami.ContinuingWorker.Generated.WorkflowFacts qualified as ContinuingWorker
 import Shikigami.DanwaConversation.Generated.WorkflowFacts qualified as DanwaConversation
 import Shikigami.ExecutionDriver.Generated.WorkflowFacts qualified as ExecutionDriver
+import Shikigami.RecurringCheckpointCycle.Generated.WorkflowFacts qualified as RecurringCheckpointCycle
+import Shikigami.RecurringObjective.Generated.WorkflowFacts qualified as RecurringObjective
 
 runServiceConformanceChecks :: IO [(String, Bool)]
 runServiceConformanceChecks =
   pure (
     [("structural/" <> fact, passed) | (fact, passed) <- StructuralConformance.structuralConformanceAssertions]
     <> [("aggregate/ExecutionLifecycle/" <> fact, passed) | (fact, passed) <- ExecutionLifecycle.harnessAssertions]
+    <> [("aggregate/MandateLifecycle/" <> fact, passed) | (fact, passed) <- MandateLifecycle.harnessAssertions]
     <> [("aggregate/ObjectiveLifecycle/" <> fact, passed) | (fact, passed) <- ObjectiveLifecycle.harnessAssertions]
     <> [("aggregate/ObjectiveTurnAdmission/" <> fact, passed) | (fact, passed) <- ObjectiveTurnAdmission.harnessAssertions]
     <> [("aggregate/RunEvidence/" <> fact, passed) | (fact, passed) <- RunEvidence.harnessAssertions]
     <> [("aggregate/WorkerSessionLifecycle/" <> fact, passed) | (fact, passed) <- WorkerSessionLifecycle.harnessAssertions]
     <> [("readmodel/execution_lookup/" <> fact, passed) | (fact, passed) <- ExecutionLookup.readModelFactResults]
+    <> [("readmodel/mandate_lookup/" <> fact, passed) | (fact, passed) <- MandateLookup.readModelFactResults]
     <> [("readmodel/objective_lookup/" <> fact, passed) | (fact, passed) <- ObjectiveLookup.readModelFactResults]
     <> [("readmodel/objective_tracker_lookup/" <> fact, passed) | (fact, passed) <- ObjectiveTrackerLookup.readModelFactResults]
     <> [("readmodel/objective_turn_lookup/" <> fact, passed) | (fact, passed) <- ObjectiveTurnLookup.readModelFactResults]
@@ -51,3 +57,5 @@ serviceConformanceFacts =
     <> [("workflow/ContinuingWorker/" <> fact, value) | (fact, value) <- ContinuingWorker.workflowFactValues]
     <> [("workflow/DanwaConversation/" <> fact, value) | (fact, value) <- DanwaConversation.workflowFactValues]
     <> [("workflow/ExecutionDriver/" <> fact, value) | (fact, value) <- ExecutionDriver.workflowFactValues]
+    <> [("workflow/RecurringCheckpointCycle/" <> fact, value) | (fact, value) <- RecurringCheckpointCycle.workflowFactValues]
+    <> [("workflow/RecurringObjective/" <> fact, value) | (fact, value) <- RecurringObjective.workflowFactValues]

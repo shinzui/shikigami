@@ -29,6 +29,9 @@
     "Initiative",
     "Inspection",
     "Integration",
+    "Mandate",
+    "MandateLifecycle",
+    "MandateLookup",
     "Memory",
     "Objective",
     "ObjectiveLifecycle",
@@ -39,6 +42,8 @@
     "PracticeReview",
     "Program",
     "ProjectionCatalog",
+    "RecurringCheckpointCycle",
+    "RecurringObjective",
     "Repository",
     "Router",
     "RunEvidence",
@@ -114,7 +119,8 @@
     "Shikigami.Workers.Shutdown",
     "Shikigami.Workers.Subscription",
     "Shikigami.Workflow.Registry",
-    "Shikigami.Workflow.Versioning"
+    "Shikigami.Workflow.Versioning",
+    "Shikigami.Server.Command.Mandates"
   ],
   "generatedRoot": "Shikigami.Generated"
 }

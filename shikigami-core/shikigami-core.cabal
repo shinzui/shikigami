@@ -204,6 +204,27 @@ library
     Shikigami.Integration.Danwa
     Shikigami.Log
     Shikigami.Log.Correlation
+    Shikigami.Mandate.Catalog
+    Shikigami.Mandate.Cycle
+    Shikigami.Mandate.Live
+    Shikigami.Mandate.Store
+    Shikigami.Mandate.Timer
+    Shikigami.Mandate.Types
+    Shikigami.Mandate.Wake
+    Shikigami.Mandate.Workflow
+    Shikigami.MandateLifecycle.BehaviorHoles
+    Shikigami.MandateLifecycle.Conformance
+    Shikigami.MandateLifecycle.Generated.BehaviorContract
+    Shikigami.MandateLifecycle.Generated.Codec
+    Shikigami.MandateLifecycle.Generated.Domain
+    Shikigami.MandateLifecycle.Generated.EventStream
+    Shikigami.MandateLifecycle.Generated.Harness
+    Shikigami.MandateLifecycle.Generated.Projection
+    Shikigami.MandateLifecycle.Generated.Transducer
+    Shikigami.MandateLookup.Generated.ReadModel
+    Shikigami.MandateLookup.Generated.ReadModelHarness
+    Shikigami.MandateLookup.Generated.ReadModelTable
+    Shikigami.MandateLookup.ReadModelHoles
     Shikigami.Memory.Access
     Shikigami.Memory.AliasStore
     Shikigami.Memory.Scope
@@ -280,6 +301,10 @@ library
     Shikigami.Program.Registry
     Shikigami.Program.Runtime
     Shikigami.Program.Task
+    Shikigami.RecurringCheckpointCycle.Generated.WorkflowFacts
+    Shikigami.RecurringCheckpointCycle.Generated.WorkflowRuntime
+    Shikigami.RecurringObjective.Generated.WorkflowFacts
+    Shikigami.RecurringObjective.Generated.WorkflowRuntime
     Shikigami.Repository
     Shikigami.Router.Catalog
     Shikigami.Router.Decision
@@ -609,6 +634,7 @@ test-suite shikigami-core-test
     Shikigami.KanmonClientSpec
     Shikigami.KeiroSpecificationSpec
     Shikigami.LogSpec
+    Shikigami.MandateSpec
     Shikigami.ObjectiveSpec
     Shikigami.ObjectiveToolsSpec
     Shikigami.ObjectiveTrackerSpec
@@ -727,6 +753,7 @@ test-suite shikigami-core-postgres-test
     Shikigami.InitiativeInspectionSpec
     Shikigami.InitiativeLedgerSpec
     Shikigami.InitiativePolicySpec
+    Shikigami.MandateStoreSpec
     Shikigami.ObjectiveCheckpointSpec
     Shikigami.ObjectiveStoreSpec
     Shikigami.ObjectiveTrackerStoreSpec

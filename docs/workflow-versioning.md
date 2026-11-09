@@ -529,6 +529,8 @@ computed label families; a duplicated line-number census quickly becomes stale.
 | `shikigami.execution` | [Execution driver](../domain/shikigami/execution-driver.keiro) | [ExecutionDriver facts](../shikigami-core/src/Shikigami/ExecutionDriver/Generated/WorkflowFacts.hs) | [Execution/Driver.hs](../shikigami-core/src/Shikigami/Execution/Driver.hs) |
 | `shikigami.worker-session` | [Continuing worker](../domain/shikigami/continuing-worker.keiro) | [ContinuingWorker facts](../shikigami-core/src/Shikigami/ContinuingWorker/Generated/WorkflowFacts.hs) | [WorkerSession/Workflow.hs](../shikigami-core/src/Shikigami/WorkerSession/Workflow.hs) |
 | `shikigami.adaptive-delivery` | [Adaptive delivery](../domain/shikigami/adaptive-delivery.keiro) | [AdaptiveDelivery facts](../shikigami-core/src/Shikigami/AdaptiveDelivery/Generated/WorkflowFacts.hs) | [Coordination/Workflow.hs](../shikigami-core/src/Shikigami/Coordination/Workflow.hs) |
+| `shikigami.recurring-objective` | [Recurring objective](../domain/shikigami/mandate.keiro) | [RecurringObjective facts](../shikigami-core/src/Shikigami/RecurringObjective/Generated/WorkflowFacts.hs) | [Mandate/Workflow.hs](../shikigami-core/src/Shikigami/Mandate/Workflow.hs) |
+| `shikigami.recurring-checkpoint-cycle` | [Fresh checkpoint cycle](../domain/shikigami/mandate.keiro) | [RecurringCheckpointCycle facts](../shikigami-core/src/Shikigami/RecurringCheckpointCycle/Generated/WorkflowFacts.hs) | [Mandate/Workflow.hs](../shikigami-core/src/Shikigami/Mandate/Workflow.hs) |
 
 The approval child journals `ingest-approval`, `notify`, and its `decision` wait.
 All agent runs use this child. Plan 65 removed the unused pre-release approval

@@ -44,6 +44,8 @@ import Shikigami.Directory.Store (RunSkip (..), SkipStage (TriggerStage), record
 import Shikigami.Execution.Identity (newExecutionRootId)
 import Shikigami.Execution.Timer qualified as ExecutionTimer
 import Shikigami.Log qualified as Log
+import Shikigami.Mandate.Timer qualified as MandateTimer
+import Shikigami.Mandate.Wake qualified as MandateWake
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.Trigger.Enqueue (enqueueRunJobTx, enqueueScheduledRun, scheduleRunIdempotencyKey, scheduledRunJob)
 import Shikigami.Trigger.Schedule (CatchUpPolicy (..), CronSchedule, nextDue)
@@ -237,6 +239,7 @@ shikigamiTimerFallback env now row@TimerRow {payload = timerPayload, timerId = T
   case timerPayloadKind timerPayload of
     Just kind
       | kind == scheduleTimerKind -> scheduleFireAction env now row
+      | kind == MandateWake.timerKind -> MandateTimer.fireAction row
       | kind == AdaptiveWake.cutoffTimerKind -> AdaptiveWake.cutoffFireAction row
       | kind == ExecutionTimer.observationTimerKind -> ExecutionTimer.observationFireAction row
       | kind == Approval.approvalTimeoutKind -> Approval.approvalTimeoutFireAction row

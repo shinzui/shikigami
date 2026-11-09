@@ -28,6 +28,11 @@ provenance:
       at: 2026-11-06T21:09:33Z
       mode: "update"
       note: "Seed existing recurrence milestones and discharge completed provider/coordinator prerequisites without crediting mandates."
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-11-09T01:18:56Z
+      mode: "implement"
+      note: "Implement explicit mandate authority, recoverable checkpoint cycles and shared timer integration."
 ---
 
 # Supervise recurring objectives from current durable checkpoints
@@ -46,19 +51,34 @@ Maintain an explicitly authorized ongoing objective across bounded cycles withou
 ## Progress
 
 
-Implementation has not started. Plan 85 and the real objective/checkpoint provider
-from plans 98–102 are Complete; recurrence is independently eligible. Existing watchdog
-schedules and standing-policy proposals do not create recurring mandates.
+2026-11-09 UTC: Complete from baseline
+`751afde63a726ebf7256073e746e4eaa00dab95a`. The assembled qualification passes
+787 core, 681 PostgreSQL, 353 worker and 114 server cases. The recurrence group
+contains 16 PostgreSQL cases against real objective/checkpoint and resource
+owners, three pure cases and two serving-timer cases. Build, migration isolation,
+conformance and compatible evolution pass. Bounded evidence and commands are in
+[acceptance](../evidence/plan-87/acceptance.md). Existing watchdog schedules and
+standing-policy proposals remain separate from mandates.
 
-- [ ] M1: explicit versioned recurring admission/store and create/inspect/update/cancel commands with authority, finite expiry and a retained resource root.
-- [ ] M2: event/timer coalescing, current-checkpoint cycles and atomic/recoverable watermark/progress/wake publication with restart proof.
-- [ ] M3: no-delta backoff, expiry/revocation/cancellation, unknown-work retention, inspection and full real-provider recurrence qualification.
+- [x] M1 (2026-11-09): explicit versioned admission, checked lifecycle/store and operator create/inspect/update/cancel controls enforce current authority, finite expiry, bounded sources and a retained finite root. Pure/store and native parser/inspection controls pass.
+- [x] M2 (2026-11-09): both native modes accept current checkpoint receipts, coalesce events/timers, persist watermark/progress/desired-due together and recover wake publication and late child input. The two serving-timer cases and 16-case store/native group pass; the gate reports 11 additive findings, replay-neutral, and 210 passing conformance controls.
+- [x] M3 (2026-11-09): idle backoff, terminal completion/expiry/revocation/cancellation, retained uncertain reservations, bounded inspection, native admission recovery and full real-provider qualification pass. Operations, aggregate inspection, diagrams and ADR 0121 are updated; FRIC-65 is triaged as accepted.
 
 
 ## Surprises & Discoveries
 
 
-None recorded during implementation.
+The objective owner's accepted receipt can be read under the same objective lock
+as a mandate commit. The supported whole-checkpoint source therefore consumes
+at most one current snapshot, with its exact accepted receipt, without a separate
+progress-intent transaction or a timestamp-based cursor. No-delta observations
+do not write objective progress and cannot wake themselves indefinitely.
+
+A fresh child can be discovered after its spawn commits but before its parent
+publishes input. Its static ingestion label is therefore an input await rather
+than a failing step. The native recovery control first suspends that exact child
+without a checkpoint, then publishes its admitted reference and proves one
+accepted cycle across replay.
 
 
 ## Decision Log
@@ -66,11 +86,40 @@ None recorded during implementation.
 
 2026-10-10: Keep recurrence an explicit optional phase after finite coordinator mechanics. Reuse the timer/event runtime and persist desired wakes with checkpoints; wake payloads name current-state records and never become authority.
 
+2026-11-09: Deliver governed read-only checkpoint supervision through both a
+continuing controller and an independently resumed fresh native cycle. Both use
+the real objective owner and retain the same root; neither launches model/tool
+work. The initial evidence adapter is the whole current objective checkpoint,
+with explicit source and event bounds. These are new workflow families, so no
+existing durable body or historical patch branch is changed. Future effectful
+adapters must consume the existing coordinator/session/executor authorities,
+not gain authority from a timer payload. ADR 0121 records this contract.
+
 
 ## Outcomes & Retrospective
 
 
-To be filled during implementation. Do not claim request completion until every acceptance case below, including stated external integration gates, has evidence.
+The explicit recurring service is implemented and qualified with the real
+objective/checkpoint, assignment authority and resource owners. Both continuing
+and fresh native modes supervise the current whole checkpoint read-only. Useful
+changes retain exact accepted receipt references; idle cycles retain useful state
+without objective writes, workers, model audits or user notifications. Shared
+roots, unknown holds and current owner fences survive replay and stops. The
+registered runtime repairs event/timer publication and late child input.
+
+All three milestones are complete. [Acceptance evidence](../evidence/plan-87/acceptance.md)
+records the full package, native recovery and deployment checks. The ordinary
+gate reports eleven additive findings, no breaking change, replay-neutral, and
+210 passing generated controls. No existing workflow body or result codec was
+replaced. [ADR 0121](../adr/0121-recurring-mandates-retain-authority-checkpoint-receipts-and-generation-owned-wakes.md)
+distills the authority, whole-checkpoint consumption, retention and wake protocol.
+Plan 86's separate live coding trial remains outside this child.
+
+[FRIC-65](../friction-log/65-full-worker-suite-rewrites-another-plan-s-retained-acceptance-evidence.md)
+is accepted: the full worker suite rewrites Plan 113 evidence with new fixture
+identities. Its historical artifact was restored after regression qualification;
+this child's evidence is retained separately. Making that writer opt-in remains
+outside recurrence scope.
 
 
 ## Context and Orientation
@@ -152,3 +201,8 @@ Use additive, schema-qualified migrations created through `just new-migration`; 
 This plan owns mandate fields, state transitions, wake/cycle ids, watermark/backoff semantics, mandate timer kind and inspection/control surface. It consumes IR-13 current objective/checkpoint state, plan 85's bounded coordinator cycle and acceptance contract, plan 84 worker events/fences, plan 83 execution history and plan 81 root accounting. It does not own general task state, session mailboxes, a new scheduler or another adaptive proposal engine. Expose `admitMandate`, `acceptWake`, `commitCycleProgress`, `stopMandate` and `inspectMandate` as typed commands with immutable operation keys and version checks. Preserve the existing timer claim-token and generation contracts rather than updating private timer rows. The terminal state rejects all future admission even if a stale schedule continues to fire.
 
 Revision note (2026-11-06): Seed the three existing milestone outcomes, discharge delivered provider/coordinator prerequisites, distinguish watchdog/standing-policy scheduling from mandates, and point recurrence at real objective owners and bounded fixture commands. No recurring implementation is credited.
+
+Revision note (2026-11-09): Implement and qualify explicit mandates with the
+whole-checkpoint source and two read-only native cycle modes. Record ordinary
+compatible evolution, current-state recovery, finite root/authority control,
+operator operations and the completed real-provider acceptance gate.

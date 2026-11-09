@@ -233,6 +233,7 @@ test-suite shikigami-workers-test
     Shikigami.InitiativeAcceptanceSpec
     Shikigami.Inspection.ConsumerSpec
     Shikigami.Integration.ConsumerRuntimeSpec
+    Shikigami.MandateTimerSpec
     Shikigami.ObjectiveTrackerWorkerSpec
     Shikigami.ProposeWorkSpec
     Shikigami.SchedulerSpec

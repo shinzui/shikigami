@@ -1,12 +1,14 @@
 -- | Hand-owned bridge to the live evidence boundary. Never reconstruct rich
 -- payloads from lifecycle history or accept an unbound application callback.
-module Shikigami.ProjectionCatalog.ProjectionCatalogHoles (applyRunEvidenceWriterLive, applyExecutionWriterLive, applyWorkerSessionWriterLive, applyObjectiveWriterLive, applyObjectiveTurnWriterLive, applyObjectiveTrackerWriterLive) where
+module Shikigami.ProjectionCatalog.ProjectionCatalogHoles (applyRunEvidenceWriterLive, applyExecutionWriterLive, applyWorkerSessionWriterLive, applyObjectiveWriterLive, applyObjectiveTurnWriterLive, applyObjectiveTrackerWriterLive, applyMandateWriterLive) where
 
 import Control.Exception (throw)
 import Hasql.Transaction qualified as Tx
 import Kiroku.Store.Types (RecordedEvent)
 import Shikigami.Execution.Live (MissingLiveExecution (..))
 import Shikigami.ExecutionLifecycle.Generated.Domain (ExecutionLifecycleEvent)
+import Shikigami.Mandate.Live (MissingLiveMandate (..))
+import Shikigami.MandateLifecycle.Generated.Domain (MandateLifecycleEvent)
 import Shikigami.Objective.Live (MissingLiveObjective (..))
 import Shikigami.ObjectiveLifecycle.Generated.Domain (ObjectiveLifecycleEvent)
 import Shikigami.ObjectiveTurnAdmission.Generated.Domain (ObjectiveTurnAdmissionEvent)
@@ -34,3 +36,6 @@ applyObjectiveTurnWriterLive _ _ = throw MissingLiveObjective
 
 applyObjectiveTrackerWriterLive :: ObjectiveLifecycleEvent -> RecordedEvent -> Tx.Transaction ()
 applyObjectiveTrackerWriterLive _ _ = throw MissingLiveObjective
+
+applyMandateWriterLive :: MandateLifecycleEvent -> RecordedEvent -> Tx.Transaction ()
+applyMandateWriterLive _ _ = throw MissingLiveMandate

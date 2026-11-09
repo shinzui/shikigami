@@ -64,6 +64,7 @@ import Shikigami.Server.Command.DanwaSpike (runDanwaSpike)
 import Shikigami.Server.Command.EnqueueRun (runEnqueueRun)
 import Shikigami.Server.Command.Executions (runExecutionsInspect)
 import Shikigami.Server.Command.Grants (runGrantsGrant, runGrantsList, runGrantsRevoke)
+import Shikigami.Server.Command.Mandates
 import Shikigami.Server.Command.ObjectiveTrackers
 import Shikigami.Server.Command.Objectives
 import Shikigami.Server.Command.Ops (opsConfigSources, opsInvocationParser, runOps)
@@ -177,6 +178,7 @@ adminSubcommands =
     ("executions", command "executions" executionsInfo),
     ("workers", command "workers" workersInfo),
     ("objectives", command "objectives" objectivesInfo),
+    ("mandates", command "mandates" mandatesInfo),
     ("watchdog", command "watchdog" watchdogInfo),
     ("proposals", command "proposals" proposalsInfo)
   ]
@@ -214,6 +216,24 @@ policyInfo = info (subparser commands <**> helper) (progDesc "Install, revoke an
     installing = (\path format -> (runPolicyInstall path format, [])) <$> strOption (long "file" <> metavar "FILE") <*> json
     revoking = (\policy expected format -> (runPolicyRevoke policy expected format, [])) <$> strArgument (metavar "POLICY") <*> option auto (long "expected-revision" <> metavar "N") <*> json
     listing = (\principal cursor size format -> (runPolicyList principal cursor size format, [])) <$> optional (strOption (long "principal" <> metavar "PRINCIPAL")) <*> optional (strOption (long "after" <> metavar "POLICY")) <*> option auto (long "limit" <> value 50 <> metavar "N") <*> json
+
+mandatesInfo :: ParserInfo AdminAction
+mandatesInfo = info (subparser commands <**> helper) (progDesc "Explicitly admit, inspect, update or cancel finite recurring authority")
+  where
+    commands =
+      command "create" (info (create <**> helper) (progDesc "Admit an explicit recurring mandate"))
+        <> command "inspect" (info (inspect <**> helper) (progDesc "Inspect recurrence, checkpoint, owner and unresolved work"))
+        <> command "update" (info (update <**> helper) (progDesc "Authorize a schedule revision"))
+        <> command "cancel" (info (cancel <**> helper) (progDesc "Close new admission and retain accepted work"))
+    operation = option (eitherReader (either (Left . Text.unpack) Right . parseOperationId . Text.pack)) (long "operation-key" <> metavar "KEY")
+    identifier = strArgument (metavar "MANDATE")
+    revision = option revisionReader (long "expected-revision" <> metavar "REVISION")
+    file = strOption (long "file" <> metavar "FILE")
+    json = switch (long "json")
+    create = (\key path format -> (runMandatesCreate key path format, [])) <$> operation <*> file <*> json
+    inspect = (\key format -> (runMandatesInspect key format, [])) <$> identifier <*> json
+    update = (\key op expected path format -> (runMandatesUpdate key op expected path format, [])) <$> identifier <*> operation <*> revision <*> file <*> json
+    cancel = (\key op expected format -> (runMandatesCancel key op expected format, [])) <$> identifier <*> operation <*> revision <*> json
 
 objectivesInfo :: ParserInfo AdminAction
 objectivesInfo = info (subparser commands <**> helper) (progDesc "Create, inspect and update authoritative objectives as the configured operator")

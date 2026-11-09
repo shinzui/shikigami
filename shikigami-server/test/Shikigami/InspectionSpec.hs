@@ -52,6 +52,7 @@ tests fixture =
                     "ExecutionLifecycle" -> ["executionId", "pendingReceipts", "revision"]
                     "WorkerSessionLifecycle" -> ["revision", "sessionId"]
                     "ObjectiveLifecycle" -> ["objectiveId", "revision"]
+                    "MandateLifecycle" -> ["mandateId", "revision"]
                     "ObjectiveTurnAdmission" -> ["admissionKey"]
                     "RunEvidence" -> ["runEvidenceId", "runId"]
                     _ -> []
