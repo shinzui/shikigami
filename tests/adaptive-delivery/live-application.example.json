@@ -1,0 +1,94 @@
+{
+  "authorization": {
+    "actions": {
+      "mode": "kikan",
+      "caller_id": "REQUIRED_APPROVED_CALLER",
+      "kikan_en": {
+        "base_url": "https://REQUIRED_KIKAN_HOST"
+      },
+      "shomei": {
+        "base_url": "https://REQUIRED_SHOMEI_HOST",
+        "client_id": "REQUIRED_CLIENT_ID"
+      },
+      "en": {
+        "issuer_public_keys": "REQUIRED_ISSUER_KEYSET",
+        "schema_hashes": "REQUIRED_ACCEPTED_SCHEMA_HASHES"
+      }
+    }
+  },
+  "credentials": {
+    "authorization": {
+      "actions": {
+        "shomei": {
+          "client_secret": "REQUIRED_CLIENT_SECRET"
+        }
+      }
+    },
+    "providers": {
+      "openai": {
+        "api_key": "REQUIRED_MODEL_API_KEY"
+      }
+    }
+  },
+  "behavior": {
+    "provider": "openai",
+    "model": "REQUIRED_EXACT_CATALOG_MODEL",
+    "decisionModels": [
+      {
+        "alias": "adaptive",
+        "version": "1",
+        "bindingId": "qualification-adaptive",
+        "bindingVersion": "1",
+        "provider": "openai",
+        "model": "REQUIRED_EXACT_CATALOG_MODEL",
+        "thinking": "default",
+        "max_tokens": 1024,
+        "timeout_ms": 30000
+      },
+      {
+        "alias": "producer",
+        "version": "1",
+        "bindingId": "qualification-producer",
+        "bindingVersion": "1",
+        "provider": "openai",
+        "model": "REQUIRED_EXACT_CATALOG_MODEL",
+        "thinking": "default",
+        "max_tokens": 1024,
+        "timeout_ms": 30000
+      },
+      {
+        "alias": "producer-review",
+        "version": "1",
+        "bindingId": "qualification-producer-review",
+        "bindingVersion": "1",
+        "provider": "openai",
+        "model": "REQUIRED_EXACT_CATALOG_MODEL",
+        "thinking": "default",
+        "max_tokens": 1024,
+        "timeout_ms": 30000
+      },
+      {
+        "alias": "consumer",
+        "version": "1",
+        "bindingId": "qualification-consumer",
+        "bindingVersion": "1",
+        "provider": "openai",
+        "model": "REQUIRED_EXACT_CATALOG_MODEL",
+        "thinking": "default",
+        "max_tokens": 1024,
+        "timeout_ms": 30000
+      },
+      {
+        "alias": "consumer-review",
+        "version": "1",
+        "bindingId": "qualification-consumer-review",
+        "bindingVersion": "1",
+        "provider": "openai",
+        "model": "REQUIRED_EXACT_CATALOG_MODEL",
+        "thinking": "default",
+        "max_tokens": 1024,
+        "timeout_ms": 30000
+      }
+    ]
+  }
+}

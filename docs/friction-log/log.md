@@ -1,6 +1,9 @@
 # Bundle Update Log
 
 ## 2026-11-09
+* **Update**: FRIC-67 resolved: Retain the completed immutable cache and passing final native fixture evidence.
+* **Addition**: FRIC-67 records slowdown tooling friction with mori://shinzui/shikigami: Current baseline requires a cold native dependency cache
+* **Update**: FRIC-66 resolved: Resume plan 86 provider integration with restored dependency lookup.
 * **Addition**: FRIC-66 records blocked environment friction with mori://shinzui/mori: Mori registry unavailable through configured PostgreSQL tunnel
 * **Update**: FRIC-65 accepted: Accept the bounded artifact-restoration workaround for this implementation; all worker assertions passed.
 * **Addition**: FRIC-65 records detour tooling friction with mori://shinzui/shikigami: Full worker suite rewrites another plan’s retained acceptance evidence

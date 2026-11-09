@@ -1,14 +1,15 @@
--- Fixture-only executable: never installed in the production runtime. All paths,
--- credentials, repositories and identities below belong to a disposable guest.
+-- Qualification-only executable: never installed in the production runtime.
+-- Storage and repositories belong to a disposable guest. Live credentials are
+-- supplied explicitly and remain outside the command payload namespace.
 module Main (main) where
 
 import Accepted (Prepared (..), advanceUpgrade, executeGitWithBackend, executePrepared, prepareAccepted, prepareUpgrade)
-import Adaptive (adaptiveCase, adaptiveContract)
+import Adaptive (adaptiveCase, adaptiveContract, livePreflight)
 import Auth.Biscuit (toPublic)
 import Continuing (continuingCase)
 import Control.Concurrent (threadDelay)
 import Control.Exception (IOException, SomeException, catch, fromException, throwIO)
-import Control.Monad (unless, void)
+import Control.Monad (forM_, unless, void)
 import Data.Aeson qualified as Aeson
 import Data.ByteString qualified as Bytes
 import Data.ByteString.Lazy qualified as Lazy
@@ -85,7 +86,7 @@ import Shikigami.Workspace.Systemd qualified as Systemd
 import Shikigami.Workspace.Types
 import Shikigami.Workspace.Value
 import System.Directory (createDirectory, doesFileExist)
-import System.Environment (getArgs)
+import System.Environment (getArgs, getEnvironment, unsetEnv)
 import System.Exit (exitFailure)
 import System.FilePath ((</>))
 import System.IO.Error (ioeGetErrorString)
@@ -126,8 +127,9 @@ main = catch dispatch \(failure :: SomeException) -> do
               authority <- authorityApplication prefix
               runSettings (setHost "127.0.0.1" (setPort number defaultSettings)) authority
         ["continuing", config, prefix, stage] -> checkPrefix prefix >> continuingCase config prefix stage
+        ["adaptive-live-preflight", config, limits] -> explicitLiveConfiguration (livePreflight config limits)
         ["adaptive-contract"] -> adaptiveContract
-        ["adaptive", config, prefix, stage] -> checkPrefix prefix >> adaptiveCase config prefix stage
+        ["adaptive", config, prefix, stage] -> (if "-live" `Text.isSuffixOf` Text.pack stage then explicitLiveConfiguration else id) (checkPrefix prefix >> adaptiveCase config prefix stage)
         ["integration", config, prefix] -> checkPrefix prefix >> integrationCase config prefix
         ["workflow", config, prefix, stage] -> checkPrefix prefix >> workflowCase config prefix stage
         ["native-provision", config, spec] -> nativeProvision config spec
@@ -406,3 +408,13 @@ fixtureRevision value = either (error . show) id (parseRevision value)
 
 fixtureAssignment :: AssignmentText.Text -> AssignmentKey
 fixtureAssignment = either (error . show) id . parseAssignmentKey
+
+-- A qualification trial's source is its explicitly copied private AppConfig.
+-- Keep runtime/loader settings, but exclude ambient credentials and every
+-- bound configuration override before the production parser snapshots them.
+explicitLiveConfiguration :: IO a -> IO a
+explicitLiveConfiguration action = do
+  environment <- getEnvironment
+  let runtimeNames = ["PATH", "HOME", "TMPDIR", "USER", "LANG", "LC_ALL", "NIX_SSL_CERT_FILE", "SSL_CERT_FILE", "LD_LIBRARY_PATH", "DYLD_LIBRARY_PATH", "DYLD_FALLBACK_LIBRARY_PATH", "GHC_ENVIRONMENT"]
+  forM_ environment \(name, _) -> unless (name `elem` runtimeNames) (unsetEnv name)
+  action

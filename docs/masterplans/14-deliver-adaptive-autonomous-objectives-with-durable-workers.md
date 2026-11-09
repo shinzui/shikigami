@@ -72,6 +72,11 @@ provenance:
       at: 2026-11-09T01:46:08Z
       mode: "update"
       note: "Record EP-7 recurring checkpoint implementation and its independently qualified provider boundary."
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-11-09T06:07:58Z
+      mode: "implement"
+      note: "Record EP-6 live composition progress and the remaining actual-model/trusted-billing qualification gate."
 ---
 
 # Deliver adaptive autonomous objectives with durable workers
@@ -175,6 +180,20 @@ Coordinate those prerequisite deliverables with their separate owning plans when
 ## Progress
 
 
+2026-11-09 UTC: EP-6's guarded real-HTTP/production-authority composition,
+private input validation and live evidence consumer are implemented. Full host build,
+1,935 requested Haskell cases, 62 Python controls and eight native preflight
+controls on macOS and Linux pass. The immutable Linux candidate also passes
+the full fixture in 448.297 seconds, with six independently restored Git bundles
+and both exact integrated trees; [adapter evidence](../evidence/adaptive-delivery/live-adapter-qualification.md)
+retains the candidate and scope. The actual
+trial remains open for approved private configuration, usage limits and trusted
+billing reconciliation. Current HTTP handlers estimate invoice cost, and the
+resource owner deliberately retains unknown cost; model credentials alone
+cannot close this gate. EP-6 owns consuming real receipts in qualification;
+resource/selection owners retain settlement authority. No owner contract,
+acceptance requirement, dependency edge or child completion status changes.
+
 2026-11-09 UTC: EP-7 is Complete. Explicit mandates, finite retained roots, both
 native read-only checkpoint cycle modes, event/timer recovery and honest stops
 are qualified against real objective and resource owners. Its
@@ -188,9 +207,10 @@ the overall initiative remains in progress.
 Its full native repository/recovery/refusal matrix and independently restored
 exact artifacts pass; [native qualification](../evidence/adaptive-delivery/native-qualification.md)
 and [retained facts](../evidence/adaptive-delivery/native-facts.json) name the
-driver and immutable runtime. M3 still needs the guarded live adapter: the current driver unconditionally blocks
-live mode and cannot be enabled by a credential alone. After that path is implemented/
-qualified, the actual-model trial needs production authority and approved limits. No such trial was run
+driver and immutable runtime. At that checkpoint M3 still needed the guarded live
+adapter: the driver then unconditionally blocked live mode and could not be enabled
+by a credential alone. The later live implementation is recorded above; the actual
+trial still requires production authority, approved limits and trusted billing. No such trial was run
 for this reconciliation. EP-7 is independently eligible and Not Started;
 watchdog scheduling and standing-policy admission do not implement recurrence.
 
@@ -260,6 +280,14 @@ acceptance review; EP-5 still requires the whole EP-4. No child status or hard
 dependency edge changes. EP-6 retains adaptive and live coding acceptance.
 
 ## Surprises & Discoveries
+
+EP-6's live composition confirms that terminal HTTP evidence can include actual
+tokens and model identity while invoice cost remains estimated. The accepted
+resource owner keeps that dimension unknown even under an unbounded invoice
+policy; private credentials do not constitute billing reconciliation. The live
+trial must consume trusted settlement evidence or retain an honest unresolved
+verdict. The existing selection owner already exposes conservative reconciliation;
+no fake zero-cost adapter or weakened objective acceptance is introduced.
 
 EP-5's full native hierarchy exposed two shared producer gaps: continuing-worker
 children needed their verified objective association (FRIC-52), and externally
@@ -346,12 +374,12 @@ recurring child gates. See [objective operations](../operations/objective-tracki
 ## Outcomes & Retrospective
 
 
-EP-1 through EP-5 are complete. EP-6 has qualified the native integrated repository
-delivery and still needs the guarded live adapter and authorized actual-model trial;
+EP-1 through EP-5 are complete. EP-6 has qualified native integrated repository
+delivery and implemented the guarded live composition; the authorized actual-model trial and trusted billing reconciliation remain open;
 EP-7 has qualified explicit read-only recurrence against delivered objective providers. EP-5 preserves
 existing populations with real patch branches, and its shared native producer
-and capacity contracts are distilled in ADRs 0108–0111. Overall completion still
-requires both remaining children and the acceptance ownership matrix above.
+and capacity contracts are distilled in ADRs 0108–0111. Overall completion still requires EP-6's remaining actual-trial/billing gates
+and the acceptance ownership matrix above.
 Finite integrated delivery may be qualified before recurrence without marking
 the entire initiative complete.
 
@@ -360,3 +388,8 @@ Revision note (2026-11-06): Refresh EP-6's missing live adapter and accepted nat
 Revision note (2026-11-09): Close EP-7 with real-owner recurring checkpoint,
 restart, stop and resource-retention qualification. EP-6 retains its separate
 live adapter/trial gate; no other dependency or completion claim changes.
+
+Revision note (2026-11-09): Record EP-6's implemented live composition and passing
+host/Linux guard and fixture checks, while retaining the actual-model trial and
+trusted invoice reconciliation as open acceptance. Existing owner contracts and
+child status/dependency edges remain unchanged.

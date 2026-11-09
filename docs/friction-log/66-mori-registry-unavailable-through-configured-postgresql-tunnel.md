@@ -6,12 +6,17 @@ generated:
   by: "codex-cli/gpt-6.1-sol"
   at: "2026-11-09T04:57:23Z"
 frictionId: FRIC-66
-status: logged
+status: "resolved"
 impact: blocked
 kind: environment
 origin: "mori://shinzui/shikigami"
 affects: "mori://shinzui/mori"
 plan: "docs/plans/86-qualify-integrated-adaptive-autonomous-delivery.md"
+resolution: "The operator restored the configured Sungkyung PostgreSQL tunnel; Mori registry list, search, show and docs now succeed."
+amended:
+  - by: "codex-cli/gpt-6.1-sol"
+    at: "2026-11-09T05:29:59Z"
+    change: "Resume plan 86 provider integration with restored dependency lookup."
 ---
 # Mori registry unavailable through configured PostgreSQL tunnel
 

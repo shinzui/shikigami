@@ -5,7 +5,7 @@ set -eEuo pipefail
 export LANG=C.UTF-8 LC_ALL=C.UTF-8
 mode=${1:-}
 runtime=${2:-}
-[[ $# == 2 && ( "$mode" == --prototype || "$mode" == --provision || "$mode" == --git || "$mode" == --workflow || "$mode" == --workflow-only || "$mode" == --workspace-gates || "$mode" == --qualify || "$mode" == --continuing-only || "$mode" == --handoff-only || "$mode" == --ownership-only || "$mode" == --adaptive-only || "$mode" == --adaptive-transfer-only ) && "$runtime" == /nix/store/* ]] || { echo 'Usage: run-linux.sh MODE RUNTIME'; exit 64; }
+[[ $# == 2 && ( "$mode" == --prototype || "$mode" == --provision || "$mode" == --git || "$mode" == --workflow || "$mode" == --workflow-only || "$mode" == --workspace-gates || "$mode" == --qualify || "$mode" == --continuing-only || "$mode" == --handoff-only || "$mode" == --ownership-only || "$mode" == --adaptive-only || "$mode" == --adaptive-transfer-only || "$mode" == --adaptive-live-only ) && "$runtime" == /nix/store/* ]] || { echo 'Usage: run-linux.sh MODE RUNTIME'; exit 64; }
 [[ $(uname -s) == Linux && $(id -u) == 0 && -f /run/shikigami-workspace-prototype.disposable ]] || { echo 'REFUSED: a marked disposable Linux guest running as root is required'; exit 78; }
 [[ $(ps -p 1 -o comm=) == systemd && $(stat -fc %T /sys/fs/cgroup) == cgroup2fs ]]
 sudo -n true
@@ -28,7 +28,12 @@ if [[ "$mode" == --git || "$mode" == --workflow || "$mode" == --workspace-gates 
 cleanup() {
   status=$?
   trap - EXIT ERR
-  if [[ "$mode" == --adaptive-only || "$mode" == --adaptive-transfer-only ]] && "$pg_started"; then
+  if [[ "$mode" == --adaptive-only || "$mode" == --adaptive-transfer-only || "$mode" == --adaptive-live-only ]] && "$pg_started"; then
+    if [[ "$mode" == --adaptive-live-only ]]; then
+      /usr/bin/psql "$connection" -Atc "SELECT COALESCE(jsonb_agg(jsonb_build_object('rootId',root_id,'state',state)),'[]'::jsonb) FROM shikigami.execution_roots" >"$prefix/adaptive-live-roots.json" || true
+      /usr/bin/psql "$connection" -Atc "SELECT COALESCE(jsonb_agg(jsonb_build_object('assignmentId',assignment_id,'state',state)),'[]'::jsonb) FROM shikigami.execution_selections" >"$prefix/adaptive-live-assignment-state.json" || true
+      /usr/bin/psql "$connection" -Atc "SELECT COALESCE(jsonb_agg(jsonb_build_object('attemptId',attempt_id,'state',state)),'[]'::jsonb) FROM shikigami.execution_selection_calls" >"$prefix/adaptive-live-call-state.json" || true
+    fi
     if /usr/bin/psql "$connection" -Atc "SELECT COALESCE(jsonb_agg(binding ORDER BY resource),'[]'::jsonb) FROM shikigami.workspace_bindings WHERE binding->>'repository' IN ('mori://fixture/adaptive-producer','mori://fixture/adaptive-consumer')" >"$prefix/adaptive-bindings.json" &&
       python3 -I "$repo/tests/adaptive-delivery/archive.py" --prefix "$prefix" >"$prefix/adaptive-archive.log" 2>&1; then
       :
@@ -132,11 +137,15 @@ nix --extra-experimental-features 'nix-command flakes' copy --no-check-sigs --to
 ln -s "$tool/bin/busybox" "$prefix/root/bin/env"
 cc -static -Wall -Wextra -Werror -O2 -DHOST_SECRET_PATH="\"$prefix/host-secret\"" -DSIBLING_SECRET_PATH="\"$prefix/sibling/secret\"" -o "$prefix/root/bin/probe" "$repo/tests/workspace/prototype-payload.c"
 chmod 555 "$prefix/root/bin/probe"
-if [[ "$mode" == --adaptive-only || "$mode" == --adaptive-transfer-only ]]; then
+if [[ "$mode" == --adaptive-only || "$mode" == --adaptive-transfer-only || "$mode" == --adaptive-live-only ]]; then
   cc -static -Wall -Wextra -Werror -O2 -o "$prefix/root/bin/adaptive-check" "$repo/tests/adaptive-delivery/validate.c"
   chmod 555 "$prefix/root/bin/adaptive-check"
 fi
-image_digest=$( { printf '%s\n' "$tool" "$guard"; sha256sum "$prefix/root/bin/probe"; if [[ "$mode" == --adaptive-only || "$mode" == --adaptive-transfer-only ]]; then sha256sum "$prefix/root/bin/adaptive-check"; fi; } | sha256sum | cut -d ' ' -f1)
+image_digest=$( { printf '%s\n' "$tool" "$guard"; sha256sum "$prefix/root/bin/probe"; if [[ "$mode" == --adaptive-only || "$mode" == --adaptive-transfer-only || "$mode" == --adaptive-live-only ]]; then sha256sum "$prefix/root/bin/adaptive-check"; fi; } | sha256sum | cut -d ' ' -f1)
+if [[ "$mode" == --adaptive-live-only ]]; then
+  authority_port=0
+  oauth_port=0
+else
 # The fixture HTTP issuer listens only inside this guest on loopback.
 authority_port=$(python3 - <<'PY'
 import socket
@@ -156,17 +165,27 @@ with socket.socket() as listener:
 PORT
 )
 systemd-run --quiet --unit="$oauth" -p Type=exec -p Restart=no -p UMask=0077 -p StandardOutput=null -p "StandardError=file:$prefix/oauth.log" -- /usr/bin/python3 "$repo/tests/workspace/fixture-oauth.py" "$oauth_port" "$authority_port" "$prefix/http-status.log"
-python3 - "$prefix" "$connection" "$authority_port" "$runtime" "$guard" "$image_digest" "$oauth_port" "$repo" <<'PY'
+fi
+python3 - "$prefix" "$connection" "$authority_port" "$runtime" "$guard" "$image_digest" "$oauth_port" "$repo" "$mode" <<'PY'
 import json,sys
 from pathlib import Path
-prefix,connection,port,runtime,guard,digest,oauth_port,repo=sys.argv[1:]
+prefix,connection,port,runtime,guard,digest,oauth_port,repo,mode=sys.argv[1:]
 p=Path(prefix)
 (p/'directory.json').write_text(json.dumps([{'principal_id':'agent_01h000000000000000'+name,'handle':name,'lifecycle':'active','display_name':'Workspace fixture'} for name in ['triage','coordinator','successor','producer','producer-review','consumer','consumer-review','consumer-successor']]))
-config={'database':{'connection_string':connection},'directory':{'mode':'file','file':{'path':str(p/'directory.json')},'refresh_interval_seconds':1},'workspace':{'supervisor':{'socketPath':str(p/'rpc/supervisor.sock'),'users':[0],'workers':4,'timeoutSeconds':5}},'authorization':{'actions':{'mode':'kikan','kikan_en':{'base_url':f'http://127.0.0.1:{oauth_port}'},'shomei':{'base_url':f'http://127.0.0.1:{oauth_port}','client_id':'fixture'},'en':{'issuer_public_keys':(p/'issuer-public.txt').read_text(),'schema_hashes':'workspace-fixture-schema'},'caller_id':'workspace-fixture'}},'credentials':{'authorization':{'actions':{'shomei':{'client_secret':'fixture-secret'}}}}}
+config={'database':{'connection_string':connection},'directory':{'mode':'file','file':{'path':str(p/'directory.json')},'refresh_interval_seconds':1},'workspace':{'supervisor':{'socketPath':str(p/'rpc/supervisor.sock'),'users':[0],'workers':4,'timeoutSeconds':5}},'authorization':{'actions':{'mode':'kikan','kikan_en':{'base_url':f'http://127.0.0.1:{oauth_port}'},'shomei':{'base_url':f'http://127.0.0.1:{oauth_port}','client_id':'fixture'},'en':{'issuer_public_keys':((p/'issuer-public.txt').read_text() if mode!='--adaptive-live-only' else ''),'schema_hashes':'workspace-fixture-schema'},'caller_id':'workspace-fixture'}},'credentials':{'authorization':{'actions':{'shomei':{'client_secret':'fixture-secret'}}}}}
 config['agents']={'directory':str(Path(repo)/'agents')}
+if mode=='--adaptive-live-only':
+    # This file was explicitly copied for live mode, never inherited from HOME.
+    production=json.loads(Path('/run/shikigami-live-config/application.json').read_text())
+    assert set(production)=={'authorization','credentials','behavior'}
+    config.update(production)
 (p/'config.json').write_text(json.dumps(config))
 (p/'native-spec.json').write_text(json.dumps({'format':1,'directory':prefix,'image':{'rootDirectory':str(p/'root'),'rootIdentity':'sha256:'+digest,'environmentExecutable':'/bin/env','deadlineExecutable':guard+'/bin/shikigami-workspace-deadline','collectorExecutable':runtime+'/bin/shikigami-workspace-collector'}}))
 PY
+if [[ "$mode" == --adaptive-live-only ]]; then
+  cp /run/shikigami-live-config/limits.json "$prefix/live-limits.json"
+  "$prototype" adaptive-live-preflight "$config" "$prefix/live-limits.json" >"$prefix/live-preflight.log" 2>&1
+fi
 "$prototype" native-provision "$config" "$prefix/native-spec.json" >"$prefix/provision.log" 2>&1
 cat "$prefix/provision.log"
 if [[ "$mode" == --provision ]]; then echo 'Coupled native provision probe passed (2 cases); full Linux prototype remains open.'; exit 0; fi
@@ -199,7 +218,47 @@ for _ in {1..200}; do
   sleep 0.1
 done
 jq -Rse 'split("\n") | any(.[]; try (fromjson | .event=="workspace.supervisor.started") catch false)' "$prefix/supervisor.log" >/dev/null
-if [[ "$mode" == --adaptive-only || "$mode" == --adaptive-transfer-only ]]; then
+if [[ "$mode" == --adaptive-only || "$mode" == --adaptive-transfer-only || "$mode" == --adaptive-live-only ]]; then
+  python3 -I "$repo/tools/qualification/test_adaptive_live.py" --native-preflight --executable "$prototype" >"$prefix/live-native-controls.log" 2>&1
+  cat "$prefix/live-native-controls.log"
+fi
+if [[ "$mode" == --adaptive-live-only ]]; then
+  python3 -I "$repo/tests/adaptive-delivery/prepare.py" --directory "$prefix/adaptive-repositories" >"$prefix/adaptive-seeds.json"
+  "$prototype" adaptive "$config" "$prefix" admit-live >"$prefix/adaptive-admit.log" 2>&1
+  "$prototype" adaptive "$config" "$prefix" drive-live >"$prefix/adaptive-drive.log" 2>&1
+  jq -e '.format==3 and .status=="Completed"' "$prefix/adaptive-evidence.json" >/dev/null
+  live_selections() {
+    /usr/bin/psql "$connection" -Atc "SELECT COALESCE(jsonb_agg(jsonb_build_object('assignmentId',s.assignment_id,'selection',s.state->'selection','calls',(SELECT COALESCE(jsonb_agg(jsonb_build_object('attemptId',c.attempt_id,'operationId',c.operation_id,'ordinal',c.ordinal,'rootId',c.state->'receipt'->'rootId','phase',c.state->'outcome'->'phase','receipt',c.state->'receipt','outcome',c.state->'outcome','decision',(SELECT jsonb_build_object('callId',d.call_id,'model',d.effective_model,'terminal',d.terminal,'facts',d.facts,'receipt',r.receipt) FROM shikigami.decision_resource_calls r JOIN shikigami.decision_attempts d USING(call_id) WHERE r.receipt->'request'->>'attemptId'=c.attempt_id)) ORDER BY c.ordinal),'[]'::jsonb) FROM shikigami.execution_selection_calls c WHERE c.assignment_id=s.assignment_id)) ORDER BY s.assignment_id),'[]'::jsonb) FROM shikigami.execution_selections s WHERE s.state->'selection'->'descriptor'->>'alias' IN ('adaptive','producer','producer-review','consumer','consumer-review')"
+  }
+  live_selections >"$prefix/adaptive-live-selections.json"
+  /usr/bin/psql "$connection" -Atc "SELECT COALESCE(jsonb_agg(jsonb_build_object('sessionId',session_id,'assignmentId',assignment_id,'sequence',sequence,'operationId',operation_id) ORDER BY session_id,sequence),'[]'::jsonb) FROM shikigami.worker_session_messages" >"$prefix/adaptive-live-messages.json"
+  cp "$prefix/adaptive-evidence.json" "$prefix/adaptive-first-evidence.json"
+  cp "$prefix/adaptive-provider-calls" "$prefix/adaptive-first-provider-calls"
+  cp "$prefix/adaptive-live-selections.json" "$prefix/adaptive-first-selections.json"
+  "$prototype" adaptive "$config" "$prefix" drive-live >"$prefix/adaptive-replay.log" 2>&1
+  live_selections >"$prefix/adaptive-live-selections.json"
+  python3 - "$prefix" <<'LIVE_REPLAY'
+import hashlib,json,sys
+from pathlib import Path
+p=Path(sys.argv[1])
+first=json.loads((p/'adaptive-first-evidence.json').read_text())
+after=json.loads((p/'adaptive-evidence.json').read_text())
+before=(p/'adaptive-first-provider-calls').read_bytes()
+calls=(p/'adaptive-provider-calls').read_bytes()
+selections=json.loads((p/'adaptive-live-selections.json').read_text())
+assert first==after and before==calls and selections==json.loads((p/'adaptive-first-selections.json').read_text())
+recovery={'format':3,'admission':json.loads((p/'adaptive-live-admission.json').read_text()),
+          'worker_selections':selections,'messages':json.loads((p/'adaptive-live-messages.json').read_text()),
+          'authority':[json.loads(line) for line in (p/'adaptive-live-authority.jsonl').read_text().splitlines()],
+          'transportCalls':[json.loads(line) for line in calls.decode().splitlines()],
+          'terminal_replay':{'sameEvidence':True,'providerCallsBefore':hashlib.sha256(before).hexdigest(),
+                             'providerCallsAfter':hashlib.sha256(calls).hexdigest()}}
+(p/'adaptive-recovery.json').write_text(json.dumps(recovery,indent=2)+'\n')
+LIVE_REPLAY
+  echo 'Live adaptive trial completed; host verification remains required.'
+  exit 0
+fi
+if [[ "$mode" == --adaptive-only || "$mode" == --adaptive-transfer-only || "$mode" == --adaptive-live-only ]]; then
   adaptive_suffix=
   if [[ "$mode" == --adaptive-transfer-only ]]; then adaptive_suffix=-transfer; fi
   adaptive() { "$prototype" adaptive "$config" "$prefix" "$1$adaptive_suffix"; }

@@ -75,7 +75,29 @@ Implementation began on 2026-11-04 UTC at baseline
 
 - [x] Milestone 1 (2026-11-04): Reproducible two-repository fixture, bounded driver, 50 host controls and native objective admission.
 - [x] Milestone 2 (2026-11-04): Full native integration/recovery/refusal matrix, exact returned artifacts and a passing driver command.
-- [ ] Milestone 3: implement and qualify the guarded live adapter, then run an explicitly configured actual-model/production-authority trial and publish its live evidence and coverage updates.
+- [ ] Milestone 3: qualify the guarded live adapter, then run an explicitly configured actual-model/production-authority trial and publish its live evidence and coverage updates.
+
+Live implementation resumed on 2026-11-09 UTC at `ec3e1c6c`. The guarded path
+now exists in `tests/workspace/prototype/Adaptive.hs`, both Linux/Apple runners
+and the driver. It consumes the production HTTP handlers, explicit private
+AppConfig, fresh production authorizer and finite root limits. Actual coordinator
+and worker calls share the retained selection/root receipts and physical-handler
+journal; format-3 evidence compares those with independent admission and source
+configuration. No scripted response or usage evidence is installed in live mode.
+The full host build and 1,935 requested Haskell cases pass, as do 62 Python
+qualification controls (15.184 seconds), eight native CLI preflight controls on
+both macOS and Linux, and migration isolation. Immutable Linux runtime
+`05yi39ncc8rkxji2ag8jm3wdhgc64gx2` passes the full fixture in 448.297 seconds,
+including all six independently restored Git bundles, both recomputed exact
+trees and the returned-pair journey. [Adapter qualification](../evidence/adaptive-delivery/live-adapter-qualification.md)
+retains commands, source hashes and evidence; it is key-free qualification,
+not actual-model proof. Actual-model/production-authority trial
+acceptance remains open pending operator-supplied private configuration,
+approved limits, and selection/wiring of trusted billing reconciliation. [Live templates and commands](../../tests/adaptive-delivery/README.md)
+make those inputs concrete. No actual model call has been made in this work.
+Mori now resolves dependency source/docs; FRIC-66 is resolved. FRIC-67 in
+`docs/friction-log/` records the current baseline's cold Linux dependency cache;
+the final candidate consumes its completed immutable output.
 
 Implementation resumed on 2026-11-09 UTC at source
 `217dd7bde45743d5ab425434783e479efa92e3a6`. The live worker verifier now accepts
@@ -162,14 +184,13 @@ its full targets. [ADR 0039](../adr/0039-deployment-roles-share-a-frozen-cabal-s
 records this qualified cache boundary. FRIC-54, FRIC-55 and FRIC-56 in
 `docs/friction-log/` retain the rebuild/interruption costs.
 
-The [live missing-configuration control](../evidence/adaptive-delivery/live-blocked-control.json)
-records blocked/exit 2 without model work. The current tests also verify that a
-valid configuration with `mode: live` cannot fall back to the scripted native
-provider. Missing credentials are therefore not the only blocker: the live
-qualification adapter itself is absent. Implement the guarded API path described
-in M3; Codex CLI execution remains outside this plan's accepted scope. Production
-authorization and approved live limits still need to be supplied for a trial.
-Fixture models and the disposable issuer do not close UC-1/IR-16.
+The [historical live missing-configuration control](../evidence/adaptive-delivery/live-blocked-control.json)
+records blocked/exit 2 without model work. The current driver still refuses
+absent/invalid private live input and scripted evidence, but a valid live
+configuration now selects a separate real HTTP composition. Models, fresh
+production authority, enforced root limits and actual evidence are all required.
+The actual trial remains open; fixture models and disposable issuers do not
+close UC-1/IR-16. Codex CLI execution remains outside the accepted scope.
 
 
 ## Surprises & Discoveries
@@ -224,7 +245,43 @@ model estimates cannot silently clear the root. This is existing acceptance,
 not a new invoice-ceiling requirement.
 
 
+The native live preflight exposed two consumer assumptions hidden by synthetic
+controls. Native `Dimension` maps serialize as key/value-pair arrays, including
+limits and measured usage; the verifier and staging now consume that exact owner
+format and reject duplicate dimensions. The regression reads retained real
+native root evidence. Also, ordinary AppConfig environment precedence let an
+inherited key satisfy a deliberately omitted credential. The live CLI boundary
+now clears ambient configuration before loading its explicit file; the eight
+native controls verify both valid parsing and refusal without model dispatch.
+Production configuration semantics and workflow journals are unchanged.
+
+
+The real HTTP provider source confirms the billing gate is substantive, not
+merely a missing key. The OpenAI and Anthropic HTTP assemblers derive estimated
+cost from catalog pricing. `Execution.SelectionRuntime.outcomeFor` accepts cost
+only with `ProviderReportedTotal`, so successful HTTP calls may retain unknown
+cost. `Execution.SelectionStore.reconcileSelectionCallTx` can consume independent
+trusted measurements while preserving prior evidence, but this fixture has no
+production invoice/reconciliation source configured. The direct live verifier
+therefore refuses these unresolved calls rather than manufacture zero billing.
+Selecting and qualifying a trusted billing reconciliation source remains an
+actual-trial prerequisite; private model/service credentials alone cannot close
+M3. This preserves [ADR 0052](../adr/0052-assignments-pin-whole-run-selection-and-account-every-provider-attempt.md).
+Source ownership is `mori://shinzui/baikai`, project-relative
+`baikai-openai/src/Baikai/Provider/OpenAI/Internal/Stream.hs`,
+`baikai-openai/src/Baikai/Provider/OpenAI/Responses/Stream.hs` and
+`baikai-claude/src/Baikai/Provider/Claude/Internal/Stream.hs` (artifact-level source
+URIs pending); use Mori to locate that checkout.
+
+
 ## Decision Log
+
+2026-11-09: Give live qualification its own explicit private configuration and
+format-3 consumer, while keeping the format-1/2 deterministic matrix intact.
+Use the production parser/handlers/authorizer and native owner wire formats;
+exclude ambient configuration at the live CLI boundary. Keep actual trial
+acceptance and unknown-billing settlement distinct from key-free guard success.
+This changes qualification composition, not workflow or owner contracts.
 
 
 2026-10-10: Give integrated qualification its own child so green component tests cannot close UC-1. Require both deterministic fault tests through real durability boundaries and a bounded live coding trial; retain external workspace/checkpoint blockers explicitly.
@@ -252,10 +309,22 @@ authorization or production runtime contracts.
 
 ## Outcomes & Retrospective
 
+The guarded HTTP/production-authority composition, explicit private staging,
+ambient-configuration refusal, native resource-wire handling and format-3
+consumer are implemented and guard-qualified. Full host checks and the current
+immutable Linux fixture pass. The actual trial remains open for an operator's
+private inputs/limits and selection/wiring of trusted invoice reconciliation.
+The next integration must use `Execution.SelectionStore.reconcileSelectionCallTx`
+with actual source evidence, preserving its prior compliance facts, and retain
+an independently linked reconciliation record for the verifier. Current HTTP
+estimates cannot close that gate. No use-case/request status has been promoted.
+FRIC-66 is resolved; FRIC-67's cache miss is mitigated by the published immutable
+dependency output. Final whole-plan friction triage remains with actual completion.
+
 
 Milestones 1 and 2 are delivered with a reproducible, passing full fixture and
-independently returned exact artifacts. Milestone 3 remains open pending the live
-provider path and private production configuration; no request/use-case status
+independently returned exact artifacts. Milestone 3 remains open pending the actual-model trial with private production configuration and trusted
+billing reconciliation; no request/use-case status
 has been marked complete.
 
 Qualification must observe the owner's actual boundaries: result/wake
@@ -364,39 +433,53 @@ Inject restart after a worker operation outcome, after a follow-up acceptance, a
 
 ### Milestone 3: Run a bounded live coding trial and publish evidence
 
-The current driver does not implement live admission: `tools/qualification/adaptive-delivery.py`
-unconditionally returns blocked for `--mode live`, and its configuration allow-list
-contains only fixture/runtime/scenario limits. Supplying credentials cannot enable it.
-First implement a separate guarded API-provider/production-authority adapter using
-the delivered selection, root accounting, workspace and objective owners. Add explicit
-private configuration validation, actual provider dispatch, fresh authority and enforceable
-limits; prove absent/invalid configuration refuses before model work. Reuse the existing
-HTTP model path; adding Codex CLI execution remains separately scoped and unqualified.
+The guarded composition is implemented in `tests/workspace/prototype/Adaptive.hs`
+and selected by native stages `admit-live` / `drive-live`, exposed through
+`tests/workspace/run-apple.sh --adaptive-live-only` and the driver `--mode live`.
+Live mode installs only the existing production HTTP handlers and authorizer;
+it does not construct model responses, zero usage or disposable issuer proofs.
+`Main.hs` clears ambient configuration for those entry points. Native
+`adaptive-live-preflight CONFIG LIMITS` uses the production AppConfig parser and
+live validation without model dispatch. The key-free controls are executable:
 
-Implement the live qualification composition alongside the scripted consumer in
-`tests/workspace/prototype/Adaptive.hs` and expose its selection through the
-workspace fixture executable and `tests/workspace/run-apple.sh` /
-`tests/workspace/run-linux.sh`. Consume the existing production model and
-authorization composition rather than constructing responses or usage records
-in the fixture. The checked-in script currently enrolls 48 model attempts,
-a 1,200-second native cutoff and explicitly unbounded other resource dimensions;
-the 1,800-second driver timeout is only the host observation bound. A live
-configuration must feed the admitted root and dispatch policy, not merely change
-that host timeout. Validate explicit private configuration before live work and
-record the actual admitted limits alongside observed usage and uncertainty.
+```bash
+nix develop --no-write-lock-file -c cabal build workspace-linux-fixture
+nix develop --no-write-lock-file -c cabal run workspace-linux-fixture -- adaptive-contract
+nix develop --no-write-lock-file -c python3 tools/qualification/test_adaptive_live.py --native-preflight
+python3 -m unittest discover -s tools/qualification -p 'test_*.py' -v
+```
 
-Extend `tools/qualification/adaptive-delivery.py` and
-`tools/qualification/test_adaptive_delivery.py` with live configuration and
-evidence handling. Compare each actual transport tuple and receipt with the
-admitted live descriptor and root; do not require fixture aliases to be model ids,
-fixture bindings or exactly two calls per role. Keep exact repository artifacts,
-current acceptance revisions, unique settled call receipts and enforced limits
-mandatory. Preserve the fixture verifier and its full fault matrix unchanged in
-meaning. Add controls proving missing/invalid authority or limits dispatch no
-model work, scripted evidence cannot satisfy live mode, mismatched selections
-and unresolved root work refuse, and the returned exact artifact pair is checked.
-A real live pass must retain actual provider evidence; green adapter tests alone
-cannot close this milestone.
+`tests/adaptive-delivery/live.py` validates a private JSON application file with
+exactly `authorization`, `credentials` and `behavior`, plus explicit root limits
+and duration from the private driver configuration. The two checked-in example
+JSON files and `tests/adaptive-delivery/README.md` specify every field and
+operator preparation step. Both inputs are bounded private owned regular files;
+staging copies only these approved values into the disposable guest, and removes
+the host's staged credential copy on success or failure. The guest supplies its
+own database, workspace roots and directory; operator files cannot redirect it
+to production storage. Live mode skips both disposable issuer services and uses
+the configured production Kikan-En/Shomei boundary. No publication is required.
+
+The admitted root requires finite model/tool attempts, tokens, active work and
+descendants, with a cutoff at most 1,200 seconds after admission. The outer
+model-attempt ceiling must agree with the admitted root. Per-binding output and
+request deadlines are mandatory. HTTP invoice ceilings remain unsupported and
+explicitly unbounded; missing billing still retains uncertainty. The physical
+handler journal records the unmodified provider response identity and applied
+caps, while the owner records actual measured usage. No estimate is promoted to
+settled billing to obtain completion.
+
+Format-3 verification compares actual coordinator and worker receipts with the
+separate admission snapshot and private operator specs, including root, provider,
+API, exact model, thinking, binding versions and applied request caps. It requires
+native resource-pair encoding, unique settled attempts, measured provider facts,
+fresh production authority coordinates, a continuing-worker follow-up, terminal
+replay and the same exact returned Git artifact checks as fixture mode. Failure
+retains bounded owner root/call/authority records and available Git bundles as
+forensic evidence, preserving unresolved scope without a passing verdict. The
+deterministic fixture keeps its original fault-matrix acceptance. The final native fixture regression and eight Linux preflight controls pass.
+An actual approved trial with trusted billing settlement remains required;
+these controls alone cannot close M3.
 
 With that adapter accepted and explicitly supplied live configuration, run the same finite fixture using at least one actual model-driven coding path, governed writable workspaces and the actual production authorization boundary. Set bounded attempts, duration, cost/token policy where enforceable, and exact local-edit/test scope; no publication or deployment is required. Validate service availability before starting and report absent configuration as blocked. This planning task does not create a deployment or incur live model work.
 
@@ -480,7 +563,7 @@ Use additive, schema-qualified migrations created through `just new-migration`; 
 ## Interfaces and Dependencies
 
 
-This plan owns only the fixture, qualification driver, evidence format and integration test/report changes. IR-11 owns real workspace tools and fences; IR-13 owns task/checkpoint state; plan 85 owns adaptive decisions and `IntegratedAcceptance`; plan 84 owns session events; plan 83 owns durable turns; plan 82 owns selections; plan 81 owns shared budgets. The production provider and coordinator components are delivered; their live qualification composition and verifier remain M3 work. Missing operator configuration is a visible blocked trial, not permission to bypass their boundaries. Provider/checkpoint adapter interface mismatches are coordinated in the master plan before changing owners. Generic deployment readiness, external executor plan 78, public HTTP control and signed attestation completion remain separate.
+This plan owns only the fixture, qualification driver, evidence format and integration test/report changes. IR-11 owns real workspace tools and fences; IR-13 owns task/checkpoint state; plan 85 owns adaptive decisions and `IntegratedAcceptance`; plan 84 owns session events; plan 83 owns durable turns; plan 82 owns selections; plan 81 owns shared budgets. The production provider and coordinator components are delivered; the guarded live composition and verifier are implemented, with the actual-model trial and trusted billing reconciliation remaining as M3 acceptance. Missing operator configuration is a visible blocked trial, not permission to bypass their boundaries. Provider/checkpoint adapter interface mismatches are coordinated in the master plan before changing owners. Generic deployment readiness, external executor plan 78, public HTTP control and signed attestation completion remain separate.
 
 ## Revision Notes
 
@@ -503,3 +586,9 @@ live driver, scripted consumer and evidence verifier at `091c95ab`. Preserve
 M1/M2 historical acceptance, distinguish missing live implementation from private
 operator inputs, and specify the live dispatch, admitted-limit and verifier work
 needed for M3 without expanding scope or claiming a new runtime qualification.
+
+Revision note (2026-11-09): Implement explicit private live composition, production
+HTTP dispatch, ambient-configuration isolation, native resource-wire handling and
+format-3 evidence checks. Retain 62 host controls, eight native guard controls,
+1,935 requested Haskell cases and the passing current Linux fixture. Actual-model
+acceptance still needs approved private inputs and trusted billing reconciliation.

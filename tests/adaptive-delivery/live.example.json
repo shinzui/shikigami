@@ -1,0 +1,41 @@
+{
+  "format": 1,
+  "mode": "live",
+  "scenario": "baseline",
+  "timeout_seconds": 1800,
+  "max_model_attempts": 48,
+  "repositories": [
+    "mori://fixture/adaptive-producer",
+    "mori://fixture/adaptive-consumer"
+  ],
+  "runtime": "REQUIRED_NIX_RUNTIME_OUTPUT",
+  "live": {
+    "application_config": "REQUIRED_ABSOLUTE_PRIVATE_APPLICATION_FILE",
+    "durationSeconds": 900,
+    "limits": {
+      "ActiveWork": {
+        "tag": "Limited",
+        "contents": 8
+      },
+      "LifetimeDescendants": {
+        "tag": "Limited",
+        "contents": 32
+      },
+      "ModelAttempts": {
+        "tag": "Limited",
+        "contents": 48
+      },
+      "ToolAttempts": {
+        "tag": "Limited",
+        "contents": 128
+      },
+      "Tokens": {
+        "tag": "Limited",
+        "contents": 2000000
+      },
+      "CostMicroUsd": {
+        "tag": "ExplicitlyUnbounded"
+      }
+    }
+  }
+}

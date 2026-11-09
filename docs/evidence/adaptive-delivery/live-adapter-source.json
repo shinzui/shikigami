@@ -1,0 +1,29 @@
+{
+  "baseline": "ec3e1c6c00e86913c14a643f731cac41e0cc61cf",
+  "source_dirty": true,
+  "runtime": "/nix/store/05yi39ncc8rkxji2ag8jm3wdhgc64gx2-shikigami-workspace-prototype-0.1.0.0-dirty",
+  "derivation": "/nix/store/27zsd4p67d74i7nigz32qax1zj365wvh-shikigami-workspace-prototype-0.1.0.0-dirty.drv",
+  "files": {
+    "tests/workspace/prototype/Adaptive.hs": "4de792e1064d7a04ffcbd2172447426ad9a7620290a64f35ea9717497c7b18a2",
+    "tests/workspace/prototype/Main.hs": "8cb963aad356af5c22a4178af6a4575a4e3d41c2f0e75f11de70e2b410dc3a5f",
+    "tests/workspace/run-apple.sh": "8c2c2a14ce5107be88a163511bca8c48b21b4af3b36d100971e6c552a9c67293",
+    "tests/workspace/run-linux.sh": "16534fa0702c7a7f55a0335550ef4f873a4e80a4a23d6479711eebe752bb0512",
+    "tests/adaptive-delivery/live.py": "9873c2c1f56c456f49a198c77605a5d2e1304dc711949b74d28cc10a3c3916ec",
+    "tests/adaptive-delivery/live-skill/SKILL.md": "c1a19dcfb9b05227d7ac54ff86d6d1dfea975e98cfcdb1e7947730768ad07ab1",
+    "tools/qualification/adaptive-delivery.py": "e681b5959f3f0d8925fe103f716ba985b07fef10c6317ffc58de20ae8a2b2940",
+    "tools/qualification/test_adaptive_delivery.py": "a2e9ce74988eb2baf5ca55e163ce74d265856630bc64ea033e164494508b7aa8",
+    "tools/qualification/test_adaptive_live.py": "ec01f35725f19064b07ffb85b2168679385bb356f92b5dbb75a8db0b7b700c54"
+  },
+  "qualified_files": {
+    "tests/workspace/prototype/Adaptive.hs": "eddc218d372ab8d4edd92bd1d4515f81ca92debae05980d969c51aa88a32638a",
+    "tests/workspace/prototype/Main.hs": "c1a15fcd29f21ba96f3e524f635e20e32d4b1da5985c9cc719f045195ed11eb7",
+    "tests/workspace/run-apple.sh": "8c2c2a14ce5107be88a163511bca8c48b21b4af3b36d100971e6c552a9c67293",
+    "tests/workspace/run-linux.sh": "16534fa0702c7a7f55a0335550ef4f873a4e80a4a23d6479711eebe752bb0512",
+    "tests/adaptive-delivery/live.py": "9873c2c1f56c456f49a198c77605a5d2e1304dc711949b74d28cc10a3c3916ec",
+    "tests/adaptive-delivery/live-skill/SKILL.md": "c1a19dcfb9b05227d7ac54ff86d6d1dfea975e98cfcdb1e7947730768ad07ab1",
+    "tools/qualification/adaptive-delivery.py": "e681b5959f3f0d8925fe103f716ba985b07fef10c6317ffc58de20ae8a2b2940",
+    "tools/qualification/test_adaptive_delivery.py": "a2e9ce74988eb2baf5ca55e163ce74d265856630bc64ea033e164494508b7aa8",
+    "tools/qualification/test_adaptive_live.py": "ec01f35725f19064b07ffb85b2168679385bb356f92b5dbb75a8db0b7b700c54"
+  },
+  "normalization": "After native qualification, fourmolu normalized imports/layout and module comments were clarified. Host build and eight CLI controls were rerun; workflow and runtime behavior are unchanged."
+}

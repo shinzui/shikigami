@@ -21,6 +21,9 @@ FIXTURE = ROOT / "tests/adaptive-delivery"
 spec = importlib.util.spec_from_file_location("adaptive_prepare", FIXTURE / "prepare.py")
 prepare = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(prepare)
+live_spec = importlib.util.spec_from_file_location("adaptive_live", FIXTURE / "live.py")
+live = importlib.util.module_from_spec(live_spec)
+live_spec.loader.exec_module(live)
 
 
 def stamp():
@@ -37,8 +40,8 @@ def load_config(path, mode):
     # JSON is an intentionally restricted, dependency-free subset of YAML.
     if path.stat().st_size > 65536:
         raise ValueError("configuration exceeds 64 KiB")
-    value = json.loads(path.read_text())
-    allowed = {"format", "mode", "timeout_seconds", "max_model_attempts", "repositories", "runtime", "scenario"}
+    value = live.private_json(path) if mode == "live" else json.loads(path.read_text())
+    allowed = {"format", "mode", "timeout_seconds", "max_model_attempts", "repositories", "runtime", "scenario", "live"}
     if not isinstance(value, dict) or set(value) - allowed:
         raise ValueError("configuration has unknown fields; credentials belong in private runtime configuration")
     if type(value.get("format")) is not int or value["format"] != 1 or value.get("mode") != mode:
@@ -53,6 +56,10 @@ def load_config(path, mode):
             raise ValueError(f"{field} must be an integer between 1 and {maximum}")
     if "runtime" in value and (not isinstance(value["runtime"], str) or not value["runtime"].startswith("/nix/store/")):
         raise ValueError("runtime must name an explicitly built Nix runtime output")
+    if mode == "live":
+        live.validate(value.get("live"), value["max_model_attempts"], value["timeout_seconds"])
+    elif "live" in value:
+        raise ValueError("fixture mode cannot consume production configuration")
     return value
 
 
@@ -188,7 +195,7 @@ def verify_git_artifacts(directory, combined, records):
     return {"artifacts": len(exact), "worker_pairs_recomputed": len(combined), "journey": check}
 
 
-def native_evidence(directory, repositories):
+def native_evidence(directory, repositories, *, live_settings=None):
     text = (directory / "native.log").read_text()
     matches = re.findall(r"^Private fixture evidence: (/tmp/shikigami-workspace-run\.[a-zA-Z0-9_]+)$", text, re.M)
     if len(matches) != 1:
@@ -198,16 +205,16 @@ def native_evidence(directory, repositories):
         raise ValueError("native evidence is not a bounded regular artifact")
     value = json.loads(path.read_text())
     combined = value["integrated"]["repositories"]
-    if type(value["format"]) is not int or value["format"] not in [1, 2] or value["status"] != "Completed" or len(combined) != 2:
+    if type(value["format"]) is not int or value["format"] not in ([1, 2] if live_settings is None else [3]) or value["status"] != "Completed" or len(combined) != 2:
         raise ValueError("finite objective did not complete against two integrated repositories")
-    if value["sessionMessageResultCounts"] != [4, 5, 5]:
+    if live_settings is None and value["sessionMessageResultCounts"] != [4, 5, 5]:
         raise ValueError("native recovery counts differ")
     if value["root"]["active"] != 0 or value["root"]["unknown"] != 0:
         raise ValueError("native root has unsettled work")
     roles = ["producer", "producer-review", "consumer", "consumer-review"]
     if value["format"] == 2:
         roles.append("consumer-successor")
-    for name in roles:
+    for name in roles if live_settings is None else []:
         if value["providerCalls"][name] != (4 if name == "consumer" and value["format"] == 1 else 2):
             raise ValueError("native provider calls repeated or omitted completed turns")
     starts = {entry["identity"]: entry["base"] for entry in repositories}
@@ -230,9 +237,76 @@ def native_evidence(directory, repositories):
     if value["integrated"]["journey"]["exitCode"] != 0:
         raise ValueError("combined journey failed")
     recovery_path = path.parent / "adaptive-recovery.json"
-    if recovery_path.is_symlink() or not recovery_path.is_file() or recovery_path.stat().st_size > 65536:
+    if recovery_path.is_symlink() or not recovery_path.is_file() or recovery_path.stat().st_size > (65536 if live_settings is None else 1048576):
         raise ValueError("bounded native recovery evidence missing")
     recovery = json.loads(recovery_path.read_text())
+    if live_settings is None:
+        validate_fixture_recovery(value, recovery, roles)
+    else:
+        validate_live_evidence(value, recovery, live_settings)
+    value["recovery"] = recovery
+    archives = path.parent / "adaptive-artifacts"
+    inventory = archives / "manifest.json"
+    if inventory.is_symlink() or not inventory.is_file() or inventory.stat().st_size > 65536:
+        raise ValueError("bounded Git artifact inventory missing")
+    captured = json.loads(inventory.read_text())
+    required = {(entry["repository"], revision) for entry in combined
+                for revision in [entry["combined"]["result"], *[worker["revision"] for worker in entry["workers"]]]}
+    records = captured["artifacts"]
+    if (captured["format"] != 1 or len(records) != 6
+            or {(entry["repository"], entry["head"]) for entry in records} != required
+            or len({entry["bundle"] for entry in records}) != 6):
+        raise ValueError("not every exact native Git artifact was retained")
+    target = directory / "git-artifacts"
+    target.mkdir(mode=0o700, exist_ok=True)
+    for entry in records:
+        if not re.fullmatch(r"workspace-[0-5]\.bundle", entry["bundle"]) or entry["base"] != starts[entry["repository"]]:
+            raise ValueError("Git artifact identity differs")
+        bundle = archives / entry["bundle"]
+        if bundle.is_symlink() or not bundle.is_file() or not 0 < bundle.stat().st_size <= 1048576:
+            raise ValueError("Git artifact is not a bounded regular file")
+        content = bundle.read_bytes()
+        if hashlib.sha256(content).hexdigest() != entry["sha256"]:
+            raise ValueError("Git artifact bytes differ from the retained commitment")
+        (target / entry["bundle"]).write_bytes(content)
+    (target / "manifest.json").write_text(json.dumps(captured, indent=2) + "\n")
+    value["git_artifacts"] = captured
+    value["returned_artifact_verification"] = verify_git_artifacts(directory, combined, records)
+    shutil.copyfile(recovery_path, directory / "native-recovery.json")
+    shutil.copyfile(path, directory / "native-evidence.json")
+    return value
+
+
+def preserve_live_failure(directory):
+    """Keep bounded owner facts and available Git bundles without a pass verdict."""
+    matches = re.findall(r"^Private fixture evidence: (/tmp/shikigami-workspace-run\.[a-zA-Z0-9_]+)$",
+                         (directory / "native.log").read_text(), re.M)
+    if len(matches) != 1:
+        return {"retained": [], "limitation": "native cleanup supplied no evidence location"}
+    source = Path(matches[0]) / "evidence"
+    target = directory / "failed-live-evidence"
+    target.mkdir(mode=0o700, exist_ok=True)
+    names = ["adaptive-live-admission.json", "adaptive-live-roots.json", "adaptive-live-assignment-state.json",
+             "adaptive-live-call-state.json", "adaptive-live-authority.jsonl", "adaptive-live-dispatches.jsonl",
+             "adaptive-provider-calls", "adaptive-objectives.jsonl", "adaptive-seeds.json"]
+    retained = []
+    for name in names:
+        candidate = source / name
+        if candidate.is_file() and not candidate.is_symlink() and candidate.stat().st_size <= 1048576:
+            shutil.copyfile(candidate, target / name)
+            retained.append(name)
+    archives = source / "adaptive-artifacts"
+    if archives.is_dir() and not archives.is_symlink():
+        (target / "git-artifacts").mkdir(mode=0o700, exist_ok=True)
+        for name in ["manifest.json", *[f"workspace-{n}.bundle" for n in range(6)]]:
+            candidate = archives / name
+            if candidate.is_file() and not candidate.is_symlink() and candidate.stat().st_size <= 1048576:
+                shutil.copyfile(candidate, target / "git-artifacts" / name)
+                retained.append("git-artifacts/" + name)
+    return {"retained": retained, "scope": "forensic owner facts; no outcome reconciliation or passing acceptance implied"}
+
+
+def validate_fixture_recovery(value, recovery, roles):
     restart = recovery["adaptation_commit_restart"]
     replay = recovery["terminal_replay"]
     if (recovery["format"] != 1 or type(restart["exitCode"]) is not int or restart["exitCode"] != 86
@@ -288,37 +362,6 @@ def native_evidence(directory, repositories):
                 or receipt["operationId"] != intent["operationId"]):
             raise ValueError("native ownership cut does not bind real fenced owner and successor receipts")
         validate_transfer_probes(value, recovery)
-    value["recovery"] = recovery
-    archives = path.parent / "adaptive-artifacts"
-    inventory = archives / "manifest.json"
-    if inventory.is_symlink() or not inventory.is_file() or inventory.stat().st_size > 65536:
-        raise ValueError("bounded Git artifact inventory missing")
-    captured = json.loads(inventory.read_text())
-    required = {(entry["repository"], revision) for entry in combined
-                for revision in [entry["combined"]["result"], *[worker["revision"] for worker in entry["workers"]]]}
-    records = captured["artifacts"]
-    if (captured["format"] != 1 or len(records) != 6
-            or {(entry["repository"], entry["head"]) for entry in records} != required
-            or len({entry["bundle"] for entry in records}) != 6):
-        raise ValueError("not every exact native Git artifact was retained")
-    target = directory / "git-artifacts"
-    target.mkdir(mode=0o700, exist_ok=True)
-    for entry in records:
-        if not re.fullmatch(r"workspace-[0-5]\.bundle", entry["bundle"]) or entry["base"] != starts[entry["repository"]]:
-            raise ValueError("Git artifact identity differs")
-        bundle = archives / entry["bundle"]
-        if bundle.is_symlink() or not bundle.is_file() or not 0 < bundle.stat().st_size <= 1048576:
-            raise ValueError("Git artifact is not a bounded regular file")
-        content = bundle.read_bytes()
-        if hashlib.sha256(content).hexdigest() != entry["sha256"]:
-            raise ValueError("Git artifact bytes differ from the retained commitment")
-        (target / entry["bundle"]).write_bytes(content)
-    (target / "manifest.json").write_text(json.dumps(captured, indent=2) + "\n")
-    value["git_artifacts"] = captured
-    value["returned_artifact_verification"] = verify_git_artifacts(directory, combined, records)
-    shutil.copyfile(recovery_path, directory / "native-recovery.json")
-    shutil.copyfile(path, directory / "native-evidence.json")
-    return value
 
 
 def validate_transfer_probes(value, recovery):
@@ -382,7 +425,7 @@ def validate_worker_selections(value, recovery, roles, *, admitted=None):
     if admitted is not None:
         validate_live_descriptors(admitted, roles)
     selections = recovery["worker_selections"]
-    if not isinstance(selections, list) or not len(roles) <= len(selections) <= 8:
+    if not isinstance(selections, list) or not len(roles) <= len(selections) <= (8 if admitted is None else 128):
         raise ValueError("native pinned worker selections missing")
     totals = {role: 0 for role in roles}
     assignments, attempts, descriptors = set(), set(), {}
@@ -449,9 +492,32 @@ def validate_live_call(call, assignment, descriptor, root):
     authority and exact artifact acceptance remain separate live trial gates.
     """
     receipt, outcome = call["receipt"], call["outcome"]
-    facts = outcome["compliance"]
+    if descriptor["alias"] == "adaptive":
+        decision = call["decision"]
+        if (not isinstance(decision, dict) or decision["receipt"] != receipt
+                or decision["model"] != descriptor or decision["terminal"] != "CallSucceeded"
+                or not isinstance(decision["callId"], str) or not decision["callId"]):
+            raise ValueError("live decision lacks its independently linked accounting receipt")
+        facts = decision["facts"]
+    else:
+        facts = outcome["compliance"]
     if not isinstance(facts, dict):
         raise ValueError("live worker call has no provider compliance facts")
+    known = resource_map(outcome["known"])
+    reserved = resource_map(receipt["request"]["quantities"])
+    if (set(known) != {"Tokens", "CostMicroUsd"}
+            or any(type(amount) is not int or amount < 0 for amount in reserved.values())
+            or receipt["request"]["policy"] != "EnforcedCeiling" or reserved.get("ActiveWork") != 1
+            or reserved.get("ModelAttempts") != 1 or type(reserved.get("Tokens")) is not int
+            or reserved["Tokens"] <= 0 or type(known.get("Tokens")) is not int
+            or known["Tokens"] > reserved["Tokens"]):
+        raise ValueError("live model call lacks an enforced token reservation")
+    cost = facts["costMicroUsd"]
+    if (not isinstance(cost, dict) or set(cost) != {"numerator", "denominator"}
+            or type(cost["numerator"]) is not int or cost["numerator"] < 0
+            or type(cost["denominator"]) is not int or cost["denominator"] <= 0
+            or (cost["numerator"] + cost["denominator"] - 1) // cost["denominator"] != known.get("CostMicroUsd")):
+        raise ValueError("live billing measurement differs from the settled receipt")
     endpoint = facts["endpoint"]
     canonical_api = {"anthropic-messages": "messages", "openai-chat-completions": "chat-completions",
                      "openai-responses": "responses"}.get(endpoint["api"], endpoint["api"])
@@ -459,8 +525,10 @@ def validate_live_call(call, assignment, descriptor, root):
     if (endpoint["provider"] != descriptor["provider"] or canonical_api != descriptor["api"]
             or endpoint["transport"] != "http_api"
             or (endpoint_url is not None and urlsplit(endpoint_url).scheme != "https")
-            or facts["thinking"]["requested"] != descriptor["thinking"]
-            or facts["status"] != "succeeded" or facts["strength"] != "model_observed"
+            or facts["thinking"]["requested"] != (None if descriptor["thinking"] is None else
+                {"ThinkingNone": "none", "ThinkingMinimal": "minimal", "ThinkingLow": "low",
+                 "ThinkingMedium": "medium", "ThinkingHigh": "high", "ThinkingXHigh": "xhigh", "ThinkingMax": "max"}.get(descriptor["thinking"], "invalid"))
+            or facts["status"] != "succeeded" or facts["strength"] not in ["model_observed", "fully_observed"]
             or facts["costUncertain"] is not False):
         raise ValueError("live provider facts differ from the admitted HTTP transport")
     if (receipt["assignmentId"] != assignment or receipt["rootId"] != root
@@ -470,6 +538,7 @@ def validate_live_call(call, assignment, descriptor, root):
             or not isinstance(receipt["fingerprint"], str) or not receipt["fingerprint"]
             or outcome["phase"] != "CallTerminal" or outcome["missing"] != []
             or outcome["reportedModel"] != descriptor["modelId"]
+            or facts["observedModelId"] != {"observed": descriptor["modelId"]}
             or not isinstance(outcome["providerCallId"], str) or not outcome["providerCallId"]
             or type(facts["format"]) is not int or facts["format"] != 1
             or facts["requestedAlias"] != descriptor["alias"]
@@ -477,11 +546,21 @@ def validate_live_call(call, assignment, descriptor, root):
             or facts["resolvedModelId"] != descriptor["modelId"]
             or facts["providerCallId"] != outcome["providerCallId"]
             or type(facts["tokens"]) is not int or facts["tokens"] <= 0
-            or type(outcome["known"].get("Tokens")) is not int
-            or outcome["known"]["Tokens"] != facts["tokens"]
-            or type(outcome["known"].get("CostMicroUsd")) is not int
-            or outcome["known"]["CostMicroUsd"] < 0):
+            or type(known.get("Tokens")) is not int
+            or known["Tokens"] != facts["tokens"]
+            or type(known.get("CostMicroUsd")) is not int
+            or known["CostMicroUsd"] < 0):
         raise ValueError("live worker call lacks matching settled provider facts")
+
+
+def resource_map(value):
+    # The native Dimension map uses JSON key/value pairs. Reject object-shaped
+    # substitutes and duplicate dimensions before normalization.
+    if (not isinstance(value, list) or any(not isinstance(pair, list) or len(pair) != 2
+            or not isinstance(pair[0], str) or pair[0] not in live.DIMENSIONS for pair in value)
+            or len({pair[0] for pair in value}) != len(value)):
+        raise ValueError("native resource dimensions must be unique key/value pairs")
+    return dict(value)
 
 
 def validate_live_root(root, envelope, *, admitted_at):
@@ -492,7 +571,7 @@ def validate_live_root(root, envelope, *, admitted_at):
     An observation timeout is never substituted for the root cutoff.
     """
     dimensions = {"ActiveWork", "LifetimeDescendants", "ModelAttempts", "ToolAttempts", "Tokens", "CostMicroUsd"}
-    limits = envelope["limits"]
+    limits = resource_map(envelope["limits"])
     if (set(envelope) != {"limits", "cutoff"} or set(limits) != dimensions
             or limits["CostMicroUsd"] != {"tag": "ExplicitlyUnbounded"}):
         raise ValueError("live envelope must state each dimension and unsupported invoice policy")
@@ -510,12 +589,109 @@ def validate_live_root(root, envelope, *, admitted_at):
             or type(root["active"]) is not int or root["active"] != 0
             or type(root["unknown"]) is not int or root["unknown"] != 0
             or root["cancelled"] is not False or root["overage"] is not False
-            or any(type(amount) is not int or amount != 0 for amount in root["usage"]["held"].values())):
+            or any(type(amount) is not int or amount != 0 for amount in resource_map(root["usage"]["held"]).values())):
         raise ValueError("live root differs from admission or has unresolved work")
-    for dimension, amount in root["usage"]["settled"].items():
+    for dimension, amount in resource_map(root["usage"]["settled"]).items():
         if (dimension not in dimensions or type(amount) is not int or amount < 0
                 or (dimension != "CostMicroUsd" and amount > limits[dimension]["contents"])):
             raise ValueError("live settled usage exceeds its admitted envelope")
+
+
+def validate_live_evidence(value, recovery, settings):
+    application = live.validate(settings, settings["limits"]["ModelAttempts"]["contents"], 3600)
+    if value["format"] != 3 or recovery["format"] != 3:
+        raise ValueError("scripted evidence cannot qualify live mode")
+    admission = recovery["admission"]
+    admitted_at = datetime.fromisoformat(admission["admittedAt"].replace("Z", "+00:00"))
+    envelope = admission["envelope"]
+    cutoff = datetime.fromisoformat(envelope["cutoff"].replace("Z", "+00:00"))
+    if (admission["rootId"] != value["rootId"] or resource_map(envelope["limits"]) != settings["limits"]
+            or (cutoff - admitted_at).total_seconds() != settings["durationSeconds"]):
+        raise ValueError("live root admission differs from the explicit private configuration")
+    validate_live_root(value["root"], envelope, admitted_at=admitted_at)
+    actions = application["authorization"]["actions"]
+    expected_authority = {"kikanBaseUrl": actions["kikan_en"]["base_url"],
+                          "shomeiBaseUrl": actions["shomei"]["base_url"], "callerId": actions["caller_id"]}
+    if admission["authority"] != expected_authority:
+        raise ValueError("live authority admission differs from the private production configuration")
+    descriptors = admission["descriptors"]
+    if not isinstance(descriptors, list) or len(descriptors) != len(live.ROLES):
+        raise ValueError("live admitted descriptor snapshot is incomplete")
+    admitted = {d["alias"]: d for d in descriptors}
+    validate_live_descriptors(admitted, live.ROLES)
+    # Check the independent native admission against the operator's source specs,
+    # before comparing any outcomes with that frozen descriptor snapshot.
+    thinking = {name: "Thinking" + label for name, label in
+                [("none", "None"), ("minimal", "Minimal"), ("low", "Low"), ("medium", "Medium"),
+                 ("high", "High"), ("xhigh", "XHigh"), ("max", "Max")]}
+    for spec in application["behavior"]["decisionModels"]:
+        descriptor = admitted[spec["alias"]]
+        surface = {"anthropic": ("anthropic", "messages"), "openai": ("openai", "chat-completions"),
+                   "openai-responses": ("openai", "responses")}[spec["provider"]]
+        expected = {key: spec[key] for key in ["alias", "version", "bindingId", "bindingVersion"]}
+        expected.update(provider=surface[0], api=surface[1], endpointClass="https", modelId=spec["model"],
+                        thinking=None if spec["thinking"] == "default" else thinking[spec["thinking"]])
+        if any(descriptor[key] != item for key, item in expected.items()):
+            raise ValueError("live admission descriptor differs from private operator selection")
+    validate_worker_selections(value, recovery, live.ROLES, admitted=admitted)
+    calls = [call for record in recovery["worker_selections"] for call in record["calls"]]
+    total = sum(value["providerCalls"].values())
+    if (len(calls) != total or total != value["liveTransportCalls"] or total > settings["limits"]["ModelAttempts"]["contents"]
+            or resource_map(value["root"]["usage"]["settled"]).get("ModelAttempts") != total
+            or len(recovery["transportCalls"]) != total):
+        raise ValueError("live actual transport calls differ from their root accounting")
+    for dimension in ["Tokens", "CostMicroUsd"]:
+        if (sum(resource_map(call["outcome"]["known"])[dimension] for call in calls)
+                != resource_map(value["root"]["usage"]["settled"]).get(dimension, 0)):
+            raise ValueError("live provider usage differs from settled root accounting")
+    tuples = [record["selection"]["descriptor"] for record in recovery["worker_selections"]
+              for _ in record["calls"]]
+    observed = recovery["transportCalls"]
+    def tuple_key(call):
+        return json.dumps({key: call[key] for key in ["provider", "api", "endpointClass", "modelId", "thinking"]}, sort_keys=True)
+    if sorted(tuple_key(d) for d in tuples) != sorted(tuple_key(c["tuple"]) for c in observed):
+        raise ValueError("live handler transport tuples differ from the admitted receipts")
+    factual_ids = [(call["decision"]["facts"] if record["selection"]["descriptor"]["alias"] == "adaptive"
+                    else call["outcome"]["compliance"])["providerCallId"]
+                   for record in recovery["worker_selections"] for call in record["calls"]]
+    if (len(set(factual_ids)) != total
+            or sorted(factual_ids) != sorted(call["providerCallId"] for call in observed)):
+        raise ValueError("live actual provider responses differ from the retained call facts")
+    transport_by_id = {call["providerCallId"]: call for call in observed}
+    specs = {spec["alias"]: spec for spec in application["behavior"]["decisionModels"]}
+    for record in recovery["worker_selections"]:
+        role = record["selection"]["descriptor"]["alias"]
+        for call in record["calls"]:
+            facts = call["decision"]["facts"] if role == "adaptive" else call["outcome"]["compliance"]
+            transport = transport_by_id[facts["providerCallId"]]
+            request = transport["evidenceRequest"]
+            if (type(transport["maxTokens"]) is not int or not 0 < transport["maxTokens"] <= specs[role]["max_tokens"]
+                    or type(transport["timeoutMs"]) is not int or not 0 < transport["timeoutMs"] <= specs[role]["timeout_ms"]
+                    or request["run_id"] != facts["providerRunId"] or request["attempt"] != facts["attempt"]):
+                raise ValueError("live physical request differs from its admitted limits or call identity")
+    counts = value["sessionMessageResultCounts"]
+    messages = recovery["messages"]
+    if (len(counts) != 3 or counts[0] != 4 or counts[1] < 5 or counts[2] < 5
+            or len(messages) != counts[1] or not any(m["sequence"] > 0 for m in messages)):
+        raise ValueError("live coding lacks the retained continuing-worker adaptation")
+    authority = recovery["authority"]
+    if not isinstance(authority, list) or not authority or len(authority) > 10000:
+        raise ValueError("live production authority receipts missing")
+    requests = set()
+    for receipt in authority:
+        # checkedAt is the verifier's opaque consistency token, not a timestamp.
+        # The native client has already verified signature/expiry at dispatch;
+        # proof bytes are deliberately absent from this audit projection.
+        expires = datetime.fromisoformat(receipt["expiresAt"].replace(" UTC", "+00:00").replace("Z", "+00:00"))
+        if (not receipt["principal"] or not receipt["resource"] or not receipt["schemaHash"]
+                or not isinstance(receipt["checkedAt"], str) or not receipt["checkedAt"]
+                or not receipt["requestId"] or receipt["requestId"] in requests or expires.tzinfo is None):
+            raise ValueError("live client-verified authority coordinates are duplicated or incomplete")
+        requests.add(receipt["requestId"])
+    replay = recovery["terminal_replay"]
+    if (replay["sameEvidence"] is not True or not re.fullmatch("[0-9a-f]{64}", replay["providerCallsBefore"])
+            or replay["providerCallsBefore"] != replay["providerCallsAfter"]):
+        raise ValueError("live terminal replay repeated model work")
 
 
 def qualify(directory, config, mode):
@@ -532,10 +708,9 @@ def qualify(directory, config, mode):
         if any(case["state"] != "passed" for case in manifest["cases"]):
             manifest["state"] = "failed"
         else:
-            if mode == "live":
-                manifest["limitations"].append(
-                    "An explicitly supplied live provider configuration, fresh authorization and enforceable limits are required")
-            elif config["max_model_attempts"] != 48:
+            if mode == "live" and "live" not in config:
+                manifest["limitations"].append("Explicit private live provider/authority configuration and enforceable limits are required")
+            elif mode == "fixture" and config["max_model_attempts"] != 48:
                 manifest["limitations"].append("native fixture currently admits exactly the declared 48-call ceiling")
             elif "runtime" not in config:
                 manifest["limitations"].append(
@@ -544,16 +719,26 @@ def qualify(directory, config, mode):
                 manifest["limitations"].append("the Apple container and Nix executables are required for native qualification")
             else:
                 command = ["bash", "tests/workspace/run-apple.sh",
+                           "--adaptive-live-only" if mode == "live" else
                            "--adaptive-transfer-only" if config.get("scenario") == "transfer" else "--adaptive-only"]
+                if mode == "live":
+                    live.stage_value(config, directory / "live-private")
                 if "runtime" in config:
                     command.append(config["runtime"])
+                if mode == "live":
+                    command.append(str(directory / "live-private"))
                 case = run_case(directory, "native", command, config["timeout_seconds"])
                 manifest["cases"].append(case)
                 if case["state"] == "passed":
-                    manifest["native"] = native_evidence(directory, manifest["repositories"])
-                    if config.get("scenario") == "transfer" and manifest["native"]["format"] != 2:
+                    manifest["native"] = (native_evidence(directory, manifest["repositories"], live_settings=config["live"])
+                                          if mode == "live" else native_evidence(directory, manifest["repositories"]))
+                    if mode == "live":
+                        manifest["state"] = "passed"
+                    elif config.get("scenario") == "transfer" and manifest["native"]["format"] != 2:
                         raise ValueError("selected runtime did not exercise native transfer qualification")
-                    if config.get("scenario") == "transfer":
+                    if mode == "live":
+                        manifest["limitations"].append("One bounded actual-model trial; no fleet-wide performance claim")
+                    elif config.get("scenario") == "transfer":
                         manifest["state"] = "passed"
                         manifest["limitations"].append(
                             "Scripted models and disposable authorization issuer; the live model/production-authority gate remains separate")
@@ -562,10 +747,21 @@ def qualify(directory, config, mode):
                             "The complete coupled fault/refusal matrix remains required before fixture qualification passes")
                 else:
                     manifest["state"] = case["state"]
-    except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
+                    if mode == "live":
+                        manifest["failed_live_evidence"] = preserve_live_failure(directory)
+    except (OSError, ValueError, KeyError, TypeError, AttributeError, OverflowError, subprocess.SubprocessError):
         # Configuration or exception representations can contain private values.
         manifest["state"] = "failed"
         manifest["limitations"].append("qualification did not produce verified complete evidence")
+        if mode == "live" and (directory / "native.log").is_file():
+            try:
+                manifest["failed_live_evidence"] = preserve_live_failure(directory)
+            except (OSError, ValueError):
+                manifest["limitations"].append("native failure evidence could not be copied; private native log retains its location")
+    finally:
+        secret = directory / "live-private/application.json"
+        if secret.is_file():
+            secret.unlink()
     manifest["finished_at"] = stamp()
     return manifest
 

@@ -427,13 +427,18 @@ class AdaptiveDeliveryTests(unittest.TestCase):
             for call in record["calls"]:
                 call["receipt"] = {"assignmentId": record["assignmentId"], "rootId": value["rootId"],
                                    "ordinal": call["ordinal"], "fingerprint": "request-commitment",
-                                   "request": {key: call[key] for key in ["attemptId", "operationId"]}}
+                                   "request": {"attemptId": call["attemptId"], "operationId": call["operationId"],
+                                               "quantities": [["ActiveWork", 1], ["ModelAttempts", 1], ["Tokens", 1000]],
+                                               "policy": "EnforcedCeiling"}}
                 call["outcome"] = {"phase": "CallTerminal", "missing": [],
                                    "reportedModel": descriptor["modelId"], "providerCallId": call["attemptId"],
-                                   "known": {"Tokens": 31, "CostMicroUsd": 2}, "compliance": {
+                                   "known": [["Tokens", 31], ["CostMicroUsd", 2]], "compliance": {
                                        "format": 1, "requestedAlias": role,
                                        "requestedModelId": descriptor["modelId"], "resolvedModelId": descriptor["modelId"],
                                        "providerCallId": call["attemptId"], "tokens": 31, "costUncertain": False,
+                                       "observedModelId": {"observed": descriptor["modelId"]},
+                                       "costMicroUsd": {"numerator": 2, "denominator": 1},
+                                       "providerRunId": "root-run", "attempt": 1,
                                        "status": "succeeded", "strength": "model_observed", "thinking": {"requested": None}, "endpoint": {
                                            "provider": "anthropic", "api": "anthropic-messages",
                                            "transport": "http_api", "endpoint": "https://api.example.invalid/v1/messages"}}}
@@ -469,7 +474,7 @@ class AdaptiveDeliveryTests(unittest.TestCase):
                      lambda r: r["calls"][0]["outcome"].update(reportedModel="other"),
                      lambda r: r["calls"][0]["outcome"]["compliance"].update(requestedAlias="other"),
                      lambda r: r["calls"][0]["outcome"]["compliance"].update(tokens=True),
-                     lambda r: r["calls"][0]["outcome"]["known"].update(Tokens=32),
+                     lambda r: r["calls"][0]["outcome"]["known"].__setitem__(0, ["Tokens", 32]),
                      lambda r: r["calls"][0]["outcome"]["compliance"]["endpoint"].update(provider="other"),
                      lambda r: r["calls"][0]["outcome"]["compliance"]["endpoint"].update(api="openai-responses"),
                      lambda r: r["calls"][0]["outcome"]["compliance"]["endpoint"].update(transport="agent_run"),
@@ -490,12 +495,18 @@ class AdaptiveDeliveryTests(unittest.TestCase):
         envelope = {"limits": limits, "cutoff": "2026-11-09T00:20:00Z"}
         root = {"envelope": copy.deepcopy(envelope), "active": 0, "unknown": 0,
                 "cancelled": False, "overage": False, "usage": {"held": {}, "settled": {"Tokens": 31}}}
-        driver.validate_live_root(root, envelope, admitted_at=instant)
+        def verify(root, envelope):
+            native_root, native_envelope = copy.deepcopy(root), copy.deepcopy(envelope)
+            native_root["envelope"]["limits"] = list(map(list, root["envelope"]["limits"].items()))
+            native_envelope["limits"] = list(map(list, envelope["limits"].items()))
+            native_root["usage"] = {key: list(map(list, values.items())) for key, values in root["usage"].items()}
+            driver.validate_live_root(native_root, native_envelope, admitted_at=instant)
+        verify(root, envelope)
         for field in ["active", "unknown", "cancelled", "overage"]:
             altered = copy.deepcopy(root)
             altered[field] = True if field in ["cancelled", "overage"] else 1
             with self.assertRaises(ValueError):
-                driver.validate_live_root(altered, envelope, admitted_at=instant)
+                verify(altered, envelope)
         for mutate in [lambda e: e["limits"].pop("Tokens"),
                        lambda e: e["limits"].update(Tokens={"tag": "ExplicitlyUnbounded"}),
                        lambda e: e["limits"].update(ModelAttempts={"tag": "Limited", "contents": True}),
@@ -505,15 +516,15 @@ class AdaptiveDeliveryTests(unittest.TestCase):
             altered = copy.deepcopy(envelope)
             mutate(altered)
             with self.assertRaises(ValueError):
-                driver.validate_live_root(root | {"envelope": altered}, altered, admitted_at=instant)
+                verify(root | {"envelope": altered}, altered)
         changed = copy.deepcopy(root)
         changed["envelope"]["limits"]["ModelAttempts"]["contents"] = 1
         with self.assertRaises(ValueError):
-            driver.validate_live_root(changed, envelope, admitted_at=instant)
+            verify(changed, envelope)
         for usage in [{"held": {"Tokens": 1}, "settled": {}},
                       {"held": {}, "settled": {"Tokens": 1001}}]:
             with self.assertRaises(ValueError):
-                driver.validate_live_root(root | {"usage": usage}, envelope, admitted_at=instant)
+                verify(root | {"usage": usage}, envelope)
 
     @staticmethod
     def transfer_probes():

@@ -195,29 +195,93 @@ bytes, an omitted reviewer change or an obsolete consumer contract cannot
 supply passing artifact evidence. The attempt manifest records the selected
 runtime output separately from the driver's source revision.
 
-Live verifier building blocks are available in
-`tools/qualification/adaptive-delivery.py`. `validate_worker_selections` accepts
-an optional independent `admitted` descriptor map, rejects fixture bindings,
-and checks each stored selection receipt/outcome against it. The Linux snapshot
-exports those complete owner records without credentials. This supports variable
-call counts and exact HTTP model ids. `validate_live_root` compares the stored
-root with the independently admitted envelope and admission time; finite token,
-attempt, tool, descendant and concurrency limits are mandatory. Invoice ceilings
-remain explicitly unbounded because the HTTP path cannot enforce them. Missing
-billing remains unresolved work even under that policy. These functions do not
-supply fresh authorization, decision receipts or live dispatch, and are not yet
-wired into a live driver verdict. Their unit controls are not actual-model proof.
+Live qualification now has a separate `--mode live` path. It dispatches the
+production HTTP handlers for the coordinator and all four coding/review roles,
+and uses the configured Kikan-En/Shomei authorizer with local proof verification.
+It starts neither disposable authorization issuer in this mode. It retains the
+same governed workspaces, accepted executor, continuing sessions, exact per-repo
+integration and objective completion boundary. Terminal reconstruction must
+preserve evidence, actual call receipts and provider-journal bytes. The fixture
+fault matrix remains independently selected with `--mode fixture`.
 
-`--mode live` currently returns blocked. No private live provider configuration
-has been supplied and no live adapter is selected. Live acceptance additionally
-requires an actual model-driven coding path, production authorization, explicit
-attempt/duration/token policy, fresh service readiness, and retained evidence.
-Baikai's Codex CLI transport and Shikigami's foreground/unattended launch wrapper
-already exist, but are not the admitted durable response path used here. The
-current response guard refuses `codex-cli` until bounded output, deadlines and
-descendant confinement are qualified; a foreground process result alone cannot
-complete this objective. See [the execution runbook](../../docs/operations/baikai-execution.md).
-It must never fall back to the deterministic provider. No publication, merge,
+Copy the templates into an ignored private directory, then fill their required
+fields with an approved configuration. These examples intentionally cannot run:
+
+```bash
+umask 077
+mkdir -p build/adaptive-delivery-live
+cp tests/adaptive-delivery/live-application.example.json build/adaptive-delivery-live/application.json
+cp tests/adaptive-delivery/live.example.json build/adaptive-delivery-live/trial.json
+chmod 600 build/adaptive-delivery-live/application.json build/adaptive-delivery-live/trial.json
+```
+
+`application.json` contains exactly `authorization`, `credentials` and `behavior`.
+Supply the production Kikan-En and Shomei HTTPS endpoints, client id/secret,
+issuer verification keys, accepted schema hashes and caller id. Choose exact
+HTTP catalog models and credential bindings for the five aliases `adaptive`,
+`producer`, `producer-review`, `consumer`, `consumer-review`. Each alias has an
+explicit output cap and request timeout. The catalog may use one exact model
+for several roles; actual response identities must match the admitted model.
+Native AppConfig remains authoritative for catalog resolution and compatibility.
+The permission service must authorize the fixture's declared principals and
+workspace/model actions: `agent_01h000000000000000coordinator`, the four same-name
+worker principals under `agent_01h000000000000000`, and the native provisioning
+actor `agent_01h000000000000000triage`. Permission-service failure or refusal
+before admission performs no model work. Declarations and credentials alone do
+not grant those actions.
+
+`trial.json` selects an explicitly built immutable Linux runtime and the absolute
+path of `application.json`. Its `live` section supplies the admitted duration
+and every resource dimension. The example numbers are illustrative; the
+operator must approve the actual limits. Model attempts agree with the outer
+driver ceiling; concurrency, descendants, tools and tokens must also be finite.
+Invoice ceilings are explicitly unsupported by these HTTP transports, so
+`CostMicroUsd` must be `ExplicitlyUnbounded`. Missing measured billing still
+remains unresolved; it cannot be replaced with model estimates or zero. A
+passing trial needs settled provider measurements or independently reconciled
+owner evidence. The current direct live verifier requires measured settled
+facts; supplying independent reconciliation requires retaining its owner linkage.
+The host timeout bounds observation and cleanup; it does not enlarge the root.
+
+Only these explicitly supplied private files are copied into the disposable
+guest, without host mounts. Live entry points clear ambient configuration
+variables before parsing the file; an inherited API key cannot satisfy a missing
+credential. Both files must be owned, private regular files without symlinks or
+hard links, at most 64 KiB. The host's staged credential copy is removed after
+success or failure; the guest and its private copies are destroyed on exit.
+Never put credentials into tracked examples or command arguments.
+
+The driver validates configuration before provisioning or dispatch. Run the
+candidate with the private configuration after building its runtime:
+
+```bash
+python3 tools/qualification/adaptive-delivery.py --mode live \
+  --config build/adaptive-delivery-live/trial.json \
+  --artifact-dir build/adaptive-delivery-live-evidence
+```
+
+A passing live verdict requires format-3 native evidence, independently retained
+admission matching the private configuration, exact HTTP/model/thinking tuples,
+unique linked coordinator and worker receipts, enforced request token/time caps,
+settled native root usage, fresh production authority coordinates, a retained
+consumer follow-up, terminal replay and the independently restored exact artifact
+pair. The owner encodes resource maps as arrays of key/value pairs; staging
+converts the friendly configuration object into that native wire format.
+A failed run preserves bounded root/attempt/authority facts and available Git
+bundles as forensic evidence and never claims acceptance.
+
+Adapter controls use synthetic private values and make no paid model calls:
+
+```bash
+nix develop --no-write-lock-file -c cabal build workspace-linux-fixture
+nix develop --no-write-lock-file -c cabal run workspace-linux-fixture -- adaptive-contract
+nix develop --no-write-lock-file -c python3 tools/qualification/test_adaptive_live.py --native-preflight
+python3 -m unittest discover -s tools/qualification -p 'test_*.py' -v
+```
+
+These controls and the fixture matrix cannot close the actual-model trial. No
+live production configuration has been supplied for the recorded adapter work.
+Codex CLI execution remains outside this admitted path. No publication, merge,
 deployment or recurring mandate is authorized by this fixture.
 
 Prototype builds reuse `packages.x86_64-linux.shikigami-qualification-dependencies`,
