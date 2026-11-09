@@ -32,3 +32,7 @@ __pycache__/
 nix/qualification/metadata/
 .codex/
 .dev/
+
+# Heni mutation workspaces and reports (published evidence is copied explicitly).
+mutation-results/
+.heni-build/

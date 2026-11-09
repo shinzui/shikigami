@@ -281,6 +281,11 @@ haskell-conventions:
     python3 tools/style/check_haskell.py
     python3 -m unittest discover -s tools/style -v
 
+# Heni is installed separately; run this recipe inside the development shell.
+mutation-tests heni output:
+    cabal build shikigami-core-test
+    cabal exec -- {{quote(absolute_path(heni))}} run tests/mutation/heni.json --tag pilot --output {{quote(output)}}
+
 # Check nominal value scopes and opaque construction with the selected compiler.
 domain-value-types:
     cabal build shikigami-core shikigami-agent:lib:shikigami-agent shikigami-workers:lib:shikigami-workers

@@ -1,0 +1,166 @@
+{
+  "schemaVersion": 1,
+  "sourceRoot": "../..",
+  "sourcePolicy": {
+    "includes": [
+      "shikigami-core/src/Shikigami/Execution/Resources.hs",
+      "shikigami-core/test/Shikigami/ExecutionResourcesSpec.hs",
+      "tests/mutation/Build.hs",
+      "tests/mutation/Main.hs",
+      "tests/mutation/heni.json"
+    ],
+    "excludes": []
+  },
+  "commands": {
+    "build": {
+      "executable": "runghc",
+      "arguments": [
+        "-package-env",
+        "-",
+        "tests/mutation/Build.hs"
+      ],
+      "timeoutSeconds": 120
+    },
+    "test": {
+      "executable": "./.heni-build/resources",
+      "arguments": [
+        "--color",
+        "never",
+        "--num-threads",
+        "1",
+        "--hide-successes"
+      ],
+      "timeoutSeconds": 20
+    }
+  },
+  "cases": [
+    {
+      "id": "finite-capacity",
+      "description": "Admitting a representable excess must fail the existing capacity assertion.",
+      "tags": [
+        "pilot"
+      ],
+      "edits": [
+        {
+          "kind": "replace",
+          "path": "shikigami-core/src/Shikigami/Execution/Resources.hs",
+          "old": "when (Map.findWithDefault 0 dimension next > amountUnits maximumAmount)",
+          "new": "when (False && Map.findWithDefault 0 dimension next > amountUnits maximumAmount)"
+        }
+      ],
+      "build": "build",
+      "test": "test",
+      "expect": {
+        "kind": "diagnostic",
+        "stage": "test",
+        "exitCode": 1,
+        "outputContains": "finite capacity refuses a representable excess:"
+      }
+    },
+    {
+      "id": "billing-completeness",
+      "description": "Completing without reserved billing dimensions must fail the existing settlement assertion.",
+      "tags": [
+        "pilot"
+      ],
+      "edits": [
+        {
+          "kind": "replace",
+          "path": "shikigami-core/src/Shikigami/Execution/Resources.hs",
+          "old": "unless (all (`Map.member` measured) (Map.keys required))",
+          "new": "unless (True || all (`Map.member` measured) (Map.keys required))"
+        }
+      ],
+      "build": "build",
+      "test": "test",
+      "expect": {
+        "kind": "diagnostic",
+        "stage": "test",
+        "exitCode": 1,
+        "outputContains": "completion cannot erase an unreported reserved dimension:"
+      }
+    },
+    {
+      "id": "stale-root-revision",
+      "description": "Bypassing the expected root revision must fail its admission assertion.",
+      "tags": [
+        "pilot"
+      ],
+      "edits": [
+        {
+          "kind": "replace",
+          "path": "shikigami-core/src/Shikigami/Execution/Resources.hs",
+          "old": "when (expected /= root.revision)",
+          "new": "when (False && expected /= root.revision)"
+        }
+      ],
+      "build": "build",
+      "test": "test",
+      "expect": {
+        "kind": "diagnostic",
+        "stage": "test",
+        "exitCode": 1,
+        "outputContains": "root admission requires the current revision:"
+      }
+    },
+    {
+      "id": "unchanged-control",
+      "description": "The unchanged source and owning test suite must pass.",
+      "tags": [
+        "pilot"
+      ],
+      "edits": [],
+      "build": "build",
+      "test": "test",
+      "expect": {
+        "kind": "control"
+      }
+    },
+    {
+      "id": "survivor-control",
+      "description": "A harmless comment must survive; this deliberately unmet contract exits nonzero.",
+      "tags": [
+        "negative-control"
+      ],
+      "edits": [
+        {
+          "kind": "replace",
+          "path": "shikigami-core/src/Shikigami/Execution/Resources.hs",
+          "old": "-- | Pure admission rules.",
+          "new": "-- | Pure admission rules (harmless survivor control)."
+        }
+      ],
+      "build": "build",
+      "test": "test",
+      "expect": {
+        "kind": "diagnostic",
+        "stage": "test",
+        "exitCode": 1,
+        "outputContains": "finite capacity refuses a representable excess:"
+      }
+    },
+    {
+      "id": "compile-error-control",
+      "description": "An unrelated compile error must never count as semantic detection.",
+      "tags": [
+        "negative-control"
+      ],
+      "edits": [
+        {
+          "kind": "replace",
+          "path": "shikigami-core/src/Shikigami/Execution/Resources.hs",
+          "old": "when (expected /= root.revision)",
+          "new": "when (missingMutationGuard expected root)"
+        }
+      ],
+      "build": "build",
+      "test": "test",
+      "expect": {
+        "kind": "diagnostic",
+        "stage": "test",
+        "exitCode": 1,
+        "outputContains": "root admission requires the current revision:"
+      }
+    }
+  ]
+}

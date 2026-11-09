@@ -9,7 +9,7 @@ import Data.Time (UTCTime (..), fromGregorian)
 import Shikigami.Execution.Counter
 import Shikigami.Execution.Quantity (ResourceAmount, parseResourceAmount)
 import Shikigami.Execution.Resources
-import Shikigami.StateRevision (initialRevision)
+import Shikigami.StateRevision (advanceRevision, initialRevision)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit
 
@@ -89,6 +89,18 @@ tests =
             request = Map.singleton Tokens (fixtureAmount 1)
         admit Map.empty usage request @?= Left (DimensionNotAdmitted Tokens)
         admit (Map.singleton Tokens (Limited (fixtureAmount 1))) usage request @?= Left (ResourceExhausted Tokens),
+      testCase "finite capacity refuses a representable excess" do
+        let limits = Map.singleton Tokens (Limited (fixtureAmount 10))
+            usage = Usage (Map.singleton Tokens (fixtureAmount 8)) Map.empty
+        admit limits usage (Map.singleton Tokens (fixtureAmount 2)) @?= Right (Usage usage.settled (Map.singleton Tokens (fixtureAmount 2)))
+        admit limits usage (Map.singleton Tokens (fixtureAmount 3)) @?= Left (ResourceExhausted Tokens),
+      testCase "root admission requires the current revision" do
+        let now = UTCTime (fromGregorian 2026 11 9) 0
+            cutoff = UTCTime (fromGregorian 2026 11 10) 0
+            current = advanceRevision initialRevision
+            root = Root (Envelope Map.empty cutoff) current ContinueWork Nothing NoOverage (fixtureCount 0) (fixtureCount 0) Map.empty emptyUsage
+        checkRoot now current root @?= Right ()
+        checkRoot now initialRevision root @?= Left RevisionConflict,
       testCase "aggregate arithmetic cannot overflow a bounded unit" do
         let top = toInteger (maxBound :: Int64)
         assertBool "sum refused before int64 overflow" (case admit (Map.singleton Tokens ExplicitlyUnbounded) (Usage (Map.singleton Tokens (fixtureAmount top)) Map.empty) (Map.singleton Tokens (fixtureAmount 1)) of Left _ -> True; _ -> False),

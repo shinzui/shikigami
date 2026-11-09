@@ -1,0 +1,31 @@
+{
+  "baselineCommit": "af5febded10524c81c06f5434ba834cf15be1010",
+  "compiler": "ghc-9.12.4",
+  "platform": "aarch64-darwin",
+  "heni": {
+    "version": "0.1.0.0",
+    "project": "mori://shinzui/heni",
+    "executableSha256": "204d6fe097fe6bbe5a5b74c9ef165bc478b0f8925d7815ceb1c07afe9b9cea05"
+  },
+  "cabalPlanSha256": "6c46acd62d809be2a2552cbee1f7f6c2aaba154d2f0962a5516f2036e52104f0",
+  "files": {
+    "shikigami-core/src/Shikigami/Execution/Resources.hs": "be45fe24704815c13991933189840ea5ff018685136537c9b40c3000a7f37c3f",
+    "shikigami-core/test/Shikigami/ExecutionResourcesSpec.hs": "d7d80e6b703dbd4ef3d85788e90ce593bc8672d68af4588d377e8e4dc3668573",
+    "tests/mutation/Build.hs": "fae707ef860f9d8e6d6af769577ebd4c26278b10201d6485a290e71cd1b14360",
+    "tests/mutation/Main.hs": "434909747aeaa6ced1c4813bb1f3345a4f92c2fbabb249c10cc4efd3e9a9dad5",
+    "tests/mutation/heni.json": "4bfce5205cdc010af8f1da05026371a6318c9777cd8277efa8b802c53f841940"
+  },
+  "reports": {
+    "pilot-report.json": "7e9abc5eb3ff29efd9da7ac1ddcece5685eb86262317c58c466ae9faae99fb4f",
+    "controls-report.json": "8787b8d48b06d2371d817645489e8a0f93b5d325cfa5a99197fcda0ba4d2ebc4",
+    "transcripts.json": "1c70d84e77f51a4c5bf6c71e99bebadae8f1166175fe4ab3d6a8d730ad89d43d",
+    "logs.tar.gz": "91c023cb2157dadb28e361d250119516649e99f5eea7f5d75a3810c7ca2dad3b"
+  },
+  "snapshot": "07e58e8c2c7939c692e1b1facab965a0a8d74f7b1968e4b7df3330dbc26a6db6",
+  "checks": {
+    "coreTests": 789,
+    "styleTests": 13,
+    "pilotExit": 0,
+    "negativeControlsExit": 1
+  }
+}
