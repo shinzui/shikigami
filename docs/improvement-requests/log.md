@@ -1,5 +1,11 @@
 # Bundle Update Log
 
+## 2026-11-11
+
+* **Addition**: IR-23 requests publication of a validated workspace commit to an operator-granted ref of the source repository, for `mori://shinzui/mori/okf/use-cases/concepts/UC-2`.
+
+* **Addition**: IR-22 requests attested workspace run outcomes: a required validated commit decides run success, and the commit and validation facts recorded by Shikigami's tools appear on the public status response, for `mori://shinzui/mori/okf/use-cases/concepts/UC-2`.
+
 ## 2026-11-06
 * **Completion**: Complete IR-19 under MasterPlan 19 and plans 109–113. All eight scheduled watchdog acceptance cases and lost-append accounting pass; scoped inspection, independent age telemetry and operator guides are qualified. Evidence: docs/evidence/plan-113/acceptance.md. Optional native/live-model trials remain explicit additional gaps.
 
