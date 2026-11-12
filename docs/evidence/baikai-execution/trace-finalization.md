@@ -44,8 +44,9 @@ when source review found the proof manifest excluded by `runtimeSource`; the
 corrected filter is included in the restarted build.
 
 All 801 core checks pass, including 20 behavior-tool, 23 TypeSafe and nine
-structured-content cases. Remaining serial application/database checks and
-immutable builds are in progress. No Linux runtime, live provider, authenticated batch
+structured-content cases. All remaining serial application/database checks and the five immutable role
+builds passed; exact counts and package outputs are in [the machine-readable
+checkpoint](trace-finalization.json). No Linux runtime, live provider, authenticated batch
 reporter or final immutable role acceptance is claimed by this checkpoint.
 
 The serial run passed core 801 and workers 353, then stopped at migration
@@ -55,3 +56,21 @@ SQL. The regeneration invocation wrote the snapshot but failed against the
 previously embedded verifier; a rebuild then passed all 11 smoke checks.
 FRIC-68 in `docs/friction-log/` is resolved. The package build containing the
 stale snapshot was stopped; final package qualification remains outstanding.
+
+At source checkpoint `ba63a3db`, native qualification passes core 801, workers
+353, core PostgreSQL 681, agent 37, server 114 and migration smoke 11 checks
+(1,997 total). The committed workflow gate passes 210 conformance assertions,
+no generated drift and a replay-neutral verdict. It uses the same isolated
+project via a temporary Cabal wrapper; no ignored project override is changed.
+Haskell conventions, migration schema isolation and whitespace checks pass.
+The native TypeSafe queue/restart fixtures are included in the PostgreSQL run.
+
+All five native immutable roles built successfully at `ba63a3db`. Ten
+outside-checkout checks passed with provider API keys absent: each role's help,
+interactive configuration, both unattended help levels, installed judgment
+manifest validation and lifecycle rendering. The installed manifest resolves its
+schema import without checkout assets. This proves installed loading and command
+composition; installed judgment enqueue/worker execution remains unqualified.
+No Linux runtime, live provider or authenticated batch reporter trial was run.
+The full off/cache wire, structured-error and judgment authority/budget matrices
+still keep Plan 80 open.

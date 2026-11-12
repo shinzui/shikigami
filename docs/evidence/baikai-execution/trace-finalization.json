@@ -1,0 +1,72 @@
+{
+  "source": "ba63a3dbdfd2f706e4479bbd2561c0ad13e08bc9",
+  "indexState": "2026-11-12T17:25:33Z",
+  "baikai": "0.10.1.0",
+  "baikaiEffectful": "0.4.0.5",
+  "shikumi": "0.5.1.0",
+  "runtimePackages": 382,
+  "immutableRepositories": 6,
+  "suites": {
+    "core": 801,
+    "workers": 353,
+    "postgres": 681,
+    "agent": 37,
+    "server": 114,
+    "migrationSmoke": 11
+  },
+  "conformanceAssertions": 210,
+  "replayVerdict": "replay-neutral",
+  "packages": {
+    "shikigami": "/nix/store/vdxb63nlk92s2964v7gl4wfa2pg8wskd-shikigami",
+    "shikigami-server": "/nix/store/60a45gz938yfhaiwbrrii00lh2kjgv4x-shikigami-server",
+    "shikigami-worker": "/nix/store/wmn75m5fbrkfsxi0zj6f0559g6c0jyq5-shikigami-worker",
+    "shikigami-migrate": "/nix/store/56jbi12z2igbkbs37csk9pzzx9ybzaaq-shikigami-migrate",
+    "shikigami-agent-launch": "/nix/store/5h71prgf8gsw5r2mi9vb6hadgcvhdza4-shikigami-agent-launch"
+  },
+  "installedChecks": [
+    {
+      "case": "shikigami help",
+      "exitCode": 0
+    },
+    {
+      "case": "shikigami-server help",
+      "exitCode": 0
+    },
+    {
+      "case": "shikigami-worker help",
+      "exitCode": 0
+    },
+    {
+      "case": "shikigami-migrate help",
+      "exitCode": 0
+    },
+    {
+      "case": "shikigami-agent-launch help",
+      "exitCode": 0
+    },
+    {
+      "case": "interactive config",
+      "exitCode": 0
+    },
+    {
+      "case": "unattended help",
+      "exitCode": 0
+    },
+    {
+      "case": "unattended agent help",
+      "exitCode": 0
+    },
+    {
+      "case": "installed judgment validation",
+      "exitCode": 0
+    },
+    {
+      "case": "installed judgment lifecycle",
+      "exitCode": 0
+    }
+  ],
+  "liveProviderCalls": 0,
+  "linuxQualification": false,
+  "installedJudgmentQueueWorkerQualification": false,
+  "batchReporterQualified": false
+}
