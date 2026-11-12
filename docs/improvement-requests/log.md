@@ -2,6 +2,9 @@
 
 ## 2026-11-12
 
+* **Addition**: IR-26 requests a registered product-review Flow generalized from the practice-review ports: payload-supplied commit-pinned evidence, a validated draft report, TypeSafe judgments per item, review memory, Kawa history and coalesced Kizashi attention, for `mori://tan/tan-product-management/plans/11-run-recurring-product-reviews-with-durable-history-and-delivery`.
+
+
 * **Addition**: IR-25 requests subscription-backed (CLI) generative steps in durable Flows after plan 80 qualifies CLI providers, with JSON-schema output, isolated tools and configuration, pinned bindings, honest usage evidence and a distinct login failure, for `mori://tan/tan-product-management/masterplans/2-add-shikigami-product-management-reviews-and-follow-up`.
 
 * **Addition**: IR-24 requests pinned, allowlisted, read-only repository evidence for durable runs, with ref resolution at admission and a content reference per read, for `mori://tan/tan-product-management/masterplans/2-add-shikigami-product-management-reviews-and-follow-up`; it also asks whether IR-18 is closed at the read-only boundary on purpose.
