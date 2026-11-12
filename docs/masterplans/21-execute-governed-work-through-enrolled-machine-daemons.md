@@ -10,6 +10,12 @@ provenance:
     model: "claude-fable-5-1"
     harness: "claude-code"
     at: 2026-11-04T19:25:33Z
+  revisions:
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-11-12T14:08:07Z
+      mode: "update"
+      note: "Audit current source, retained evidence and remaining-work relevance at 8d46662a; retain evidence-backed child statuses."
 ---
 
 # Execute governed work through enrolled machine daemons
@@ -108,12 +114,45 @@ No child waits on any plan outside this MasterPlan. EP-1 may begin immediately. 
 
 ## Progress
 
-No child plan has started. EP-1 is eligible immediately. Three cross-plan gates have their own acceptance beyond any single child:
+2026-11-12 audit at `8d46662a`: no child plan has started. EP-1 is eligible
+immediately; later children retain their declared dependencies. Three cross-plan
+gates have their own acceptance beyond any single child:
 
 - [ ] Session check (EP-1 M3): a daemon in one process enrolls, authenticates to a gateway in another process over TLS, receives a `Welcome` with an empty fence list, heartbeats, is revoked and is refused on reconnection, with the registry showing each state.
 - [ ] Relay check (EP-4 M2): a remote edit adapter enqueues a bound command, an in-process fake daemon returns a receipt, the execution settles once through `recordIndependentToolReceipt`, and a second delivery of the same dispatch converges on the same command.
 - [ ] Integrated IR-20 acceptance (EP-5): all nine acceptance cases pass on at least two disposable Apple containers behind a severable network, and the request's lifecycle is set to completed with evidence under `docs/evidence/plan-123/`.
 
+
+## Status and relevance audit — 2026-11-12
+
+All five Not Started statuses are correct. There are no `Shikigami.Machine`
+implementation modules, machine roles in the worker package, machine tables in
+the migration manifest, or `tests/workspace/run-machines-apple.sh` qualification
+runner. The existing supervisor and Apple-container fixtures deliver the local
+workspace substrate, not enrolled remote sessions, local machine policy or
+partition fencing. No completed machine milestone was found to mark off.
+
+IR-20 remains relevant if operators need work to execute on separately owned or
+intermittently connected machines. It is an optional deployment expansion for
+the current single-host runtime, and no incomplete initiative in this audit
+requires it to finish. Recommend keeping it behind current execution correctness,
+service composition and local delivery qualification until a remote-machine
+deployment is selected. Its missing implementation is real; high progress in
+other plans is not evidence of IR-20 completion or irrelevance.
+
+The new [IR-22](../improvement-requests/attest-workspace-run-outcomes-in-run-status.md)
+and [IR-23](../improvement-requests/publish-workspace-commits-to-the-source-repository.md)
+do not depend on remote enrollment. IR-23 explicitly distinguishes publication
+from placement; this plan's receipt/commit identities do not make a private commit
+retrievable centrally. Keep those requests separately owned rather than silently
+adding publication or cross-machine artifact transport to these children.
+
+The research paragraph above is the historical `88926307` snapshot. The current
+migration manifest ends at `0049-recurring-mandates.sql`, not `0042`; allocate
+new migration names only at implementation. Recheck dependency APIs/releases
+through Mori before implementing the proposed transport; this status audit
+selects no transport dependency or bound. No container or runtime acceptance
+was rerun.
 
 ## Surprises & Discoveries
 
@@ -157,4 +196,12 @@ No child plan has started. EP-1 is eligible immediately. Three cross-plan gates 
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Not Started. The 2026-11-12 audit confirms no machine-specific milestone has
+landed. The existing local provider is usable without this deployment expansion;
+all enrollment, policy, remote-host, relay and multi-machine acceptance remains.
+
+## Revision Notes
+
+2026-11-12: Confirm the five unstarted children against current modules, roles,
+migrations and qualification runners; assess remote deployment relevance,
+separate new outcome/publication requests, and retain historical research dates.

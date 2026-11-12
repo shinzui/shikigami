@@ -31,6 +31,11 @@ provenance:
       at: 2026-11-06T20:49:07Z
       mode: "update"
       note: "Reconcile the registry and completion summary with plan 74 reopened failure-path acceptance."
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-11-12T14:08:06Z
+      mode: "update"
+      note: "Audit current source, retained evidence and remaining-work relevance at 8d46662a; retain evidence-backed child statuses."
   reviews:
     - model: "claude-fable-5-1"
       harness: "claude-code"
@@ -152,7 +157,7 @@ The integrated consumer also uses EP-1's additive typed pinned-reference recover
 ## Progress
 
 
-2026-11-06 reconciliation: three children are Complete; EP-2 (plan 74) remains In
+2026-11-12 reconciliation at `8d46662a`: three children are Complete; EP-2 (plan 74) remains In
 Progress following its 2026-10-29 review. Its M3 requires missing-terminal
 enforcement and the remaining cancellation, terminal-write, retry and refusal
 fixtures. The current runner still returns a validated output after normal
@@ -170,6 +175,29 @@ Plan 85 has also delivered `runDecisionAccepted` and per-actual-call root hooks;
 M3 must preserve those consumers and structured complete/stream output.
 
 
+
+## Status and relevance audit — 2026-11-12
+
+Keep plan 74 In Progress and this initiative incomplete. Its M3 was explicitly
+reopened for a contract gap; it is not forgotten completion paperwork. In
+[`DecisionRunner.hs`](../../shikigami-core/src/Shikigami/Program/DecisionRunner.hs),
+`begin` retains hooks by attempt identity, and `finish` writes terminal evidence,
+but normal successful program return validates output without checking that all
+begun streams reached a persisted terminal. The current
+[`runner tests`](../../shikigami-core/test/Shikigami/DecisionRunnerSpec.hs) cover
+successful streaming, blocking finish-hook failure and cancellation, without
+the precise unterminated-stream/streamed-write qualification required by M3.
+Plan 124's interpreter adoption and later root-accounted consumers did not supply
+that missing guard or its full refusal matrix.
+
+This remaining work has high relevance and is the recommended first closeout:
+it protects an already-used provider/evidence boundary, is actionable with local
+fake providers, and needs neither live credentials nor a new dependency choice.
+Reproduce the missing-terminal path, repair the runner, then complete the focused
+failure fixtures and existing core/PostgreSQL consumer regressions specified by
+plan 74. Preserve the three accepted children; no new registry, runner or Flow
+implementation is needed. The audit inspected source/history and retained
+qualification only; it did not reproduce the failure or rerun runtime suites.
 
 ## Surprises & Discoveries
 
@@ -215,3 +243,7 @@ ADR distillation reviewed every child's Decision Log, Surprises and Outcomes. AD
 Initiative-level environment friction FRIC-1 is accepted with an isolated Kikan source checkout and temporary Cabal project. This preserves the repository's dependency declarations and the registered older checkout. Child-specific fixture concurrency and archive mirror detours are triaged in their owning plans. No friction entry remains logged. Completed replay is call-free; execution before an uncommitted result can repeat and remains fully accounted. Live HTTP model execution, optional probability/calibration adapters and downstream signing/read APIs are outside the validated example's scope.
 
 Revision note (2026-11-06): Rebase current architecture and integration on local ProgramRuntime, selected released structured-output cohort and completed accepted/root-accounted decisions; retain historical results and the genuine plan-74 failure-path gate.
+
+Revision note (2026-11-12): Reconfirm the missing normal-success terminal guard
+and exact remaining runner fixtures at the current source; retain three Complete
+children and recommend the key-free correctness closeout before optional extensions.

@@ -17,6 +17,11 @@ provenance:
       at: 2026-11-06T20:49:07Z
       mode: "update"
       note: "Make the unstarted repair plans and live content-plane acceptance explicit in the current snapshot."
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-11-12T14:08:07Z
+      mode: "update"
+      note: "Audit current source, retained evidence and remaining-work relevance at 8d46662a; retain evidence-backed child statuses."
 ---
 
 # Architecture-practice review flow
@@ -154,6 +159,34 @@ corrupt-retained-attention recovery. It still lacks valid retained-skip rollback
 label-independent semantic keys, resolver entitlement, profile install/show and the full
 coupled conformance matrix. No runtime suite or live content call was rerun here.
 
+## Status and relevance audit — 2026-11-12
+
+At `8d46662a`, the registry still correctly records three Complete children,
+two In Progress and three Not Started. The four repair plans are already included;
+there is no omitted completed repair to mark off. Source still establishes their
+need: [`Attention.hs`](../../shikigami-core/src/Shikigami/PracticeReview/Attention.hs)
+includes `claimId` in its version-1 semantic projection and can commit a tentative
+reservation/association when `JournalAlreadyPresent` returns a valid retained skip.
+[`Authorization.hs`](../../shikigami-core/src/Shikigami/PracticeReview/Authorization.hs)
+checks submission authorization but has no verdict-bound resolver entitlement.
+The operator parser has no sanctioned-profile install/show commands, and
+[`Capability.hs`](../../shikigami-core/src/Shikigami/PracticeReview/Capability.hs)
+still supplies an unavailable content reader for deployed review composition.
+
+Plans 60/61's correctness and entitlement repairs remain necessary before claiming
+this reviewer safe and complete. Plans 62/63 still own usable provisioning,
+truthful examples and joined routing/delivery/identity proof. The completed watchdog
+and generic objective tools do not perform this revision-pinned ADR review or its
+human adjudication. This is a distinct advisory feature; recommend scheduling full
+rollout around an actual architecture-review consumer, after core execution and
+service-operation gaps, while retaining its safety gates.
+
+The live-reader gate remains unaccepted locally. Mori navigation and a fresh
+owner-document read on 2026-11-12 confirm
+`mori://shinzui/kikan/okf/improvement-requests/concepts/IR-5` remains Proposed
+with the content-plane contract unratified. No review runtime suite, external
+content call or new acceptance was performed.
+
 ## Surprises & Discoveries
 
 The old registry omitted the already-required repair plans and its high checkbox fraction
@@ -216,6 +249,10 @@ fail-closed pending `mori://shinzui/kikan/okf/improvement-requests/concepts/IR-5
 
 
 ## Revision Notes
+
+- 2026-11-12: Verify the still-missing attention, entitlement, provisioning and live-reader
+  outcomes against current source; retain all eight child statuses and assess the feature
+  separately from completed watchdog/objective work. No repair milestone was newly accepted.
 
 - 2026-11-06: Register existing repair plans 60–63, distinguish accepted core artifacts from final closeout gates, credit delivered identity/ingress hardening and plan-62 documentation while preserving all missing safety, provisioning, conformance and live-reader acceptance.
 

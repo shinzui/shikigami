@@ -17,11 +17,16 @@ provenance:
       at: 2026-11-06T21:09:33Z
       mode: "update"
       note: "Refresh current code, completed prerequisites, shared ownership and genuine remaining acceptance; preserve historical decisions."
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-11-12T14:08:06Z
+      mode: "update"
+      note: "Audit current source, retained evidence and remaining-work relevance at 8d46662a; retain evidence-backed child statuses."
 ---
 
 # Sanctioned Execution Attestation for Agent Runs
 
-This MasterPlan was refreshed against `ff00b819` on 2026-11-06. Three children are
+This MasterPlan was audited against `8d46662a` on 2026-11-12. Three children are
 Complete; the signing/served-verification child remains Not Started.
 
 ## Vision & Scope
@@ -131,6 +136,33 @@ lookups/offline verification, and UC-8 mutation plus real-provider qualification
 contains canonicalPayloadBytes/attestationPayloadDigest but no signer, offline verifier
 or attestation API route. No runtime or paid-provider proof was executed in this refresh.
 
+## Status and relevance audit — 2026-11-12
+
+The three completed foundations are already credited; plan 52 correctly remains
+Not Started. [`Envelope.hs`](../../shikigami-core/src/Shikigami/Attestation/Envelope.hs)
+still describes optional signature/key fields as unsigned work in progress and
+provides canonical bytes/digest, not issuance. The authenticated
+[`public route tree`](../../shikigami-api/src/Shikigami/Api.hs) has health, agent
+and objective routes, with no attestation lookup. There is no delivered signer,
+immutable issuance store, rotation or standalone verifier to accept as one of
+plan 52's five milestones. Later provider/resource evidence does not replace them.
+
+The remaining scope is relevant to UC-8's external signed review gate. Its priority
+depends on deploying that consumer. The newer
+[IR-22](../improvement-requests/attest-workspace-run-outcomes-in-run-status.md)
+asks for tool-recorded workspace outcome facts and truthful public run success;
+it does not require this cryptographic review envelope. Recommend treating IR-22's
+delivery-correctness gap independently rather than blocking it on signing or
+absorbing it into plan 52. [IR-23](../improvement-requests/publish-workspace-commits-to-the-source-repository.md)
+likewise owns authorized publication, not this attestation API. Neither new request
+supersedes UC-8 or is implemented by this audit.
+
+Shared Kikan IR-6 conformance remains unaccepted locally. Mori navigation and a
+fresh owner-document read on 2026-11-12 confirm
+`mori://shinzui/kikan/okf/improvement-requests/concepts/IR-6` remains Proposed;
+its shared signed-envelope/golden agreement is still required. No release choice,
+signing algorithm, runtime test or paid-provider proof is added by this refresh.
+
 ## Surprises & Discoveries
 
 The former plan-52 text asked to implement hashes/types already delivered and to lift
@@ -221,6 +253,10 @@ still requires plan 52's signed portable proof with rotation, bounded authorized
 trusted offline verification, shared golden agreement and a real-provider positive case.
 
 ## Revision Notes
+
+2026-11-12: Confirm signing/API/verifier milestones remain unimplemented, retain the
+registry, distinguish UC-8 from new workspace outcome/publication requests, and mark
+the shared contract as still proposed after a fresh Mori owner-document check.
 
 2026-11-06: Refresh selected evidence/cohort, canonical and allocated-identity ownership,
 current execution/workspace/API dependencies and the genuine remaining signing acceptance.

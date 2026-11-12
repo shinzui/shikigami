@@ -77,6 +77,11 @@ provenance:
       at: 2026-11-09T06:07:58Z
       mode: "implement"
       note: "Record EP-6 live composition progress and the remaining actual-model/trusted-billing qualification gate."
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-11-12T14:08:06Z
+      mode: "update"
+      note: "Audit current source, retained evidence and remaining-work relevance at 8d46662a; retain evidence-backed child statuses."
 ---
 
 # Deliver adaptive autonomous objectives with durable workers
@@ -124,7 +129,7 @@ Relevant local decisions consulted include [ADR 0007](../adr/0007-a-resolved-pro
 | EP-3 | Recover durable model and tool turns with composed policies | [docs/plans/83-recover-durable-model-and-tool-turns-with-composed-policies.md](../plans/83-recover-durable-model-and-tool-turns-with-composed-policies.md) | EP-1, EP-2 | None | Complete |
 | EP-4 | Coordinate continuing worker sessions and fenced handoffs | [docs/plans/84-coordinate-continuing-worker-sessions-and-fenced-handoffs.md](../plans/84-coordinate-continuing-worker-sessions-and-fenced-handoffs.md) | EP-1, EP-2, EP-3; IR-11/IR-13 and full consumer acceptance qualified by plans 96/99/84 | None | Complete |
 | EP-5 | Adapt durable delivery through validated coordinator decisions | [docs/plans/85-adapt-durable-delivery-through-validated-coordinator-decisions.md](../plans/85-adapt-durable-delivery-through-validated-coordinator-decisions.md) | EP-4; external plan 76; completion gate IR-13 provider | None | Complete |
-| EP-6 | Qualify integrated adaptive autonomous delivery | [docs/plans/86-qualify-integrated-adaptive-autonomous-delivery.md](../plans/86-qualify-integrated-adaptive-autonomous-delivery.md) | EP-5 | None | In Progress |
+| EP-6 | Qualify integrated adaptive autonomous delivery | [docs/plans/86-qualify-integrated-adaptive-autonomous-delivery.md](../plans/86-qualify-integrated-adaptive-autonomous-delivery.md) | EP-5 | None | In Progress (live adapter qualified; actual trial and trusted billing open) |
 | EP-7 | Supervise recurring objectives from current durable checkpoints | [docs/plans/87-supervise-recurring-objectives-from-current-durable-checkpoints.md](../plans/87-supervise-recurring-objectives-from-current-durable-checkpoints.md) | EP-5 | EP-6 fixture reuse | Complete |
 
 EP numbers identify rows in this master plan; the linked ExecPlan file ids are 81–87. A child reference is a whole-child start gate: that child must be Complete before the dependent child begins. External plans 73 and 76 are start gates of the same kind, owned by [MasterPlan 13](13-compose-shikumi-decisions-in-durable-flows.md). IR-11 is owned by [plan 96](../plans/96-provide-governed-mutable-repository-workspaces-for-durable-agents.md) and IR-13 by [MasterPlan 17](17-track-durable-objectives-and-authoritative-assignment-checkpoints-without-rei.md), whose EP-2 (plan 99) delivers the provider that closes the IR-13 gate; where a row names one as a completion gate, the child may build its mechanics against the fixture adapter its own plan defines, but it cannot be marked Complete until the real provider passes the acceptance cases named in the ownership matrix below. EP-6 is the exception: its milestones 2–3 exercise real workspaces and checkpoints, so both providers must exist before those milestones start. Initial status is Not Started, not a claim that every row is currently implementable.
@@ -179,6 +184,12 @@ Coordinate those prerequisite deliverables with their separate owning plans when
 
 ## Progress
 
+
+2026-11-12 audit at `8d46662a`: six of seven children are Complete. EP-6 remains
+In Progress for the actual-model/production-authority trial and trusted billing
+reconciliation, not for implementing the live adapter. The adapter's retained
+qualification and test consolidation below are already accepted. No trial or
+new runtime qualification was performed by this status audit.
 
 2026-11-09 UTC: EP-6's guarded real-HTTP/production-authority composition,
 private input validation and live evidence consumer are implemented. Full host build,
@@ -278,6 +289,32 @@ post-establishment old-owner fencing. Both real provider boundaries are now
 available to EP-4 and EP-6. At that checkpoint, EP-4 stayed In Progress for its full IR-15 consumer
 acceptance review; EP-5 still requires the whole EP-4. No child status or hard
 dependency edge changes. EP-6 retains adaptive and live coding acceptance.
+
+## Status and relevance audit — 2026-11-12
+
+The six completed children, including recurrence, are already marked Complete.
+Plan 86 M1/M2 are checked off; M3 correctly remains open. Commit `5e5d3255`
+delivered the separate live composition, and `af5febde` moved native preflight
+controls into Haskell. [`Adaptive.hs`](../../tests/workspace/prototype/Adaptive.hs),
+the driver and the [adapter report](../evidence/adaptive-delivery/live-adapter-qualification.md)
+agree: the guarded path and format-3 verifier exist, while no retained passing
+actual-model/production-authority trial exists. The child checklist has been
+clarified to name only the remaining trial/settlement acceptance.
+
+This gate remains relevant to UC-1's real autonomous-delivery claim. It requires
+engineering as well as operator inputs: select and wire trusted billing evidence
+through the existing selection owner, retain independently linked reconciliation
+evidence in the verifier, then use explicit private production authority/model
+configuration and approved enforceable limits for the bounded trial. Current
+[`SelectionRuntime.hs`](../../shikigami-core/src/Shikigami/Execution/SelectionRuntime.hs)
+does not treat estimated HTTP pricing as measured billing; an unbounded invoice
+policy does not settle unknown usage. Credentials alone cannot close this gate.
+
+Keep the accepted deterministic/native delivery and recurrence claims, and retain
+the live gate for full initiative completion. Mina's active child means partially
+delivered; it does not mean the actual trial is ready to run without those inputs
+and reconciliation work. New IR-22/IR-23 public outcome/publication requests have
+separate acceptance and are not retroactive additions to this finite fixture.
 
 ## Surprises & Discoveries
 
@@ -393,3 +430,7 @@ Revision note (2026-11-09): Record EP-6's implemented live composition and passi
 host/Linux guard and fixture checks, while retaining the actual-model trial and
 trusted invoice reconciliation as open acceptance. Existing owner contracts and
 child status/dependency edges remain unchanged.
+
+Revision note (2026-11-12): Audit all current child statuses, credit the delivered
+live adapter/test consolidation, and identify trusted billing integration plus
+private inputs and an actual passing trial as the genuine remaining EP-6 gate.

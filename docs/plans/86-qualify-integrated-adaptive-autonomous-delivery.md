@@ -58,6 +58,11 @@ provenance:
       at: 2026-11-09T13:28:44Z
       mode: "implement"
       note: "Consolidate adaptive qualification coverage and prefer Haskell for native controls."
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-11-12T14:08:07Z
+      mode: "update"
+      note: "Credit the qualified live adapter and identify remaining trusted-billing integration and actual-model trial; preserve acceptance."
 ---
 
 # Qualify integrated adaptive autonomous delivery
@@ -80,7 +85,19 @@ Implementation began on 2026-11-04 UTC at baseline
 
 - [x] Milestone 1 (2026-11-04): Reproducible two-repository fixture, bounded driver, 50 host controls and native objective admission.
 - [x] Milestone 2 (2026-11-04): Full native integration/recovery/refusal matrix, exact returned artifacts and a passing driver command.
-- [ ] Milestone 3: qualify the guarded live adapter, then run an explicitly configured actual-model/production-authority trial and publish its live evidence and coverage updates.
+- [ ] Milestone 3: integrate trusted billing reconciliation, run the bounded actual-model/production-authority trial with explicit private configuration and approved limits, and publish passing live evidence and coverage updates. The guarded live adapter and its key-free qualification are already delivered.
+
+2026-11-12 status audit at `8d46662a`: M1/M2 remain accepted and M3 remains
+partially delivered. The live implementation and adapter report below already
+credit `5e5d3255`; `af5febde` consolidates its native controls in Haskell. The next
+engineering step is a trusted reconciliation source/consumer using
+`Execution.SelectionStore.reconcileSelectionCallTx`, with independently linked
+evidence accepted by the live verifier. Then supply private model/production
+authority configuration and approved bounds for an actual trial. There is no
+retained passing actual-model trial to mark off. The requirement remains relevant
+to full UC-1 delivery; no acceptance was waived and no runtime test or external
+call was performed for this documentation audit. Earlier checkpoints below retain
+their original dates and do not describe missing live-adapter implementation today.
 
 Live implementation resumed on 2026-11-09 UTC at `ec3e1c6c`. The guarded path
 now exists in `tests/workspace/prototype/Adaptive.hs`, both Linux/Apple runners
@@ -124,9 +141,11 @@ A separate root-envelope check requires finite enforceable resource limits,
 an explicit unsupported invoice-ceiling policy, the admitted cutoff and settled
 work. The Linux selection snapshot now retains the owner's complete receipt and
 outcome records. All 54 Python qualification tests pass (13.519 seconds), including
-four new live verifier control groups. These helpers are not yet connected to
-live dispatch: `native_evidence` and the executable driver still qualify only
-the deterministic fixture. No actual model was called and M3 remains open.
+four new live verifier control groups. At that earlier checkpoint these helpers
+were not yet connected to live dispatch: `native_evidence` and the executable
+driver qualified only the deterministic fixture. The subsequent live composition
+described above closed that implementation gap. No actual model was called and
+M3 remains open.
 The full fixture driver also passes with the expanded owner snapshots: its native
 phase takes 448.241 seconds on reused immutable runtime `5ee0dd83`, retaining ten
 complete worker receipt/outcome records and independently checking all six Git
@@ -139,11 +158,12 @@ PostgreSQL instance has no Mori database. Do not substitute a new empty registry
 
 Refresh verified on 2026-11-08 at source `091c95abe5ef193d116b62e96298e9e952c731ab`:
 all 50 Python qualification tests pass (12.124 seconds), including the live-mode
-refusal and exact-artifact tamper controls. Source inspection confirms M3 is
-still unimplemented at the qualification boundary. The driver cannot admit a
-live run; the native consumer scripts both coordinator proposals and worker
-edits; the evidence verifier requires fixture provider bindings and fixed call
-counts. Private production configuration and the actual-model trial remain
+refusal and exact-artifact tamper controls. Source inspection at that checkpoint
+confirmed the live qualification path was still unimplemented. At that point the
+driver could not admit a live run; the native consumer scripted both coordinator
+proposals and worker edits; the evidence verifier required fixture provider
+bindings and fixed call counts. The later live composition supersedes those
+implementation findings. Private production configuration and the actual-model trial remain
 separate outstanding inputs/evidence. No Haskell rebuild, Linux runtime trial
 or paid model call was performed in this refresh. M1/M2 retain their dated
 acceptance below, not a new qualification of the current runtime.
@@ -437,9 +457,10 @@ native run used a 48-model-attempt ceiling and 1,200-second cutoff. The current
 checked-in `fixture.yaml` sets 48 attempts and a 1,800-second driver timeout;
 record both configured driver bounds and the native root cutoff separately. Its
 provider is free and deterministic; token/invoice dimensions are explicitly
-unbounded fixture policy. `--mode live` remains blocked until a separate actual
-provider/authority adapter and operator-supplied limits are installed. Do not
-reuse these fixture policies as a live spending claim.
+unbounded fixture policy. The separate live composition is now implemented and
+guard-qualified as described in M3. It requires its own private actual-provider/
+authority configuration, enforceable limits and trusted billing settlement;
+do not reuse fixture policies as a live spending claim.
 
 ### Milestone 2: Exercise adaptation, integration and fault recovery
 
@@ -558,8 +579,8 @@ PY
 ```
 
 The fixture driver is implemented. Reuse its accepted runtime for unchanged
-mechanics or requalify a rebuilt candidate; after implementing the live adapter,
-run it against the selected runtime and the
+mechanics or requalify a rebuilt candidate. For the remaining actual-model
+acceptance, run the implemented live adapter against the selected runtime and the
 separately supplied live configuration:
 
 ```bash
@@ -583,6 +604,10 @@ This plan owns only the fixture, qualification driver, evidence format and integ
 
 ## Revision Notes
 
+
+2026-11-12: Audit source, history and retained adapter evidence; update M3 to the
+remaining trusted-reconciliation/private-input/actual-trial work and label obsolete
+missing-live-adapter observations as historical. Preserve all milestone acceptance.
 
 2026-11-04: Audited the working tree and completed plans 85, 96 and 99 before
 implementation. Replaced obsolete blockers with concrete native producer,

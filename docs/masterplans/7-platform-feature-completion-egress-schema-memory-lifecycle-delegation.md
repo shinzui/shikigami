@@ -27,6 +27,11 @@ provenance:
       at: 2026-11-06T21:35:46Z
       mode: "update"
       note: "Audit current identity, dual timer entry points and generic MCP execution compatibility; preserve outstanding release gates."
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-11-12T14:08:07Z
+      mode: "update"
+      note: "Audit current source, retained evidence and remaining-work relevance at 8d46662a; retain evidence-backed child statuses."
   reviews:
     - model: "gpt-6-astra"
       harness: "codex-cli"
@@ -40,7 +45,10 @@ provenance:
 This MasterPlan coordinates five feature streams. The registry owns child status;
 child ExecPlans own implementation milestones. Refreshed against the working tree,
 accepted ADRs and upstream release sources on **2026-11-06**, including a focused
-compatibility audit at `69ac8b25`.
+compatibility audit at `69ac8b25`. Local status, remaining-work relevance and
+upstream request status were audited again at `8d46662a` on **2026-11-12**.
+Release-version observations retain their original date; no dependency bound
+was selected by the later audit.
 
 ## Vision & Scope
 
@@ -250,6 +258,36 @@ runtime milestones; current generic Kioku pages are insufficient. Released MCP t
 adapter/discovery authority still gate live integration. No runtime qualification was
 performed for this refresh; the selected source and release metadata were inspected.
 
+## Status and relevance audit — 2026-11-12
+
+The three Complete children remain accepted; neither unfinished child has delivered
+an unchecked implementation milestone. Plan 34 remains Not Started:
+[`Agent/Run.hs`](../../shikigami-core/src/Shikigami/Agent/Run.hs) still fetches an
+entire scope before truncation and concatenates principal/alias results before
+the final `take`. [`Memory/Scope.hs`](../../shikigami-core/src/Shikigami/Memory/Scope.hs)
+explicitly leaves `sharedScope` unused. The shared timer entry points still have
+no Kioku lifecycle integration. No MCP provider has appeared in the application
+sources. Generic overlays, execution transcripts and recurring mandates are already
+credited to their own completed plans; none supplies these missing outcomes.
+
+Prioritize bounded, correctly ordered recall in plan 34: it repairs an existing
+runtime path. Distillation, marker-owned retention and Shared remain relevant to
+managed long-term memory, with the privacy/ownership limits in ADR 0064. MCP remains
+a separate useful extension when a named remote tool consumer is selected; it is
+not required by the existing native workspace tools. Recommend scheduling that
+integration after the current local correctness and operational gaps. Retain both
+children and their acceptance rather than cancelling useful scope merely to reduce
+the incomplete count. Their independent local fixtures can proceed now.
+
+Mori navigation and owner-request reads on 2026-11-12 confirm Kioku IR-2 remains
+In Progress and explicitly lacks the full recall/retention collection contract;
+Baikai IR-2 and Shikumi IR-1 remain Proposed. Kikan-En IR-3 also remains Proposed;
+that label does not erase the local C13 connection/invocation checks already
+delivered. These are the canonical upstream handles listed below. Request status
+alone does not qualify a released API: recheck exact contracts and authoritative
+releases before selecting integration bounds. No dependency change or runtime
+qualification occurred in this audit.
+
 ## Surprises & Discoveries
 
 The audit holes now have selected remedies and explicit closure evidence:
@@ -331,6 +369,10 @@ Implementation, missing upstream releases and final integration remain; no row i
 closed by the planning change alone.
 
 ## Revision Notes
+
+- 2026-11-12: Confirm local memory/MCP implementation gaps and unchanged child statuses;
+  prioritize existing-path bounded recall, distinguish optional MCP integration, and
+  recheck the canonical upstream owner requests through the local Mori registry.
 
 - 2026-11-06 focused audit at `69ac8b25`: Verified the remaining work against code,
   current ADRs and release metadata; added missing identity, standalone scheduler,

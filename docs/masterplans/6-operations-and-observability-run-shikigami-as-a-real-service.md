@@ -22,11 +22,16 @@ provenance:
       at: 2026-11-06T21:09:33Z
       mode: "update"
       note: "Refresh current code, completed prerequisites, shared ownership and genuine remaining acceptance; preserve historical decisions."
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-11-12T14:08:07Z
+      mode: "update"
+      note: "Audit current source, retained evidence and remaining-work relevance at 8d46662a; retain evidence-backed child statuses."
 ---
 
 # Operations and Observability: Run Shikigami as a Real Service
 
-This MasterPlan was refreshed against `ff00b819` on 2026-11-06. Child plans own
+This MasterPlan was audited against `8d46662a` on 2026-11-12. Child plans own
 milestones and acceptance; this document owns coordination.
 
 ## Vision & Scope
@@ -116,11 +121,32 @@ owners; service restart cannot claim an unknown remote effect never happened.
 
 Three of four children are Complete. Plan 31 has accepted immutable packaging and installed
 asset evidence, including plan 124's 2026-11-05 native regression on the Handan-free closure.
-The 2026-11-06 source still has only PostgreSQL/schema/sanity entries in process-compose,
+The 2026-11-12 source still has only PostgreSQL/schema/sanity entries in process-compose,
 no dev/build/down recipes and no NixOS module. The configuration guide already exists.
 Remaining acceptance is local composition/restart, complete delivery smoke/installed startup,
 module evaluation and bounded drain/flush/recovery. No runtime qualification was rerun
 by this plan refresh.
+
+## Status and relevance audit — 2026-11-12
+
+The registry is correct: three children are Complete and plan 31 remains In Progress.
+Its packaging slice is already checked off. The other four milestones are still open:
+[`process-compose.yaml`](../../process-compose.yaml) has no application roles or broker,
+[`justfile`](../../justfile) has no dev/build/dev-down recipes, and the proposed
+`nix/nixos-module.nix` is absent. Later adaptive-delivery container fixtures qualify
+their particular consumer; they do not implement this startup graph or prove every
+service's drain/flush behavior. No completed milestone was found to mark off.
+
+Remaining work is relevant to operating the service. Prioritize plan 31 M1/M2's
+repeatable local startup and delivery smoke, then its shutdown/recovery acceptance.
+The NixOS milestone remains relevant to the recorded installation target; it is
+deployment-specific work, not a prerequisite for every native coding fixture.
+No deployment-target change or acceptance waiver is made by this audit.
+
+Mina's 48/52 counts checklist items across all children, including the three completed
+ones. It is not an estimate that only eight percent of deployment effort remains:
+plan 31 itself has accepted only one of five substantial deliverables. This audit
+checked source and retained evidence; it did not rerun deployment qualification.
 
 ## Surprises & Discoveries
 
@@ -219,6 +245,10 @@ current accepted native evidence, but plan 31 still owns actual composed deploym
 drain. Complete this MasterPlan only after its four remaining acceptance milestones pass.
 
 ## Revision Notes
+
+2026-11-12: Verify all four remaining deployment gates against current source, retain
+the registry, and distinguish service-operation priority from target-specific installation
+and checklist arithmetic. No completed work was left unchecked.
 
 2026-11-06: Rebase coordination on delivered health/configuration/packaging, remove
 satisfied start gates, and retain exact composed, installed, NixOS and shutdown acceptance.
