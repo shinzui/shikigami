@@ -42,6 +42,7 @@ import Baikai.Content (AssistantContent (AssistantText), TextContent (..))
 import Baikai.Context (Context, emptyContext, systemUser)
 import Baikai.Context qualified as Context
 import Baikai.Error (BaikaiError, authError, rateLimited)
+import Baikai.Evidence qualified as Evidence
 import Baikai.Message (AssistantPayload (..))
 import Baikai.Model (Model, emptyModel)
 import Baikai.Model qualified as Model
@@ -61,8 +62,10 @@ import Control.Lens ((&), (.~))
 import Control.Monad (unless, void)
 import Data.Aeson (Value, (.=))
 import Data.Aeson qualified as Aeson
+import Data.Aeson.Key qualified as Key
+import Data.Aeson.KeyMap qualified as KM
 import Data.Generics.Labels ()
-import Data.IORef (newIORef, readIORef, writeIORef)
+import Data.IORef (modifyIORef', newIORef, readIORef, writeIORef)
 import Data.List.NonEmpty qualified as NonEmpty
 import Data.Text (Text)
 import Data.Text qualified as Text
@@ -92,7 +95,7 @@ import Shikigami.Attestation.Profile qualified as Profile
 import Shikigami.Attestation.Resolve (ResolvedProfile, ResolvedProfileView (..), resolvedProfileFor, resolvedProfileView)
 import Shikigami.Behavior.Compatibility
 import Shikigami.Behavior.Error (FailureClass (..), RunError (..))
-import Shikigami.Behavior.Provider (ProfileViolation (..), ProviderCall (ProviderCall), constrainBehaviorEnv, describeProviderSelection, newBehaviorEnvFor, providerCall, renderProfileViolation)
+import Shikigami.Behavior.Provider (ProfileViolation (..), ProviderCall (..), constrainBehaviorEnv, describeProviderSelection, newBehaviorEnvFor, providerCall, renderProfileViolation)
 import Shikigami.Behavior.Provider.Coordinate qualified as Coordinate
 import Shikigami.Behavior.Run (BehaviorEnv (..), defaultToolTurnLimit, newBehaviorEnv, triggerOnly)
 import Shikigami.Behavior.Run qualified as Behavior
@@ -100,17 +103,20 @@ import Shikigami.Behavior.Skill (SkillDir (..), runSkillWith)
 import Shikigami.Log qualified as Log
 import Shikigami.Trigger.Schedule (parseCron)
 import Shikumi.Tool (mkRegistry)
+import Streamly.Data.Fold qualified as Fold
+import Streamly.Data.Stream qualified as Stream
 import System.Directory (createDirectory, doesFileExist, executable, getPermissions, getTemporaryDirectory, removeDirectoryRecursive, removeFile, setPermissions)
 import System.Exit (ExitCode (..))
 import System.FilePath ((</>))
 import System.IO (hClose, openTempFile)
 import System.Process (readProcessWithExitCode)
+import System.Process qualified as Process
 import System.Timeout (timeout)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
 
 tests :: TestTree
-tests = testGroup "behavior provider" [credentialTests, profileConstraintTests, failureTests, contractTests, httpDispatchTests]
+tests = testGroup "behavior provider" [credentialTests, profileConstraintTests, failureTests, contractTests, cancellationMatrixTests, httpDispatchTests, reasoningCacheTests, refusedReasoningCacheTests]
 
 -- ── Which credential reaches the model call ─────────────────────────────────
 
@@ -487,18 +493,37 @@ withFake body run = bracket acquire removeDirectoryRecursive \dir -> do
 -- asynchronous exception and complete descendant settlement. This qualifies
 -- inherited group cancellation; batch deadlines/output/confinement stay gated.
 cancellationSettles :: Api -> IO ()
-cancellationSettles apiTag = withFake "sleep 5 &\necho $! > child\necho $$ > parent\nwait\n" \dir exe -> do
+cancellationSettles apiTag = cancellationCase apiTag False False False
+
+cancellationMatrixTests :: TestTree
+cancellationMatrixTests =
+  testGroup
+    "owned batch cancellation matrix"
+    [ testCase
+        (show api <> if version then "/version-probe" else if streaming then "/stream-resistant-repeated" else "/complete-resistant-repeated")
+        (cancellationCase api streaming True version)
+    | api <- [AnthropicMessagesCli, OpenAICompletionsCli],
+      (streaming, version) <- [(False, False), (True, False), (False, True)]
+    ]
+
+cancellationCase :: Api -> Bool -> Bool -> Bool -> IO ()
+cancellationCase apiTag streaming resistant version = withFake body \dir exe -> bracket (Process.createProcess (Process.proc "sleep" ["30"])) (\(_, _, _, sentinel) -> Process.terminateProcess sentinel >> void (Process.waitForProcess sentinel)) \(_, _, _, sentinel) -> do
   finished <- newEmptyMVar
   let provider =
         if apiTag == AnthropicMessagesCli
           then ClaudeCli.claudeCliProvider ((ClaudeCli.defaultClaudeCliConfig & #executable .~ (exe) & #workingDir .~ (Just dir)))
           else CodexCli.codexCliProvider ((CodexCli.defaultCodexCliConfig & #executable .~ (exe) & #workingDir .~ (Just dir)))
-  worker <- forkIO (try @SomeException (provider.complete (cliModel apiTag) emptyContext emptyOptions) >>= putMVar finished)
+      options =
+        emptyOptions
+          & #evidence .~ (if version then Just (Evidence.evidenceRequest "version-cancellation") else Nothing)
+          & #responseFormat .~ (if apiTag == OpenAICompletionsCli && not version then Just (JsonSchema (jsonSchemaFormat "public" (Aeson.object ["type" .= ("object" :: Text)]))) else Nothing)
+      run = if streaming then Stream.fold Fold.drain (provider.stream (cliModel apiTag) emptyContext options) else void (provider.complete (cliModel apiTag) emptyContext options)
+  worker <- forkIO (try @SomeException run >>= putMVar finished)
   let cleanup = do
         mapM_
           ( \file -> do
               exists <- doesFileExist (dir </> file)
-              if exists then readFile (dir </> file) >>= \pid -> void (readProcessWithExitCode "/bin/kill" ["-TERM", takeWhile (/= '\n') pid] "") else pure ()
+              if exists then readFile (dir </> file) >>= \pid -> void (readProcessWithExitCode "/bin/kill" ["-KILL", takeWhile (/= '\n') pid] "") else pure ()
           )
           ["child", "parent"]
         void (timeout 6_000_000 (takeMVar finished))
@@ -506,6 +531,7 @@ cancellationSettles apiTag = withFake "sleep 5 &\necho $! > child\necho $$ > par
     ready <- timeout 2_000_000 (waitFor (dir </> "child"))
     unless (ready == Just ()) (assertFailure "fake process did not start")
     void (forkIO (killThread worker))
+    whenResistant (void (forkIO (threadDelay 10_000 >> killThread worker)))
     result <- timeout 2_000_000 (readMVar finished)
     case result of
       Just (Left failure) -> fromException @AsyncException failure @?= Just ThreadKilled
@@ -513,14 +539,37 @@ cancellationSettles apiTag = withFake "sleep 5 &\necho $! > child\necho $$ > par
     pid <- takeWhile (/= '\n') <$> readFile (dir </> "child")
     gone <- timeout 2_000_000 (waitForStopped pid)
     gone @?= Just ()
+    Process.getProcessExitCode sentinel >>= (@?= Nothing)
+    schemaExists <- doesFileExist (dir </> "schema-path")
+    if schemaExists
+      then do
+        path <- takeWhile (/= '\n') <$> readFile (dir </> "schema-path")
+        doesFileExist path >>= (@?= False)
+      else unless (version || apiTag /= OpenAICompletionsCli) (assertFailure "Codex schema path was not captured")
     validateResponseOptions (cliModel apiTag) emptyOptions @?= Left BatchBoundsAndConfinementRequired
   where
+    whenResistant action = if resistant then action else pure ()
+    body =
+      "cd \"$(dirname \"$0\")\"\n"
+        <> "if [ \"$1\" = --version ]; then\n"
+        <> (if version then "  :\n" else "  echo public-fixture-1; exit 0\n")
+        <> "else\n"
+        <> ( if version
+               then
+                 if apiTag == AnthropicMessagesCli
+                   then "  printf '%s\\n' '{\"result\":\"marker\",\"is_error\":false}'; exit 0\n"
+                   else "  printf '%s\\n' '{\"type\":\"item.completed\",\"item\":{\"type\":\"agent_message\",\"text\":\"marker\"}}'; exit 0\n"
+               else "  while [ $# -gt 0 ]; do if [ \"$1\" = --output-schema ]; then shift; echo \"$1\" > schema-path; fi; shift; done\n"
+           )
+        <> "fi\n"
+        <> (if resistant then "trap '' TERM INT\n" else "")
+        <> "sleep 30 &\necho $! > child\necho $$ > parent\nwait\n"
     waitFor path = do
       exists <- doesFileExist path
       if exists then pure () else threadDelay 10_000 >> waitFor path
     waitForStopped pid = do
-      (status, _, _) <- readProcessWithExitCode "/bin/kill" ["-0", pid] ""
-      if status /= ExitSuccess then pure () else threadDelay 10_000 >> waitForStopped pid
+      (status, state, _) <- readProcessWithExitCode "/bin/ps" ["-o", "stat=", "-p", pid] ""
+      if status /= ExitSuccess || 'Z' `elem` state then pure () else threadDelay 10_000 >> waitForStopped pid
 
 httpDispatchTests :: TestTree
 httpDispatchTests =
@@ -553,3 +602,112 @@ httpDispatchTests =
 
 stableKeyForTest :: Text -> Settei.Key
 stableKeyForTest = either (error . show) id . Settei.parseKey
+
+refusedReasoningCacheTests :: TestTree
+refusedReasoningCacheTests =
+  testGroup
+    "unsupported reasoning and cache refuse before HTTP"
+    [ testCase (Text.unpack (choice <> "/" <> model <> "/" <> key)) do
+        seen <- newIORef (0 :: Int)
+        let application _ respond = modifyIORef' seen (+ 1) >> respond (Wai.responseLBS status200 [] "unexpected")
+        testWithApplication (pure application) \port -> do
+          let overrides =
+                [ cliOverride behaviorProviderKey choice,
+                  cliOverride behaviorModelKey model,
+                  cliOverride anthropicApiKeyKey "public-fixture",
+                  cliOverride openaiApiKeyKey "public-fixture",
+                  cliOverride (stableKeyForTest "behavior.base_url") ("http://127.0.0.1:" <> Text.pack (show port)),
+                  cliOverride (stableKeyForTest key) value
+                ]
+              result = appConfigRun RunBehaviorRole ConfigOptions {configPaths = [], namedSources = [], overrides, diagnosticMode = NoDiagnostic} (Right []) (environmentSource environmentBindings (envSnapshot []))
+          result.exitCode @?= 4
+          assertBool "setting named in refusal" (key `Text.isInfixOf` result.standardError)
+          readIORef seen >>= (@?= 0)
+    | (choice, model, key, value) <-
+        [ ("anthropic", "claude-fable-5", "behavior.options.thinking", "none"),
+          ("openai", "gpt-5.6", "behavior.options.cache_retention", "long"),
+          ("openai-responses", "gpt-6.1-sol", "behavior.options.cache_retention", "long")
+        ]
+    ]
+
+-- Exercise configuration, the common builder and public provider together. The
+-- fixture reports no cache usage: requesting retention is not evidence of a hit.
+reasoningCacheTests :: TestTree
+reasoningCacheTests =
+  testGroup
+    "reasoning and shared-prefix wire contracts"
+    [ testCase (Text.unpack (choice <> "/" <> modelId <> "/" <> maybe "default" id thinking <> "/" <> maybe "omitted" id retention)) do
+        seen <- newIORef []
+        let application request respond = do
+              bytes <- Wai.strictRequestBody request
+              body <- either (assertFailure . show) pure (Aeson.eitherDecode bytes)
+              modifyIORef' seen (<> [(Wai.pathInfo request, body)])
+              respond (Wai.responseLBS status200 [("Content-Type", "text/event-stream")] (wireFrames choice))
+        testWithApplication (pure application) \port -> do
+          selection <-
+            selectionFor
+              ( [ cliOverride behaviorProviderKey choice,
+                  cliOverride behaviorModelKey modelId,
+                  cliOverride (if choice == "anthropic" then anthropicApiKeyKey else openaiApiKeyKey) "public-wire-fixture",
+                  cliOverride (stableKeyForTest "behavior.base_url") ("http://127.0.0.1:" <> Text.pack (show port) <> if choice == "anthropic" then "" else "/v1")
+                ]
+                  <> [cliOverride (stableKeyForTest "behavior.options.thinking") value | Just value <- [thinking]]
+                  <> [cliOverride (stableKeyForTest "behavior.options.cache_retention") value | Just value <- [retention]]
+              )
+          env <- newBehaviorEnvFor Log.silentLogger selection Nothing
+          let call = providerCall env
+          call.thinking @?= env.options.thinking
+          fmap (\level -> show level) call.thinking @?= (if thinking == Just "none" then Just "ThinkingNone" else Nothing)
+          call.endpointClass @?= Coordinate.providerCoordinate "http"
+          responses <- mapM (\question -> Behavior.completeBehaviorRequest env env.model (systemUser "shared public prefix" question) (env.options & #evidence .~ Just (Evidence.evidenceRequest "wire-fixture"))) ["first question", "second question"]
+          mapM_
+            ( \resp -> do
+                responseError resp @?= Nothing
+                evidence <- maybe (assertFailure "call evidence missing") pure resp.evidence
+                evidence.thinking.requested @?= env.options.thinking
+                evidence.thinking.mode @?= if thinking /= Just "none" then Evidence.ThinkingModeAbsent else if choice == "anthropic" then Evidence.ThinkingModeToggle else Evidence.ThinkingModeAdaptive
+                evidence.thinking.adjustments @?= []
+                evidence.observedThinking @?= Evidence.Unobserved
+            )
+            responses
+          requests <- readIORef seen
+          length requests @?= 2
+          mapM_
+            ( \(path, body) -> do
+                path @?= if choice == "anthropic" then ["v1", "messages"] else if choice == "openai" then ["v1", "chat", "completions"] else ["v1", "responses"]
+                field "model" body @?= Just (Aeson.String modelId)
+                let on = thinking == Just "none"
+                if choice == "anthropic"
+                  then field "thinking" body @?= (if on then Just (Aeson.object ["type" .= ("disabled" :: Text)]) else Nothing)
+                  else
+                    if choice == "openai"
+                      then field "reasoning_effort" body @?= (if on then Just (Aeson.String "none") else Nothing)
+                      else field "reasoning" body @?= (if on then Just (Aeson.object ["effort" .= ("none" :: Text)]) else Nothing)
+                if choice == "anthropic"
+                  then do
+                    let control = Aeson.object (["type" .= ("ephemeral" :: Text)] <> ["ttl" .= ("1h" :: Text) | retention == Just "long"])
+                    field "system" body @?= Just (if retention == Nothing then Aeson.String "shared public prefix" else Aeson.toJSON [Aeson.object ["type" .= ("text" :: Text), "text" .= ("shared public prefix" :: Text), "cache_control" .= control]])
+                  else do
+                    field "prompt_cache_options" body @?= case retention of
+                      Just "short" -> Just (Aeson.object ["ttl" .= ("30m" :: Text)])
+                      Just "long" -> Just (Aeson.object ["ttl" .= ("12h" :: Text)])
+                      _ -> Nothing
+                    if retention == Nothing
+                      then pure ()
+                      else assertBool "explicit shared-prefix marker on both requests" (containsKey "prompt_cache_breakpoint" body)
+            )
+            requests
+          assertBool "different user questions survive" (snd (head requests) /= snd (last requests))
+    | (choice, modelId, retentions) <- [("anthropic", "claude-sonnet-4-6", [Nothing, Just "short", Just "long"]), ("openai", "gpt-5.6", [Nothing, Just "short"]), ("openai-responses", "gpt-6.1-sol", [Nothing, Just "short"]), ("openai-responses", "gpt-6-luna", [Just "long"])],
+      thinking <- if modelId `elem` ["gpt-5.6", "gpt-6.1-sol"] then [Nothing] else [Nothing, Just "none"],
+      retention <- retentions
+    ]
+  where
+    field key (Aeson.Object fields) = KM.lookup (Key.fromText key) fields
+    field _ _ = Nothing
+    containsKey key (Aeson.Object fields) = KM.member key fields || any (containsKey key) fields
+    containsKey key (Aeson.Array values) = any (containsKey key) values
+    containsKey _ _ = False
+    wireFrames "anthropic" = "data: {\"type\":\"message_start\",\"message\":{\"id\":\"public\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"model\":\"claude-sonnet-4-6\",\"usage\":{\"input_tokens\":1,\"output_tokens\":0}}}\n\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":0}}\n\ndata: {\"type\":\"message_stop\"}\n\n"
+    wireFrames "openai" = "data: {\"id\":\"public\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"marker\"},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n"
+    wireFrames _ = "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"public\",\"output\":[{\"id\":\"msg_public\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"marker\"}]}]}}\n\n"

@@ -1,9 +1,14 @@
 module Shikigami.TypeSafeDecisionSpec (tests) where
 
 import Baikai.Content (DataContent (..))
+import Baikai.Context qualified as Context
+import Baikai.Model qualified as Model
+import Baikai.Options qualified as Options
 import Baikai.Provider.Registry (ApiProvider (..))
+import Baikai.ResponseFormat (ResponseFormat (..), jsonSchemaFormat)
 import Baikai.Stream.Event (AssistantMessageEvent (..), DataEndPayload (..))
 import Baikai.ThinkingLevel (ThinkingLevel (ThinkingNone))
+import Baikai.Tool (mkTool)
 import Control.Concurrent (forkIO, killThread)
 import Control.Concurrent.MVar (newEmptyMVar, putMVar, takeMVar)
 import Control.Exception (AsyncException (ThreadKilled), SomeException, fromException, try)
@@ -15,16 +20,27 @@ import Data.Aeson.KeyMap qualified as KM
 import Data.Either (isLeft)
 import Data.Generics.Labels ()
 import Data.IORef (modifyIORef', newIORef, readIORef)
+import Data.List.NonEmpty (NonEmpty (..))
 import Data.Map.Strict qualified as Map
+import Data.Text (Text)
+import Data.Time (UTCTime (..), fromGregorian)
+import Data.Vector qualified as Vector
+import Shikigami.Attestation.PolicyValue qualified as PV
+import Shikigami.Attestation.Profile qualified as Profile
+import Shikigami.Attestation.Resolve (ResolvedProfileView (..), resolvedProfileFor, resolvedProfileView)
+import Shikigami.Behavior.Error (TransientBehaviorFailure)
+import Shikigami.Behavior.Provider.Coordinate (providerCoordinate)
 import Shikigami.Decision.Answer (answerBlocks)
 import Shikigami.Decision.Contract
 import Shikigami.Decision.ModelCatalog
 import Shikigami.Fixture.TypeSafe
-import Shikigami.Program.Decision (DecisionProgramRef, SomeProgram (..), descriptor, programRef, programRegistry)
+import Shikigami.Program.Decision
 import Shikigami.Program.Decision.JudgmentExample
 import Shikigami.Program.DecisionRunner
 import Shikumi.Decision.Setting (DecisionSetting (NoulSetting))
+import Shikumi.LLM qualified as LLM
 import Shikumi.Program (emptyParams, setDecisionSetting)
+import Shikumi.Program qualified as Program
 import Shikumi.Stream qualified as SS
 import Streamly.Data.Stream qualified as Stream
 import System.Timeout (timeout)
@@ -78,6 +94,15 @@ runnerTests label runProgram =
             [(path, Object body)] -> do
               path @?= "/v1/systemone"
               KM.lookup "model" body @?= Just (String "jev-latest")
+              KM.lookup "state" body @?= Just (object ["instructions" .= ("Judge whether this ticket is urgent, classify its issue category and assess its severity using only the supplied ticket." :: Text), "input_fields" .= ("1. `ticket` (str): " :: Text), "inputs" .= object ["ticket" .= ("Checkout is unavailable." :: Text)]])
+              KM.lookup "questions" body
+                @?= Just
+                  ( object
+                      [ "urgent" .= object ["type" .= ("noul" :: Text), "instructions" .= ("urgent" :: Text)],
+                        "category" .= object ["type" .= ("choice" :: Text), "instructions" .= ("category" :: Text), "criteria" .= object ["billing" .= ("Billing or payment issue" :: Text), "technical" .= ("Product or availability issue" :: Text)]],
+                        "severity" .= object ["type" .= ("score" :: Text), "instructions" .= ("severity" :: Text), "criteria" .= (["Minor", "Disruptive", "Blocking"] :: [Text])]
+                      ]
+                  )
               assertBool "no generation defaults" (all (\key -> not (KM.member key body)) ["thinking", "max_tokens", "temperature", "speed"])
             _ -> assertFailure "one HTTP request expected",
       testCase "fresh changed settings change derived values while raw probabilities remain identical" $
@@ -144,7 +169,124 @@ runnerTests label runProgram =
         | (name, malformed) <-
             [ ("missing answers", object []),
               ("out of range predicate", replaceAnswer "urgent" (object ["type" .= ("noul" :: String), "noul" .= (1.2 :: Double)])),
-              ("unknown choice", replaceAnswer "category" (object ["type" .= ("choice" :: String), "choice" .= ("unknown" :: String), "probabilities" .= object ["unknown" .= (1 :: Int)]]))
+              ("unknown choice", replaceAnswer "category" (object ["type" .= ("choice" :: String), "choice" .= ("unknown" :: String), "probabilities" .= object ["unknown" .= (1 :: Int)]])),
+              ("missing choice probability", replaceAnswer "category" (object ["type" .= ("choice" :: String), "choice" .= ("technical" :: String), "confidence" .= (0.5 :: Double), "probabilities" .= object ["technical" .= (1 :: Int)]])),
+              ("negative choice probability", replaceAnswer "category" (object ["type" .= ("choice" :: String), "choice" .= ("technical" :: String), "confidence" .= (0.5 :: Double), "probabilities" .= object ["technical" .= (1 :: Int), "billing" .= (-0.1 :: Double)]])),
+              ("changed score legend", replaceAnswer "severity" (object ["type" .= ("score" :: String), "score" .= (1.5 :: Double), "confidence" .= (0.5 :: Double), "probabilities" .= object ["0" .= (0.1 :: Double), "1" .= (0.3 :: Double), "2" .= (0.6 :: Double)], "legend" .= object ["0" .= ("Minor" :: String), "1" .= ("changed" :: String), "2" .= ("Blocking" :: String)]]))
+            ]
+        ],
+      testGroup
+        "classified HTTP failures"
+        [ testCase (show status) $ withTypeSafeFixture status 0 (object ["error" .= ("public fixture" :: String)]) \fixture -> do
+            let catalog = fixtureCatalog fixture.endpoint
+            (hooks, inspect) <- newMemoryCallHooks
+            env <- fixtureRuntime catalog hooks
+            (result, answers) <- runProgram env (fixturePrepared catalog) (programRef judgmentProgram) fixtureTicket
+            fmap failureCode (either Right (const (Left ())) result) @?= Right expected
+            answers @?= []
+            calls <- inspect
+            assertBool "bounded attempts" (Map.size calls >= 1 && Map.size calls <= 4)
+            assertBool "all attempts failed" (all (\call -> case call.terminal of Just (CallFailed, Just _) -> True; _ -> False) calls)
+            fixture.requests >>= (\requests -> length requests @?= Map.size calls)
+        | (status, expected) <- [(401, ProviderFailure), (422, OutputDecodeFailure)]
+        ],
+      testGroup
+        "transient HTTP failures retain failed attempts and propagate for workflow retry"
+        [ testCase (show status) $ withTypeSafeFixture status 0 (object ["error" .= ("public fixture" :: Text)]) \fixture -> do
+            let catalog = fixtureCatalog fixture.endpoint
+            (hooks, inspect) <- newMemoryCallHooks
+            env <- fixtureRuntime catalog hooks
+            result <- try @TransientBehaviorFailure (runProgram env (fixturePrepared catalog) (programRef judgmentProgram) fixtureTicket)
+            assertBool "transient failure propagated" (isLeft result)
+            calls <- inspect
+            assertBool "bounded attempts" (Map.size calls >= 1 && Map.size calls <= 4)
+            assertBool "all actual attempts failed" (all (\call -> case call.terminal of Just (CallFailed, Just _) -> True; _ -> False) calls)
+            fixture.requests >>= (\requests -> length requests @?= Map.size calls)
+        | status <- [429, 500]
+        ],
+      testGroup
+        "finite policy and exact tuple admission"
+        [ testCase name $ withTypeSafeFixture 200 0 fixtureResponse \fixture -> do
+            let catalog = fixtureCatalog fixture.endpoint
+                prepared = fixturePrepared catalog
+                policy = resolvedProfileFor (change judgmentProfile)
+                pinned = prepared & #policy .~ Just (resolvedProfileView policy).ref
+            (hooks, inspect) <- newMemoryCallHooks
+            base <- fixtureRuntime catalog hooks
+            (result, answers) <- runProgram (base & #profile .~ Just policy) pinned (programRef judgmentProgram) fixtureTicket
+            fmap failureCode (either Right (const (Left ())) result) @?= Right ForbiddenModel
+            answers @?= []
+            fixture.requests >>= (@?= [])
+            inspect >>= (\calls -> Map.size calls @?= 0)
+        | (name, change) <-
+            [ ("finite output tokens", \p -> p & #limits . #maxTokens .~ Just (mustRight (PV.mkCeiling 64))),
+              ("finite cost with unknown pricing", \p -> p & #limits . #maxCostMicroUsd .~ Just (mustRight (PV.mkCeiling 1000))),
+              ("HTTPS-only endpoint", \p -> p & #allowedCalls .~ ((allowedJudgment & #endpointClass .~ providerCoordinate "https") :| [])),
+              ("another model", \p -> p & #allowedCalls .~ ((allowedJudgment & #modelId .~ providerCoordinate "jev-preview") :| [])),
+              ("default thinking forbidden", \p -> p & #prohibitions . #defaultedThinkingAllowed .~ PV.Prohibited)
+            ]
+        ],
+      testCase "an exact judgment profile admits its HTTP tuple and preserves unset thinking" $
+        withTypeSafeFixture 200 0 fixtureResponse \fixture -> do
+          let catalog = fixtureCatalog fixture.endpoint
+              policy = resolvedProfileFor judgmentProfile
+              prepared = fixturePrepared catalog & #policy .~ Just (resolvedProfileView policy).ref
+          (hooks, inspect) <- newMemoryCallHooks
+          base <- fixtureRuntime catalog hooks
+          (result, answers) <- runProgram (base & #profile .~ Just policy) prepared (programRef judgmentProgram) fixtureTicket
+          assertBool "exact profile succeeds" (not (isLeft result))
+          length answers @?= 1
+          fixture.requests >>= (\requests -> length requests @?= 1)
+          inspect >>= (\calls -> Map.size calls @?= 1),
+      testCase "a prepared alias cannot acquire another binding" $
+        withTypeSafeFixture 200 0 fixtureResponse \fixture -> do
+          let catalog = fixtureCatalog fixture.endpoint
+              prepared = fixturePrepared catalog
+              changed = prepared & #model . #bindingId .~ mustRight (parseModelRegistration "another-binding")
+          (hooks, inspect) <- newMemoryCallHooks
+          env <- fixtureRuntime catalog hooks
+          (result, answers) <- runProgram env changed (programRef judgmentProgram) fixtureTicket
+          fmap failureCode (either Right (const (Left ())) result) @?= Right UnavailableModel
+          answers @?= []
+          fixture.requests >>= (@?= [])
+          inspect >>= (\calls -> Map.size calls @?= 0),
+      testGroup
+        "unsupported requests leave transport and actual-attempt counters untouched"
+        [ testCase name $ withTypeSafeFixture 200 0 fixtureResponse \fixture -> do
+            let catalog = fixtureCatalog fixture.endpoint
+                registered =
+                  mustRight
+                    ( registerJudgmentProgram
+                        "invalid-judgment"
+                        "1"
+                        "fixture/1"
+                        "ticket/1"
+                        "ticket/1"
+                        "validator/1"
+                        "derive/1"
+                        Null
+                        (Program.Embed (\ticket -> (if label == "complete" then void (LLM.complete Model.emptyModel context options) else void (LLM.stream Model.emptyModel context options)) >> pure ticket))
+                        jsonResultCodec
+                        Right
+                        Right
+                    )
+                ref = programRef registered
+                prepared = fixturePrepared catalog & #program .~ descriptor ref
+            (hooks, inspect) <- newMemoryCallHooks
+            base <- fixtureRuntime catalog hooks
+            let env = base & #programs .~ mustRight (programRegistry [SomeProgram registered])
+            result <-
+              if label == "complete"
+                then fst <$> runDecisionProgramWithAnswers env prepared ref fixtureTicket
+                else fst <$> streamDecisionProgramWithAnswers env prepared ref fixtureTicket (const (pure ()))
+            fmap failureCode (either Right (const (Left ())) result) @?= Right OutputValidationFailure
+            fixture.requests >>= (@?= [])
+            inspect >>= (\calls -> Map.size calls @?= 0)
+        | (name, context, options) <-
+            [ ("free-text schema", judgmentContext, Options.emptyOptions & #responseFormat .~ Just (JsonSchema (jsonSchemaFormat "unsupported" (object ["type" .= ("object" :: Text), "properties" .= object ["text" .= object ["type" .= ("string" :: Text)]]])))),
+              ("multiple user turns", judgmentContext & #messages .~ Vector.replicate 2 (Vector.head judgmentContext.messages), closedOptions),
+              ("system history", Context.systemUser "hidden system" "ticket", closedOptions),
+              ("advertised tools", judgmentContext & #tools .~ Vector.singleton (mkTool "inspect" "fixture" (object [])), closedOptions)
             ]
         ],
       testCase "terminal persistence failure returns no structured success and cannot retry" $
@@ -178,6 +320,18 @@ runnerTests label runProgram =
           Map.size calls @?= 1
           assertBool "no fabricated terminal" (all (\call -> call.terminal == Nothing) calls)
           fixture.requests >>= (\requests -> length requests @?= 1),
+      testCase "the application deadline bounds a stalled judgment without a successful terminal" $
+        withTypeSafeFixture 200 500000 fixtureResponse \fixture -> do
+          let catalog = fixtureCatalog fixture.endpoint
+          (hooks, inspect) <- newMemoryCallHooks
+          base <- fixtureRuntime catalog hooks
+          let env = base & #timeoutMicros .~ mustRight (parseDecisionTimeout 100000)
+          result <- timeout 2000000 (try @TransientBehaviorFailure (runProgram env (fixturePrepared catalog) (programRef judgmentProgram) fixtureTicket))
+          assertBool "bounded transient timeout" (case result of Just (Left _) -> True; _ -> False)
+          calls <- inspect
+          Map.size calls @?= 1
+          assertBool "timeout cannot publish success" (all (\call -> case call.terminal of Nothing -> True; Just (CallFailed, _) -> True; _ -> False) calls)
+          fixture.requests >>= (\requests -> length requests @?= 1),
       testCase "explicit generation controls and missing credentials refuse binding before HTTP" $
         withTypeSafeFixture 200 0 fixtureResponse \fixture -> do
           let catalog = fixtureCatalog fixture.endpoint
@@ -200,6 +354,32 @@ replaceAnswer key value = case fixtureResponse of
     Just (Object answers) -> Object (KM.insert "answers" (Object (KM.insert key value answers)) fields)
     _ -> error "fixture must contain answers"
   other -> other
+
+closedOptions :: Options.Options
+closedOptions = Options.emptyOptions & #responseFormat .~ Just (JsonSchema (jsonSchemaFormat "predicate" (object ["type" .= ("object" :: Text), "properties" .= object ["urgent" .= object ["type" .= ("boolean" :: Text)]]])))
+
+judgmentContext :: Context.Context
+judgmentContext = Context.systemUser "" "ticket" & #systemPrompt .~ Nothing
+
+allowedJudgment :: Profile.AllowedCall
+allowedJudgment = Profile.AllowedCall (providerCoordinate "typesafe") (providerCoordinate "typesafe-system-one") (providerCoordinate "http") (providerCoordinate "jev-latest") ThinkingNone
+
+judgmentProfile :: Profile.SanctionedExecutionProfile
+judgmentProfile =
+  Profile.SanctionedExecutionProfile
+    { profileId = Profile.ProfileId "judgment-fixture",
+      version = Profile.ProfileVersion "1",
+      issuer = Profile.Issuer "test",
+      lifecycle = Profile.Active,
+      validFrom = UTCTime (fromGregorian 2026 1 1) 0,
+      validUntil = Nothing,
+      allowedCalls = allowedJudgment :| [],
+      prohibitions = Profile.defaultProhibitions & #defaultedThinkingAllowed .~ PV.Permitted,
+      limits = Profile.unlimitedProfileLimits,
+      minimumEvidenceStrength = Profile.EvidenceRequestedOnly,
+      requiredCorrelationFields = [],
+      signerRequirements = Profile.noSignerRequirements
+    }
 
 streamTests :: TestTree
 streamTests =
@@ -265,5 +445,18 @@ streamTests =
               broken = env & #providers .~ map omit env.providers
           (result, _) <- streamDecisionProgramWithAnswers broken (fixturePrepared catalog) (programRef judgmentProgram) fixtureTicket (const (pure ()))
           assertBool "malformed structured terminal refused" (isLeft result)
+          fixture.requests >>= (\requests -> length requests @?= 1),
+      testCase "a truncated structured stream cannot publish a retained successful answer" $
+        withTypeSafeFixture 200 0 fixtureResponse \fixture -> do
+          let catalog = fixtureCatalog fixture.endpoint
+          (hooks, inspect) <- newMemoryCallHooks
+          env <- fixtureRuntime catalog hooks
+          let truncate provider = provider & #stream .~ (\model context options -> Stream.filter (\case EventDone {} -> False; _ -> True) (provider.stream model context options))
+          (result, answers) <- streamDecisionProgramWithAnswers (env & #providers .~ map truncate env.providers) (fixturePrepared catalog) (programRef judgmentProgram) fixtureTicket (const (pure ()))
+          assertBool "truncated result refused" (isLeft result)
+          answers @?= []
+          calls <- inspect
+          Map.size calls @?= 1
+          assertBool "terminal remains unresolved" (all (\call -> call.terminal == Nothing) calls)
           fixture.requests >>= (\requests -> length requests @?= 1)
     ]

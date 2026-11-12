@@ -305,6 +305,9 @@ finalOptions env binding actual context node = do
                  )
         )
   unless (actual == selected) (abort ForbiddenModel "program attempted to change the selected model or endpoint")
+  -- Judgment models have unknown prices and no enforceable generation cap.
+  -- A finite spending policy cannot be interpreted as a zero-cost request.
+  when (Model.isJudgmentOnly actual && isJust (limits >>= (\limit -> limit.maxCostMicroUsd))) (abort ForbiddenModel "judgment provider cannot uphold a finite cost ceiling")
   when (isJust node.apiKey || not (Map.null node.headers)) (abort ForbiddenModel "program attempted a credential override")
   when (isJust node.thinking && node.thinking /= base.thinking) (abort ForbiddenModel "program attempted a thinking override")
   when (isJust base.cacheRetention && isJust node.cacheRetention && node.cacheRetention /= base.cacheRetention) (abort ForbiddenModel "program attempted a cache retention override")

@@ -153,7 +153,8 @@ Supply `TYPESAFE_API_KEY` privately, or set
 loopback fixture can additionally set `base_url` and use only its public
 synthetic credential. Configuration checks make no request. TypeSafe rejects
 generation controls, including `max_tokens`, sampling and explicit reasoning
-`none`; an incompatible finite token policy refuses before transport. The
+`none`; incompatible finite token or cost policies refuse before transport and
+actual-attempt admission. Unknown judgment prices never count as zero. The
 legacy text/tool model selection cannot select this judgment-only model.
 
 After the normal database bootstrap, save the YAML as `judgment.yaml` and use

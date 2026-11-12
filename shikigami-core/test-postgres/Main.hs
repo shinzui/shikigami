@@ -55,6 +55,7 @@ main = do
   case args of
     ["--objective-commit-and-exit"] -> ObjectiveStoreSpec.crashWriter
     ["--tracker-commit-and-exit"] -> ObjectiveTrackerStoreSpec.crashWriter
+    ["--installed-judgment", operator, worker, agents] -> TypeSafeDecisionWorkflowSpec.qualifyInstalled operator worker agents
     _ -> suite
 
 suite :: IO ()

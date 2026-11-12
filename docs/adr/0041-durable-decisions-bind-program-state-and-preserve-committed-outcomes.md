@@ -115,6 +115,12 @@ the same typed local derivation, with status callbacks rather than partial prose
 No application router/parser bypass is introduced. See the
 [consumer checkpoint](../evidence/baikai-execution/structured-judgments.md).
 
+Judgment providers expose neither an enforceable output-token ceiling nor known
+prices. Both complete and streaming decision execution refuse finite token or
+cost policies before actual-attempt admission and transport. A missing price
+cannot satisfy a spending ceiling as zero; changing to a future enforceable
+policy requires qualification of its owning provider and accounting boundary.
+
 ## References
 
 - [MasterPlan 13](../masterplans/13-compose-shikumi-decisions-in-durable-flows.md)

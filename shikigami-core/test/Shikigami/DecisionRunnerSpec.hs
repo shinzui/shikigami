@@ -15,12 +15,12 @@ import Baikai.Provider.Registry (ApiProvider (..), apiProviderWith, newProviderR
 import Baikai.Response (Response (..), emptyResponse, errorResponse)
 import Baikai.ResponseFormat (StructuredOutputSupport (NativeJsonSchema))
 import Baikai.Stream (liftCompleteToStream)
-import Baikai.ThinkingLevel (ThinkingLevel (ThinkingHigh))
+import Baikai.ThinkingLevel (ThinkingLevel (ThinkingHigh, ThinkingNone))
 import Control.Concurrent (forkIO, threadDelay)
 import Control.Concurrent.MVar (newEmptyMVar, putMVar, takeMVar)
 import Control.Exception (SomeException, throwIO, try)
 import Control.Monad (void)
-import Data.Aeson (FromJSON, ToJSON, Value (Null, String), toJSON, (.:?), (.=))
+import Data.Aeson (FromJSON, ToJSON, Value (Null, String), toJSON, (.:), (.:?), (.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Types qualified as AesonTypes
 import Data.ByteString.Lazy qualified as LBS
@@ -213,7 +213,7 @@ tests =
         length (filter (== Seen (Model.modelId (bindingModel bindingA)) (Just "credential-a") True) requests) @?= 2
         length (filter (== Seen (Model.modelId (bindingModel bindingB)) (Just "credential-b") True) requests) @?= 2,
       testCase "configured decision endpoint and retention reach the public HTTP adapter" do
-        for_ [Nothing, Just "none", Just "short", Just "long"] \retention -> do
+        for_ [(thinking, retention) | thinking <- ["default", "none"], retention <- [Nothing, Just "none", Just "short", Just "long"]] \(thinking, retention) -> do
           seen <- newIORef []
           let application request respond = do
                 body <- Wai.strictRequestBody request
@@ -228,7 +228,7 @@ tests =
                     "bindingVersion" .= ("1" :: Text),
                     "provider" .= ("anthropic" :: Text),
                     "model" .= ("claude-haiku-4-5" :: Text),
-                    "thinking" .= ("default" :: Text),
+                    "thinking" .= (thinking :: Text),
                     "base_url" .= endpoint
                   ]
                     <> maybe [] (\value -> ["cache_retention" .= (value :: Text)]) retention
@@ -238,6 +238,7 @@ tests =
             config <- maybe (assertFailure (Text.unpack configured.standardError)) pure configured.resolved
             let catalog = mustRight config.decisionModelCatalog
                 selected = mustRight (pinnedBinding catalog (head (catalogDescriptors catalog)))
+            (modelDescriptor selected).thinking @?= if thinking == "none" then Just ThinkingNone else Nothing
             (hooks, inspect) <- newMemoryCallHooks
             env <- environment twoNodes claudeMessagesProvider hooks
             let httpsOnly = resolvedProfileFor ((resolvedProfileView forbiddenProfile).profile & #allowedCalls .~ (Profile.AllowedCall (Coordinate.providerCoordinate "anthropic") (Coordinate.providerCoordinate "messages") (Coordinate.providerCoordinate "https") (Coordinate.providerCoordinate "claude-haiku-4-5") Profile.ThinkingHigh :| []))
@@ -252,6 +253,7 @@ tests =
               path @?= ["v1", "messages"]
               let field name = AesonTypes.parseMaybe (Aeson.withObject "request" (.:? name)) body :: Maybe (Maybe Aeson.Value)
               field "model" @?= Just (Just (String "claude-haiku-4-5"))
+              field "thinking" @?= Just (if thinking == "none" then Just (Aeson.object ["type" .= ("disabled" :: Text)]) else Nothing)
               field "cache_control"
                 @?= Just
                   ( case retention of
@@ -263,6 +265,10 @@ tests =
               >>= ( \calls -> do
                       Map.size calls @?= 2
                       assertBool "each actual HTTP terminal persisted" (all (\call -> call.terminal /= Nothing) (Map.elems calls))
+                      for_ calls \call -> case call.terminal of
+                        Just (CallSucceeded, Just terminal) ->
+                          AesonTypes.parseMaybe (Aeson.withObject "evidence" (\fields -> fields .: "thinking" >>= Aeson.withObject "translation" (.:? "requested"))) terminal @?= Just (if thinking == "none" then Just (String "none") else Nothing)
+                        _ -> assertFailure "successful decision terminal evidence missing"
                   ),
       testCase "canonical and historical API evidence compare without rewriting raw facts" do
         for_ [("anthropic-messages", True), ("messages", True), ("openai-chat-completions", False), ("anthropic-messages-cli", False)] \(rawApi, admitted) -> do

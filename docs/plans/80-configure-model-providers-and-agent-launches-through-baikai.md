@@ -51,6 +51,11 @@ provenance:
       at: 2026-11-12T18:58:35Z
       mode: "implement"
       note: "Adopt core trace-finalization fix and qualify behavior consumer cancellation and structured trace retention"
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-11-12T21:53:18Z
+      mode: "implement"
+      note: "Qualify generative off/cache wire contracts and judgment schema, failure and finite-policy admission"
 ---
 
 # Configure model providers and agent launches through Baikai
@@ -102,6 +107,26 @@ Implementation in progress (2026-11-12 UTC): core trace-finalization adoption, b
 
 ### Historical handoffs
 
+Implementation continuation (2026-11-12 UTC): the candidate now passes 863 core
+checks, including 62 TypeSafe complete/stream checks, ten structured-content
+checks, twelve successful reasoning/cache wire combinations and three offline
+refusals. The public adapters qualify complete, active-stream and version-probe
+cancellation with resistant inherited children, repeated cancellation, an
+unrelated sentinel and Codex schema-file cleanup on Darwin. Configured decision
+aliases independently prove default/off wire translation and retained evidence.
+Judgment tests assert the exact state/questions, missing/wrong-provider
+credentials, unknown models, immutable binding/profile refusals, malformed
+probability maps/legends, permanent/transient HTTP failures, timeout and truncated
+streams. A newly exposed synchronous judgment cost-policy gap is fixed by
+refusing finite cost ceilings before actual-attempt admission. ADR 0041 records
+the constraint. Native database regression, final immutable roles and the new
+explicit installed acceptance mode are still being qualified; no full milestone
+is closed by this continuation. The installed driver is available through the
+PostgreSQL test executable's `--installed-judgment OPERATOR WORKER PROOF_DIRECTORY`
+mode, requiring absolute installed paths and running commands in a disposable
+directory with API-key environment variables removed. It never substitutes
+checkout commands. Batch deadlines/output/confinement and Linux remain open.
+
 Refresh handoff (2026-11-02 UTC): this is a plan update, with no dependency or runtime change. Hackage and upstream tags verify core 0.10.0.0, Claude/OpenAI 0.7.3.0 and agent 0.2.0.4 as the latest normal releases. A coherent latest-version solve is not yet established: published Shikumi descriptors require Baikai below 0.9, and the selected Kioku 0.12.0.0 does too. Resolve those owning-package prerequisites before promoting the latest target. See the release refresh in Context and Orientation.
 
 Scope handoff (2026-11-02 UTC): the user authorized adoption of every feature discussed, including structured answers and TypeSafe judgments. M7 and M8 are now required deliverables. The earlier generative-only scope decision is superseded; current dependency prerequisites and October qualification evidence retain their meaning.
@@ -118,6 +143,17 @@ Source checkpoint (2026-11-03 UTC): the released cohort is integrated with struc
 IR-5 release adoption (2026-11-03 UTC): verified normal Hackage releases Shikumi 0.5.1.0, cache 0.2.1.1, tools 0.4.2.1 and trace 0.3.2.0, with descriptors matching tag commit `7b96ecf06364b37de44b15c4f58b2528b5a3e0f5` at `mori://shinzui/shikumi`. The application solve succeeds at index-state `2026-11-03T12:48:57Z` without other cohort changes or new bounds overrides. The new `streamDecisionProgramWithAnswers` entry point shares complete-call admission, private provider registry, terminal acknowledgement and raw-answer retention while composing public Shikumi streaming interpreters. All 15 real TypeSafe checks pass, including exact complete/stream request/raw/typed parity, atomic events, cancellation, refusal, consumer failure and terminal-persistence failure. FRIC-49 is resolved; the historical pre-transport refusal no longer blocks this candidate. At source `d9f34aa7`, full core 689, agent 37, serial PostgreSQL 546, serial worker 281, server 105 and migration smoke 11 checks pass. All three TypeSafe PostgreSQL cases pass, including the public stream with SQL acknowledgement before LM completion and identical journal replay with one total HTTP request. The committed native gate passes 177 assertions with no generated drift or workflow-shape findings and a replay-neutral stored-data verdict, using the verified isolated committed Cabal descriptor. The frozen export has 387 runtime packages and seven immutable repositories; all five Nix role attributes evaluate in a dry run. See [the streaming checkpoint](../evidence/baikai-execution/streaming-consumer-checkpoint.json). M7/M8 remain open for the remaining plan matrix and packaging criteria; no paid or Linux runtime qualification is implied.
 
 ## Surprises & Discoveries
+
+The 2026-11-12 consumer matrix exposed a synchronous TypeSafe admission gap:
+`finalOptions` checked token ceilings through generation-control refusal but
+did not refuse a finite cost ceiling for unknown judgment prices. The candidate
+now refuses it before allocating an actual attempt, for complete and stream
+execution. Positive exact-profile tests prove these refusals are not merely
+caused by an unusable profile. Unsupported schema/history/tool requests are
+refused by public Shikumi routing as `OutputValidationFailure`; HTTP 429/500
+retain failed actual attempts and propagate `TransientBehaviorFailure` for the
+workflow retry owner. Anthropic caching uses system text-block markers; the
+fixtures assert their actual placement rather than only a top-level control.
 
 The 2026-11-12 serial regression found that migration 0049's mandate tables were missing from the reviewed schema snapshot. Native regeneration added 34 entries matching the committed SQL; rebuilding the embedded verifier restored all 11 smoke checks. FRIC-68 is resolved. This is a qualification-baseline repair, with no migration or workflow change. Core 801, workers 353 and the replay-neutral committed gate pass at the trace checkpoint; all six suites now pass (1,997 checks total), along with five native immutable roles and ten installed checks.
 

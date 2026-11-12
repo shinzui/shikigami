@@ -154,7 +154,16 @@ tests =
             invalid = "[{\"alias\":\"triage\",\"credential\":\"" <> marker <> "\"}]"
             run = configRun [("behavior.decisionModels", invalid)] ExplainJson
         run.exitCode @?= 4
-        assertBool "no secret in diagnostics" (not (marker `Text.isInfixOf` (run.standardOutput <> run.standardError)))
+        assertBool "no secret in diagnostics" (not (marker `Text.isInfixOf` (run.standardOutput <> run.standardError))),
+      testCase "judgment bindings require the matching credential and an exact catalog model" do
+        let entries model = TE.decodeUtf8 . LBS.toStrict . encode $ [object ["alias" .= ("judge" :: Text), "version" .= ("1" :: Text), "bindingId" .= ("judgment" :: Text), "bindingVersion" .= ("1" :: Text), "provider" .= ("typesafe" :: Text), "model" .= model, "thinking" .= ("default" :: Text)]]
+            run model keys = configRun (("behavior.decisionModels", entries model) : keys) CheckConfig
+        for_ [[], [("credentials.providers.anthropic.api_key", "public-wrong-provider")], [("credentials.providers.openai.api_key", "public-wrong-provider")]] \keys -> do
+          let result = run ("jev-latest" :: Text) keys
+          result.exitCode @?= 4
+          assertBool "missing matching credential named" ("credentials.providers.typesafe.api_key" `Text.isInfixOf` result.standardError)
+        (run ("jev-unknown" :: Text) [("credentials.providers.typesafe.api_key", "public-fixture")]).exitCode @?= 4
+        (run ("jev-latest" :: Text) [("credentials.providers.typesafe.api_key", "public-fixture")]).exitCode @?= 0
     ]
 
 httpConfigRun :: [Pair] -> DiagnosticMode -> ConfigRun

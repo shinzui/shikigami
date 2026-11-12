@@ -64,6 +64,15 @@ tests =
         length [() | CallFailed {} <- observed] @?= 0,
       testCase "public full response codec retains data and optional provider observations" do
         parseEither responseFromJSON (responseToJSON response) @?= Right response,
+      testCase "absent structured optional fields remain absent through codec, snapshot and replay" do
+        let minimal = structured {probabilities = Nothing, confidence = Nothing, method = Nothing}
+            original = response & #message . #content .~ Vector.singleton (AssistantData minimal)
+        parseEither responseFromJSON (responseToJSON original) @?= Right original
+        snapshot <- either (assertFailure . show) (maybe (assertFailure "snapshot missing") pure) (captureAnswer original.message.content)
+        eitherDecode (encode snapshot) @?= Right snapshot
+        answerBlocks snapshot @?= [minimal]
+        restored <- either (assertFailure . show) pure (restoreAssistant (captureAssistant original))
+        restored.content @?= original.message.content,
       testCase "cache serialization preserves structured data without minting call evidence" do
         now <- getCurrentTime
         let evidence =
