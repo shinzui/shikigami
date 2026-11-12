@@ -10,6 +10,7 @@ import Control.Exception (AsyncException (ThreadKilled), SomeException, fromExce
 import Control.Lens ((&), (.~))
 import Control.Monad (void)
 import Data.Aeson (Value (..), eitherDecode, encode, object, toJSON, (.=))
+import Data.Aeson.Key (Key)
 import Data.Aeson.KeyMap qualified as KM
 import Data.Either (isLeft)
 import Data.Generics.Labels ()
@@ -114,6 +115,38 @@ runnerTests label runProgram =
           Map.size calls @?= 1
           assertBool "one failed terminal" (all (\call -> case call.terminal of Just (CallFailed, Just _) -> True; _ -> False) calls)
           fixture.requests >>= (\requests -> length requests @?= 1),
+      testCase "HTTP bad request retains one failed actual attempt" $
+        withTypeSafeFixture 400 0 (object ["error" .= ("invalid public fixture" :: String)]) \fixture -> do
+          let catalog = fixtureCatalog fixture.endpoint
+          (hooks, inspect) <- newMemoryCallHooks
+          env <- fixtureRuntime catalog hooks
+          (result, answers) <- runProgram env (fixturePrepared catalog) (programRef judgmentProgram) fixtureTicket
+          fmap failureCode (either Right (const (Left ())) result) @?= Right OutputDecodeFailure
+          answers @?= []
+          calls <- inspect
+          Map.size calls @?= 1
+          assertBool "failed actual attempt" (all (\call -> case call.terminal of Just (CallFailed, Just _) -> True; _ -> False) calls)
+          fixture.requests >>= (\requests -> length requests @?= 1),
+      testGroup
+        "malformed provider answers never become structured success"
+        [ testCase name $
+            withTypeSafeFixture 200 0 malformed \fixture -> do
+              let catalog = fixtureCatalog fixture.endpoint
+              (hooks, inspect) <- newMemoryCallHooks
+              env <- fixtureRuntime catalog hooks
+              (result, answers) <- runProgram env (fixturePrepared catalog) (programRef judgmentProgram) fixtureTicket
+              assertBool "malformed answer refused" (isLeft result)
+              answers @?= []
+              calls <- inspect
+              assertBool "bounded actual attempts" (Map.size calls >= 1 && Map.size calls <= 4)
+              assertBool "every attempt failed" (all (\call -> case call.terminal of Just (CallFailed, Just _) -> True; _ -> False) calls)
+              fixture.requests >>= (\requests -> length requests @?= Map.size calls)
+        | (name, malformed) <-
+            [ ("missing answers", object []),
+              ("out of range predicate", replaceAnswer "urgent" (object ["type" .= ("noul" :: String), "noul" .= (1.2 :: Double)])),
+              ("unknown choice", replaceAnswer "category" (object ["type" .= ("choice" :: String), "choice" .= ("unknown" :: String), "probabilities" .= object ["unknown" .= (1 :: Int)]]))
+            ]
+        ],
       testCase "terminal persistence failure returns no structured success and cannot retry" $
         withTypeSafeFixture 200 0 fixtureResponse \fixture -> do
           let catalog = fixtureCatalog fixture.endpoint
@@ -160,6 +193,13 @@ runnerTests label runProgram =
           assertBool "missing credential refused" (isLeft (bind (bindingOptions pinned) Nothing))
           fixture.requests >>= (@?= [])
     ]
+
+replaceAnswer :: Key -> Value -> Value
+replaceAnswer key value = case fixtureResponse of
+  Object fields -> case KM.lookup "answers" fields of
+    Just (Object answers) -> Object (KM.insert "answers" (Object (KM.insert key value answers)) fields)
+    _ -> error "fixture must contain answers"
+  other -> other
 
 streamTests :: TestTree
 streamTests =

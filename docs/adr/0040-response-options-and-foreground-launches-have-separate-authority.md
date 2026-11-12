@@ -38,6 +38,15 @@ Shikigami does not copy the owning process engine or infer confinement from the
 absence of advertised Shikumi tool support. Foreground launch authority does not
 supply background reporter authority.
 
+The Baikai 0.10.1 synchronous trace wrapper owns consumption and bounded
+finalization of a behavior call. Healthy abort trace delivery precedes the
+original cancellation; cancellation during terminal drain preserves the
+already committed terminal. Trace delivery is still distinct from the
+application's durable actual-attempt acknowledgement. A stalled or failed trace
+sink cannot establish a successful durable outcome, process confinement or
+batch execution bounds. General stream decorators do not inherit the stronger
+lifetime of a synchronous wrapper or an explicitly owned consumer fold.
+
 ## Alternatives rejected
 
 Reusing a terminal/process result as `run-behavior-v2` success would confuse coding

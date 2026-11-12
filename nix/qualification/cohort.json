@@ -319,12 +319,12 @@
       ],
       "flags": {},
       "source": {
-        "hash": "sha256-cgo7ZF3LtLgTstfK0vfswwl4rEsD9/ttBOcmfAiyUuA=",
-        "metadata_hash": "sha256-iOJJMOyGVKWimr/xLWXdiOAOpsOmHNjcFJbBhR8Rhm0=",
+        "hash": "sha256-aknUP5wF+JxKXx9oCtkL/ZKi0fM5X4lNSeYhvQ7Qpcc=",
+        "metadata_hash": "sha256-EI8tS5jlB299YG1Je0HJizBO1qosgXwvPLxyZZ37exY=",
         "type": "hackage",
-        "url": "https://hackage.haskell.org/package/baikai-0.10.0.0/baikai-0.10.0.0.tar.gz"
+        "url": "https://hackage.haskell.org/package/baikai-0.10.1.0/baikai-0.10.1.0.tar.gz"
       },
-      "version": "0.10.0.0"
+      "version": "0.10.1.0"
     },
     "baikai-agent": {
       "components": [
@@ -645,7 +645,7 @@
       },
       "source": {
         "hash": "sha256-qW7cHYp4LKiIBoqbyXFFLcf77QO5Dl4Ncb1zPFaE5i0=",
-        "metadata_hash": "sha256-jVpV+Tay2L5yf4tEBK2RT/k0kbc8e7MJSWVUbfYhAVY=",
+        "metadata_hash": "sha256-jHtZrdM91VCWxGKivb90+HSTpdaDV5GJKCSQ+3jF6Ag=",
         "type": "hackage",
         "url": "https://hackage.haskell.org/package/boring-0.2.2.1/boring-0.2.2.1.tar.gz"
       },

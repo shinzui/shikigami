@@ -1,12 +1,18 @@
 module Shikigami.BaikaiStructuredContentSpec (tests) where
 
+import Baikai.Api (Api (Custom))
 import Baikai.Content (AssistantContent (..), DataContent (..), TextContent (..), UserContent (..))
 import Baikai.Context qualified as Context
+import Baikai.Evidence qualified as Evidence
 import Baikai.Message qualified as Message
 import Baikai.Model (emptyModel)
 import Baikai.Options (emptyOptions)
+import Baikai.Provider (apiProviderWith)
+import Baikai.Provider.Registry (newProviderRegistryFrom)
 import Baikai.Response (Response (..), emptyResponse)
 import Baikai.Response.JSON (responseFromJSON, responseToJSON)
+import Baikai.Stream (liftCompleteToStream)
+import Baikai.Trace (TraceEvent (..), TraceSink (..))
 import Control.Lens ((&), (.~))
 import Data.Aeson (eitherDecode, encode, object, (.=))
 import Data.Aeson.Types (parseEither)
@@ -21,6 +27,7 @@ import Effectful (Eff, IOE, liftIO, runEff, type (:>))
 import Effectful.Concurrent (runConcurrent)
 import Effectful.Dispatch.Dynamic (interpret)
 import Effectful.Error.Static (Error, runErrorNoCallStack, throwError)
+import Shikigami.Behavior.Run (completeBehaviorRequest, newBehaviorEnv)
 import Shikigami.Decision.Answer
 import Shikigami.Execution.Policy (defaultHarnessPolicy, validateTerminalOutput)
 import Shikigami.Execution.Transcript
@@ -29,6 +36,7 @@ import Shikumi.Cache.Backend.Memory (newMemoryCache, runCacheMemory)
 import Shikumi.Effect.Time (runTime)
 import Shikumi.Error (ShikumiError (..))
 import Shikumi.LLM (LLM (..), complete)
+import Streamly.Data.Fold qualified as Fold
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit
 
@@ -36,22 +44,57 @@ tests :: TestTree
 tests =
   testGroup
     "Baikai structured content"
-    [ testCase "public full response codec retains data and optional provider observations" do
+    [ testCase "behavior trace preserves mixed structured data and absent provider observations" do
+        events <- newIORef []
+        let api = Custom "structured-behavior-trace"
+            model = emptyModel & #api .~ api
+            mixed = response & #message . #content .~ Vector.fromList [AssistantText (TextContent "answer"), AssistantData structured]
+            handler _ _ _ = pure mixed
+            sink = TraceSink (Fold.drainMapM (\event -> modifyIORef' events (<> [event])))
+        registry <- newProviderRegistryFrom [apiProviderWith api (liftCompleteToStream handler) handler]
+        base <- newBehaviorEnv
+        let env = base & #providerRegistry .~ Just registry & #traceSink .~ Just sink
+        actual <- completeBehaviorRequest env model Context.emptyContext emptyOptions
+        actual.message.content @?= mixed.message.content
+        actual.evidence @?= Nothing
+        observed <- readIORef events
+        [structuredData | CallFinished {structuredData} <- observed] @?= [Just (Vector.singleton structured)]
+        length [() | CallStarted {} <- observed] @?= 1
+        length [() | CallEvidence {} <- observed] @?= 0
+        length [() | CallFailed {} <- observed] @?= 0,
+      testCase "public full response codec retains data and optional provider observations" do
         parseEither responseFromJSON (responseToJSON response) @?= Right response,
       testCase "cache serialization preserves structured data without minting call evidence" do
         now <- getCurrentTime
-        let cached = CachedResponse response now currentKeyVersion
-        eitherDecode (encode cached) @?= Right cached
+        let evidence =
+              Evidence.baseEvidence
+                (Evidence.evidenceRequest "structured-cache")
+                "original-call"
+                (Evidence.EndpointIdentity "fixture" "fixture" Evidence.TransportHttpApi Nothing "fixture/1" Nothing)
+                "fixture"
+                Evidence.noThinkingRequested
+                now
+                now
+                Evidence.CallSucceeded
+                "sha256:request"
+                "sha256:configuration"
+            original = response & #evidence .~ Just evidence
+            cached = CachedResponse original now currentKeyVersion
+        parseEither responseFromJSON (responseToJSON original) @?= Right original
+        eitherDecode (encode cached) @?= Right (CachedResponse response now currentKeyVersion)
         cache <- newMemoryCache
         count <- newIORef 0
-        result <- runEff . runErrorNoCallStack @ShikumiError . runConcurrent . runTime . runCacheMemory cache . counting count . cachedLLM $ do
+        result <- runEff . runErrorNoCallStack @ShikumiError . runConcurrent . runTime . runCacheMemory cache . counting original count . cachedLLM $ do
           first <- complete emptyModel Context.emptyContext emptyOptions
           second <- complete emptyModel Context.emptyContext emptyOptions
           pure (first, second)
-        result @?= Right (response, response)
+        result @?= Right (original, response)
         readIORef count >>= (@?= 1)
         case result of
-          Right (_, hit) -> hit.evidence @?= Nothing
+          Right (_, hit) -> do
+            hit.evidence @?= Nothing
+            restored <- either (assertFailure . show) pure (restoreAssistant (captureAssistant original))
+            restored.content @?= hit.message.content
           Left _ -> assertFailure "cache result missing",
       testCase "protected answer snapshot roundtrips optional fields and rejects invalid probability data" do
         snapshot <- either (assertFailure . show) (maybe (assertFailure "snapshot missing") pure) (captureAnswer response.message.content)
@@ -118,7 +161,7 @@ structured =
 response :: Response
 response = emptyResponse & #message . #content .~ Vector.singleton (AssistantData structured)
 
-counting :: (IOE :> es, Error ShikumiError :> es) => IORef Int -> Eff (LLM : es) a -> Eff es a
-counting count = interpret \_ -> \case
-  Complete {} -> liftIO (modifyIORef' count (+ 1)) >> pure response
+counting :: (IOE :> es, Error ShikumiError :> es) => Response -> IORef Int -> Eff (LLM : es) a -> Eff es a
+counting original count = interpret \_ -> \case
+  Complete {} -> liftIO (modifyIORef' count (+ 1)) >> pure original
   Stream {} -> throwError (ValidationFailure "unexpected stream in complete-cache fixture")

@@ -10,6 +10,23 @@ the cohort moves. Before plan 80, the only exact constraint was `keiro-dsl`, whi
 and so no bound ties to the runtime's Keiro release. A drift between a matrix
 row and the solver's plan is a bug in one of them.
 
+## Baikai trace-finalization candidate — selected 2026-11-12
+
+Plan 80 advances the fixed index to `2026-11-12T17:25:33Z` and core Baikai to
+0.10.1.0. The released tag `baikai-0.10.1.0` in `mori://shinzui/baikai`
+peels to `cdb79e5805613ab60074bb2c9279d779af610c05`; its Hackage descriptor
+SHA256 is `108f2d4b98e5076f7d606d497b41c98b304ed6aa2c817c2f3cbc72659dfb7b16`.
+The isolated application solve and frozen export retain 382 runtime packages
+and six immutable repositories. All other package versions remain fixed,
+including compatible baikai-effectful 0.4.0.5 and Shikumi 0.5.1.0. The newer
+index selects a revised `boring` 0.2.2.1 descriptor; its source hash is unchanged.
+Adapter 0.5 remains excluded by published Shikumi bounds.
+
+Consumer and installed qualification for this candidate is recorded in
+[the trace checkpoint](evidence/baikai-execution/trace-finalization.md).
+Batch CLI responses remain gated on deadlines, output bounds and confinement.
+The following checkpoints retain their original source and release attribution.
+
 ## Baikai 0.10 consumer candidate — selected 2026-11-03
 
 Plan 80 selects index `2026-11-03T12:48:57Z`. Exact constraints retain the

@@ -175,6 +175,9 @@ pkgs.stdenv.mkDerivation {
         cp "$(cabal list-bin --offline exe:shikigami-workspace-prototype)" "$out/bin/shikigami-workspace-prototype"
       ''}
       cp -R ${source}/schema "$out/share/shikigami/schema"
+      mkdir -p "$out/share/shikigami/agents/proof"
+      cp ${source}/agents/proof/shikumi-judgment-example.dhall \
+        "$out/share/shikigami/agents/proof/shikumi-judgment-example.dhall"
       mkdir -p "$out/share/shikigami/fixtures"
       cp -R ${source}/fixtures/qualification "$out/share/shikigami/fixtures/qualification"
       chmod -R u+w "$out/share/shikigami/fixtures"

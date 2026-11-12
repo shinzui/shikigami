@@ -668,6 +668,7 @@ test-suite shikigami-core-test
 
   build-depends:
     aeson,
+    async,
     baikai,
     baikai-claude,
     baikai-openai,

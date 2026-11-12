@@ -28,13 +28,13 @@ with-compiler: ghc-9.12.4
 -- The co-developed cohort is selected by the components' own build-depends
 -- bounds, resolved against this fixed Hackage snapshot. Advance it to move the
 -- cohort; docs/dependency-cohort.md records the release matrix and evidence.
-index-state: 2026-11-03T12:48:57Z
+index-state: 2026-11-12T17:25:33Z
 -- Nothing links keiro-dsl, so no bound ties it to the runtime's Keiro release;
 -- the toolchain and the runtime move in lockstep.
 -- Preserve the qualified runtime closure while adding released Baikai surfaces.
 constraints:
   keiro-dsl ==0.22.0.0,
-  baikai ==0.10.0.0,
+  baikai ==0.10.1.0,
   baikai-claude ==0.7.3.0,
   baikai-openai ==0.7.3.0,
   baikai-agent ==0.2.0.4,

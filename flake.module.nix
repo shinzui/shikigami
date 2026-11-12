@@ -34,7 +34,10 @@
           ])
           || relative == "fixtures"
           || relative == "fixtures/qualification"
-          || lib.hasPrefix "fixtures/qualification/" relative;
+          || lib.hasPrefix "fixtures/qualification/" relative
+          || relative == "agents"
+          || relative == "agents/proof"
+          || relative == "agents/proof/shikumi-judgment-example.dhall";
       };
       runtime = import ./nix/qualification-package.nix {
         inherit pkgs lib;

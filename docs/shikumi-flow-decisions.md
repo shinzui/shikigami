@@ -166,6 +166,13 @@ cabal run shikigami -- --config judgment.yaml enqueue-run shikumi-judgment-examp
 cabal run shikigami-worker -- --config judgment.yaml
 ```
 
+Immutable role packages also supply this declaration at
+`share/shikigami/agents/proof/shikumi-judgment-example.dhall`. For installed
+commands outside the checkout, set `SHIKIGAMI_AGENTS_DIRECTORY` to that absolute
+installed `agents/proof` directory; its schema import resolves inside the same
+package. Use the installed `shikigami` and `shikigami-worker` commands with the
+same private configuration and payload.
+
 This makes a real TypeSafe call when pointed at its public endpoint. The
 deterministic acceptance tests instead use a local HTTP server and synthetic
 answers. The registered program pins an urgency threshold of 0.8, category

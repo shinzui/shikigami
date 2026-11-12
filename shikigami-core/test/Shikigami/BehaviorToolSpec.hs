@@ -6,6 +6,7 @@ import Baikai.Api (Api (Custom))
 import Baikai.Content (AssistantContent (AssistantText, AssistantToolCall), TextContent (..), ToolCall (..), ToolResultContent (ToolResultText), emptyToolCall)
 import Baikai.Context (Context)
 import Baikai.Context qualified as Context
+import Baikai.Evidence qualified as Evidence
 import Baikai.Message (Message (ToolResultMessage), ToolResultPayload (..))
 import Baikai.Model (Model, emptyModel)
 import Baikai.Options (Options, emptyOptions)
@@ -15,8 +16,12 @@ import Baikai.Response (Response (..), emptyResponse)
 import Baikai.StopReason (StopReason (Stop, ToolUse))
 import Baikai.Stream (liftCompleteToStream)
 import Baikai.Tool qualified as WireTool
-import Baikai.Trace (TraceEvent (CallFinished, CallStarted), TraceSink (..))
+import Baikai.Trace (TraceEvent (..), TraceSink (..))
+import Control.Concurrent (newEmptyMVar, putMVar, takeMVar, tryPutMVar)
+import Control.Concurrent.Async (asyncThreadId, waitCatch, withAsync)
+import Control.Exception (AsyncException (ThreadKilled), finally, fromException, throwIO, throwTo)
 import Control.Lens ((&), (.~))
+import Control.Monad (void)
 import Data.Aeson (ToJSON, Value, object, (.=))
 import Data.Aeson qualified as Aeson
 import Data.Generics.Labels ()
@@ -39,7 +44,7 @@ import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Behavior.Error (FailureClass (..), RunError (..), classifyRunError)
 import Shikigami.Behavior.Input (triggerOnly)
-import Shikigami.Behavior.Run (BehaviorEnv (..), defaultToolTurnLimit, newBehaviorEnv, runBehavior, withCapabilityTools)
+import Shikigami.Behavior.Run (BehaviorEnv (..), completeBehaviorRequest, defaultToolTurnLimit, newBehaviorEnv, runBehavior, withCapabilityTools)
 import Shikigami.Behavior.Skill (SkillDir (..), ToolTurnLimit, parseToolTurnLimit, runSkillWith, toolTurnLimitNumber)
 import Shikigami.Capability.Catalog (ExecutionMode (Durable))
 import Shikigami.Capability.Overlay
@@ -58,6 +63,7 @@ import Shikumi.Tool.Output (textToolOutput)
 import Streamly.Data.Fold qualified as Fold
 import System.Directory (doesFileExist)
 import System.FilePath ((</>))
+import System.Timeout (timeout)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertFailure, testCase, (@?=))
 import Prelude
@@ -80,6 +86,9 @@ tests =
       toolLoopTests,
       overlayEnvironmentTests,
       bracketedTraceTest,
+      cancelledTraceTest,
+      failedSinkCancellationTest,
+      terminalDrainTraceTest,
       toolInvocationAuthorizationTest,
       ephemeralTests
     ]
@@ -280,6 +289,93 @@ overlayEnvironmentTests =
         duplicate @?= Left (CapabilityOverlayMismatch [workspaceReadId, workspaceReadId] [workspaceReadId])
         classifyRunError (CapabilityOverlayMismatch [workspaceReadId] []) @?= Permanent
     ]
+
+cancelledTraceTest :: TestTree
+cancelledTraceTest =
+  testCase "behavior cancellation delivers one abort terminal before the original exception returns" do
+    ready <- newEmptyMVar
+    held <- newEmptyMVar
+    traceEvents <- newIORef []
+    let api = Custom "shikigami-behavior-cancel-trace"
+        model = toolModel api
+        handler _ _ _ = putMVar ready () >> takeMVar held
+        sink = TraceSink (Fold.drainMapM (\event -> modifyIORef' traceEvents (<> [event])))
+    registry <- newProviderRegistryFrom [apiProviderWith api (liftCompleteToStream handler) handler]
+    base <- newBehaviorEnv
+    let env = base & #providerRegistry .~ Just registry & #traceSink .~ Just sink
+        options = emptyOptions & #evidence .~ Just (Evidence.evidenceRequest "behavior-cancel")
+    withAsync (completeBehaviorRequest env model Context.emptyContext options) \worker -> do
+      timeout 5000000 (takeMVar ready) >>= (@?= Just ())
+      -- Throw the specific asynchronous exception through the application boundary.
+      -- Reading the sink immediately after joining detects GC-delayed finalization.
+      throwTo (asyncThreadId worker) ThreadKilled
+      outcome <- timeout 5000000 (waitCatch worker)
+      case outcome of
+        Just (Left err) -> fromException err @?= Just ThreadKilled
+        _ -> assertFailure "cancelled behavior did not return its original exception"
+      observed <- readIORef traceEvents
+      length [() | CallStarted {} <- observed] @?= 1
+      length [() | CallFailed {} <- observed] @?= 1
+      length [() | CallFinished {} <- observed] @?= 0
+      [evidence.status | CallEvidence {evidence} <- observed] @?= [Evidence.CallAborted]
+      case observed of
+        [CallStarted {eventId = started}, CallEvidence {eventId = evidenced}, CallFailed {eventId = failed}] ->
+          (evidenced, failed) @?= (started, started)
+        _ -> assertFailure "abort evidence must precede exactly one terminal"
+
+failedSinkCancellationTest :: TestTree
+failedSinkCancellationTest =
+  testCase "a failed trace sink cannot replace behavior cancellation" do
+    ready <- newEmptyMVar
+    held <- newEmptyMVar
+    sinkFailed <- newEmptyMVar
+    let api = Custom "shikigami-behavior-failed-sink"
+        model = toolModel api
+        handler _ _ _ = putMVar ready () >> takeMVar held
+        sink = TraceSink (Fold.drainMapM (\_ -> putMVar sinkFailed () >> throwIO (userError "public fixture sink failure")))
+    registry <- newProviderRegistryFrom [apiProviderWith api (liftCompleteToStream handler) handler]
+    base <- newBehaviorEnv
+    let env = base & #providerRegistry .~ Just registry & #traceSink .~ Just sink
+    withAsync (completeBehaviorRequest env model Context.emptyContext emptyOptions) \worker -> do
+      timeout 5000000 (takeMVar ready) >>= (@?= Just ())
+      timeout 5000000 (takeMVar sinkFailed) >>= (@?= Just ())
+      throwTo (asyncThreadId worker) ThreadKilled
+      outcome <- timeout 5000000 (waitCatch worker)
+      case outcome of
+        Just (Left err) -> fromException err @?= Just ThreadKilled
+        _ -> assertFailure "failed sink lost original cancellation or exceeded cleanup bound"
+
+terminalDrainTraceTest :: TestTree
+terminalDrainTraceTest =
+  testCase "cancellation during a stalled terminal drain stays bounded and preserves the committed terminal" do
+    draining <- newEmptyMVar
+    release <- newEmptyMVar
+    traceEvents <- newIORef []
+    let api = Custom "shikigami-behavior-terminal-drain"
+        model = toolModel api
+        handler _ _ _ = pure (textResponse "committed")
+        record event = do
+          modifyIORef' traceEvents (<> [event])
+          case event of
+            CallFinished {} -> putMVar draining () >> takeMVar release
+            _ -> pure ()
+        sink = TraceSink (Fold.drainMapM record)
+    registry <- newProviderRegistryFrom [apiProviderWith api (liftCompleteToStream handler) handler]
+    base <- newBehaviorEnv
+    let env = base & #providerRegistry .~ Just registry & #traceSink .~ Just sink
+    ( withAsync (completeBehaviorRequest env model Context.emptyContext emptyOptions) \worker -> do
+        timeout 5000000 (takeMVar draining) >>= (@?= Just ())
+        throwTo (asyncThreadId worker) ThreadKilled
+        outcome <- timeout 5000000 (waitCatch worker)
+        case outcome of
+          Just (Left err) -> fromException err @?= Just ThreadKilled
+          _ -> assertFailure "stalled trace cleanup lost cancellation or exceeded its bound"
+        observed <- readIORef traceEvents
+        length [() | CallStarted {} <- observed] @?= 1
+        length [() | CallFinished {} <- observed] @?= 1
+        length [() | CallFailed {} <- observed] @?= 0
+      )
+      `finally` void (tryPutMVar release ())
 
 bracketedTraceTest :: TestTree
 bracketedTraceTest =
