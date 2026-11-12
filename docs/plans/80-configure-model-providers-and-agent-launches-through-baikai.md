@@ -41,6 +41,11 @@ provenance:
       at: 2026-11-09T04:59:37Z
       mode: "update"
       note: "Reconcile adopted cohort, structured judgments and Plan 124 packaging; validate remaining milestone gates against current source and evidence"
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-11-12T14:42:17Z
+      mode: "update"
+      note: "Refresh against current registry, Baikai 0.10.1 tracing release and Shikumi 0.5.1 published adapter bounds; preserve unqualified consumer gates"
 ---
 
 # Configure model providers and agent launches through Baikai
@@ -64,9 +69,9 @@ The expanded scope also adopts Baikai's structured answers and TypeSafe judgment
 ## Progress
 
 
-Status validated against source `217dd7bd` on 2026-11-08. This is a standalone ExecPlan (no parent MasterPlan). Historical handoffs below retain their original dates; this snapshot supersedes their open-blocker and selected-version statements.
+Source and release status reviewed at `5b716874` on 2026-11-12 UTC. This documentation refresh does not renew the earlier runtime qualification. This is a standalone ExecPlan (no parent MasterPlan). Historical handoffs below retain their original dates; this snapshot supersedes their open-blocker and selected-version statements.
 
-- [ ] M1: released-cohort adoption and Darwin inherited-group cancellation are implemented and evidenced. Remaining: the full cancellation matrix on Darwin/Linux and an owning boundary proving reporter deadlines, bounded retained output and descendant/native-tool confinement. Publication is no longer the blocker.
+- [ ] M1: released-cohort adoption and Darwin inherited-group cancellation are implemented and evidenced. Remaining: adoption and consumer proof of the published Baikai 0.10.1.0 trace-finalization fix, the full cancellation matrix on Darwin/Linux and an owning boundary proving reporter deadlines, bounded retained output and descendant/native-tool confinement. Publication is no longer the blocker.
 - [ ] M2: HTTP configuration, TypeSafe decision bindings, explicit reasoning-off decoding and native-cache-policy checks are implemented. Remaining: generative off/cache consumer wire/evidence matrix and qualified CLI response configuration after M1's batch promotion gate.
 - [ ] M3: HTTP dispatch and governed TypeSafe complete/stream dispatch are implemented. Remaining: qualified CLI response handlers and allowed/refused actual-tuple tests after the batch gate, plus the remaining wire/error cases below.
 - [x] M4 (2026-10-06): foreground attended/unattended commands and real Codex marker/exit trials accepted; launch regression passed again in the November source checkpoints. New cohort changes retain foreground regression obligations.
@@ -75,9 +80,9 @@ Status validated against source `217dd7bd` on 2026-11-08. This is a standalone E
 - [ ] M7: structured snapshots, versioned context/assistant/outcome replay, complete cache roundtrip and complete/stream answer retention are implemented. Remaining: explicit trace, evidence-bearing cache/replay and malformed/mixed/interrupted-content matrix, followed by final package acceptance.
 - [ ] M8: configured public TypeSafe complete/stream interpretation, raw versus derived results, supplied-ticket Flow and PostgreSQL restart replay are implemented. Remaining: the precise schema/error/authority/budget matrix below and installed example qualification.
 
-Current pins are Baikai 0.10.0.0, Claude/OpenAI 0.7.3.0, agent 0.2.0.4, Shikumi 0.5.1.0 (cache 0.2.1.1, tools 0.4.2.1, trace 0.3.2.0), Kioku 0.12.0.2 and Effectful 2.7.1.0/core 2.7.1.2 at index `2026-11-03T12:48:57Z`. [Plan 124](124-remove-handan-by-owning-the-shikumi-execution-adapter-in-shikigami.md) replaces Handan with `Shikigami.Program.Runtime`; the current frozen export contains 382 packages and six repositories. FRIC-46, FRIC-48 and FRIC-49 are resolved; FRIC-47 retains the accepted serial database-test profile. No dependency upgrade is proposed in this refresh.
+Current pins are Baikai 0.10.0.0, Claude/OpenAI 0.7.3.0, agent 0.2.0.4, Shikumi 0.5.1.0 (cache 0.2.1.1, tools 0.4.2.1, trace 0.3.2.0), Kioku 0.12.0.2 and Effectful 2.7.1.0/core 2.7.1.2 at index `2026-11-03T12:48:57Z`. [Plan 124](124-remove-handan-by-owning-the-shikumi-execution-adapter-in-shikigami.md) replaces Handan with `Shikigami.Program.Runtime`; the current frozen export contains 382 packages and six repositories. FRIC-46, FRIC-48 and FRIC-49 are resolved; FRIC-47 retains the accepted serial database-test profile. The next implementation targets core Baikai 0.10.1.0 with the compatible Effectful adapter 0.4.0.5; the pins and frozen export remain unchanged by this documentation edit. Shikumi 0.5.1.0 is still the latest published core release. See the current release audit below.
 
-Refresh validation (2026-11-09 UTC, November 8 Pacific): the isolated committed-descriptor solve and core build succeeded with GHC 9.12.4. Fresh focused runs passed all 15 `TypeSafe` cases and all eight `Baikai structured content` cases. Relative plan links, fenced-block languages and `git diff --check` pass. PostgreSQL, Linux, immutable-role rebuilds, installed commands and live providers were not rerun in this documentation refresh; their prior evidence remains revision-scoped. Reproduce the focused checks after creating `qualification_project` with the helper in Concrete Steps:
+Historical refresh validation (2026-11-09 UTC, November 8 Pacific): the isolated committed-descriptor solve and core build succeeded with GHC 9.12.4. Fresh focused runs passed all 15 `TypeSafe` cases and all eight `Baikai structured content` cases. Relative plan links, fenced-block languages and `git diff --check` pass. PostgreSQL, Linux, immutable-role rebuilds, installed commands and live providers were not rerun in this documentation refresh; their prior evidence remains revision-scoped. Reproduce the focused checks after creating `qualification_project` with the helper in Concrete Steps:
 
 ```bash
 nix develop --command cabal test shikigami-core-test \
@@ -85,6 +90,8 @@ nix develop --command cabal test shikigami-core-test \
 nix develop --command cabal test shikigami-core-test \
   --project-file="$qualification_project" --test-options='--num-threads=1 -p "Baikai structured content"'
 ```
+
+Refresh validation (2026-11-12 UTC): Mori registry list/search/show/docs succeeded after replacing this session's stale inherited database connection with the connection from the current shell configuration. Hackage preferred versions, published descriptors and upstream tags were checked directly. The source review reconfirmed the CLI refusal, eight structured-content cases, TypeSafe complete/stream fixtures, the traced behavior call and the missing installed proof manifest. No builds, solver run, database tests, Linux probes or live calls were performed in this refresh; milestone states and prior test evidence remain unchanged.
 
 ### Historical handoffs
 
@@ -128,6 +135,9 @@ The public unattended parser includes its own `agent` group and does not export 
 
 
 ## Decision Log
+
+
+Decision (2026-11-12 UTC): Target the released core Baikai 0.10.1.0 trace-finalization fix as part of M1/M7 while retaining Shikumi 0.5.1.0 and baikai-effectful 0.4.0.5. The published bounds admit that core candidate, but a fresh isolated application solve and consumer qualification are required before changing the frozen cohort. Do not select baikai-effectful 0.5.0.0 until an owning Shikumi release or revision admits its breaking effect constructor. A bounded trace finalizer does not supply batch process deadlines, retained-output limits, confinement or durable evidence acknowledgement.
 
 
 Decision (2026-10-06 UTC): Extend `behavior.provider`, preserving `stub` and `anthropic`. Add `openai`, `openai-responses`, `claude-cli` and `codex-cli`, meaning OpenAI Chat Completions HTTP, OpenAI Responses HTTP, Claude batch CLI and Codex batch CLI respectively. Vendor request rendering, subprocess output parsing and model invocation belong to Baikai.
@@ -182,7 +192,20 @@ Public response modules are `Baikai.Provider.Claude.Api`, `Baikai.Provider.Claud
 
 The interactive vocabulary is `Baikai.Interactive.InteractiveLaunchRequest`, with prompt, optional system prompt/model/effort, working directory, extra directories, safety and arguments. Vendor `launchClaudeInteractive` and `launchCodexInteractive` return `Either AgentRenderError InteractiveLaunchResult`. Refusal starts no process; a nonzero result means the process ran and failed. The unattended surface uses `Baikai.Agent.Config` for named jobs, `Baikai.Agent.Cli` for parsing/policy-aware execution, and `Baikai.Agent.Run.runAgentCommand` for bounded execution. Its operator ceiling is the maximum permission set repository jobs may request; repository config cannot raise it. Its runner bounds retained output and terminates the process group on timeout. These guarantees must not be assumed for the separate batch adapters without testing.
 
-The selected cohort is recorded in Progress and `cabal.project`; `nix/qualification/cohort.json` is its frozen runtime export. The following dated release investigations are historical evidence, not current blockers or claims about the latest available releases. Mori discovery was attempted on 2026-11-08 with `mori registry search baikai` and `mori registry list`; both failed because its PostgreSQL notification connection was refused. This refresh uses checked-in release evidence and application source, changes no bounds or pins, and does not claim a fresh upstream release audit. Re-run Mori and authoritative registry/tag verification before selecting any newer cohort.
+The selected cohort is recorded in Progress and `cabal.project`; `nix/qualification/cohort.json` is its frozen runtime export. Both Baikai and Shikumi are active dependencies, with Shikumi interpreted through the application-owned `shikigami-core/src/Shikigami/Program/Runtime.hs`. The following current audit supersedes latest-release claims in the dated investigations below.
+
+### Current release audit — 2026-11-12 UTC
+
+
+Mori registry discovery confirms `mori://shinzui/baikai` and `mori://shinzui/shikumi`, including the TypeSafe package and guide. Registry access works: the first attempts in this session inherited an obsolete PostgreSQL socket; loading the current shell connection corrected them. Do not treat that session configuration failure as registry unavailability or feature absence.
+
+Hackage preferred-version endpoints report core Baikai 0.10.1.0 and baikai-effectful 0.5.0.0 as the new normal releases. Both upstream tags peel to `cdb79e5805613ab60074bb2c9279d779af610c05`. The published core descriptor matches its tagged descriptor byte-for-byte, SHA256 `108f2d4b98e5076f7d606d497b41c98b304ed6aa2c817c2f3cbc72659dfb7b16`. Claude/OpenAI 0.7.3.0, agent 0.2.0.4, TypeSafe 0.1.0.1 and trace-otel 0.4.1.1 remain the latest normal releases. Shikumi core 0.5.1.0 remains current at tag commit `7b96ecf06364b37de44b15c4f58b2528b5a3e0f5`; cache 0.2.1.1, tools 0.4.2.1, trace 0.3.2.0, eval 0.3.1.0 and trace-otel 0.1.3.0 also remain current. These checks establish publication, not application acceptance.
+
+The new core release fixes synchronous cancellation finalization in `withTrace`, `withTraceWith`, and the traced call inside `runRequestWith`/`runRequestWithRegistry`. Its public `withTraceFold`/`withTraceFoldWith` own the entire consumer fold; `withTraceList`/`withTraceListWith` collect events under the same lifetime. Before terminal commitment, a healthy sink processes abort evidence before the original cancellation escapes. After commitment, the existing terminal remains authoritative. Cleanup has a shared one-second budget, preserves the original exception and does not duplicate terminal submission. A blocked sink may deliver later; this is not a durable acknowledgement guarantee. General `withTraceStream` abandonment between steps still relies on garbage collection. Read `mori://shinzui/baikai/docs/model-call-evidence` and the tagged `baikai/src/Baikai/Trace.hs` in `mori://shinzui/baikai` (artifact-level source URI pending).
+
+This matters directly to `shikigami-core/src/Shikigami/Behavior/Run.hs:completeBehaviorRequest`, which invokes `BaikaiTrace.withTraceWith` when a sink is installed. Include it in M1/M7 consumer qualification; dependency compilation alone does not prove terminal delivery or application accounting. Preserve the existing decision-wrapper treatment of cancellation as unresolved/unknown unless the owning durable acknowledgement actually succeeds.
+
+Published Shikumi 0.5.1.0 admits core `>=0.10.0.0 && <0.11` but requires baikai-effectful `>=0.4.0.5 && <0.5`. The retained adapter 0.4.0.5 admits core `^>=0.10.0`, so a core-only 0.10.1.0 candidate is within those bounds. In contrast, adapter 0.5.0.0 requires core `^>=0.10.1` and adds the breaking `StreamCollectTraced` effect constructor plus `streamCollectTraced`. Shikumi's authoritative bound excludes that adapter. Keep 0.4.0.5 for this candidate; do not widen bounds locally or call the latest adapter adopted. Any future adapter upgrade requires published consumer compatibility and an audit of custom interpreters. The full application solve has not been rerun for the core candidate, and no new index cutoff or source hash is selected here.
 
 ### Historical release investigations
 
@@ -207,7 +230,7 @@ Core 0.9 adds structured `UserData`/`AssistantData` content, stream constructors
 
 Native cache support now depends on `NativeCachePolicy` for the exact catalog binding and endpoint; older `cacheControlFormat` and `supportsPromptCacheOptions` predicates alone are insufficient. Claude/OpenAI 0.7.3.0 can mark nonempty shared system prefixes. OpenAI modern Short and verified Luna Responses Long have distinct policies; unsupported retention must fail locally. Keep retention configurable through the existing setting, leave breakpoint placement and effective pricing to Baikai, and do not promise a cache hit. CLI adapters still ignore retention. Supporting guides are `mori://shinzui/baikai/docs/models-and-providers`, `mori://shinzui/baikai/docs/prompt-caching` and `mori://shinzui/baikai/docs/model-call-evidence`. Latest evidence schema 2.8 and model serialization changes must not reinterpret historical application-owned facts or pinned descriptor digests.
 
-The TypeSafe target is `mori://shinzui/baikai/packages/baikai-typesafe` 0.1.0.1, verified against Hackage and tag `baikai-typesafe-0.1.0.1` at `03140cf60381ac154ebfa86d3bb2208d7df8626c`. Its released descriptor requires core `^>=0.10.0` and `mori://shinzui/typesafe-hs/packages/typesafe-hs` `^>=0.1.0.0`; that wire client is published as 0.1.0.0 with tag `v0.1.0.0` at `f79344b9bb48ac49626b1065d7de255bea4b5464`. Import only `Baikai.Provider.TypeSafe.Api`, not its exposed `Internal` modules. The guide `mori://shinzui/baikai/docs/typesafe-judgments` and `mori://shinzui/baikai/okf/capabilities/concepts/CAP-27` describe the public contract. These newer artifacts and package are absent from the stale local Mori registry; use their canonical URIs and inspect their producer sources rather than treating resolution failure as feature absence.
+The TypeSafe target is `mori://shinzui/baikai/packages/baikai-typesafe` 0.1.0.1, verified against Hackage and tag `baikai-typesafe-0.1.0.1` at `03140cf60381ac154ebfa86d3bb2208d7df8626c`. Its released descriptor requires core `^>=0.10.0` and `mori://shinzui/typesafe-hs/packages/typesafe-hs` `^>=0.1.0.0`; that wire client is published as 0.1.0.0 with tag `v0.1.0.0` at `f79344b9bb48ac49626b1065d7de255bea4b5464`. Import only `Baikai.Provider.TypeSafe.Api`, not its exposed `Internal` modules. The guide `mori://shinzui/baikai/docs/typesafe-judgments` and `mori://shinzui/baikai/okf/capabilities/concepts/CAP-27` describe the public contract. At the November 2 investigation these artifacts and package were absent from the local Mori registry (the November 12 registry now includes them); use their canonical URIs and inspect their producer sources rather than treating resolution failure as feature absence.
 
 Select exact catalog models `jev-latest` or `jev-preview` with `TypeSafeSystemOne` and provider `typesafe`. `isJudgmentOnly` is the routing fact. `prepareJudgment` accepts one user text/data message, no system prompt or tools, and a closed-set `JsonSchema`: boolean predicates, distinct string choices, or integer scores over contiguous levels 0 through N−1. Score declarations have two through ten levels. Baikai validates names, alternatives, finite probabilities and confidence; it preserves provider choices, fractional expected scores and distributions without normalizing them. A response contains `AssistantData` with `value`, optional `probabilities`, optional `confidence` and `method`. Call evidence is a separate optional record. Synthetic streaming emits atomic `DataStart`/`DataEnd`, not text chunks. Public `Baikai.Response.JSON.responseToJSON` and `responseFromJSON` preserve full responses; do not introduce orphan JSON instances or assume exact arbitrary-rational cost roundtrips.
 
@@ -223,12 +246,14 @@ Relevant architectural context is established. [ADR 0003](../adr/0003-a-seventh-
 ## Plan of Work
 
 
-Retain the original milestone numbers so October evidence remains attributable. M1's coherent released interfaces are adopted; retain them while closing the remaining consumer proofs. Finish M2/M3's reasoning/cache proof and the remaining M7/M8 consumer matrix against their existing implementation. M4's foreground behavior remains a regression obligation. Repeat M5 packaging/journal qualification after all feature changes, then close M6's existing live CLI handoff. An upstream blocker for one surface does not prevent independent consumer work or justify marking that blocked surface complete.
+Retain the original milestone numbers so October evidence remains attributable. The November 3 interfaces are adopted; first qualify the core-only 0.10.1.0 candidate described above while retaining the compatible adapter, then close the remaining consumer proofs. Finish M2/M3's reasoning/cache proof and the remaining M7/M8 consumer matrix against their existing implementation. M4's foreground behavior remains a regression obligation. Repeat M5 packaging/journal qualification after all feature changes, then close M6's existing live CLI handoff. An upstream blocker for one surface does not prevent independent consumer work or justify marking that blocked surface complete.
 
 
-### Remaining acceptance, validated 2026-11-08
+### Remaining acceptance, source-reviewed 2026-11-12
 
 The milestone narratives below remain the full contract, including already implemented work. Resume from these gaps rather than recreating modules or repeating resolved release negotiations.
+
+For M1/M7, extend the native Haskell trace/evidence fixtures in `shikigami-core/test-postgres/Shikigami/RunEvidenceSpec.hs` and the provider tests to exercise `completeBehaviorRequest` with a healthy recording sink. Synchronize cancellation before terminal commitment and require exactly one abort terminal before the original exception reaches the caller. Exercise cancellation during terminal drain and after terminal commitment without duplicating or replacing the committed terminal. A stalled/failing sink must finish bounded cleanup while preserving cancellation and must not fabricate successful durable evidence. If an application consumer uses the new public fold API, test cancellation between stream steps through that consumer; do not assign its stronger lifetime to a general stream decorator. Re-run structured complete/stream and accepted-decision accounting regressions with the candidate. These are outstanding consumer proofs, not results inferred from upstream tests.
 
 For M1, `BehaviorProviderSpec.cancellationSettles` currently covers a complete call with an inherited sleeping child for each vendor on Darwin. Add or locate evidence for active-stream cancellation, repeated cancellation, signal-resistant children, executable-version probes, Codex schema cleanup and an unrelated sentinel; qualify the same owned cases on native Linux. These cancellation tests do not satisfy the separate absolute-deadline, retained-output and detached-descendant/native-tool confinement requirements. Keep `BatchBoundsAndConfinementRequired` until an owning boundary supplies all of them. The workspace Apple-container probes qualify their documented supervisor substrates, not automatically Baikai response adapters.
 
@@ -240,7 +265,7 @@ For M8, `TypeSafeDecisionSpec` has 15 cases (six shared complete/stream cases pl
 
 For M5, reuse Plan 124's successful native role-build evidence at its recorded revision. After remaining code changes, rerun affected serial suites and the workflow gate, rebuild changed roles, and run installed launch plus judgment-example commands from outside the checkout with an installed proof-agent directory. The current `nix/qualification-package.nix` copies `schema`, `fixtures/qualification` and Hurl assets, but does not install `agents/proof/shikumi-judgment-example.dhall`; no judgment example exists in the copied qualification fixtures. Install that manifest with a layout preserving its `../../schema/Agent.dhall` import (or an explicit installed import rewrite), then demonstrate configuration/enqueue/worker execution outside the checkout. This is an implementation gap as well as a missing validation result. Preserve the existing schema/patch/readers; [ADR 0041](../adr/0041-durable-decisions-bind-program-state-and-preserve-committed-outcomes.md) governs structured results, and [ADR 0110](../adr/0110-accepted-typed-decisions-account-for-every-transport-call.md) requires actual-call accounting for the newer accepted typed-decision path. Regression must cover both retained synchronous and accepted execution paths where affected.
 
-Independent next work is the HTTP off/cache and structured/TypeSafe failure matrix, plus installed-asset inspection. M1 batch qualification blocks CLI-specific M2/M3 work, which in turn blocks M6. Final M5 qualification follows the completed feature changes. M7/M8 do not depend on promoting batch CLI responses. No existing acceptance requirement is waived by this ordering.
+Independent next work is the core 0.10.1.0 solve and trace-cancellation proof, the HTTP off/cache and structured/TypeSafe failure matrix, plus installed-asset inspection. M1 batch qualification blocks CLI-specific M2/M3 work, which in turn blocks M6. Final M5 qualification follows the completed feature changes. M7/M8 do not depend on promoting batch CLI responses. No existing acceptance requirement is waived by this ordering.
 
 
 ### Milestone 1: Prove contracts and inventory the settings
@@ -363,7 +388,12 @@ mori registry list
 mori registry search baikai
 mori registry show shinzui/baikai --full
 mori registry docs shinzui/baikai
+mori registry search shikumi
+mori registry show shinzui/shikumi --full
+mori registry docs shinzui/shikumi
 curl -fsSL https://hackage.haskell.org/package/baikai/preferred.json
+curl -fsSL https://hackage.haskell.org/package/baikai-0.10.1.0/baikai.cabal
+curl -fsSL https://hackage.haskell.org/package/baikai-effectful-0.5.0.0/baikai-effectful.cabal
 curl -fsSL https://hackage.haskell.org/package/baikai-claude/preferred.json
 curl -fsSL https://hackage.haskell.org/package/baikai-openai/preferred.json
 curl -fsSL https://hackage.haskell.org/package/baikai-agent/preferred.json
@@ -539,6 +569,8 @@ Meaningful regression cases cover exact cwd/argument transport, cancellation inc
 
 For the refreshed cohort, prove explicit off versus omission in config, profile tuples, translated requests and evidence; refuse unsupported clamping before dispatch. Prove native cache policy admission/refusal for the exact binding and retain older saved-model defaults. Existing pinned descriptors must either resolve to their retained compatible binding or refuse explicitly, never rebind to a newly encoded model. Completed decision and accepted model/tool outcomes must survive the dependency change without another provider call. The model/output/event migration must compile all affected consumers and keep judgment-only models out of generative paths. Positive cancellation probes on native Darwin and Linux qualify the selected release under its documented inherited-process-group limit; deadline/output bounds and reporter authority need separate proof.
 
+The core 0.10.1.0 candidate additionally requires the M1/M7 cancellation/terminal-ordering fixtures above, an isolated solve retaining the compatible adapter, and refreshed frozen-package qualification. Healthy trace delivery must precede propagated cancellation; failed or stalled delivery must not become fabricated durable evidence.
+
 The expanded acceptance additionally requires all of M7/M8: structured content through complete/stream/cache/replay; configured TypeSafe through the public adapter and real Shikumi decoder; default and weighted local derivation with preserved neutral provider answers; and a runnable durable supplied-ticket Flow. Invalid schema, generation controls, model/alias/profile escapes and unsupported finite budgets must leave invocation markers untouched. Complete and stream terminals persist one actual-attempt outcome without treating probabilities as compliance evidence. Fresh decisions under changed settings can change answers, while restart of a committed old decision preserves its full raw/derived outcome using retained codecs and zero new transport calls. Do not mark this plan complete with only dependency builds or pure decoder tests.
 
 Launch tests prove wrong-provider safety, exceeded ceiling and repository ceiling override start nothing; nonzero exit propagates; process results never become durable `Response` success. The isolated build, affected suites, workflow gate, frozen role builds and installed commands outside checkout must pass. Real CLI response and attended session records name vendor version, requested model, user and outcome, and distinguish reported facts from unverified served-model identity. Plan 79's remaining service and fault scenarios stay independently unchecked until observed.
@@ -609,3 +641,5 @@ No authorization or delivery service is needed for deterministic adapter tests o
 2026-11-03 UTC, Shikumi release follow-up: Verified the new published Shikumi 0.5 family and successful Baikai 0.10 pair solve, resolved FRIC-46 and recorded the next consumer prerequisite in Kioku as FRIC-48. Added exact paired positive/negative solve evidence and current release guidance while preserving the application pins and historical runtime qualification.
 
 2026-11-09 UTC: Reconciled Progress, outcomes, commands and interfaces with the adopted cohort, public judgment streaming, local Shikumi runtime and Plan 124 native role builds. Replaced resolved publication blockers with concrete outstanding consumer and installed-package acceptance; retained historical evidence and the batch bounds/confinement gate. No runtime, dependency or architecture change.
+
+2026-11-12 UTC: Reviewed current source and restored Mori discovery using the current shell connection. Verified Baikai 0.10.1.0 and Effectful adapter 0.5.0.0 publication and unchanged latest Shikumi 0.5.1.0. Added the core-only trace-finalization adoption path, the published adapter compatibility restriction and consumer cancellation/evidence acceptance. Preserved the selected pins, historical runtime results and outstanding CLI, structured-content and installed-asset gates; this refresh changes documentation only.
