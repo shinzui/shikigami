@@ -119,6 +119,8 @@ IR-5 release adoption (2026-11-03 UTC): verified normal Hackage releases Shikumi
 
 ## Surprises & Discoveries
 
+The 2026-11-12 serial regression found that migration 0049's mandate tables were missing from the reviewed schema snapshot. Native regeneration added 34 entries matching the committed SQL; rebuilding the embedded verifier restored all 11 smoke checks. FRIC-68 is resolved. This is a qualification-baseline repair, with no migration or workflow change. Core 801, workers 353 and the replay-neutral committed gate pass at the trace checkpoint; remaining suites are still running.
+
 The release-blocker observations below are historical. FRIC-46/48/49 are resolved; use Progress for current status. The enduring findings are the distinction between cancellation and confinement, immutable provider bindings, and raw answers versus local derivation.
 
 The released Shikumi 0.5.0.0 complete path supports rich judgments, but its public `streamProgram` and `routeLLM` explicitly reject decision outputs before transport. Its streaming parser also omits the complete path's explicit decision settings. FRIC-49 is promoted to `mori://shinzui/shikumi/okf/improvement-requests/concepts/IR-5` at the user's request. That request requires public complete/stream typed-result parity, atomic TypeSafe structured events, preserved raw answers and acknowledged attempt evidence in a tagged release. At that checkpoint M7/M8 streaming acceptance remained open; do not bypass the owning router or copy its parser downstream. Independent complete-call and durable replay qualification can continue.

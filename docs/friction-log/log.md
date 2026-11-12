@@ -1,5 +1,11 @@
 # Bundle Update Log
 
+## 2026-11-12
+
+* **Update**: FRIC-68 resolved: Resolve stale expected schema after native regeneration and full smoke acceptance.
+
+* **Addition**: FRIC-68 records detour tooling friction with mori://shinzui/shikigami: Reviewed schema snapshot omits recurring mandate tables
+
 ## 2026-11-09
 * **Update**: FRIC-67 resolved: Retain the completed immutable cache and passing final native fixture evidence.
 * **Addition**: FRIC-67 records slowdown tooling friction with mori://shinzui/shikigami: Current baseline requires a cold native dependency cache

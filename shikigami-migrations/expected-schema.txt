@@ -177,6 +177,16 @@ column	initiative_standing_policies.principal	text not null
 column	initiative_standing_policies.revision	numeric not null
 column	initiative_standing_policies.revoked_at	timestamp with time zone
 column	initiative_standing_policies.revoked_by	text
+column	mandate_cycles.cycle	bigint not null
+column	mandate_cycles.mandate_id	text not null
+column	mandate_cycles.state	jsonb not null
+column	mandate_receipts.fingerprint	text not null
+column	mandate_receipts.mandate_id	text not null
+column	mandate_receipts.operation_key	text not null
+column	mandate_receipts.outcome	jsonb not null
+column	mandates.mandate_id	text not null
+column	mandates.objective_id	text not null
+column	mandates.state	jsonb not null
 column	objective_assignments.assignment_id	text not null
 column	objective_assignments.objective_id	text not null
 column	objective_assignments.reference_key	text not null
@@ -702,6 +712,23 @@ constraint	initiative_standing_policies.initiative_standing_policies_policy_not_
 constraint	initiative_standing_policies.initiative_standing_policies_principal_not_null	NOT NULL principal
 constraint	initiative_standing_policies.initiative_standing_policies_revision_check	CHECK ((revision >= (0)::numeric))
 constraint	initiative_standing_policies.initiative_standing_policies_revision_not_null	NOT NULL revision
+constraint	mandate_cycles.mandate_cycles_cycle_check	CHECK ((cycle > 0))
+constraint	mandate_cycles.mandate_cycles_cycle_not_null	NOT NULL cycle
+constraint	mandate_cycles.mandate_cycles_mandate_id_fkey	FOREIGN KEY (mandate_id) REFERENCES shikigami.mandates(mandate_id)
+constraint	mandate_cycles.mandate_cycles_mandate_id_not_null	NOT NULL mandate_id
+constraint	mandate_cycles.mandate_cycles_pkey	PRIMARY KEY (mandate_id, cycle)
+constraint	mandate_cycles.mandate_cycles_state_not_null	NOT NULL state
+constraint	mandate_receipts.mandate_receipts_fingerprint_not_null	NOT NULL fingerprint
+constraint	mandate_receipts.mandate_receipts_mandate_id_fkey	FOREIGN KEY (mandate_id) REFERENCES shikigami.mandates(mandate_id)
+constraint	mandate_receipts.mandate_receipts_mandate_id_not_null	NOT NULL mandate_id
+constraint	mandate_receipts.mandate_receipts_operation_key_not_null	NOT NULL operation_key
+constraint	mandate_receipts.mandate_receipts_outcome_not_null	NOT NULL outcome
+constraint	mandate_receipts.mandate_receipts_pkey	PRIMARY KEY (mandate_id, operation_key)
+constraint	mandates.mandates_mandate_id_not_null	NOT NULL mandate_id
+constraint	mandates.mandates_objective_id_fkey	FOREIGN KEY (objective_id) REFERENCES shikigami.objectives(objective_id)
+constraint	mandates.mandates_objective_id_not_null	NOT NULL objective_id
+constraint	mandates.mandates_pkey	PRIMARY KEY (mandate_id)
+constraint	mandates.mandates_state_not_null	NOT NULL state
 constraint	objective_assignments.objective_assignments_assignment_id_not_null	NOT NULL assignment_id
 constraint	objective_assignments.objective_assignments_objective_id_fkey	FOREIGN KEY (objective_id) REFERENCES shikigami.objectives(objective_id)
 constraint	objective_assignments.objective_assignments_objective_id_not_null	NOT NULL objective_id
@@ -1155,6 +1182,10 @@ index	initiative_proposals_pkey	CREATE UNIQUE INDEX initiative_proposals_pkey ON
 index	initiative_proposals_window	CREATE INDEX initiative_proposals_window ON shikigami.initiative_proposals USING btree (observer, proposed_at)
 index	initiative_standing_policies_pkey	CREATE UNIQUE INDEX initiative_standing_policies_pkey ON shikigami.initiative_standing_policies USING btree (policy_id)
 index	initiative_standing_policies_principal	CREATE INDEX initiative_standing_policies_principal ON shikigami.initiative_standing_policies USING btree (principal, expires_at)
+index	mandate_cycles_pkey	CREATE UNIQUE INDEX mandate_cycles_pkey ON shikigami.mandate_cycles USING btree (mandate_id, cycle)
+index	mandate_receipts_pkey	CREATE UNIQUE INDEX mandate_receipts_pkey ON shikigami.mandate_receipts USING btree (mandate_id, operation_key)
+index	mandates_objective	CREATE INDEX mandates_objective ON shikigami.mandates USING btree (objective_id, mandate_id)
+index	mandates_pkey	CREATE UNIQUE INDEX mandates_pkey ON shikigami.mandates USING btree (mandate_id)
 index	objective_assignments_pkey	CREATE UNIQUE INDEX objective_assignments_pkey ON shikigami.objective_assignments USING btree (objective_id, assignment_id)
 index	objective_assignments_reference_key_key	CREATE UNIQUE INDEX objective_assignments_reference_key_key ON shikigami.objective_assignments USING btree (reference_key)
 index	objective_associations_pkey	CREATE UNIQUE INDEX objective_associations_pkey ON shikigami.objective_associations USING btree (kind, source_id, objective_id)
@@ -1281,6 +1312,9 @@ table	initiative_candidates	kind=r
 table	initiative_observers	kind=r
 table	initiative_proposals	kind=r
 table	initiative_standing_policies	kind=r
+table	mandate_cycles	kind=r
+table	mandate_receipts	kind=r
+table	mandates	kind=r
 table	objective_assignments	kind=r
 table	objective_associations	kind=r
 table	objective_cursors	kind=r

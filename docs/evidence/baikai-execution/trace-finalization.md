@@ -47,3 +47,11 @@ All 801 core checks pass, including 20 behavior-tool, 23 TypeSafe and nine
 structured-content cases. Remaining serial application/database checks and
 immutable builds are in progress. No Linux runtime, live provider, authenticated batch
 reporter or final immutable role acceptance is claimed by this checkpoint.
+
+The serial run passed core 801 and workers 353, then stopped at migration
+smoke because migration 0049's mandate objects were absent from the reviewed
+schema snapshot. Native regeneration added exactly 34 entries matching that
+SQL. The regeneration invocation wrote the snapshot but failed against the
+previously embedded verifier; a rebuild then passed all 11 smoke checks.
+FRIC-68 in `docs/friction-log/` is resolved. The package build containing the
+stale snapshot was stopped; final package qualification remains outstanding.
