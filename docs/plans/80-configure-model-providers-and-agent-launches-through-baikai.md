@@ -67,7 +67,7 @@ This ExecPlan is a living document. Keep Progress, Surprises & Discoveries, Deci
 ## Purpose / Big Picture
 
 
-An operator can configure the model provider, transport, model, reasoning effort, and supported execution settings, with Baikai performing the provider call or agent launch. The target background reporter can use an already authenticated Codex or Claude CLI without an HTTP API key after consumer lifecycle and confinement qualification. The current Cabal candidate adopts Baikai 0.10 and passes inherited-group cancellation on Darwin; background CLI responses still require enforced deadlines, bounded retained output and descendant confinement. Shikumi 0.5.1.0 now supplies public judgment-stream support and passes the application parity/failure fixtures. Remaining work includes the rest of the consumer wire and error matrix, Linux qualification, final installed-asset qualification and rebuilds after further changes, and CLI configuration and dispatch after its contracts qualify. The HTTP and foreground integration is independently implemented. A separate foreground command can open an interactive session or run an unattended named Baikai coding job. Effective configuration explains the selected surface and settings before a model is called.
+An operator can configure the model provider, transport, model, reasoning effort, and supported execution settings, with Baikai performing the provider call or agent launch. The target background reporter can use an already authenticated Codex or Claude CLI without an HTTP API key after consumer lifecycle and confinement qualification. The current Cabal candidate adopts Baikai 0.10.1 and passes the Darwin cancellation matrix; background CLI responses still require enforced deadlines, bounded retained output and descendant confinement. Shikumi 0.5.1.0 supplies qualified public judgment streaming. HTTP reasoning/cache and structured judgment consumer matrices, durable recovery and installed queue/worker execution now pass. Remaining work is native Linux and batch bounds/confinement qualification, CLI configuration/dispatch and the authenticated batch trial, followed by final candidate rebuilding. The HTTP and foreground integration is independently implemented. A separate foreground command can open an interactive session or run an unattended named Baikai coding job. Effective configuration explains the selected surface and settings before a model is called.
 
 The foundation already exists: [plan 13](13-wire-a-real-model-provider-into-behavior-runs.md) installed a shared Baikai builder and typed provider configuration. At authoring revision `f740895`, Shikigami exposed only `stub` and Anthropic HTTP; the completed part of this plan added OpenAI Chat Completions, OpenAI Responses and foreground launches. The 2026-11-02 refresh below distinguishes that installed baseline from newer upstream releases. Refresh the model catalog and compatibility rules through Baikai while preserving exact operator selections, pinned descriptors and the existing Anthropic default unless an operator explicitly changes them.
 
@@ -79,16 +79,16 @@ The expanded scope also adopts Baikai's structured answers and TypeSafe judgment
 ## Progress
 
 
-Source and release status was reviewed at `5b716874` on 2026-11-12 UTC. The subsequent implementation checkpoint at `ba63a3db` adds the native and installed qualification below; historical evidence retains its original source attribution. This is a standalone ExecPlan (no parent MasterPlan). Historical handoffs below retain their original dates; this snapshot supersedes their open-blocker and selected-version statements.
+The 2026-11-12 consumer continuation qualifies runtime source `847d5de2` and the subsequent test-only boundary proofs. See [the consumer matrix](../evidence/baikai-execution/consumer-matrix.md) for exact source attribution, suite counts and installed results. This is a standalone ExecPlan (no parent MasterPlan). Historical handoffs retain their original dates; this snapshot supersedes their open-blocker and selected-version statements.
 
-- [ ] M1: released-cohort adoption and Darwin inherited-group cancellation are implemented and evidenced. The released Baikai 0.10.1.0 core is now adopted with native behavior cancellation/sink proofs. Remaining: the rest of the trace/acknowledgement matrix, the full cancellation matrix on Darwin/Linux and an owning boundary proving reporter deadlines, bounded retained output and descendant/native-tool confinement. Publication is no longer the blocker.
-- [ ] M2: HTTP configuration, TypeSafe decision bindings, explicit reasoning-off decoding and native-cache-policy checks are implemented. Remaining: generative off/cache consumer wire/evidence matrix and qualified CLI response configuration after M1's batch promotion gate.
-- [ ] M3: HTTP dispatch and governed TypeSafe complete/stream dispatch are implemented. Remaining: qualified CLI response handlers and allowed/refused actual-tuple tests after the batch gate, plus the remaining wire/error cases below.
+- [ ] M1: released-cohort adoption, behavior trace/collector cancellation and the Darwin complete/active-stream/version-probe cancellation matrix pass, including resistant children, repeated cancellation, Codex schema cleanup and an unrelated sentinel. Remaining: native Linux qualification and an owning boundary proving reporter deadlines, bounded retained output and descendant/native-tool confinement. The latest released batch adapters still lack the latter contract.
+- [ ] M2: HTTP configuration, TypeSafe bindings, reasoning-off/default wire/evidence and exact native-cache-policy admission/refusal are qualified. Remaining: qualified CLI response configuration after M1's batch promotion gate.
+- [ ] M3: HTTP dispatch and governed TypeSafe complete/stream dispatch pass the request/error/authority/budget matrix. Remaining: qualified CLI response handlers and CLI actual-tuple tests after the batch gate.
 - [x] M4 (2026-10-06): foreground attended/unattended commands and real Codex marker/exit trials accepted; launch regression passed again in the November source checkpoints. New cohort changes retain foreground regression obligations.
-- [ ] M5: November source regression/journal evidence and Plan 124's five native immutable role builds are available. The 2026-11-12 checkpoint adds 1,997 native checks, a 210-assertion replay-neutral gate, five immutable role builds and ten installed checks at `ba63a3db`. Remaining: final-source qualification after the remaining feature matrix and installed judgment enqueue/worker execution. October installed checks do not qualify the November cohort.
+- [ ] M5: the current HTTP/structured candidate passes native regression, 210 replay-neutral conformance assertions, five immutable role builds, ten installed command/asset checks and installed judgment config/enqueue/worker/restart execution with one total fixture request. Runtime artifacts are from `847d5de2`; subsequent changes are tests/documentation only. Remaining: final candidate qualification after future CLI promotion changes. Earlier October packaging is not substituted for these results.
 - [ ] M6: authenticated batch reporter is blocked by M1's bounds/confinement gate and M2/M3 CLI implementation. The attended trial is already recorded. Plan 79 service/trust/delivery acceptance remains independent.
-- [ ] M7: structured snapshots, versioned context/assistant/outcome replay, complete cache roundtrip and complete/stream answer retention are implemented. Mixed structured trace and evidence-bearing cache/replay proofs now pass. Remaining: optional-field and malformed/interrupted-content cases, the rest of the trace matrix, followed by final package acceptance.
-- [ ] M8: configured public TypeSafe complete/stream interpretation, raw versus derived results, supplied-ticket Flow and PostgreSQL restart replay are implemented. Complete/stream HTTP 400 and malformed answer cases now pass. Remaining: the rest of the schema/error/authority/budget matrix below and installed queue/worker example qualification.
+- [x] M7 (2026-11-12): optional-field absence, malformed/truncated streams, full response/cache/trace snapshots, historical codecs and accepted structured model recovery pass. Repeating an accepted model operation with its provider retired preserves the exact structured outcome with one total call. Native PostgreSQL and immutable/installed qualification pass for the current candidate.
+- [x] M8 (2026-11-12): the complete/stream TypeSafe state/question, schema/error, credential, alias/profile/capability and finite-policy matrix passes. Raw answers remain separate from derived results; native crash/restart replay passes. Installed config, enqueue, worker execution and duplicate enqueue after restart pass outside the checkout with one total HTTP fixture request. No remote TypeSafe call is claimed.
 
 Current candidate pins are Baikai 0.10.1.0, Claude/OpenAI 0.7.3.0, agent 0.2.0.4, Shikumi 0.5.1.0 (cache 0.2.1.1, tools 0.4.2.1, trace 0.3.2.0), Kioku 0.12.0.2 and Effectful 2.7.1.0/core 2.7.1.2 at index `2026-11-12T17:25:33Z`. [Plan 124](124-remove-handan-by-owning-the-shikumi-execution-adapter-in-shikigami.md) replaces Handan with `Shikigami.Program.Runtime`; the current frozen export contains 382 packages and six repositories. FRIC-46, FRIC-48 and FRIC-49 are resolved; FRIC-47 retains the accepted serial database-test profile. The 2026-11-12 implementation selects core Baikai 0.10.1.0 with compatible Effectful adapter 0.4.0.5; the isolated application solve succeeds and the frozen export is refreshed. Other package versions are unchanged; the newer index selects revised metadata for `boring` 0.2.2.1 with unchanged source bytes. Consumer tests and final package acceptance are tracked separately below. Shikumi 0.5.1.0 is still the latest published core release. See the current release audit below.
 
@@ -103,11 +103,11 @@ nix develop --command cabal test shikigami-core-test \
 
 Refresh validation (2026-11-12 UTC): Mori registry list/search/show/docs succeeded after replacing this session's stale inherited database connection with the connection from the current shell configuration. Hackage preferred versions, published descriptors and upstream tags were checked directly. The source review reconfirmed the CLI refusal, eight structured-content cases, TypeSafe complete/stream fixtures, the traced behavior call and the missing installed proof manifest. No builds, solver run, database tests, Linux probes or live calls were performed in this refresh; milestone states and prior test evidence remain unchanged.
 
-Implementation in progress (2026-11-12 UTC): core trace-finalization adoption, behavior cancellation/terminal-drain/failed-sink fixtures, evidence-bearing structured cache/replay and mixed trace retention, complete/stream malformed TypeSafe responses and installed judgment-manifest layout are implemented in the candidate. See [the trace checkpoint](../evidence/baikai-execution/trace-finalization.md). All 801 core checks pass, including 20 behavior-tool, 23 TypeSafe and nine structured-content cases. Serial qualification now passes core 801, workers 353, PostgreSQL 681, agent 37, server 114 and migration smoke 11 checks, plus 210 conformance assertions with a replay-neutral gate; all five immutable roles and ten outside-checkout installed checks pass at `ba63a3db`; no full milestone is completed by these partial proofs.
+Earlier implementation checkpoint (2026-11-12 UTC, superseded by the consumer matrix above): core trace-finalization adoption, behavior cancellation/terminal-drain/failed-sink fixtures, evidence-bearing structured cache/replay and mixed trace retention, complete/stream malformed TypeSafe responses and installed judgment-manifest layout are implemented in the candidate. See [the trace checkpoint](../evidence/baikai-execution/trace-finalization.md). All 801 core checks pass, including 20 behavior-tool, 23 TypeSafe and nine structured-content cases. Serial qualification now passes core 801, workers 353, PostgreSQL 681, agent 37, server 114 and migration smoke 11 checks, plus 210 conformance assertions with a replay-neutral gate; all five immutable roles and ten outside-checkout installed checks pass at `ba63a3db`; no full milestone is completed by these partial proofs.
 
 ### Historical handoffs
 
-Implementation continuation (2026-11-12 UTC): the candidate now passes 863 core
+Interim implementation continuation (2026-11-12 UTC, before final installed acceptance): the candidate passes 863 core
 checks, including 62 TypeSafe complete/stream checks, ten structured-content
 checks, twelve successful reasoning/cache wire combinations and three offline
 refusals. The public adapters qualify complete, active-stream and version-probe
@@ -181,6 +181,12 @@ The public unattended parser includes its own `agent` group and does not export 
 
 ## Decision Log
 
+Decision (2026-11-12 UTC): refuse finite judgment cost policies at the shared
+complete/stream final-options boundary before allocating an actual attempt.
+Unknown TypeSafe prices cannot satisfy a spending ceiling as zero. This closes
+an existing acceptance gap and preserves the token-cap refusal and actual-call
+accounting owners; it introduces no workflow, descriptor or journal change.
+
 
 Decision (2026-11-12 UTC): Target the released core Baikai 0.10.1.0 trace-finalization fix as part of M1/M7 while retaining Shikumi 0.5.1.0 and baikai-effectful 0.4.0.5. The published bounds admit that core candidate, but a fresh isolated application solve and consumer qualification are required before changing the frozen cohort. Do not select baikai-effectful 0.5.0.0 until an owning Shikumi release or revision admits its breaking effect constructor. A bounded trace finalizer does not supply batch process deadlines, retained-output limits, confinement or durable evidence acknowledgement.
 
@@ -211,6 +217,26 @@ Decision (2026-11-02 UTC): Reuse public `Baikai.Judgment`, `Baikai.Response.JSON
 Decision (2026-11-03 UTC): Deliver the independent decision-binding endpoint/cache configuration against the retained qualified cohort while the released solve is blocked. Reuse existing endpoint and retention validation and the model/options digest preimage, preserving omitted-field identity. An explicitly pinned retention, including `none`, cannot be changed by a program node; conflicts refuse before actual-attempt admission. This does not qualify the newer adapter's shared-prefix caching or TypeSafe and does not change workflow bodies, step shapes or journal codecs. ADR 0052 records the durable binding rule.
 
 ## Outcomes & Retrospective
+
+The 2026-11-12 consumer continuation completes M7 and M8. Native qualification
+passes core 866, PostgreSQL 683, workers 353, server 114, agent 37 and migration
+smoke 11 checks (2,064 total), plus 210 replay-neutral conformance assertions.
+Runtime source `847d5de2` builds all five immutable roles; subsequent changes are
+tests/documentation only. Ten installed command/asset checks and the actual
+installed judgment config/enqueue/worker/restart probe pass outside the checkout.
+The latter preserves raw category `technical` and derived category `billing`
+with one total HTTP fixture request. See
+[consumer-matrix.md](../evidence/baikai-execution/consumer-matrix.md) for precise
+source attribution, failed preliminary probes and reproduction. No new friction
+entry remains to triage; FRIC-47's accepted serial profile is retained.
+
+M1/M2/M3/M6 remain open for native Linux and an owning batch deadline/output/
+confinement contract, followed by CLI response configuration/dispatch and the
+authenticated reporter. M5 retains final candidate qualification after those
+future runtime changes. The current HTTP/structured qualification does not
+promote batch CLIs or close Plan 79's service/trust/delivery gates. The finite
+judgment cost constraint is distilled in ADR 0041; existing ADR 0040 continues
+to govern separate response and foreground authority.
 
 The 2026-11-12 implementation checkpoint adopts released Baikai 0.10.1.0, proves behavior trace cancellation/terminal-drain/failed-sink handling, structured trace retention and evidence removal through cache/replay, adds eight complete/stream malformed judgment checks, and installs the supplied-ticket proof manifest through the immutable source filter. Core 801, workers 353, PostgreSQL 681, agent 37, server 114 and migration smoke 11 checks pass, plus 210 replay-neutral conformance assertions. All five native immutable roles build at `ba63a3db` and ten outside-checkout launch/manifest checks pass. See [the checkpoint](../evidence/baikai-execution/trace-finalization.md). FRIC-68 is resolved by native schema-snapshot regeneration and rebuilt verification. Full installed queue/worker execution, the remaining consumer matrices, Linux and authenticated batch reporter acceptance remain open; no milestone is prematurely closed.
 
@@ -296,23 +322,56 @@ Relevant architectural context is established. [ADR 0003](../adr/0003-a-seventh-
 Retain the original milestone numbers so October evidence remains attributable. The November 3 interfaces are adopted; first qualify the core-only 0.10.1.0 candidate described above while retaining the compatible adapter, then close the remaining consumer proofs. Finish M2/M3's reasoning/cache proof and the remaining M7/M8 consumer matrix against their existing implementation. M4's foreground behavior remains a regression obligation. Repeat M5 packaging/journal qualification after all feature changes, then close M6's existing live CLI handoff. An upstream blocker for one surface does not prevent independent consumer work or justify marking that blocked surface complete.
 
 
-### Remaining acceptance, source-reviewed 2026-11-12
+### Qualified consumer matrix and remaining promotion gates
 
-The milestone narratives below remain the full contract, including already implemented work. Resume from these gaps rather than recreating modules or repeating resolved release negotiations.
 
-For M1/M7, the candidate behavior tests now prove preterminal abort delivery, cancellation during a stalled successful-terminal drain and cancellation with a failed sink. Continue the native Haskell trace/evidence fixtures in `shikigami-core/test-postgres/Shikigami/RunEvidenceSpec.hs` and the provider tests to exercise `completeBehaviorRequest` with a healthy recording sink. Synchronize cancellation before terminal commitment and require exactly one abort terminal before the original exception reaches the caller. Exercise cancellation during terminal drain and after terminal commitment without duplicating or replacing the committed terminal. A stalled/failing sink must finish bounded cleanup while preserving cancellation and must not fabricate successful durable evidence. If an application consumer uses the new public fold API, test cancellation between stream steps through that consumer; do not assign its stronger lifetime to a general stream decorator. Re-run structured complete/stream and accepted-decision accounting regressions with the candidate. These are outstanding consumer proofs, not results inferred from upstream tests.
+The milestone narratives below remain the full contract, including implemented
+work. The completed consumer matrix is recorded in
+[consumer-matrix.md](../evidence/baikai-execution/consumer-matrix.md) and its JSON
+checkpoint. Resume from the CLI promotion gaps rather than recreating modules,
+repeating resolved release negotiations or treating HTTP/structured work as open.
 
-For M1, `BehaviorProviderSpec.cancellationSettles` currently covers a complete call with an inherited sleeping child for each vendor on Darwin. Add or locate evidence for active-stream cancellation, repeated cancellation, signal-resistant children, executable-version probes, Codex schema cleanup and an unrelated sentinel; qualify the same owned cases on native Linux. These cancellation tests do not satisfy the separate absolute-deadline, retained-output and detached-descendant/native-tool confinement requirements. Keep `BatchBoundsAndConfinementRequired` until an owning boundary supplies all of them. The workspace Apple-container probes qualify their documented supervisor substrates, not automatically Baikai response adapters.
+M1's Darwin complete, active-stream and version-probe probes now cover repeated
+cancellation, resistant inherited children, original asynchronous exceptions,
+Codex schema-file cleanup and an unrelated sentinel. The behavior boundary also
+proves healthy abort delivery through the real evidence collector, bounded
+stalled/failed-sink cleanup and preservation of the committed terminal. General
+stream decorators acquire no stronger lifetime from these synchronous proofs.
+Native Linux qualification is still required. More fundamentally, the released
+batch adapters still lack enforced absolute deadlines, bounded retained output
+and detached-descendant/native-tool confinement. Keep
+`BatchBoundsAndConfinementRequired` until an owning public boundary supplies all
+three. Workspace supervisor probes do not automatically qualify these adapters.
 
-For M2/M3, `Compatibility.hs` already uses `ThinkingNone`, `supportsThinkingDisabled` and `validateNativeCachePolicy`, and binding tests preserve pinned retention through complete/stream merges. Finish application fixtures that compare omitted/default versus explicit off in decoded settings, actual profile tuples, emitted HTTP body and returned evidence. Exercise supported and refused Anthropic off settings and exact OpenAI endpoint cache policies, including shared system-prefix markers and supported Short/Long retention. Pure option admission and the older Anthropic retention fixture alone do not establish the new wire behavior. Unsupported combinations must leave transport markers untouched. CLI configuration/dispatch stays dependent on the batch gate; generative HTTP qualification can proceed now.
+M2/M3's HTTP work passes twelve successful application wire combinations, three
+off/cache refusals, independent decision-alias default/off evidence, exact model
+and endpoint tuples, and pinned cache merging. Anthropic system text-block
+markers, OpenAI modern shared-prefix markers, supported Short/Long and refused
+Long settings are checked without inferring a real cache hit. Neither the Chat
+`gpt-5.6` binding nor Responses `gpt-6.1-sol` admits explicit off in the selected
+catalog; Responses `gpt-6-luna` does. CLI configuration, dispatch and actual-tuple
+qualification remain dependent on M1's promotion gate.
 
-For M7, `BaikaiStructuredContentSpec` now contains nine cases covering codec/cache roundtrip, protected snapshot bounds, versioned assistant replay and user-data placement. The candidate cache fixture starts with evidence and proves removal on cache serialization and a memory hit, with one underlying call and unchanged restored answer content. A new behavior trace fixture preserves mixed text/data and absent evidence. Remaining cases include optional-field absence and malformed/truncated structured streams. Retain historical byte encodings and test interrupted streams cannot publish a successful answer. Reuse the existing TypeSafe atomic-event/terminal-ordering and durable replay tests rather than duplicating their completed cases.
+M7/M8 pass optional-field preservation, malformed and interrupted answers,
+evidence-bearing cache/replay, structured trace retention, accepted model
+recovery and complete/stream TypeSafe interpretation. Tests assert exact
+state/questions, wrong/missing credentials, unknown models, alias and slot
+capability admission, generative-program runtime refusal, profile escapes,
+finite token/cost refusal, invalid probabilities/legends, HTTP classification,
+timeout/cancellation and failed terminal acknowledgement. PostgreSQL retains
+both raw and derived committed results through the existing crash/restart cases.
+The installed proof manifest is exercised through configuration, enqueue and
+worker commands outside the checkout, with a temporary HOME, a cleared
+environment and one total loopback request across a worker restart and duplicate
+enqueue. That installed duplicate check is distinct from the native fault proof.
 
-For M8, `TypeSafeDecisionSpec` now has 23 cases (ten shared complete/stream cases plus three stream cases), and `TypeSafeDecisionWorkflowSpec` has three queue/replay cases. Their current coverage includes weighted derivation, unchanged raw answers, provider refusal, cancellation, missing credentials/generation controls, terminal persistence failure, atomic-event parity and pending retired binding refusal. Finish explicit application-path tests for unsupported schema/history/tools, malformed probability maps/legends, HTTP error classification beyond the existing 403 refusal and timeout, wrong-provider credentials, unknown models and alias/profile escapes. Assert exact request questions/state, finite output-token or unknown-price budget refusal before HTTP; preserve the existing changed-settings/default-versus-weighted derivation proof. Generic governance tests may satisfy shared cases only when their applicability to a judgment binding is demonstrated; upstream decoder tests alone do not close this matrix.
-
-For M5, reuse Plan 124's successful native role-build evidence at its recorded revision. After remaining code changes, rerun affected serial suites and the workflow gate, rebuild changed roles, and run installed launch plus judgment-example commands from outside the checkout with an installed proof-agent directory. The candidate `nix/qualification-package.nix` now installs `agents/proof/shikumi-judgment-example.dhall` under `share/shikigami/agents/proof`, preserving its `../../schema/Agent.dhall` import. Demonstrate configuration/enqueue/worker execution outside the checkout against that installed layout; source installation alone does not close this acceptance gate. Preserve the existing schema/patch/readers; [ADR 0041](../adr/0041-durable-decisions-bind-program-state-and-preserve-committed-outcomes.md) governs structured results, and [ADR 0110](../adr/0110-accepted-typed-decisions-account-for-every-transport-call.md) requires actual-call accounting for the newer accepted typed-decision path. Regression must cover both retained synchronous and accepted execution paths where affected.
-
-Independent next work is the core 0.10.1.0 solve and trace-cancellation proof, the HTTP off/cache and structured/TypeSafe failure matrix, plus installed-asset inspection. M1 batch qualification blocks CLI-specific M2/M3 work, which in turn blocks M6. Final M5 qualification follows the completed feature changes. M7/M8 do not depend on promoting batch CLI responses. No existing acceptance requirement is waived by this ordering.
+M5's current artifacts qualify runtime source `847d5de2`; subsequent source edits
+are test/documentation only. All five native roles and the ten installed
+launch/manifest checks pass. After future CLI feature changes, repeat affected
+serial suites, the committed workflow gate, role builds and installed checks at
+that final candidate. M6 still requires the authenticated batch reporter after
+M1/M2/M3 qualify; prior attended evidence and Plan 79's independent service/trust/
+delivery gates retain their meaning. No current gate is waived by this ordering.
 
 
 ### Milestone 1: Prove contracts and inventory the settings

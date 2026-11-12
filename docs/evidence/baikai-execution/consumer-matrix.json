@@ -1,0 +1,106 @@
+{
+  "schema": "shikigami.baikai-consumer-matrix/1",
+  "date": "2026-11-12",
+  "runtimeSource": "847d5de2292d0de2e9d4145951226a2989f9738d",
+  "boundarySource": "0fdd0797c3a3b21f4ff02670aa46c66f2156fc64",
+  "sourceQualification": "Runtime outputs precede subsequent test/documentation-only changes; no runtime implementation, descriptor, workflow, schema or installed asset changed after runtimeSource.",
+  "indexState": "2026-11-12T17:25:33Z",
+  "baikai": "0.10.1.0",
+  "baikaiEffectful": "0.4.0.5",
+  "shikumi": "0.5.1.0",
+  "suites": {
+    "core": 866,
+    "postgres": 683,
+    "workers": 353,
+    "server": 114,
+    "agent": 37,
+    "migrationSmoke": 11
+  },
+  "totalNativeChecks": 2064,
+  "databaseProfile": "one Cabal invocation with -j1 and --num-threads=1",
+  "conformanceAssertions": 210,
+  "replayVerdict": "replay-neutral",
+  "packages": {
+    "shikigami": "/nix/store/n3vicknnrjgdq59hhnsc4bl4s68zn6iz-shikigami",
+    "shikigami-server": "/nix/store/p5q6y9yb5a6rf0v5wyyzkjkarwryhbrq-shikigami-server",
+    "shikigami-worker": "/nix/store/yzw7b14fix48hr03qmydgm9awqhk63js-shikigami-worker",
+    "shikigami-migrate": "/nix/store/ky2941j358ykmfz8bqvacsx963jvzdh6-shikigami-migrate",
+    "shikigami-agent-launch": "/nix/store/1v5z0x489vmg63v1n3ix0v2fyqm1rx5g-shikigami-agent-launch"
+  },
+  "installedChecks": [
+    {
+      "case": "shikigami",
+      "exitCode": 0
+    },
+    {
+      "case": "shikigami-server",
+      "exitCode": 0
+    },
+    {
+      "case": "shikigami-worker",
+      "exitCode": 0
+    },
+    {
+      "case": "shikigami-migrate",
+      "exitCode": 0
+    },
+    {
+      "case": "shikigami-agent-launch",
+      "exitCode": 0
+    },
+    {
+      "case": "interactive configuration",
+      "exitCode": 0
+    },
+    {
+      "case": "unattended help",
+      "exitCode": 0
+    },
+    {
+      "case": "unattended agent help",
+      "exitCode": 0
+    },
+    {
+      "case": "installed manifest",
+      "exitCode": 0
+    },
+    {
+      "case": "installed lifecycle",
+      "exitCode": 0
+    }
+  ],
+  "installedJudgment": {
+    "passed": true,
+    "configurationHttpRequests": 0,
+    "totalHttpRequests": 1,
+    "rawProviderCategory": "technical",
+    "derivedCategory": "billing",
+    "urgencyProbability": 0.83,
+    "severityExpectedScore": 1.5,
+    "restart": "graceful worker restart and duplicate enqueue; separate native fault/replay qualification",
+    "environment": "temporary HOME and minimal explicit environment, without provider API environment variables",
+    "workingDirectory": "outside checkout, disposable directory"
+  },
+  "nativeCliCancellation": {
+    "darwin": true,
+    "linux": false,
+    "cases": [
+      "complete",
+      "active synthetic stream",
+      "repeated cancellation",
+      "signal-resistant inherited children",
+      "version probe",
+      "Codex schema cleanup",
+      "unrelated sentinel"
+    ]
+  },
+  "remoteProviderCalls": 0,
+  "batchReporterQualified": false,
+  "remaining": [
+    "Native Linux cancellation qualification",
+    "Owning batch deadline/output/confinement contract",
+    "CLI response configuration/dispatch and tuple qualification",
+    "Authenticated batch reporter",
+    "Final candidate qualification after CLI changes"
+  ]
+}
