@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-11-12
+* **Addition**: IR-24 requests pinned, allowlisted, read-only repository evidence for durable runs, with ref resolution at admission and a content reference per read, for `mori://tan/tan-product-management/masterplans/2-add-shikigami-product-management-reviews-and-follow-up`; it also asks whether IR-18 is closed at the read-only boundary on purpose.
+
 ## 2026-11-11
 
 * **Addition**: IR-23 requests publication of a validated workspace commit to an operator-granted ref of the source repository, for `mori://shinzui/mori/okf/use-cases/concepts/UC-2`.
