@@ -1,5 +1,6 @@
 module Shikigami.TypeSafeDecisionWorkflowSpec (tests, qualifyInstalled) where
 
+import Baikai.Content (DataContent (..))
 import Control.Concurrent (threadDelay)
 import Control.Exception (SomeException, bracket, throwIO, try)
 import Control.Lens ((&), (.~))
@@ -22,6 +23,7 @@ import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (AgentWorkflowRoute), r
 import Shikigami.Agent.Workflow qualified as Agent
 import Shikigami.App (AppEnv (..), noopTracer, runAppIO)
 import Shikigami.Behavior.Run (newBehaviorEnv)
+import Shikigami.Decision.Answer (answerBlocks)
 import Shikigami.Decision.Contract
 import Shikigami.Decision.Evidence
 import Shikigami.Decision.ModelCatalog
@@ -211,11 +213,11 @@ qualifyInstalled operator worker agents = do
       bracket scratch removeDirectoryRecursive \directory -> do
         declaration <- mustRight <$> loadAgent (agents </> "shikumi-judgment-example.dhall")
         ambient <- getEnvironment
-        let environment = ("OTEL_SDK_DISABLED", "true") : filter (\(key, _) -> not ("SHIKIGAMI_" `Text.isPrefixOf` Text.pack key) && key `notElem` ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "CODEX_API_KEY", "TYPESAFE_API_KEY", "OTEL_SDK_DISABLED"]) ambient
+        let environment = [("HOME", directory), ("TMPDIR", directory), ("LANG", "en_US.UTF-8"), ("PATH", maybe "/usr/bin:/bin" id (lookup "PATH" ambient)), ("OTEL_SDK_DISABLED", "true")]
             configuration = directory </> "fixture.json"
             decisionModels = [object ["alias" .= ("judge" :: Text.Text), "version" .= ("1" :: Text.Text), "bindingId" .= ("installed-fixture" :: Text.Text), "bindingVersion" .= ("1" :: Text.Text), "provider" .= ("typesafe" :: Text.Text), "model" .= ("jev-latest" :: Text.Text), "thinking" .= ("default" :: Text.Text), "base_url" .= server.endpoint]]
             run executable args = do
-              outcome <- timeout 30000000 (Process.readCreateProcessWithExitCode ((Process.proc executable args) {Process.cwd = Just directory, Process.env = Just environment}) "")
+              outcome <- timeout 30000000 (Process.readCreateProcessWithExitCode ((Process.proc executable (args <> ["+RTS", "-N2", "-RTS"])) {Process.cwd = Just directory, Process.env = Just environment}) "")
               case outcome of
                 Just (ExitSuccess, output, _) -> pure output
                 other -> assertFailure ("installed command failed: " <> show other)
@@ -227,24 +229,49 @@ qualifyInstalled operator worker agents = do
         void (run operator ["--config", configuration, "enqueue-run", "shikumi-judgment-example", "--payload", "{\"ticket\":\"Checkout is unavailable.\"}", "--key", "ep80-installed"])
         tracer <- noopTracer
         let app = AppEnv {connectionSettings = defaultConnectionSettings connection, tracer, metrics = Nothing, store = Nothing}
-            waitRecorded = do
+            requireAlive handle =
+              Process.getProcessExitCode handle >>= \case
+                Nothing -> pure ()
+                Just status -> do
+                  logs <- readFile (directory </> "worker.log")
+                  assertFailure ("installed worker exited " <> show status <> ": " <> take 8192 logs)
+            waitRecorded handle = do
+              requireAlive handle
               index <- either (assertFailure . show) pure =<< runAppIO app (loadStepIndex Agent.agentRunWorkflowName (runJobWorkflowId request) 0)
-              if Map.member "record" index then readOutcome app request else threadDelay 100000 >> waitRecorded
+              if Map.member "record" index then readOutcome app request else threadDelay 100000 >> waitRecorded handle
         withFile (directory </> "worker.log") WriteMode \logHandle -> do
-          let process = (Process.proc worker ["--config", configuration]) {Process.cwd = Just directory, Process.env = Just environment, Process.std_out = Process.UseHandle logHandle, Process.std_err = Process.UseHandle logHandle}
+          let process = (Process.proc worker ["--config", configuration, "+RTS", "-N2", "-RTS"]) {Process.cwd = Just directory, Process.env = Just environment, Process.std_in = Process.NoStream, Process.std_out = Process.UseHandle logHandle, Process.std_err = Process.UseHandle logHandle}
+              start = Process.createProcess_ "installed judgment worker" process
               stop (_, _, _, handle) = do
                 Process.terminateProcess handle
                 stopped <- timeout 10000000 (Process.waitForProcess handle)
-                case stopped of Nothing -> assertFailure "installed worker did not stop"; Just _ -> pure ()
-          original <- bracket (Process.createProcess process) stop \_ -> do
-            result <- timeout 30000000 waitRecorded
-            maybe (assertFailure "installed worker did not record judgment") pure result
+                case stopped of
+                  Nothing -> do
+                    pid <- Process.getPid handle
+                    mapM_ (\owned -> void (Process.readProcessWithExitCode "/bin/kill" ["-KILL", show owned] "")) pid
+                    void (timeout 5000000 (Process.waitForProcess handle))
+                    assertFailure "installed worker did not stop gracefully"
+                  Just _ -> pure ()
+          original <- bracket start stop \(_, _, _, handle) -> do
+            result <- timeout 30000000 (waitRecorded handle)
+            case result of
+              Just outcome -> pure outcome
+              Nothing -> readFile (directory </> "worker.log") >>= assertFailure . ("installed worker did not record judgment: " <>) . take 8192
           length (outcomeAnswers original) @?= 1
+          map (.value) (concatMap (answerBlocks . (.snapshot)) (outcomeAnswers original)) @?= [object ["urgent" .= True, "category" .= ("technical" :: Text.Text), "severity" .= (1.5 :: Double)]]
           length original.attempts @?= 1
-          case original.result of Right _ -> pure (); Left failure -> assertFailure (show failure)
-          restored <- bracket (Process.createProcess process) stop \_ -> do
+          case original.result of
+            Right value -> case fromJSON @TicketJudgment value of
+              Success output -> do
+                output.urgent.probability @?= 0.83
+                output.category.value @?= Billing
+                output.severity.value @?= 1.5
+              Error problem -> assertFailure problem
+            Left failure -> assertFailure (show failure)
+          restored <- bracket start stop \(_, _, _, handle) -> do
             void (run operator ["--config", configuration, "enqueue-run", "shikumi-judgment-example", "--payload", "{\"ticket\":\"Checkout is unavailable.\"}", "--key", "ep80-installed"])
             threadDelay 1000000
+            requireAlive handle
             readOutcome app request
           toJSON restored @?= toJSON original
         server.requests >>= (\requests -> length requests @?= 1)

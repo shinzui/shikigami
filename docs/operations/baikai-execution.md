@@ -71,6 +71,15 @@ request's advertised tools immediately before each call. A Flow's JsonObject
 requirement and a Skill's acquired registry cannot be silently dropped.
 The actual model and thinking preference still pass the exact pinned-profile gate.
 
+Reasoning off is an exact model capability. On the selected catalog,
+`claude-sonnet-4-6` sends `thinking: {type: disabled}` and Responses
+`gpt-6-luna` sends `reasoning: {effort: none}`. `gpt-6.1-sol` does not admit
+`none`; omission preserves its provider default. Native cache controls also
+depend on the exact binding: `gpt-5.6` Chat and `gpt-6.1-sol` Responses admit
+Short but refuse Long, while `gpt-6-luna` Responses admits Long. These settings
+request retention and do not establish a cache hit. Anthropic marks the shared
+system text block; modern OpenAI bindings mark the shared prefix explicitly.
+
 `behavior.base_url` overrides the actual endpoint, with no embedded credentials,
 query or fragment. HTTP profile endpoint class follows its actual URL scheme;
 an HTTPS-only profile refuses an `http://` override before dispatch. Flow routing

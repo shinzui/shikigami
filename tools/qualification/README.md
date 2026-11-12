@@ -43,6 +43,28 @@ are ignored working files; the deterministic archive is the packaging input.
 All role packages expose schema and qualification assets under
 `share/shikigami`; installed skill manifests refer to installed skill paths.
 
+The PostgreSQL test executable has an explicit installed judgment mode. Build it
+with the isolated project, then supply absolute paths to the packaged operator,
+worker and installed proof-agent directory:
+
+```sh
+nix develop --command cabal build shikigami-core-postgres-test \
+  --project-file="$qualification_project"
+qualification_test=$(nix develop --command cabal list-bin shikigami-core-postgres-test \
+  --project-file="$qualification_project")
+nix develop --command "$qualification_test" --installed-judgment \
+  /absolute/operator/bin/shikigami /absolute/worker/bin/shikigami-worker \
+  /absolute/operator/share/shikigami/agents/proof
+```
+
+The driver provisions PostgreSQL and a loopback TypeSafe fixture, runs the actual
+installed commands from a disposable directory with a temporary HOME and cleared
+credential environment, and checks configuration, enqueue, worker execution,
+duplicate enqueue after restart, retained raw/derived answers and one total HTTP
+request. It refuses relative paths and never substitutes checkout executables.
+The separate native restart test covers a crash between decision commitment and
+workflow completion; duplicate installed enqueue does not claim that fault proof.
+
 `snapshot.py --inventory PATH --marker PUBLIC_MARKER` reads a JSON inventory with
 a `health_endpoints` object mapping short service names to explicit numeric
 loopback HTTP URLs, for example `http://127.0.0.1:8081/health/ready`. It probes only

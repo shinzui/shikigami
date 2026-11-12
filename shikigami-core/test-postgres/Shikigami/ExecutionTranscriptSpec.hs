@@ -544,6 +544,44 @@ tests fixture =
           Map.lookup R.ModelAttempts root.usage.settled @?= Just (fixtureAmount 2)
           Map.lookup R.Tokens root.usage.settled @?= Just (fixtureAmount 3)
           root.active @?= (fixtureCount 0),
+      testCase "accepted structured model output survives restart without another provider call" $
+        withConfiguredResourceFixture fixture id (Map.insert R.Tokens R.ExplicitlyUnbounded) \env snapshot access -> do
+          withStore env.connectionSettings (\store -> ensureRunQueue store.pool >>= expectRight)
+          (base, _, _) <- driverRuntime env False
+          invocations <- newIORef (0 :: Int)
+          let dat = Content.DataContent (object ["category" .= ("technical" :: Text), "severity" .= (1.5 :: Double)]) (Just (Map.singleton "category" (Map.fromList [("billing", 0.2), ("technical", 0.7)]))) Nothing Nothing
+              selected = base.selectionRuntime snapshot
+              complete model context options = do
+                modifyIORef' invocations (+ 1)
+                response <- Provider.complete stubApiProvider model context options
+                pure (response & #message . #content .~ Vector.fromList [Content.AssistantText (Content.TextContent "structured observation"), Content.AssistantData dat])
+              provider = stubApiProvider & #complete .~ complete & #stream .~ liftCompleteToStream complete
+              readAccepted reference = do
+                Just accepted <- inspectOperation env reference.operationId
+                ref <- maybe (assertFailure "structured outcome missing") pure accepted.outcome
+                expectRight =<< run env (Store.readReplayPayload @OperationOutcome access "operation-outcome" ref)
+          registry <- Provider.newProviderRegistryFrom [provider]
+          let executor = base {Executor.selectionRuntime = const (selected {providers = [provider], baseEnv = selected.baseEnv & #providerRegistry .~ Just registry})}
+              reach remaining
+                | remaining <= (0 :: Int) = assertFailure "structured driver did not suspend"
+                | otherwise = do
+                    outcome <- run env (runWorkflow DriverGenerated.workflowName (executionWorkflowId snapshot.executionId) (Driver.executionWorkflow executor (Just (Driver.ExecutionStart snapshot.executionId))))
+                    case outcome of ContinuedAsNew -> reach (remaining - 1); Suspended -> pure (); _ -> assertFailure (show outcome)
+          reach 4
+          reference <- pendingReference env snapshot
+          Executor.executeAcceptedAttempt executor snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
+          original <- readAccepted reference
+          case original of
+            ModelReturned assistant _ -> do
+              assistant.format @?= StructuredAssistant
+              assistant.blocks @?= [TextBlock "structured observation", DataBlock dat]
+              restored <- expectRight (restoreAssistant assistant)
+              restored.content @?= Vector.fromList [Content.AssistantText (Content.TextContent "structured observation"), Content.AssistantData dat]
+            _ -> assertFailure "structured response changed outcome kind"
+          let retired = executor {Executor.selectionRuntime = \_ -> error "accepted structured outcome redispatched"}
+          Executor.executeAcceptedAttempt retired snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
+          readAccepted reference >>= (@?= original)
+          readIORef invocations >>= (@?= 1),
       testCase "claim expiry before dispatch permits replacement without another actual attempt" $
         withPreparedModel fixture \env _snapshot access _operation reference -> do
           first <- expectClaim =<< run env (Store.claimExecutionAttempt access (fixtureRevision 2) reference (fixtureOwner "first-owner") 1)

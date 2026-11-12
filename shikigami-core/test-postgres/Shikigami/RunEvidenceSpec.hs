@@ -1,10 +1,15 @@
 module Shikigami.RunEvidenceSpec (tests, completeScenarioEvidence) where
 
+import Baikai.Api (Api (Custom))
 import Baikai.Context (emptyContext)
 import Baikai.Evidence qualified as Baikai
 import Baikai.Options (emptyOptions)
 import Baikai.Options qualified as Options
+import Baikai.Provider.Registry (apiProviderWith, newProviderRegistryFrom)
+import Baikai.Stream (liftCompleteToStream)
 import Baikai.Trace qualified as BaikaiTrace
+import Control.Concurrent.Async (asyncThreadId, waitCatch, withAsync)
+import Control.Concurrent.MVar (newEmptyMVar, putMVar, takeMVar)
 import Control.Exception qualified as Exception
 import Data.Aeson (Value, eitherDecode, encode)
 import Data.ByteString.Lazy (ByteString)
@@ -40,6 +45,7 @@ import Shikigami.Attestation.PolicyValue qualified as PV
 import Shikigami.Attestation.Profile
 import Shikigami.Attestation.Reviewed
 import Shikigami.Behavior.Provider.Coordinate qualified as Coordinate
+import Shikigami.Behavior.Run (BehaviorEnv (..), completeBehaviorRequest, newBehaviorEnv)
 import Shikigami.Behavior.StubProvider (registerStubProvider, stubModel)
 import Shikigami.Decision.ModelAlias (ModelAlias, parseModelAlias)
 import Shikigami.Log.Correlation
@@ -52,6 +58,7 @@ import Shikigami.Log.Correlation
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Shikigami.Prelude
 import Shikigami.RunEvidence.Catalog qualified as EvidenceCatalog
+import System.Timeout (timeout)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertEqual, assertFailure, testCase)
 
@@ -143,6 +150,32 @@ tests databaseFixture =
                 assertEqual "Baikai run id" "run-evidence-live" (terminal ^. #runId)
                 assertEqual "Baikai schema" Baikai.evidenceSchemaVersion (terminal ^. #schemaVersion)
               other -> assertFailure ("expected one root call, got " <> show other),
+          testCase "behavior cancellation reaches the real evidence collector before returning" do
+            ready <- newEmptyMVar
+            held <- newEmptyMVar
+            let runId = runCorrelationId "run-evidence-cancel"
+                callId = callCorrelationId runId "run-behavior-v2" 0
+                api = Custom "evidence-cancellation"
+                model = stubModel & #api .~ api
+                options = configureEvidenceCall runId callId 1 Nothing Baikai.EvidenceRequestedOnly emptyOptions
+                handler _ _ _ = putMVar ready () >> takeMVar held
+            (sink, source) <- newEvidenceCollector runId "run-behavior-v2" 0 Baikai.EvidenceRequestedOnly Nothing
+            registry <- newProviderRegistryFrom [apiProviderWith api (liftCompleteToStream handler) handler]
+            base <- newBehaviorEnv
+            let env = base & #providerRegistry .~ Just registry & #traceSink .~ Just sink
+            withAsync (completeBehaviorRequest env model emptyContext options) \worker -> do
+              timeout 5000000 (takeMVar ready) >>= assertEqual "provider ready" (Just ())
+              Exception.throwTo (asyncThreadId worker) Exception.ThreadKilled
+              outcome <- timeout 5000000 (waitCatch worker)
+              case outcome of
+                Just (Left failure) -> assertEqual "original cancellation" (Just Exception.ThreadKilled) (Exception.fromException failure)
+                _ -> assertFailure "behavior cancellation did not finish"
+              collected <- source.terminalCallsFor runId
+              case collected of
+                [RecordedCallEvidence {callId = actualId, evidence = terminal}] -> do
+                  assertEqual "correlation preserved" callId actualId
+                  assertEqual "abort retained" Baikai.CallAborted (terminal ^. #status)
+                _ -> assertFailure "expected exactly one collected abort, without deferred GC delivery",
           testCase "two-call, retry, and child fixtures pin literal Baikai JSON" do
             assertLiteralEvidence "two-call" twoCallEvidenceJson twoCallFirst
             assertLiteralEvidence "retry" retryEvidenceJson retryAttempt
