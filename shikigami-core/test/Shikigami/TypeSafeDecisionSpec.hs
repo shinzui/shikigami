@@ -250,6 +250,22 @@ runnerTests label runProgram =
           answers @?= []
           fixture.requests >>= (@?= [])
           inspect >>= (\calls -> Map.size calls @?= 0),
+      testCase "the runtime refuses a generative program even with a prepared judgment binding" $
+        withTypeSafeFixture 200 0 fixtureResponse \fixture -> do
+          let catalog = fixtureCatalog fixture.endpoint
+              registered = mustRight (registerProgram "generative-escape" "1" "fixture/1" "ticket/1" "ticket/1" "validator/1" "derive/1" Null (Program.Embed pure) jsonResultCodec Right Right)
+              ref = programRef registered
+              prepared = fixturePrepared catalog & #program .~ descriptor ref
+          (hooks, inspect) <- newMemoryCallHooks
+          base <- fixtureRuntime catalog hooks
+          let env = base & #programs .~ mustRight (programRegistry [SomeProgram registered])
+          result <-
+            if label == "complete"
+              then fst <$> runDecisionProgramWithAnswers env prepared ref fixtureTicket
+              else fst <$> streamDecisionProgramWithAnswers env prepared ref fixtureTicket (const (pure ()))
+          fmap failureCode (either Right (const (Left ())) result) @?= Right ForbiddenModel
+          fixture.requests >>= (@?= [])
+          inspect >>= (\calls -> Map.size calls @?= 0),
       testGroup
         "unsupported requests leave transport and actual-attempt counters untouched"
         [ testCase name $ withTypeSafeFixture 200 0 fixtureResponse \fixture -> do

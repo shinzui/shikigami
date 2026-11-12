@@ -37,8 +37,10 @@ import Shikigami.Coordination.Decision (adaptiveSlots)
 import Shikigami.Decision.Contract
 import Shikigami.Decision.ModelAlias qualified as Alias
 import Shikigami.Decision.ModelCatalog
+import Shikigami.Fixture.TypeSafe qualified as TypeSafe
 import Shikigami.Flow (FlowDef (..), flowDecisionSlotsFor, flowRegistry)
 import Shikigami.Program.Decision
+import Shikigami.Program.Decision.JudgmentExample (judgmentProgram)
 import Shikigami.Trigger.Schedule (parseCron)
 import Shikumi.Program (Program (Embed))
 import Test.Tasty (TestTree, testGroup)
@@ -71,6 +73,17 @@ tests =
         assertBool "unknown aliases denied" (isLeft (resolveModel catalog declaration Nothing (fixtureModelAlias "payload-model")))
         assertBool "agent permission required" (isLeft (resolveModel catalog ((declaration & #decisionModels .~ ([]))) Nothing (fixtureModelAlias "triage")))
         assertBool "duplicate operator aliases refused" (isLeft (modelCatalog [binding "triage" "stub-triage", binding "triage" "stub-investigate"])),
+      testCase "a TypeSafe binding intersects the actual proof declaration and judgment slot capability" $
+        TypeSafe.withTypeSafeFixture 200 0 TypeSafe.fixtureResponse \server -> do
+          declaration <- mustRight <$> loadAgent "../agents/proof/shikumi-judgment-example.dhall"
+          let selected = TypeSafe.fixtureCatalog server.endpoint
+              programs = mustRight (programRegistry [SomeProgram judgmentProgram, SomeProgram registered])
+              closed = DecisionSlot judgmentDecisionSlot [descriptor (programRef judgmentProgram)] [fixtureModelAlias "judge"]
+          admitted <- either (assertFailure . show) pure (resolvePolicy programs [closed] selected declaration Nothing)
+          admitted.models @?= catalogDescriptors selected
+          assertBool "undeclared judgment alias refused" (isLeft (resolvePolicy programs [closed] selected (declaration & #decisionModels .~ []) Nothing))
+          assertBool "generative slot cannot acquire a judgment-only model" (isLeft (resolvePolicy programs [closed & #programs .~ [descriptor (programRef registered)]] selected declaration Nothing))
+          server.requests >>= (@?= []),
       testCase "model commitments retain the complete former binding preimage" do
         let admitted = binding "triage" "stub-triage"
             metadata = modelDescriptor admitted
