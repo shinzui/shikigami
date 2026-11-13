@@ -604,6 +604,7 @@ test-suite shikigami-core-test
     Shikigami.ApprovalNotificationSpec
     Shikigami.AttestationContractsSpec
     Shikigami.BaikaiStructuredContentSpec
+    Shikigami.Behavior.BatchCliFixture
     Shikigami.BehaviorInputSpec
     Shikigami.BehaviorProviderSpec
     Shikigami.BehaviorRetrySpec
@@ -660,7 +661,10 @@ test-suite shikigami-core-test
     Shikigami.WorkspaceInstructionsSpec
     Shikigami.WorkspaceProcessPolicySpec
 
-  hs-source-dirs: test
+  hs-source-dirs:
+    test
+    test-support
+
   ghc-options:
     -threaded
     -rtsopts

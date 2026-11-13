@@ -55,11 +55,8 @@ import Baikai.Response (Response (..), emptyResponse, errorResponse, flattenAssi
 import Baikai.ResponseFormat (ResponseFormat (..), jsonSchemaFormat)
 import Baikai.ThinkingLevel (ThinkingLevel (ThinkingMinimal))
 import Baikai.Tool (ToolChoice (ToolChoiceNone), mkTool)
-import Control.Concurrent (forkIO, killThread, threadDelay)
 import Control.Concurrent.MVar
-import Control.Exception (AsyncException (ThreadKilled), SomeException, bracket, finally, fromException, try)
 import Control.Lens ((&), (.~))
-import Control.Monad (unless, void)
 import Data.Aeson (Value, (.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Key qualified as Key
@@ -93,6 +90,7 @@ import Shikigami.App.Config.Load (ConfigOptions (..), ConfigRun (..), appConfigR
 import Shikigami.Attestation.PolicyValue qualified as PV
 import Shikigami.Attestation.Profile qualified as Profile
 import Shikigami.Attestation.Resolve (ResolvedProfile, ResolvedProfileView (..), resolvedProfileFor, resolvedProfileView)
+import Shikigami.Behavior.BatchCliFixture (cancellationCases, cliModel, withFake)
 import Shikigami.Behavior.Compatibility
 import Shikigami.Behavior.Error (FailureClass (..), RunError (..))
 import Shikigami.Behavior.Provider (ProfileViolation (..), ProviderCall (..), constrainBehaviorEnv, describeProviderSelection, newBehaviorEnvFor, providerCall, renderProfileViolation)
@@ -103,15 +101,9 @@ import Shikigami.Behavior.Skill (SkillDir (..), runSkillWith)
 import Shikigami.Log qualified as Log
 import Shikigami.Trigger.Schedule (parseCron)
 import Shikumi.Tool (mkRegistry)
-import Streamly.Data.Fold qualified as Fold
-import Streamly.Data.Stream qualified as Stream
-import System.Directory (createDirectory, doesFileExist, executable, getPermissions, getTemporaryDirectory, removeDirectoryRecursive, removeFile, setPermissions)
+import System.Directory (doesFileExist)
 import System.Exit (ExitCode (..))
 import System.FilePath ((</>))
-import System.IO (hClose, openTempFile)
-import System.Process (readProcessWithExitCode)
-import System.Process qualified as Process
-import System.Timeout (timeout)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
 
@@ -449,8 +441,6 @@ contractTests =
       testCase "nonzero Codex exit remains a classified failure" $ withFake "exit 7\n" \_ exe -> do
         resp <- (CodexCli.codexCliProvider ((CodexCli.defaultCodexCliConfig & #executable .~ (exe)))).complete (cliModel OpenAICompletionsCli) emptyContext emptyOptions
         assertBool "failed response refused" (responseError resp /= Nothing),
-      testCase "released Codex cancellation settles inherited descendants" $ cancellationSettles OpenAICompletionsCli,
-      testCase "released Claude cancellation settles inherited descendants" $ cancellationSettles AnthropicMessagesCli,
       testCase "CLI JsonObject refuses before calling a completion" do
         validateResponseRequest (cliModel OpenAICompletionsCli) ((emptyOptions & #responseFormat .~ (Just JsonObject))) emptyContext @?= Left UnsupportedFormat,
       testCase "Anthropic none cannot silently advertise tools" do
@@ -470,106 +460,15 @@ contractTests =
         validateResponseOptions model ((emptyOptions & #responseFormat .~ (Just (JsonSchema (jsonSchemaFormat "public" (Aeson.object [])))))) @?= Right ()
     ]
 
-cliModel :: Api -> Model
-cliModel apiTag = (emptyModel & #api .~ (apiTag) & #provider .~ (if apiTag == AnthropicMessagesCli then "anthropic" else "openai") & #modelId .~ ("explicit-fake-model"))
-
-withFake :: String -> (FilePath -> FilePath -> IO a) -> IO a
-withFake body run = bracket acquire removeDirectoryRecursive \dir -> do
-  let exe = dir </> "vendor"
-  writeFile exe ("#!/bin/sh\n" <> body)
-  permissions <- getPermissions exe
-  setPermissions exe permissions {executable = True}
-  run dir exe
-  where
-    acquire = do
-      tmp <- getTemporaryDirectory
-      (path, handle) <- openTempFile tmp "shikigami-baikai-test"
-      hClose handle
-      removeFile path
-      createDirectory path
-      pure path
-
--- Synchronize on the owned child before cancellation, then require the original
--- asynchronous exception and complete descendant settlement. This qualifies
--- inherited group cancellation; batch deadlines/output/confinement stay gated.
-cancellationSettles :: Api -> IO ()
-cancellationSettles apiTag = cancellationCase apiTag False False False
-
 cancellationMatrixTests :: TestTree
 cancellationMatrixTests =
   testGroup
     "owned batch cancellation matrix"
-    [ testCase
-        (show api <> if version then "/version-probe" else if streaming then "/stream-resistant-repeated" else "/complete-resistant-repeated")
-        (cancellationCase api streaming True version)
-    | api <- [AnthropicMessagesCli, OpenAICompletionsCli],
-      (streaming, version) <- [(False, False), (True, False), (False, True)]
+    [ testCase name do
+        run
+        mapM_ (\api -> validateResponseOptions (cliModel api) emptyOptions @?= Left BatchBoundsAndConfinementRequired) [AnthropicMessagesCli, OpenAICompletionsCli]
+    | (name, run) <- cancellationCases
     ]
-
-cancellationCase :: Api -> Bool -> Bool -> Bool -> IO ()
-cancellationCase apiTag streaming resistant version = withFake body \dir exe -> bracket (Process.createProcess (Process.proc "sleep" ["30"])) (\(_, _, _, sentinel) -> Process.terminateProcess sentinel >> void (Process.waitForProcess sentinel)) \(_, _, _, sentinel) -> do
-  finished <- newEmptyMVar
-  let provider =
-        if apiTag == AnthropicMessagesCli
-          then ClaudeCli.claudeCliProvider ((ClaudeCli.defaultClaudeCliConfig & #executable .~ (exe) & #workingDir .~ (Just dir)))
-          else CodexCli.codexCliProvider ((CodexCli.defaultCodexCliConfig & #executable .~ (exe) & #workingDir .~ (Just dir)))
-      options =
-        emptyOptions
-          & #evidence .~ (if version then Just (Evidence.evidenceRequest "version-cancellation") else Nothing)
-          & #responseFormat .~ (if apiTag == OpenAICompletionsCli && not version then Just (JsonSchema (jsonSchemaFormat "public" (Aeson.object ["type" .= ("object" :: Text)]))) else Nothing)
-      run = if streaming then Stream.fold Fold.drain (provider.stream (cliModel apiTag) emptyContext options) else void (provider.complete (cliModel apiTag) emptyContext options)
-  worker <- forkIO (try @SomeException run >>= putMVar finished)
-  let cleanup = do
-        mapM_
-          ( \file -> do
-              exists <- doesFileExist (dir </> file)
-              if exists then readFile (dir </> file) >>= \pid -> void (readProcessWithExitCode "/bin/kill" ["-KILL", takeWhile (/= '\n') pid] "") else pure ()
-          )
-          ["child", "parent"]
-        void (timeout 6_000_000 (takeMVar finished))
-  flip finally cleanup do
-    ready <- timeout 2_000_000 (waitFor (dir </> "child"))
-    unless (ready == Just ()) (assertFailure "fake process did not start")
-    void (forkIO (killThread worker))
-    whenResistant (void (forkIO (threadDelay 10_000 >> killThread worker)))
-    result <- timeout 2_000_000 (readMVar finished)
-    case result of
-      Just (Left failure) -> fromException @AsyncException failure @?= Just ThreadKilled
-      _ -> assertFailure "cancellation did not settle and propagate ThreadKilled"
-    pid <- takeWhile (/= '\n') <$> readFile (dir </> "child")
-    gone <- timeout 2_000_000 (waitForStopped pid)
-    gone @?= Just ()
-    Process.getProcessExitCode sentinel >>= (@?= Nothing)
-    schemaExists <- doesFileExist (dir </> "schema-path")
-    if schemaExists
-      then do
-        path <- takeWhile (/= '\n') <$> readFile (dir </> "schema-path")
-        doesFileExist path >>= (@?= False)
-      else unless (version || apiTag /= OpenAICompletionsCli) (assertFailure "Codex schema path was not captured")
-    validateResponseOptions (cliModel apiTag) emptyOptions @?= Left BatchBoundsAndConfinementRequired
-  where
-    whenResistant action = if resistant then action else pure ()
-    body =
-      "cd \"$(dirname \"$0\")\"\n"
-        <> "if [ \"$1\" = --version ]; then\n"
-        <> (if version then "  :\n" else "  echo public-fixture-1; exit 0\n")
-        <> "else\n"
-        <> ( if version
-               then
-                 if apiTag == AnthropicMessagesCli
-                   then "  printf '%s\\n' '{\"result\":\"marker\",\"is_error\":false}'; exit 0\n"
-                   else "  printf '%s\\n' '{\"type\":\"item.completed\",\"item\":{\"type\":\"agent_message\",\"text\":\"marker\"}}'; exit 0\n"
-               else "  while [ $# -gt 0 ]; do if [ \"$1\" = --output-schema ]; then shift; echo \"$1\" > schema-path; fi; shift; done\n"
-           )
-        <> "fi\n"
-        <> (if resistant then "trap '' TERM INT\n" else "")
-        <> "sleep 30 &\necho $! > child\necho $$ > parent\nwait\n"
-    waitFor path = do
-      exists <- doesFileExist path
-      if exists then pure () else threadDelay 10_000 >> waitFor path
-    waitForStopped pid = do
-      (status, state, _) <- readProcessWithExitCode "/bin/ps" ["-o", "stat=", "-p", pid] ""
-      if status /= ExitSuccess || 'Z' `elem` state then pure () else threadDelay 10_000 >> waitForStopped pid
 
 httpDispatchTests :: TestTree
 httpDispatchTests =

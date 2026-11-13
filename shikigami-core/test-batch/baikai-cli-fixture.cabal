@@ -1,0 +1,40 @@
+cabal-version: 3.0
+name: baikai-cli-fixture
+version: 0.1.0.0
+build-type: Simple
+synopsis: Shared native batch adapter lifecycle qualification
+
+executable shikigami-baikai-contracts
+  main-is: Main.hs
+  other-modules: Shikigami.Behavior.BatchCliFixture
+  hs-source-dirs:
+    .
+    ../test-support
+
+  default-language: GHC2024
+  default-extensions:
+    BlockArguments
+    DuplicateRecordFields
+    NoFieldSelectors
+    OverloadedLabels
+    OverloadedRecordDot
+    OverloadedStrings
+
+  ghc-options:
+    -Wall
+    -threaded
+    -rtsopts
+
+  build-depends:
+    aeson,
+    baikai,
+    baikai-claude,
+    baikai-openai,
+    base,
+    directory,
+    filepath,
+    generic-lens,
+    lens,
+    process,
+    streamly-core,
+    text,

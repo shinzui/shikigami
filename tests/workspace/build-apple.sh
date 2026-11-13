@@ -5,6 +5,8 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 attribute=${1:-packages.aarch64-linux.shikigami-runtime}
 [[ "$attribute" =~ ^packages\.aarch64-linux\.[a-zA-Z0-9._-]+$ ]] || { echo 'Expected a packages.aarch64-linux.<package> attribute' >&2; exit 64; }
+probe=${2:-}
+[[ $# -le 2 && ( -z "$probe" || "$probe" =~ ^bin/[a-zA-Z0-9_-]+$ ) ]] || { echo 'Optional probe must be bin/<executable>' >&2; exit 64; }
 taskdir=$(mktemp -d /tmp/shikigami-workspace-build.XXXXXX)
 name="shikigami-workspace-build-$(date -u +%Y%m%d%H%M%S)-$$"
 port=$(python3 - <<'PY'
@@ -75,6 +77,12 @@ assert len(result)==1
 print(result[0]['outputs']['out'])
 PY
 )
+if [[ -n "$probe" ]]; then
+  # Execute the exact output in this native arm64 guest with no host credentials,
+  # ambient API keys, login state or mounts. A build alone is not runtime proof.
+  container exec "$name" /usr/bin/env -i PATH=/usr/bin:/bin HOME=/tmp TMPDIR=/tmp \
+    /usr/bin/timeout 120 "$runtime/$probe" | tee "$taskdir/probe.log"
+fi
 # Trust only this task's output on the peer-verified, newly provisioned builder.
 # Do not change the host's signature policy or trusted-key configuration.
 nix copy --no-check-sigs --from "$target" "$runtime"

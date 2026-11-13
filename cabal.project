@@ -20,6 +20,7 @@ extra-packages: keiro-dsl
 -- and its Main.hs are generated; only KeiroConformance.Expectations inside it
 -- is hand-owned.
 optional-packages:
+  shikigami-core/test-batch/*.cabal
   shikigami-core/src/keiro-dsl-conformance.workspace.*/*.cabal
   tests/workspace/prototype/*.cabal
   tests/objective-tracking/fixture/*.cabal

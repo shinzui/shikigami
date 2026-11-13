@@ -92,6 +92,10 @@
       packages.shikigami-workspace-supervisor = role "shikigami-workspace-supervisor";
       packages.shikigami-workspace-deadline = import ./nix/workspace-deadline.nix { inherit pkgs; };
       packages.shikigami-runtime = runtime;
+      packages.shikigami-baikai-contracts = import ./nix/baikai-contracts.nix {
+        inherit pkgs lib;
+        source = runtimeSource;
+      };
       # Reuse only the frozen dependency build. Application and fixture sources
       # are replaced and rebuilt by Cabal/GHC for each prototype candidate.
       packages.shikigami-qualification-dependencies = import ./nix/qualification-package.nix {

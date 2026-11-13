@@ -56,6 +56,11 @@ provenance:
       at: 2026-11-12T21:53:18Z
       mode: "implement"
       note: "Qualify generative off/cache wire contracts and judgment schema, failure and finite-policy admission"
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-11-13T00:34:11Z
+      mode: "implement"
+      note: "Share native batch cancellation proofs and qualify the selected adapters on Apple Linux"
 ---
 
 # Configure model providers and agent launches through Baikai
@@ -78,6 +83,17 @@ The expanded scope also adopts Baikai's structured answers and TypeSafe judgment
 
 ## Progress
 
+
+Continuation (2026-11-13 UTC, November 12 Pacific): the eight existing public
+batch lifecycle cases now share one Haskell implementation between the core
+suite and a standalone frozen-cohort fixture. The focused Darwin behavior group
+passes all 45 cases, including both parent and inherited-child settlement.
+Native Linux fixture qualification is in progress on the configured builder:
+both disposable Apple startup attempts stalled before creating an inspectable
+container (FRIC-70), while the native x86_64 builder is reachable. The released
+public batch boundary still lacks reporter bounds/confinement (FRIC-69), so CLI
+configuration/dispatch and M6 remain refused. No runtime, workflow or dependency
+pin changes are part of this continuation.
 
 The 2026-11-12 consumer continuation qualifies runtime source `847d5de2` and the subsequent test-only boundary proofs. See [the consumer matrix](../evidence/baikai-execution/consumer-matrix.md) for exact source attribution, suite counts and installed results. This is a standalone ExecPlan (no parent MasterPlan). Historical handoffs retain their original dates; this snapshot supersedes their open-blocker and selected-version statements.
 
@@ -143,6 +159,14 @@ Source checkpoint (2026-11-03 UTC): the released cohort is integrated with struc
 IR-5 release adoption (2026-11-03 UTC): verified normal Hackage releases Shikumi 0.5.1.0, cache 0.2.1.1, tools 0.4.2.1 and trace 0.3.2.0, with descriptors matching tag commit `7b96ecf06364b37de44b15c4f58b2528b5a3e0f5` at `mori://shinzui/shikumi`. The application solve succeeds at index-state `2026-11-03T12:48:57Z` without other cohort changes or new bounds overrides. The new `streamDecisionProgramWithAnswers` entry point shares complete-call admission, private provider registry, terminal acknowledgement and raw-answer retention while composing public Shikumi streaming interpreters. All 15 real TypeSafe checks pass, including exact complete/stream request/raw/typed parity, atomic events, cancellation, refusal, consumer failure and terminal-persistence failure. FRIC-49 is resolved; the historical pre-transport refusal no longer blocks this candidate. At source `d9f34aa7`, full core 689, agent 37, serial PostgreSQL 546, serial worker 281, server 105 and migration smoke 11 checks pass. All three TypeSafe PostgreSQL cases pass, including the public stream with SQL acknowledgement before LM completion and identical journal replay with one total HTTP request. The committed native gate passes 177 assertions with no generated drift or workflow-shape findings and a replay-neutral stored-data verdict, using the verified isolated committed Cabal descriptor. The frozen export has 387 runtime packages and seven immutable repositories; all five Nix role attributes evaluate in a dry run. See [the streaming checkpoint](../evidence/baikai-execution/streaming-consumer-checkpoint.json). M7/M8 remain open for the remaining plan matrix and packaging criteria; no paid or Linux runtime qualification is implied.
 
 ## Surprises & Discoveries
+
+Apple container 1.5.0 stalled before registering either the existing systemd
+image (over six minutes) or a minimal native Nix guest. The configured builder
+responds as native x86_64 Linux with `/bin/ps` available; use it as the runtime
+fallback for this lifecycle-only fixture, without restarting the shared Apple
+service. FRIC-70 records the failed local attempts separately. This changes the
+qualification environment, not the required lifecycle assertions or the separate
+batch bounds/confinement promotion gate.
 
 The 2026-11-12 consumer matrix exposed a synchronous TypeSafe admission gap:
 `finalOptions` checked token ceilings through generation-control refusal but
