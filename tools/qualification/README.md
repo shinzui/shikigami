@@ -65,6 +65,44 @@ request. It refuses relative paths and never substitutes checkout executables.
 The separate native restart test covers a crash between decision commitment and
 workflow completion; duplicate installed enqueue does not claim that fault proof.
 
+The batch CLI lifecycle fixture reuses
+`shikigami-core/test-support/Shikigami/Behavior/BatchCliFixture.hs` from the core
+suite. It links only the selected public Baikai adapters and runs eight fake
+vendor cases, with no login or API key. It checks inherited process groups,
+active synthetic streams, repeated cancellation, resistant children, executable
+version probes, schema cleanup and an unrelated sentinel. It does not qualify
+batch deadlines, output bounds, detached descendants or reporter confinement.
+
+Prefer a disposable native Apple Linux guest:
+
+```sh
+bash tests/workspace/build-apple.sh \
+  packages.aarch64-linux.shikigami-baikai-contracts bin/shikigami-baikai-contracts
+```
+
+The optional `bin/<executable>` argument runs the exact built artifact in that
+guest, in a cleared environment under a 120-second outer fixture timeout. The
+helper retains `result.json` and `probe.log` in its printed temporary directory.
+The outer timeout protects the qualification driver; it supplies no production
+batch deadline contract.
+
+If Apple startup is unavailable, build the x86_64 fixture with the configured
+builder, then execute that exact output on native Linux. Retain the JSON output
+and use its `outputs.out` path; do not substitute a Darwin build or count
+translation as native arm64 qualification:
+
+```sh
+nix build .#packages.x86_64-linux.shikigami-baikai-contracts \
+  --max-jobs 0 --cores 2 --no-link --no-write-lock-file --json
+```
+
+The Linux host needs `/bin/ps`, `/bin/kill`, a POSIX shell and `sleep` on `PATH`.
+Run with a temporary HOME/TMPDIR and a cleared environment. Success prints
+`linux/x86_64` (or the actual native architecture), eight `PASS` cases and the
+explicit statement that batch bounds/confinement remain unqualified. The fixture
+has its own optional Cabal package, `baikai-cli-fixture`; it does not enter the
+seven-package runtime export or add a deployment command.
+
 `snapshot.py --inventory PATH --marker PUBLIC_MARKER` reads a JSON inventory with
 a `health_endpoints` object mapping short service names to explicit numeric
 loopback HTTP URLs, for example `http://127.0.0.1:8081/health/ready`. It probes only

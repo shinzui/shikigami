@@ -1,0 +1,101 @@
+{
+  "format": 1,
+  "qualifiedAt": "2026-11-13T00:57:40Z",
+  "fixtureSourceRevision": "ad8393913f8d12f87b126be215af58dd1b384c61",
+  "subsequentSourceChanges": "One unused import removed from BehaviorProviderSpec; the fixture sources and frozen cohort are unchanged.",
+  "sha256": {
+    "shikigami-core/test-support/Shikigami/Behavior/BatchCliFixture.hs": "ccc423229be1d38529f598ddc575e3d699ef4f29009fc649af02ee2607d65ed4",
+    "shikigami-core/test-batch/Main.hs": "83d104a6c3d8d58a9b0dc2257a3cd75f02aa2f3939e4122a598b15bae2c1350f",
+    "shikigami-core/test-batch/baikai-cli-fixture.cabal": "f9994e7eaa3ed3a28484ca89bc7152b1f911f900fad45ece758da8000420d686",
+    "nix/baikai-contracts.nix": "7f04acc393efa99ea9875f818bcc2d12f9847e589724e9e7cf45ebf43e970151",
+    "nix/qualification/cohort.json": "cc18346d21e0fbb38ac616d891ff606e3e83a5c499b2a6cc5a327f63f10bff40"
+  },
+  "selectedPackages": {
+    "baikai": "0.10.1.0",
+    "baikai-claude": "0.7.3.0",
+    "baikai-openai": "0.7.3.0"
+  },
+  "darwin": {
+    "architecture": "aarch64",
+    "standaloneCases": 8,
+    "behaviorGroupCases": 45,
+    "coreCases": 866,
+    "coreSeconds": 22.12,
+    "conformanceAssertions": 210,
+    "replayImpact": "replay-neutral"
+  },
+  "linux": {
+    "architecture": "x86_64",
+    "native": true,
+    "environment": "configured Linux builder; Apple startup unavailable",
+    "attribute": "packages.x86_64-linux.shikigami-baikai-contracts",
+    "derivation": "/nix/store/g5jcpvf4djj93pqf5w6579s1ij5943w5-shikigami-baikai-contracts-0.1.0.0-fixture.drv",
+    "output": "/nix/store/b93ahqimn9rg51gbnwrrl3h33mfwz6y2-shikigami-baikai-contracts-0.1.0.0-fixture",
+    "cases": 8,
+    "environmentCleared": true,
+    "temporaryHomeAndTmpdir": true,
+    "outerFixtureTimeoutSeconds": 120,
+    "rtsCapabilities": 2,
+    "apiKeysAndLoginFilesSupplied": false
+  },
+  "cases": [
+    "AnthropicMessagesCli/complete",
+    "AnthropicMessagesCli/complete-resistant-repeated",
+    "AnthropicMessagesCli/stream-resistant-repeated",
+    "AnthropicMessagesCli/version-probe",
+    "OpenAICompletionsCli/complete",
+    "OpenAICompletionsCli/complete-resistant-repeated",
+    "OpenAICompletionsCli/stream-resistant-repeated",
+    "OpenAICompletionsCli/version-probe"
+  ],
+  "assertions": [
+    "Original ThreadKilled propagates",
+    "Parent and inherited child stopped before success",
+    "Unrelated sentinel survives",
+    "Codex schema file removed after cleanup",
+    "Repeated cancellation and resistant inherited children settle"
+  ],
+  "toolingChecks": {
+    "projectRelocationCases": 3,
+    "haskellConventionCheckerCases": 9,
+    "haskellConventions": "passed",
+    "shellSyntax": "passed",
+    "invalidProbePath": "refused with exit 64"
+  },
+  "failedOrStoppedPreliminaryAttempts": [
+    {
+      "attempt": "Existing systemd Apple image",
+      "result": "Stopped after more than six minutes at Starting container; no registered container",
+      "generatedCredentialFilesRemaining": []
+    },
+    {
+      "attempt": "Minimal native arm64 Nix Apple image",
+      "result": "Stopped after more than ninety seconds at Starting container; no registered container"
+    },
+    {
+      "attempt": "Initial fixture Nix build",
+      "result": "Refused append to read-only copied cabal.project; fixed by making that copied project writable"
+    },
+    {
+      "attempt": "Preliminary broad-source fixture build",
+      "result": "Stopped before qualification; replaced with the final descriptor-and-fixture-only source filter"
+    },
+    {
+      "attempt": "Initial core compilation after extraction",
+      "result": "Missing evidence import restored before accepted tests"
+    }
+  ],
+  "remoteModelCalls": 0,
+  "batchReporterQualified": false,
+  "nativeArm64LinuxQualified": false,
+  "remaining": [
+    "Owning public batch deadline, retained-output, detached-descendant and native-tool confinement contract",
+    "CLI response configuration and dispatch with actual-tuple tests",
+    "Authenticated batch reporter",
+    "M5 final candidate qualification after future CLI runtime changes"
+  ],
+  "friction": {
+    "FRIC-69": "logged; batch public contract prerequisite",
+    "FRIC-70": "accepted; configured-builder fallback"
+  }
+}

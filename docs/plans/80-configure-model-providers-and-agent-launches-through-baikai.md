@@ -72,7 +72,7 @@ This ExecPlan is a living document. Keep Progress, Surprises & Discoveries, Deci
 ## Purpose / Big Picture
 
 
-An operator can configure the model provider, transport, model, reasoning effort, and supported execution settings, with Baikai performing the provider call or agent launch. The target background reporter can use an already authenticated Codex or Claude CLI without an HTTP API key after consumer lifecycle and confinement qualification. The current Cabal candidate adopts Baikai 0.10.1 and passes the Darwin cancellation matrix; background CLI responses still require enforced deadlines, bounded retained output and descendant confinement. Shikumi 0.5.1.0 supplies qualified public judgment streaming. HTTP reasoning/cache and structured judgment consumer matrices, durable recovery and installed queue/worker execution now pass. Remaining work is native Linux and batch bounds/confinement qualification, CLI configuration/dispatch and the authenticated batch trial, followed by final candidate rebuilding. The HTTP and foreground integration is independently implemented. A separate foreground command can open an interactive session or run an unattended named Baikai coding job. Effective configuration explains the selected surface and settings before a model is called.
+An operator can configure the model provider, transport, model, reasoning effort, and supported execution settings, with Baikai performing the provider call or agent launch. The target background reporter can use an already authenticated Codex or Claude CLI without an HTTP API key after consumer lifecycle and confinement qualification. The current Cabal candidate adopts Baikai 0.10.1 and passes the Darwin and native x86_64 Linux cancellation matrices; background CLI responses still require enforced deadlines, bounded retained output and descendant confinement. Shikumi 0.5.1.0 supplies qualified public judgment streaming. HTTP reasoning/cache and structured judgment consumer matrices, durable recovery and installed queue/worker execution now pass. Remaining work is batch bounds/confinement qualification, CLI configuration/dispatch and the authenticated batch trial, followed by final candidate rebuilding. The HTTP and foreground integration is independently implemented. A separate foreground command can open an interactive session or run an unattended named Baikai coding job. Effective configuration explains the selected surface and settings before a model is called.
 
 The foundation already exists: [plan 13](13-wire-a-real-model-provider-into-behavior-runs.md) installed a shared Baikai builder and typed provider configuration. At authoring revision `f740895`, Shikigami exposed only `stub` and Anthropic HTTP; the completed part of this plan added OpenAI Chat Completions, OpenAI Responses and foreground launches. The 2026-11-02 refresh below distinguishes that installed baseline from newer upstream releases. Refresh the model catalog and compatibility rules through Baikai while preserving exact operator selections, pinned descriptors and the existing Anthropic default unless an operator explicitly changes them.
 
@@ -84,20 +84,22 @@ The expanded scope also adopts Baikai's structured answers and TypeSafe judgment
 ## Progress
 
 
-Continuation (2026-11-13 UTC, November 12 Pacific): the eight existing public
-batch lifecycle cases now share one Haskell implementation between the core
-suite and a standalone frozen-cohort fixture. The focused Darwin behavior group
-passes all 45 cases, including both parent and inherited-child settlement.
-Native Linux fixture qualification is in progress on the configured builder:
-both disposable Apple startup attempts stalled before creating an inspectable
-container (FRIC-70), while the native x86_64 builder is reachable. The released
-public batch boundary still lacks reporter bounds/confinement (FRIC-69), so CLI
-configuration/dispatch and M6 remain refused. No runtime, workflow or dependency
-pin changes are part of this continuation.
+Continuation (2026-11-13 UTC, November 12 Pacific): all eight shared public
+batch lifecycle cases pass on native Darwin/aarch64 and Linux/x86_64. The latter
+uses the configured builder after both disposable Apple startup attempts stalled
+(FRIC-70, accepted). Source `ad839391` supplies the fixture; a subsequent unused
+test import cleanup leaves its sources unchanged. Full core regression passes
+866 cases, the focused behavior group passes 45, and the committed workflow gate
+passes 210 conformance assertions with unchanged generated files and a
+replay-neutral result. See [native lifecycle evidence](../evidence/baikai-execution/native-batch-lifecycle.md)
+for artifact hashes, failed preliminary attempts and reproduction. M1's native
+Linux lifecycle proof is complete. Its owning batch bounds/confinement contract
+is still absent (FRIC-69, logged), so M1/M2/M3/M6 remain open. No runtime,
+workflow or dependency pin changes are part of this continuation.
 
 The 2026-11-12 consumer continuation qualifies runtime source `847d5de2` and the subsequent test-only boundary proofs. See [the consumer matrix](../evidence/baikai-execution/consumer-matrix.md) for exact source attribution, suite counts and installed results. This is a standalone ExecPlan (no parent MasterPlan). Historical handoffs retain their original dates; this snapshot supersedes their open-blocker and selected-version statements.
 
-- [ ] M1: released-cohort adoption, behavior trace/collector cancellation and the Darwin complete/active-stream/version-probe cancellation matrix pass, including resistant children, repeated cancellation, Codex schema cleanup and an unrelated sentinel. Remaining: native Linux qualification and an owning boundary proving reporter deadlines, bounded retained output and descendant/native-tool confinement. The latest released batch adapters still lack the latter contract.
+- [ ] M1: released-cohort adoption, behavior trace/collector cancellation and the Darwin and native x86_64 Linux complete/active-stream/version-probe cancellation matrices pass, including resistant children, repeated cancellation, Codex schema cleanup and an unrelated sentinel. Remaining: an owning boundary proving reporter deadlines, bounded retained output and descendant/native-tool confinement. The selected released batch adapters still lack that contract.
 - [ ] M2: HTTP configuration, TypeSafe bindings, reasoning-off/default wire/evidence and exact native-cache-policy admission/refusal are qualified. Remaining: qualified CLI response configuration after M1's batch promotion gate.
 - [ ] M3: HTTP dispatch and governed TypeSafe complete/stream dispatch pass the request/error/authority/budget matrix. Remaining: qualified CLI response handlers and CLI actual-tuple tests after the batch gate.
 - [x] M4 (2026-10-06): foreground attended/unattended commands and real Codex marker/exit trials accepted; launch regression passed again in the November source checkpoints. New cohort changes retain foreground regression obligations.
@@ -162,9 +164,9 @@ IR-5 release adoption (2026-11-03 UTC): verified normal Hackage releases Shikumi
 
 Apple container 1.5.0 stalled before registering either the existing systemd
 image (over six minutes) or a minimal native Nix guest. The configured builder
-responds as native x86_64 Linux with `/bin/ps` available; use it as the runtime
-fallback for this lifecycle-only fixture, without restarting the shared Apple
-service. FRIC-70 records the failed local attempts separately. This changes the
+provides native x86_64 Linux with `/bin/ps`; all eight shared lifecycle cases pass
+there under a cleared environment and temporary HOME/TMPDIR. This is the runtime
+fallback for this fixture, without restarting the shared Apple service. FRIC-70 records the failed local attempts separately. This changes the
 qualification environment, not the required lifecycle assertions or the separate
 batch bounds/confinement promotion gate.
 
@@ -242,6 +244,20 @@ Decision (2026-11-03 UTC): Deliver the independent decision-binding endpoint/cac
 
 ## Outcomes & Retrospective
 
+The 2026-11-13 continuation completes native Linux lifecycle qualification using
+one shared Haskell fixture on Darwin/aarch64 and Linux/x86_64. All eight cases
+pass on each platform; full core regression passes 866 checks and the workflow
+gate passes 210 replay-neutral assertions. The standalone Linux artifact uses
+the frozen released cohort, with no application-library link, vendor login or
+remote model call. See [native-batch-lifecycle.md](../evidence/baikai-execution/native-batch-lifecycle.md).
+FRIC-70 is accepted with the configured-builder fallback after failed Apple
+startup; generated credentials were removed and neither task container remains.
+FRIC-69 remains logged because the public batch deadline/output/confinement
+contract is an unresolved prerequisite. CLI configuration, dispatch and the live
+reporter stay gated, with final M5 qualification due after those future runtime
+changes. ADR 0040 retains this distinction. The dated checkpoints below preserve
+their original acceptance scope.
+
 The 2026-11-12 consumer continuation completes M7 and M8. Native qualification
 passes core 866, PostgreSQL 683, workers 353, server 114, agent 37 and migration
 smoke 11 checks (2,064 total), plus 210 replay-neutral conformance assertions.
@@ -254,10 +270,10 @@ with one total HTTP fixture request. See
 source attribution, failed preliminary probes and reproduction. No new friction
 entry remains to triage; FRIC-47's accepted serial profile is retained.
 
-M1/M2/M3/M6 remain open for native Linux and an owning batch deadline/output/
-confinement contract, followed by CLI response configuration/dispatch and the
+M1/M2/M3/M6 remain open for an owning batch deadline/output/confinement
+contract, followed by CLI response configuration/dispatch and the
 authenticated reporter. M5 retains final candidate qualification after those
-future runtime changes. The current HTTP/structured qualification does not
+future runtime changes. The current HTTP/structured and native lifecycle qualification does not
 promote batch CLIs or close Plan 79's service/trust/delivery gates. The finite
 judgment cost constraint is distilled in ADR 0041; existing ADR 0040 continues
 to govern separate response and foreground authority.
@@ -343,7 +359,16 @@ Relevant architectural context is established. [ADR 0003](../adr/0003-a-seventh-
 ## Plan of Work
 
 
-Retain the original milestone numbers so October evidence remains attributable. The November 3 interfaces are adopted; first qualify the core-only 0.10.1.0 candidate described above while retaining the compatible adapter, then close the remaining consumer proofs. Finish M2/M3's reasoning/cache proof and the remaining M7/M8 consumer matrix against their existing implementation. M4's foreground behavior remains a regression obligation. Repeat M5 packaging/journal qualification after all feature changes, then close M6's existing live CLI handoff. An upstream blocker for one surface does not prevent independent consumer work or justify marking that blocked surface complete.
+Retain the original milestone numbers so October evidence remains attributable.
+The core 0.10.1.0 adoption, HTTP reasoning/cache and M7/M8 structured-judgment
+consumer proofs are qualified, including installed judgment execution. Native
+Darwin and x86_64 Linux lifecycle qualification also passes. Resume from M1's
+owning public batch deadline/output/confinement prerequisite; only after that
+boundary qualifies may M2/M3 enable CLI response configuration and dispatch.
+M4's foreground behavior remains a regression obligation. Repeat M5 packaging
+and journal qualification after those runtime changes, then close M6's existing
+authenticated CLI handoff. An upstream blocker does not waive another surface's
+acceptance or justify marking the blocked surface complete.
 
 
 ### Qualified consumer matrix and remaining promotion gates
@@ -355,15 +380,16 @@ work. The completed consumer matrix is recorded in
 checkpoint. Resume from the CLI promotion gaps rather than recreating modules,
 repeating resolved release negotiations or treating HTTP/structured work as open.
 
-M1's Darwin complete, active-stream and version-probe probes now cover repeated
-cancellation, resistant inherited children, original asynchronous exceptions,
+M1's Darwin and native x86_64 Linux complete, active-stream and version-probe
+probes now cover repeated cancellation, resistant inherited children, original asynchronous exceptions,
 Codex schema-file cleanup and an unrelated sentinel. The behavior boundary also
 proves healthy abort delivery through the real evidence collector, bounded
 stalled/failed-sink cleanup and preservation of the committed terminal. General
 stream decorators acquire no stronger lifetime from these synchronous proofs.
-Native Linux qualification is still required. More fundamentally, the released
-batch adapters still lack enforced absolute deadlines, bounded retained output
-and detached-descendant/native-tool confinement. Keep
+The native Linux proof uses the configured-builder fallback after failed Apple
+startup; exact evidence is in [native-batch-lifecycle.md](../evidence/baikai-execution/native-batch-lifecycle.md).
+The released batch adapters still lack enforced absolute deadlines, bounded
+retained output and detached-descendant/native-tool confinement. Keep
 `BatchBoundsAndConfinementRequired` until an owning public boundary supplies all
 three. Workspace supervisor probes do not automatically qualify these adapters.
 
@@ -403,7 +429,7 @@ delivery gates retain their meaning. No current gate is waived by this ordering.
 
 Extend `docs/evidence/baikai-execution/contracts.md`, preserving its October negative probes and recording the newly selected release descriptors, public imports, provider tags, option translations and mode-specific requirements. Begin with the published compatibility prerequisites in Context and Orientation; establish a release-only solve before treating the latest target as selected. In the Mori-discovered Baikai root read `baikai/src/Baikai/Options.hs`, `baikai/src/Baikai/Interactive.hs`, all five vendor response modules, both interactive modules and `baikai-agent/src/Baikai/Agent/{Config,Cli,Run}.hs` at their actual package tags. Also inspect public model, compatibility, thinking, content/event and evidence changes since 0.7.2.0. Do not depend on `Internal` modules or vendor `Transport` modules explicitly documented as unstable.
 
-Use temporary fake vendor executables to prove response decoding, failure classification, cancellation and schema support through public adapters before wiring new Shikigami branches. Keep contract cases in `shikigami-core/test/Shikigami/BehaviorProviderSpec.hs`. Replace the negative cancellation expectations only after both adapters pass positive no-survivor checks against the selected released packages. Cover complete calls, active synthetic-stream consumption, repeated cancellation, signal-resistant inherited children and executable-version evidence probes. Verify the original asynchronous exception and Codex schema cleanup after termination. Distinguish stopped zombies from live descendants, synchronize fixture readiness, and keep an unrelated sentinel alive. Use the threaded runtime and make `/bin/ps` available in the installed environment. Qualify native Darwin and Linux; use a disposable Apple container for Linux runtime evidence, with the configured builder fallback for stalled compilation. Require an explicit operator working directory for a background subprocess; the worker's ambient directory is not a stable launch setting.
+Use temporary fake vendor executables to prove response decoding, failure classification, cancellation and schema support through public adapters before wiring new Shikigami branches. Keep contract cases in `shikigami-core/test/Shikigami/BehaviorProviderSpec.hs`. Replace the negative cancellation expectations only after both adapters pass positive no-survivor checks against the selected released packages. Cover complete calls, active synthetic-stream consumption, repeated cancellation, signal-resistant inherited children and executable-version evidence probes. Verify the original asynchronous exception and Codex schema cleanup after termination. Distinguish stopped zombies from live descendants, synchronize fixture readiness, and keep an unrelated sentinel alive. Use the threaded runtime and make `/bin/ps` available in the installed environment. Qualify native Darwin and Linux; use a disposable Apple container for Linux runtime evidence, with the configured builder fallback for stalled compilation. If local Apple startup itself is unavailable, execute the exact fixture artifact on the configured native Linux builder and record the failed local attempts and actual architecture; do not claim arm64 qualification from translated execution. Require an explicit operator working directory for a background subprocess; the worker's ambient directory is not a stable launch setting.
 
 Audit vendor-native authority separately from Baikai's lack of advertised tool calling. Read bounded installed CLI `--help` output and official vendor documentation, then prove the selected disabling/confinement policy with fake argument assertions and a disposable real probe before promotion. The reporter must not receive edit/full-access flags or inherit a coding job's unrestricted policy. Separately settle the deadline and output contract: published batch adapters ignore `Options.timeoutMs` and retain output to EOF. Do not label the cancellation release as fixing these. Identify an existing owning boundary that enforces the needed bounds or obtain a public owning-library change; if neither meets the reporter's contract, keep that surface refused with the precise remaining reason. The same applies to detached descendants outside the inherited process group. Keep HTTP and foreground integration independently deliverable; do not copy a parser or supervisor into Shikigami.
 
@@ -540,6 +566,24 @@ git ls-remote --tags https://github.com/shinzui/baikai.git 'refs/tags/baikai-*'
 git ls-remote --tags https://github.com/shinzui/shikumi.git 'refs/tags/shikumi-*'
 ```
 
+The batch lifecycle fixture shares the native core cases and uses only frozen
+runtime dependencies; it adds no deployed command. Prefer the disposable native
+Apple guest; if startup is unavailable, use the configured native Linux builder:
+
+```bash
+bash tests/workspace/build-apple.sh \
+  packages.aarch64-linux.shikigami-baikai-contracts bin/shikigami-baikai-contracts
+nix build .#packages.x86_64-linux.shikigami-baikai-contracts \
+  --max-jobs 0 --cores 2 --no-link --no-write-lock-file --json
+```
+
+Run the exact `outputs.out` on native Linux with `/bin/ps`, a cleared environment
+and temporary HOME/TMPDIR, using the complete command in
+[native-batch-lifecycle.md](../evidence/baikai-execution/native-batch-lifecycle.md).
+Success prints the native platform and eight passing cases. The fixture's outer
+timeout protects its driver and is not a production batch deadline. FRIC-69's
+bounds/confinement prerequisite remains independent of this positive result.
+
 Expected for the selected cohort: the complete application resolves at the committed index without new bounds overrides. Shikumi/Kioku compatibility and public judgment streaming have already been published and adopted. Latest-version discovery is separate from reproducing this fixed solve; only select another release after verifying its authoritative descriptor and tag.
 
 Preserve ignored `cabal.project.local`. The helper prints one isolated committed project filename. Use it consistently and regenerate after changing the committed descriptor. First use `--dry-run` to establish the exact dependency closure; a solver refusal is evidence of an unresolved prerequisite, not permission for a bounds override:
@@ -660,7 +704,7 @@ nix develop --command cabal test shikigami-core-postgres-test \
 
 Expected: the local HTTP fixture observes the one-state closed-set request, raw provider selection and fractional score are preserved, the pinned rich derivation is correct, and restart replay adds zero HTTP calls. These suites provision their own disposable fixture/database; they require neither `TYPESAFE_API_KEY` nor a vendor account. Historical generative decision and transcript cases must still pass in the full suites.
 
-The TypeSafe operator configuration below is implemented; its complete/stream and durable paths have deterministic fixture evidence. Installed-asset qualification remains open. Save it privately as `/tmp/shikigami-baikai/judgment.yaml`. An explicit live run uses a separately supplied `TYPESAFE_API_KEY`; a manual loopback run instead sets per-binding `base_url` to the test server and supplies only its public synthetic credential. Do not point a real credential at the fixture. Keep the key out of YAML and command arguments:
+The TypeSafe operator configuration below is implemented; its complete/stream and durable paths have deterministic fixture evidence. Installed configuration, enqueue, worker and restart qualification is recorded in the consumer matrix; future runtime changes retain M5's final candidate gate. Save it privately as `/tmp/shikigami-baikai/judgment.yaml`. An explicit live run uses a separately supplied `TYPESAFE_API_KEY`; a manual loopback run instead sets per-binding `base_url` to the test server and supplies only its public synthetic credential. Do not point a real credential at the fixture. Keep the key out of YAML and command arguments:
 
 ```yaml
 behavior:
@@ -775,3 +819,5 @@ No authorization or delivery service is needed for deterministic adapter tests o
 2026-11-12 UTC: Reviewed current source and restored Mori discovery using the current shell connection. Verified Baikai 0.10.1.0 and Effectful adapter 0.5.0.0 publication and unchanged latest Shikumi 0.5.1.0. Added the core-only trace-finalization adoption path, the published adapter compatibility restriction and consumer cancellation/evidence acceptance. Preserved the selected pins, historical runtime results and outstanding CLI, structured-content and installed-asset gates; this refresh changes documentation only.
 
 2026-11-12 UTC: Adopted core Baikai 0.10.1.0 with compatible adapter 0.4.0.5 and a refreshed fixed index/export. Added behavior trace/sink, structured cache/replay and malformed judgment consumer proofs, installed the proof manifest through the source filter, and repaired the reviewed schema snapshot for committed migration 0049. Recorded full native regression, replay-neutral gate, immutable role and ten installed-command checks while preserving the outstanding batch and consumer-matrix gates.
+
+2026-11-13 UTC: Consolidated the eight native batch lifecycle cases into one Haskell fixture shared by the core suite and a frozen standalone package. Qualified native Darwin/aarch64 and Linux/x86_64, using the configured-builder runtime fallback after Apple startup stalled. Recorded 866 core checks, 210 replay-neutral conformance assertions, exact artifact/source hashes and failed preliminary attempts. FRIC-70 accepts that fallback; FRIC-69 retains the owning public batch bounds/confinement prerequisite. CLI promotion and final runtime candidate qualification remain open.

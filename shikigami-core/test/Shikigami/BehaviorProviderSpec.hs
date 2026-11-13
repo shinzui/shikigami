@@ -102,7 +102,6 @@ import Shikigami.Log qualified as Log
 import Shikigami.Trigger.Schedule (parseCron)
 import Shikumi.Tool (mkRegistry)
 import System.Directory (doesFileExist)
-import System.Exit (ExitCode (..))
 import System.FilePath ((</>))
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))

@@ -6,7 +6,7 @@ generated:
   by: "codex-cli/gpt-6.1-sol"
   at: "2026-11-13T00:40:15Z"
 frictionId: FRIC-70
-status: logged
+status: "accepted"
 impact: detour
 kind: environment
 origin: "mori://shinzui/shikigami"
@@ -14,6 +14,11 @@ affects: "https://github.com/apple/container"
 affectedVersion: "1.5.0"
 plan: "docs/plans/80-configure-model-providers-and-agent-launches-through-baikai.md"
 workaround: "Use the configured builder for the immutable x86_64 Linux fixture and its native runtime probe, without restarting the shared Apple container service."
+resolution: "Native x86_64 Linux build and all eight lifecycle cases pass on the configured builder; retain the authorized fallback while Apple startup is unavailable, without restarting the shared service or claiming arm64 Linux qualification."
+amended:
+  - by: "codex-cli/gpt-6.1-sol"
+    at: "2026-11-13T00:58:44Z"
+    change: "Accept the configured-builder fallback after successful native lifecycle qualification; preserve both failed Apple startup attempts and credential cleanup evidence."
 ---
 # Apple container startup stalls before a fixture becomes inspectable
 

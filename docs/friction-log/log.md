@@ -2,6 +2,9 @@
 
 ## 2026-11-13
 
+* **Update**: FRIC-70 accepted: Accept the configured-builder fallback after successful native lifecycle qualification; preserve both failed Apple startup attempts and credential cleanup evidence.
+
+
 * **Addition**: FRIC-70 records detour environment friction with https://github.com/apple/container: Apple container startup stalls before a fixture becomes inspectable
 
 * **Addition**: FRIC-69 records blocked interface friction with mori://shinzui/baikai/docs/cli-providers: Released batch response adapters lack reporter execution bounds

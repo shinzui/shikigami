@@ -1,5 +1,23 @@
 # Baikai execution contracts
 
+## Native lifecycle follow-up — 2026-11-13 UTC
+
+Core Baikai 0.10.1.0 and Claude/OpenAI 0.7.3.0 pass all eight shared lifecycle
+cases on native Darwin/aarch64 and Linux/x86_64. The core suite and standalone
+fixture use the same Haskell source. Full core regression passes 866 checks and
+the committed workflow gate passes 210 replay-neutral conformance assertions.
+See [the native lifecycle record](native-batch-lifecycle.md) for exact artifact
+hashes, the configured-builder fallback after Apple startup failed, and cleared
+environment execution. No native arm64 Linux or remote model result is claimed.
+
+This closes the Linux cancellation proof, not batch promotion. FRIC-69 remains
+logged: `mori://shinzui/baikai/docs/cli-providers` documents ignored timeout
+options, EOF output retention and inherited-group-only cleanup. The owning
+public boundary must still provide reporter deadlines, bounded retained output
+and detached-descendant/native-tool confinement before CLI configuration and
+dispatch can be enabled. The dated records below retain their historical scope;
+the current HTTP/structured results remain in [consumer-matrix.md](consumer-matrix.md).
+
 ## IR-5 released streaming follow-up — 2026-11-03 UTC
 
 The application now selects Shikumi 0.5.1.0, cache 0.2.1.1, tools 0.4.2.1 and

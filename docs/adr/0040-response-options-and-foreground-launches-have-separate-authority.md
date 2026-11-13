@@ -30,8 +30,11 @@ Response, memory session, sink receipt or authorization exception.
 
 A batch adapter must prove descendant cancellation, enforced deadlines, bounded
 retained output and reporter confinement before becoming a background response
-choice. The 2026-11-03 Baikai 0.10/vendor 0.7.3 candidate passes inherited-group
-cancellation on Darwin. Deadline/output/confinement qualification remains open,
+choice. The 2026-11-13 Baikai 0.10.1/vendor 0.7.3 candidate passes inherited-group
+cancellation on native Darwin/aarch64 and Linux/x86_64 through the same shared
+Haskell cases. The [native lifecycle evidence](../evidence/baikai-execution/native-batch-lifecycle.md)
+records complete, active-stream and executable-version cancellation, resistant
+children, repeated cancellation, schema cleanup and sentinel survival. Deadline/output/confinement qualification remains open,
 so CLI responses remain unavailable with that precise refusal. The October
 cancellation failure remains historical evidence for the older selected release.
 Shikigami does not copy the owning process engine or infer confinement from the

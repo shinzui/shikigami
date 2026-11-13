@@ -9,8 +9,9 @@ Unknown ids fail configuration; there is no alias substitution or provider fallb
 
 Background `claude-cli` and `codex-cli` responses require enforced deadlines,
 bounded retained output and descendant confinement. The selected release adds
-inherited process-group cancellation; cancellation alone does not supply those
-remaining contracts. Configuration names the requirements before a model call. CLI
+inherited process-group cancellation, qualified on native Darwin and x86_64
+Linux in the [shared lifecycle fixture](../evidence/baikai-execution/native-batch-lifecycle.md);
+cancellation alone does not supply those remaining contracts. Configuration names the requirements before a model call. CLI
 login is not currently an API-key-free background reporter path. See the
 [complete setting/support inventory](../evidence/baikai-execution/contracts.md).
 
