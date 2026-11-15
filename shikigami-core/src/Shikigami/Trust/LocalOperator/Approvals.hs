@@ -21,9 +21,12 @@ module Shikigami.Trust.LocalOperator.Approvals
     ruleNameText,
     ProgramPath,
     programPathText,
+    resolveProgram,
     LaunchDeadline,
+    mkLaunchDeadline,
     launchDeadlineSeconds,
     OutputLimit,
+    mkOutputLimit,
     outputLimitBytes,
     Budget (..),
     defaultBudget,
@@ -39,6 +42,7 @@ module Shikigami.Trust.LocalOperator.Approvals
     RepositorySelector (..),
     selectRepository,
     approvalFor,
+    testLocalRepository,
   )
 where
 
@@ -57,7 +61,7 @@ import GHC.Generics (Generic)
 import GHC.Records (HasField (..))
 import Numeric.Natural (Natural)
 import Shikigami.Agent.Name (AgentName, agentNameText, mkAgentName)
-import Shikigami.Capability.Overlay (CapabilityId, capabilityIdText, mkCapabilityId)
+import Shikigami.Capability.Overlay (CapabilityId, mkCapabilityId)
 import Shikigami.Repository (RepositoryId, repositoryId, repositoryIdText)
 import System.Directory (XdgDirectory (XdgConfig), canonicalizePath, doesDirectoryExist, doesFileExist, findExecutable, getXdgDirectory)
 import System.FilePath (isAbsolute, (</>))
@@ -142,8 +146,26 @@ newtype ProgramPath = ProgramPath FilePath
 programPathText :: ProgramPath -> Text
 programPathText (ProgramPath path) = Text.pack path
 
+-- | An absolute executable, or a name found on @PATH@.
+resolveProgram :: Text -> IO (Maybe ProgramPath)
+resolveProgram program
+  | isAbsolute (Text.unpack program) = (\exists -> if exists then Just (ProgramPath (Text.unpack program)) else Nothing) <$> doesFileExist (Text.unpack program)
+  | otherwise = fmap ProgramPath <$> findExecutable (Text.unpack program)
+
 newtype LaunchDeadline = LaunchDeadline Natural
   deriving stock (Eq, Show)
+
+-- | 1 to 86400 seconds.
+mkLaunchDeadline :: Natural -> Either Text LaunchDeadline
+mkLaunchDeadline seconds
+  | seconds < 1 || seconds > 86400 = Left "a launch deadline is 1 to 86400 seconds"
+  | otherwise = Right (LaunchDeadline seconds)
+
+-- | 1024 to 1048576 bytes per stream.
+mkOutputLimit :: Natural -> Either Text OutputLimit
+mkOutputLimit bytes
+  | bytes < 1024 || bytes > 1048576 = Left "an output limit is 1024 to 1048576 bytes"
+  | otherwise = Right (OutputLimit bytes)
 
 launchDeadlineSeconds :: LaunchDeadline -> Natural
 launchDeadlineSeconds (LaunchDeadline seconds) = seconds
@@ -320,17 +342,14 @@ validateRule RuleInput {name, argv, inherit, timeoutSeconds, outputBytes} =
     (Left detail, _) -> pure (Left (InvalidRule name detail))
     (_, []) -> pure (Left (InvalidRule name "argv must name a program"))
     (Right ruleName, program : arguments)
-      | timeoutSeconds < 1 || timeoutSeconds > 86400 -> pure (Left (InvalidRule name "timeoutSeconds must be 1 to 86400"))
-      | outputBytes < 1024 || outputBytes > 1048576 -> pure (Left (InvalidRule name "outputBytes must be 1024 to 1048576"))
+      | Left detail <- mkLaunchDeadline timeoutSeconds -> pure (Left (InvalidRule name detail))
+      | Left detail <- mkOutputLimit outputBytes -> pure (Left (InvalidRule name detail))
       | otherwise -> do
-          resolved <-
-            if isAbsolute (Text.unpack program)
-              then (\exists -> if exists then Just (Text.unpack program) else Nothing) <$> doesFileExist (Text.unpack program)
-              else findExecutable (Text.unpack program)
+          resolved <- resolveProgram program
           pure case resolved of
             Nothing -> Left (MissingProgram name program)
             Just path ->
-              Right ApprovedRule {name = ruleName, program = ProgramPath path, arguments, inherit, deadline = LaunchDeadline timeoutSeconds, outputLimit = OutputLimit outputBytes}
+              Right ApprovedRule {name = ruleName, program = path, arguments, inherit, deadline = LaunchDeadline timeoutSeconds, outputLimit = OutputLimit outputBytes}
 
 -- | How the caller names the repository of a run.
 data RepositorySelector
@@ -357,6 +376,10 @@ selectRepository resolver (LocalApprovals repos _) = \case
         Nothing -> do
           identity <- resolver.moriIdentity top
           pure (Right (LocalRepository (repositoryId (maybe ("file://" <> Text.pack top) id identity)) top "HEAD" SeparateWorktree))
+
+-- | A repository built without resolution, for tests of the host adapters.
+testLocalRepository :: RepositoryId -> Text -> FilePath -> WorkspacePlacement -> LocalRepository
+testLocalRepository identity base source placement = LocalRepository identity source base placement
 
 approvalFor :: LocalApprovals -> AgentName -> LocalRepository -> Maybe AgentApproval
 approvalFor (LocalApprovals _ approvals) agent repository =

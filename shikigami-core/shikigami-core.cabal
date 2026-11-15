@@ -386,6 +386,7 @@ library
     Shikigami.Workspace.GitStore
     Shikigami.Workspace.GitTypes
     Shikigami.Workspace.Instructions
+    Shikigami.Workspace.Launch
     Shikigami.Workspace.Process
     Shikigami.Workspace.ProcessObservation
     Shikigami.Workspace.ProcessPolicy
@@ -600,6 +601,32 @@ library inspection
     wai-websockets,
     websockets,
 
+-- Host adapters of the local-operator tier: the process launcher, the
+-- worktree provider and the checkout resolver. The domain library links no
+-- process library, so every host process lives here, shared by the light
+-- commands and (EP-2) the worker.
+library local-host
+  import: common
+  visibility: public
+  hs-source-dirs: local-host
+  exposed-modules:
+    Shikigami.Workspace.Local.Launcher
+    Shikigami.Workspace.Local.Worktree
+
+  build-depends:
+    aeson,
+    async,
+    base,
+    bytestring,
+    directory,
+    filepath,
+    keiro,
+    process,
+    shikigami-core,
+    text,
+    time,
+    unix,
+
 test-suite shikigami-core-test
   import: common
   type: exitcode-stdio-1.0
@@ -644,6 +671,7 @@ test-suite shikigami-core-test
     Shikigami.InitiativeValueSpec
     Shikigami.KanmonClientSpec
     Shikigami.KeiroSpecificationSpec
+    Shikigami.LocalHostSpec
     Shikigami.LocalOperatorSpec
     Shikigami.LogSpec
     Shikigami.MandateSpec
@@ -728,6 +756,7 @@ test-suite shikigami-core-test
     settei-yaml,
     shibuya-core,
     shikigami-core,
+    shikigami-core:local-host,
     shikumi,
     shikumi-cache,
     shikumi-tools,

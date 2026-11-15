@@ -60,6 +60,7 @@ import Shikigami.InitiativeValueSpec qualified as InitiativeValueSpec
 import Shikigami.Integration.Danwa (AddressedMessage (..), addressedMessageEventType)
 import Shikigami.KanmonClientSpec qualified as KanmonClientSpec
 import Shikigami.KeiroSpecificationSpec qualified as KeiroSpecificationSpec
+import Shikigami.LocalHostSpec qualified as LocalHostSpec
 import Shikigami.LocalOperatorSpec qualified as LocalOperatorSpec
 import Shikigami.Log qualified as Log
 import Shikigami.LogSpec qualified as LogSpec
@@ -171,6 +172,7 @@ main =
           AuthoritySpec.tests,
           RecordSpec.tests,
           LocalOperatorSpec.tests,
+          LocalHostSpec.tests,
           PracticeReviewEvidenceSpec.tests,
           PracticeReviewSpec.tests,
           RouterCatalogSpec.tests,
