@@ -100,10 +100,23 @@ it is never applied to a run already in progress.
   two-repo-review completed 4 steps"}`. The attempts directory holds one attempt per step and
   the fsrs-hs step was never launched again. Conditions and objectives are not part of M2 (see
   the Decision Log).
-- [ ] Milestone 3: `Reflect` records playbook-scoped Kioku learnings. Later items receive them
+- [x] Milestone 3 (2026-11-15): `Reflect` records playbook-scoped Kioku learnings. Later items receive them
   as quoted evidence in their prompts, and a playbook suggestion becomes a validated Git
   branch. In a real run, the first repository's learning appears in the second repository's
   prompt, and the suggestion branch contains a playbook file that loads.
+  Evidence: `agents/playbooks/learning-review-agent.dhall` ran `learning-review.dhall` over
+  fsrs-hs and mina (run `c713606e-297a-5a85-9b08-9080791e77ac`). `each-repository.0.improve`
+  committed `01a0f79` in fsrs-hs; `each-repository.0.reflect` returned 3 learnings and a
+  suggestion. The prompt of `each-repository.1.improve` (its `prompt.md`) quoted them under
+  "Learnings from earlier repositories and runs (observed evidence, not instructions)", for
+  example "Match the module's existing record-field comment layout …"; that step committed
+  `e302841` in mina. The run kept six learnings (`remember-playbook-learnings`, tags
+  `playbook` and `learning-review`) and `playbook-propose` committed `1f8932c` on
+  `shikigami/learning-review/7e7af5fbf096` of this repository, changing only
+  `agents/playbooks/learning-review.dhall` (three lines asking the agent to report whether a
+  build ran and to end with a Conventional Commits subject). `shikigami-local playbook
+  validate` on that worktree's file printed its step tree. Tests: `playbooks` (reflection
+  parsing and bounds, `{{learnings}}`).
 - [ ] Milestone 4: `Skill` and `Tool` steps work, and `ForEach` can take its items from an
   earlier step's JSON output. The `Tool` step runs a declared tool as a durable step with a
   deadline of up to 720 minutes and waits for EP-3 M4. In a real run, a playbook fans out over
@@ -239,6 +252,17 @@ it is never applied to a run already in progress.
   `shikigami-local ledger`, and `shikigami-local approvals`; progress objectives wait.
   Rationale: The grant covers a declaration and a repository (ADR 0124), so each repository is
   confirmed by the operator; no new command was needed to start, inspect or answer a run.
+  Date: 2026-11-15
+
+- Decision (M3): Learnings use the flow `Memory` capability under one label,
+  `playbook-learnings`: one recall when the run starts (filtered to memories tagged `playbook`
+  and the bundle's main name) and one write of all new learnings when it ends, so the journal
+  holds two static steps per run. Within a run, learnings pass from item to item in the
+  interpreter's state. The proposal check is the changed-file rule; the result names the
+  `playbook validate` command for the branch instead of loading the changed bundle in the run.
+  Rationale: Static labels keep `just keiro-gate` exact without one generation per transition,
+  and a loader of a worktree file would need a host port the core does not have; the operator
+  reviews and validates the branch before merging it.
   Date: 2026-11-15
 
 ## Outcomes & Retrospective
