@@ -1,0 +1,21 @@
+# just keiro-gate HEAD^ at a6d84863 (EP-3 M4), 2026-11-15
+# Expected under the pre-release exception (ADR 0027). check, inspect and scaffold passed;
+# conformance passes separately.
+
+BREAKING: AgentRun workflow-body AgentRun: workflow body labels, kinds, result types, or order changed without a new patch guard; wrap a cross-cutting change in patch, or rename the replay label for one changed step [WorkflowBodyChanged]
+    vector: private-history-read=breaking old-binary-read-new-events=breaking snapshot-hydration=advisory rollout=stop-the-world
+    declared: shikigami/agent-run.keiro:5
+    use-site: AgentRun.workflow-body (shikigami/agent-run.keiro:5)
+ADDITIVE: DeclaredToolStep workflow DeclaredToolStep: new workflow
+    declared: shikigami/declared-tool.keiro:5
+    use-site: DeclaredToolStep.workflow (shikigami/declared-tool.keiro:5)
+explain [WorkflowBodyChanged]
+  path: AgentRun.workflow-body
+  direction: private-history-read is breaking; the candidate binary may reinterpret or fail to read stored private history
+  direction: old-binary-read-new-events is breaking; a still-running old binary may reject events emitted by the candidate
+  direction: snapshot-hydration is advisory; persisted snapshot seeds require invalidation or rebuild
+  remedy: bump the owning schema or event version
+  remedy: add and retain a contiguous upcaster for every historical version
+  remedy: deploy in stop-the-world order
+
+replay-neutral: stored-data replay is unchanged by this diff
