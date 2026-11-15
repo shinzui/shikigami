@@ -21,3 +21,10 @@ explain [WorkflowBodyChanged]
 replay-neutral: stored-data replay is unchanged by this diff
 error: recipe `keiro-diff` failed with exit code 1
 error: recipe `keiro-gate` failed with exit code 1
+
+# just keiro-gate 3875f8de at 182cb022 (EP-2 M2, M2b, M3), 2026-11-15: exit 0.
+# No workflow-body finding: the coding-agent runner is resolved outside any step, and
+# the CodingAgent flow capability adds an interpreter, not a step.
+firewall: OK (95 generated modules scanned, 0 forbidden operators)
+replay-neutral: stored-data replay is unchanged by this diff
+Test suite conformance: PASS
