@@ -413,7 +413,8 @@ renderRecordEvent RecordEvent {at, run, principal, tier, agent, entry} =
       -- A declared tool call (EP-3): admitted with its exit, or refused with why.
       decided = case (recordKindText kind, field "decision", field "detail") of
         ("tool.called", Just decision, _) ->
-          [decision, maybe "?" id (field "tool"), "run", arguments]
+          [decision, maybe "?" id (field "tool")]
+            <> maybe ["run", arguments] (\remote -> [remote | remote /= "-"]) (field "remote")
             <> maybe [] (\code -> ["exit " <> code]) (number "exitCode")
             <> maybe [] pure (field "reason")
         (_, Just "allowed", _) -> ["allowed"]

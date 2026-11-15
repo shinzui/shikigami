@@ -1,7 +1,7 @@
 ---
 type: "Guide"
 title: "Give an agent your command-line tools"
-description: "Declare the CLI tools an agent may call, with the argument patterns it may use, grant the declaration once, bound it with an optional operator ceiling, and read every call in the action record."
+description: "Declare the CLI tools and MCP server tools an agent may call, grant the declaration once, bind MCP servers and bound CLI tools in the operator tools file, and read every call in the action record."
 docId: "DOC-22"
 tags: ["tools", "local-operator", "authority", "record"]
 generated:
@@ -15,7 +15,8 @@ A declaration can name the command-line tools its agent may call: the executable
 argument patterns it may be called with, the working directory and an operation class.
 Under the `local-operator` trust tier ([local operator](local-operator.md)) your one-time
 confirmation of the declaration is the grant, and every call, admitted or refused, lands in
-the action record. Declared tools work for `Skill` agents today.
+the action record. Declared tools work for `Skill` agents today; a tool can be a CLI command
+or an approved tool of an MCP server bound in your tools file.
 
 ## Declaring tools
 
@@ -102,6 +103,49 @@ in  T.Catalog::{
 
 Tools without a ceiling run on your grant alone.
 
+## MCP server tools
+
+An agent can also use tools of an MCP server. The server itself — its executable, arguments
+and environment names — and the tools you approve live only in your tools file; a
+declaration names the server and a subset of its approved tools:
+
+```dhall
+, tools = [ A.Tool.McpTools { server = "git", tools = [ "git_status", "git_log" ] } ]
+```
+
+Bind the server in `tools.dhall`. Shikigami speaks MCP over stdio; `WorkspaceRootArgument`
+is replaced by the run's repository path when the server starts:
+
+```dhall
+, mcp =
+  [ { server = "git"
+    , command = "/absolute/path/to/mcp-server-git"
+    , arguments = [ T.McpArgument.LiteralArgument "--repository", T.McpArgument.WorkspaceRootArgument ]
+    , environment = [] : List Text
+    , tools =
+      [ { remoteName = "git_status"
+        , description = "Show the working tree status of the run's repository."
+        , inputSchema = "{…the schema the server reports…}"
+        , operationClass = A.OperationClass.Observation
+        }
+      ]
+    }
+  ]
+```
+
+`shikigami-local mcp git --workspace mori://shinzui/keiro` starts the bound server and lists
+each tool it offers as `approved`, `approved-schema-changed` or `not approved`, printing a
+ready-to-edit entry with the exact schema for each one you have not approved. Choose its
+operation class yourself; leave mutating tools such as `git_commit` unapproved for an agent
+that only reads.
+
+The model sees `overlay__mcp-git__git_status`, with your description and schema rather than
+the server's. Only the requested approved tools are offered. When the server starts, every
+requested tool must still be offered with exactly the approved schema; otherwise the run
+refuses before any tool is called, and the record says why (`approved tool git_status
+schema changed`). The binding's revision digests the whole binding, so editing it is visible
+in every decision.
+
 ## What the record shows
 
 `shikigami-local ledger --run <WORKFLOW-ID>` shows the authority's decision for each tool
@@ -111,6 +155,8 @@ call and one `tool.called` entry:
 tool.called admitted cli.mori run ["registry","show","shinzui/keiro"] exit 0
 tool.called admitted cli.mina run ["docket","status"] exit 0
 tool.called refused cli.mori run ["registry","list"] arguments outside declared patterns for mori
+tool.called admitted mcp.git git_status
+tool.called refused mcp.git approved tool git_status schema changed
 ```
 
 Under the `contained` and `multi-tenant` tiers a declaration with tools is refused before

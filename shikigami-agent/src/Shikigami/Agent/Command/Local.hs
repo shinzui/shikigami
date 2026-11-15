@@ -15,9 +15,11 @@ where
 
 import Data.Aeson qualified as Aeson
 import Data.ByteString.Lazy.Char8 qualified as LazyChar8
+import Data.List (find)
 import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as Text
+import Data.Text.Encoding qualified as Text.Encoding
 import Data.Text.IO qualified as TextIO
 import Data.Time.Format.ISO8601 (iso8601Show)
 import Keiro.Workflow (WorkflowId (..))
@@ -30,6 +32,8 @@ import Shikigami.App.Config.Load (requireDatabaseUrl)
 import Shikigami.Capability.Declared (CliToolDecl (..), cliCapabilityName, cliTools, renderCliToolDecl, toolNameText)
 import Shikigami.Capability.Declared.Catalog (CliToolCeiling (..), ToolCatalog (..), checkDeclaredTools, defaultToolCatalogPath, loadToolCatalog, renderToolResolutionError)
 import Shikigami.Capability.Declared.Local (LocatedCliTool (..), locateCliTools)
+import Shikigami.Capability.Mcp (DiscoveredMcpTool (..), DiscoveryStatus (..), McpBinding (..), discoveryStatus, mkMcpServerId)
+import Shikigami.Capability.Mcp.Local (McpSession (..), mcpBindingRevision, openMcpSession)
 import Shikigami.Capability.Overlay (CapabilityDescriptor (..), capabilityIdText, capabilityRevisionText)
 import Shikigami.Migrations (verifyShikigamiMigrations)
 import Shikigami.Record
@@ -46,6 +50,8 @@ data LocalCommand
   | Ledger !LedgerOptions
   | -- | A declaration file and the repository it would run in.
     CheckTools !FilePath !(Maybe FilePath)
+  | -- | Connect to a bound MCP server and list its tools against the binding.
+    DiscoverMcp !Text !(Maybe FilePath)
 
 data LedgerOptions = LedgerOptions
   { run :: !(Maybe Text),
@@ -127,6 +133,33 @@ runLocal command config = case command of
           Right _ -> pure ()
           Left (NoStoredGrant _) -> exitWith (ExitFailure 3)
           Left _ -> exitWith (ExitFailure 1)
+  DiscoverMcp serverName workspace -> do
+    catalogPath <- defaultToolCatalogPath
+    catalog <- loadToolCatalog catalogPath >>= either die pure
+    server <- either die pure (mkMcpServerId serverName)
+    binding <- maybe (die ("no MCP server " <> serverName <> " is bound in " <> Text.pack catalogPath)) pure (find (\candidate -> candidate.server == server) catalog.mcp)
+    approvalsPath <- maybe defaultApprovalsPath pure config.localOperatorApprovalsFile
+    approvals <- loadLocalApprovals processCheckoutResolver approvalsPath >>= either (die . renderApprovalsError) pure
+    repository <- selectRepository processCheckoutResolver approvals (maybe (SelectByPath ".") repositorySelector workspace) >>= either (die . renderApprovalsError) pure
+    session <- openMcpSession repository.source binding >>= either die pure
+    TextIO.putStrLn ("mcp." <> serverName <> " in " <> Text.pack repository.source <> " (revision " <> capabilityRevisionText (mcpBindingRevision binding) <> ")")
+    mapM_
+      ( \offered -> do
+          let status = discoveryStatus binding offered
+          TextIO.putStrLn ("  " <> offered.name <> "  " <> case status of Approved -> "approved"; ApprovedSchemaDiffers -> "approved-schema-changed"; NotApproved -> "not approved")
+          if status == Approved
+            then pure ()
+            else
+              TextIO.putStrLn
+                ( "    { remoteName = \""
+                    <> offered.name
+                    <> "\", description = \"…\", inputSchema = "
+                    <> Text.pack (show (Text.Encoding.decodeUtf8Lenient (LazyChar8.toStrict (Aeson.encode offered.inputSchema))))
+                    <> ", operationClass = A.OperationClass.<Observation|IdempotentMutation|IrreversibleEmission> }"
+                )
+      )
+      session.discovered
+    session.close
   where
     repositorySelector named
       | "mori://" `Text.isPrefixOf` Text.pack named = SelectByIdentity (repositoryId (Text.pack named))

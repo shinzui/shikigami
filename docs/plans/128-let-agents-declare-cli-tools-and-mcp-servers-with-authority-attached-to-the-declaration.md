@@ -104,10 +104,25 @@ survives a worker kill, and is launched exactly once.
   Tests: the `declared tools` group in `shikigami-core:test` (10 cases: patterns, ceilings,
   checked words, the example's codecs and journal bytes, the revision, and the runner with
   `/bin/echo`, `/bin/sleep` and `/usr/bin/yes`).
-- [ ] M2: MCP bindings (ADR-65) work for `Skill` agents. `shikigami-tools mcp discover git`
+- [x] M2 (2026-11-15): MCP bindings (ADR-65) work for `Skill` agents. `shikigami-tools mcp discover git`
   lists a real `mcp-server-git`, a Skill run calls its approved `git_status` tool on the
   keiro worktree, unapproved tools are never offered, and a changed schema refuses
   acquisition.
+  Evidence: `mcp-server-git` 2026.11.11 (installed with `uv tool install` into a scratch
+  tool directory) is bound in the operator tools file with `--repository
+  WorkspaceRootArgument` and approves `git_status` and `git_log`.
+  `shikigami-local mcp git --workspace mori://shinzui/keiro` lists those two as `approved`
+  and `git_commit`, `git_add` and the rest as `not approved`, each with a pasteable entry. The
+  `repo-inventory` declaration, now also requesting `McpTools {server = "git", tools =
+  ["git_status","git_log"]}`, asked again (its tools changed), listed `git (MCP): git_status,
+  git_log`, and its reply quoted "On branch master … nothing to commit, working tree clean"
+  from `overlay__mcp-git__git_status` (run `1a2fc199-f95d-53f1-9d50-d491eaf02cac`). Its ledger
+  shows the `mcp.git` provider and `git_status` tool decisions and `tool.called admitted
+  mcp.git git_status`. With one character of the approved `git_status` schema changed, the
+  next run refused acquisition before any call and recorded `tool.called refused mcp.git
+  approved tool git_status schema changed` (run `33871149-5207-5bd0-9594-df477198164d`).
+  Tests: 3 more `declared tools` cases (discovery verification including an ignored extra
+  tool, catalog checks, revision change with a schema).
 - [ ] M3: The resolved tool set is rendered for coding agents. The representative check
   passes: a Claude Code `CodingAgent` on the keiro worktree runs declared `mori registry
   show` and the MCP `git_status`, and its `gh` call is refused and appears in the action record.
@@ -281,6 +296,25 @@ survives a worker kill, and is launched exactly once.
   implemented.
   Rationale: The XDG location is enough for one operator; the file is the operator's, not the
   repository's. M2 adds MCP bindings to the same file.
+  Date: 2026-11-15
+
+- Decision: The MCP client and provider live in `shikigami-core:local-host`
+  (`Shikigami.Capability.Mcp.Local`), the pure binding in `Shikigami.Capability.Mcp`, and the
+  discovery command is `shikigami-local mcp <server>`.
+  Rationale: As for CLI tools (ADR 0125): the worker needs the same provider later, and the
+  local operator's inspection command already exists.
+  Date: 2026-11-15
+- Decision: The connection and each call are decided by the existing overlay guard
+  (`UseCapability` on the provider and on each tool); no separate discovery decision is made.
+  An acquisition refused by the schema check is recorded as `tool.called refused`.
+  Rationale: Discovery happens inside acquisition, after the connection decision, and offers
+  nothing outside the approved set.
+  Date: 2026-11-15
+- Decision: Schemas are compared as decoded JSON values (key order ignored), and the
+  revision digests the canonicalized binding; the stdio client reads one line per message and
+  bounds each request by 60 seconds and discovery by 10 pages.
+  Rationale: Enough for `mcp-server-git`; a per-message byte bound and configurable limits
+  wait for a server that needs them.
   Date: 2026-11-15
 
 ## Outcomes & Retrospective

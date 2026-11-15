@@ -52,7 +52,8 @@ import GHC.Generics (Generic)
 import GHC.Records (HasField (..))
 import Shikigami.Agent.Decl (AgentDecl (..), codingAgentStepOf, requestedOverlays)
 import Shikigami.Agent.Name (AgentName, agentNameText, mkAgentName)
-import Shikigami.Capability.Declared (cliTools, renderCliToolDecl)
+import Shikigami.Capability.Declared (cliTools, mcpRequests, renderCliToolDecl)
+import Shikigami.Capability.Mcp (McpToolRequest (..), mcpServerIdText, mcpToolNameText)
 import Shikigami.Capability.Overlay (CapabilityId, capabilityIdText, mkCapabilityId)
 import Shikigami.CodingAgent.Types (CodingAgentStep (..), accessText, providerText)
 import Shikigami.Decision.Contract (versionedDigest)
@@ -87,7 +88,7 @@ requestedGrant decl@AgentDecl {name, behavior, tools} repository =
       placement = repository.placement,
       capabilities = Set.fromList (requestedOverlays decl),
       codingAgent = (\step -> (providerText step.provider, accessText step.access)) <$> codingAgentStepOf behavior,
-      tools = renderCliToolDecl <$> cliTools tools,
+      tools = (renderCliToolDecl <$> cliTools tools) <> [mcpServerIdText request.server <> " (MCP): " <> Text.intercalate ", " (mcpToolNameText <$> foldr (:) [] request.tools) | request <- mcpRequests tools],
       budget = defaultBudget
     }
 

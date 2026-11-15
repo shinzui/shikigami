@@ -112,7 +112,7 @@ localRoleInfo =
         withConfigOptions
           "shikigami-local"
           "Inspect local-operator grants and the action record"
-          (runLocal <$> subparser (approvals <> revoke <> ledger <> tools))
+          (runLocal <$> subparser (approvals <> revoke <> ledger <> tools <> mcp))
           (pure [])
     }
   where
@@ -125,6 +125,16 @@ localRoleInfo =
                 <*> optional (strOption (long "workspace" <> metavar "DIR|mori://…" <> help "The repository it would run in (default: the current directory)"))
             )
             (progDesc "Check a declaration's CLI tools: located, within any ceiling, and granted (exit 0), awaiting confirmation (3) or refused (1)")
+        )
+    mcp =
+      command
+        "mcp"
+        ( info
+            ( DiscoverMcp . Text.pack
+                <$> strArgument (metavar "SERVER" <> help "A server bound in the tools file")
+                <*> optional (strOption (long "workspace" <> metavar "DIR|mori://…" <> help "The repository to start it in (default: the current directory)"))
+            )
+            (progDesc "Connect to a bound MCP server and list its tools as approved, approved-schema-changed or not approved")
         )
     approvals = command "approvals" (info (pure ShowApprovals) (progDesc "Validate the approvals file and list every grant"))
     revoke = command "revoke" (info (RevokeGrant . Text.pack <$> strArgument (metavar "DIGEST" <> help "At least eight characters of a stored grant's digest")) (progDesc "Delete a stored confirmation"))

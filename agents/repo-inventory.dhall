@@ -1,5 +1,7 @@
--- Reports one repository's Mori registration and unfinished plans using only
--- the CLI tools it declares (EP-3 of MasterPlan 22). Run it under the
+-- Reports one repository's Mori registration, unfinished plans and Git state
+-- using only the tools it declares (EP-3 of MasterPlan 22): two CLI tools and
+-- two approved tools of the MCP server "git" bound in the operator's
+-- tools.dhall. Run it under the
 -- local-operator trust tier; the first run asks once and lists the tools:
 --
 --   shikigami-agent-run --set trust.tier=local-operator \
@@ -31,5 +33,6 @@ in  A.Agent::{
             , A.pattern [ "exec-plan", "remaining" ] A.Trailing.AnyTrailing
             ]
           }
+      , A.Tool.McpTools { server = "git", tools = [ "git_status", "git_log" ] }
       ]
     }

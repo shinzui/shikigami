@@ -50,7 +50,8 @@ import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.ExpertiseKey (ExpertiseKey)
 import Shikigami.Agent.Name (AgentName)
 import Shikigami.Attestation.Profile (ProfileId, ProfileVersion)
-import Shikigami.Capability.Declared (CliToolDecl (..), ToolDecl, cliCapabilityId, cliTools)
+import Shikigami.Capability.Declared (CliToolDecl (..), ToolDecl, cliCapabilityId, cliTools, mcpRequests)
+import Shikigami.Capability.Mcp (McpToolRequest (..), mcpCapabilityId)
 import Shikigami.Capability.Overlay (CapabilityId)
 import Shikigami.CodingAgent.Types (CodingAgentEffort, CodingAgentPrompt, CodingAgentProvider, CodingAgentStep (..), DeadlineMinutes, SkillDirectory, VendorModelId, WorkspaceAccess)
 import Shikigami.Decision.ModelAlias (ModelAlias)
@@ -336,7 +337,7 @@ data AgentDecl = AgentDecl
 -- the behavior environment all read this, never the field alone.
 requestedOverlays :: AgentDecl -> [CapabilityId]
 requestedOverlays AgentDecl {capabilityOverlays, tools} =
-  capabilityOverlays <> [cliCapabilityId tool.name | tool <- cliTools tools]
+  capabilityOverlays <> [cliCapabilityId tool.name | tool <- cliTools tools] <> [mcpCapabilityId request.server | request <- mcpRequests tools]
 
 -- Defaulted additions preserve the pre-change journal bytes.
 instance ToJSON AgentDecl where

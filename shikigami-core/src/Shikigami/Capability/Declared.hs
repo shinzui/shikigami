@@ -37,6 +37,7 @@ module Shikigami.Capability.Declared
     CliToolDecl (..),
     ToolDecl (..),
     cliTools,
+    mcpRequests,
     cliCapabilityId,
     cliCapabilityName,
     toolLimits,
@@ -62,6 +63,7 @@ import Dhall (FromDhall (..))
 import Dhall qualified
 import GHC.Generics (Generic)
 import Numeric.Natural (Natural)
+import Shikigami.Capability.Mcp (McpToolRequest)
 import Shikigami.Capability.Overlay (CapabilityId, CapabilityOperationClass, mkCapabilityId)
 import System.FilePath (isAbsolute)
 
@@ -203,13 +205,18 @@ data CliToolDecl = CliToolDecl
   }
   deriving stock (Eq, Ord, Show, Generic)
 
--- | A tool a declaration names. MCP tools are added by EP-3 M2.
+-- | A tool a declaration names: a CLI tool, or approved tools of an MCP
+-- server the operator's tools file binds.
 data ToolDecl
   = CliTool !CliToolDecl
+  | McpTools !McpToolRequest
   deriving stock (Eq, Ord, Show, Generic)
 
 cliTools :: [ToolDecl] -> [CliToolDecl]
 cliTools tools = [tool | CliTool tool <- tools]
+
+mcpRequests :: [ToolDecl] -> [McpToolRequest]
+mcpRequests tools = [request | McpTools request <- tools]
 
 -- | @cli.<name>@, the capability overlay the tool is offered as.
 cliCapabilityId :: ToolName -> CapabilityId
@@ -336,10 +343,13 @@ instance FromDhall CliToolDecl where
         Nothing -> Left ("tool " <> toolNameText name <> " declares no argument pattern")
         Just patterns -> Right CliToolDecl {name, executable, allow = patterns, workingDirectory, operationClass, limits}
 
--- | A union even while it has one alternative (a one-constructor Haskell
--- type would otherwise decode as its record).
+-- | Tagged by alternative, as the Dhall union is.
 instance FromDhall ToolDecl where
-  autoWith options = Dhall.union (CliTool <$> Dhall.constructor "CliTool" (autoWith options))
+  autoWith options =
+    Dhall.union
+      ( (CliTool <$> Dhall.constructor "CliTool" (autoWith options))
+          <> (McpTools <$> Dhall.constructor "McpTools" (autoWith options))
+      )
 
 -- JSON: the journal form, checked on the way back in.
 

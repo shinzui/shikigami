@@ -14,6 +14,7 @@ module Shikigami.Capability.Declared.Catalog
     ToolResolutionError (..),
     renderToolResolutionError,
     checkDeclaredTools,
+    checkMcpRequests,
   )
 where
 
@@ -25,6 +26,7 @@ import Dhall (FromDhall)
 import Dhall qualified
 import GHC.Generics (Generic)
 import Shikigami.Capability.Declared
+import Shikigami.Capability.Mcp
 import Shikigami.Capability.Overlay (CapabilityOperationClass)
 import System.Directory (XdgDirectory (XdgConfig), doesFileExist, getXdgDirectory)
 import System.FilePath ((</>))
@@ -39,15 +41,17 @@ data CliToolCeiling = CliToolCeiling
 
 instance FromDhall CliToolCeiling
 
-newtype ToolCatalog = ToolCatalog
-  { cli :: [CliToolCeiling]
+data ToolCatalog = ToolCatalog
+  { cli :: ![CliToolCeiling],
+    -- | MCP server bindings (ADR-65).
+    mcp :: ![McpBinding]
   }
   deriving stock (Eq, Show, Generic)
 
 instance FromDhall ToolCatalog
 
 emptyToolCatalog :: ToolCatalog
-emptyToolCatalog = ToolCatalog {cli = []}
+emptyToolCatalog = ToolCatalog {cli = [], mcp = []}
 
 -- | @$XDG_CONFIG_HOME/shikigami/tools.dhall@.
 defaultToolCatalogPath :: IO FilePath
@@ -74,6 +78,8 @@ data ToolResolutionError
   | ToolsUnsupportedForBehavior !Text
   | ToolsUnsupportedForTier !Text
   | ToolCatalogUnavailable !Text
+  | UncataloguedMcpServer !McpServerId
+  | McpToolNotApproved !McpServerId !McpToolName
   deriving stock (Eq, Show)
 
 renderToolResolutionError :: ToolResolutionError -> Text
@@ -86,6 +92,16 @@ renderToolResolutionError = \case
   ToolsUnsupportedForBehavior behavior -> "declared tools are not supported for " <> behavior <> " agents"
   ToolsUnsupportedForTier tier -> "declared tools need trust.tier=local-operator; this run is " <> tier
   ToolCatalogUnavailable detail -> detail
+  UncataloguedMcpServer server -> "no MCP server " <> mcpServerIdText server <> " is bound in the operator's tools file"
+  McpToolNotApproved server tool -> "the tools file does not approve " <> mcpToolNameText tool <> " of MCP server " <> mcpServerIdText server
+
+-- | Each requested MCP tool is approved in its server's binding.
+checkMcpRequests :: ToolCatalog -> [McpToolRequest] -> Either ToolResolutionError [(McpBinding, McpToolRequest)]
+checkMcpRequests ToolCatalog {mcp} = traverse \request -> case find (\binding -> binding.server == request.server) mcp of
+  Nothing -> Left (UncataloguedMcpServer request.server)
+  Just binding -> case [tool | tool <- foldr (:) [] request.tools, tool `notElem` ((.remoteName) <$> binding.tools)] of
+    tool : _ -> Left (McpToolNotApproved request.server tool)
+    [] -> Right (binding, request)
 
 -- | The declaration's tools are distinct and each fits any ceiling of its name.
 checkDeclaredTools :: ToolCatalog -> [CliToolDecl] -> Either ToolResolutionError ()

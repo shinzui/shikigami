@@ -3,11 +3,13 @@
 -- executables.
 module Shikigami.DeclaredToolsSpec (tests) where
 
-import Data.Aeson (Value (..))
+import Data.Aeson (Value (..), (.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
+import Data.ByteString.Lazy qualified as LazyByteString
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Text (Text)
+import Data.Text.Encoding qualified as Text.Encoding
 import Shikigami.Agent.Decl (AgentDecl (..), requestedOverlays)
 import Shikigami.Agent.DeclarationValue (declarationCoordinate)
 import Shikigami.Agent.Loader (loadAgent)
@@ -16,6 +18,8 @@ import Shikigami.Capability.Catalog (ExecutionMode (Durable))
 import Shikigami.Capability.Declared
 import Shikigami.Capability.Declared.Catalog
 import Shikigami.Capability.Declared.Local
+import Shikigami.Capability.Mcp
+import Shikigami.Capability.Mcp.Local (mcpBindingRevision)
 import Shikigami.Capability.Overlay (CapabilityDescriptor (..), CapabilityOperationClass (..), capabilityIdText)
 import Shikigami.Capability.Provider (CapabilityRun (..), CapabilityScope (..))
 import Shikigami.Record (memoryRecord, unspecifiedTier)
@@ -58,7 +62,8 @@ tests =
         loaded <- loadAgent "../agents/repo-inventory.dhall"
         decl <- either (assertFailure . show) pure loaded
         (.name) <$> cliTools decl.tools @?= [name' "mori", name' "mina"]
-        capabilityIdText <$> requestedOverlays decl @?= ["cli.mori", "cli.mina"]
+        capabilityIdText <$> requestedOverlays decl @?= ["cli.mori", "cli.mina", "mcp.git"]
+        (mcpServerIdText . (.server)) <$> mcpRequests decl.tools @?= ["git"]
         Aeson.decode (Aeson.encode decl) @?= Just decl,
       testCase "a declaration without tools keeps its journal bytes" do
         loaded <- loadAgent "../agents/local-maintainer.dhall"
@@ -99,7 +104,25 @@ tests =
         flooded <- runCliTool host scope yes []
         case flooded of
           Right (Object fields) -> KeyMap.lookup "truncated" fields @?= Just (Bool True)
-          other -> assertFailure (show other)
+          other -> assertFailure (show other),
+      testCase "discovered MCP tools must match the approved ones; extra tools are ignored" do
+        let requested = mcpName "git_status" :| [mcpName "git_log"]
+            offered = [DiscoveredMcpTool "git_status" statusSchema, DiscoveredMcpTool "git_log" logSchema, DiscoveredMcpTool "git_commit" statusSchema]
+        verifyDiscoveredTools gitBinding requested offered @?= Right ()
+        verifyDiscoveredTools gitBinding requested (take 1 offered) @?= Left (ApprovedToolMissing (mcpName "git_log"))
+        verifyDiscoveredTools gitBinding requested [DiscoveredMcpTool "git_status" logSchema, DiscoveredMcpTool "git_log" logSchema] @?= Left (ApprovedSchemaChanged (mcpName "git_status"))
+        verifyDiscoveredTools gitBinding (mcpName "git_commit" :| []) offered @?= Left (RequestedToolNotApproved (mcpName "git_commit"))
+        discoveryStatus gitBinding (DiscoveredMcpTool "git_commit" statusSchema) @?= NotApproved,
+      testCase "an MCP request needs its server bound and its tools approved" do
+        let catalog = ToolCatalog {cli = [], mcp = [gitBinding]}
+            request tools = McpToolRequest {server = mcpServer "git", tools}
+        fmap (fmap snd) (checkMcpRequests catalog [request (mcpName "git_status" :| [])]) @?= Right [request (mcpName "git_status" :| [])]
+        fmap (const ()) (checkMcpRequests catalog [request (mcpName "git_commit" :| [])]) @?= Left (McpToolNotApproved (mcpServer "git") (mcpName "git_commit"))
+        fmap (const ()) (checkMcpRequests emptyToolCatalog [request (mcpName "git_status" :| [])]) @?= Left (UncataloguedMcpServer (mcpServer "git")),
+      testCase "the binding's revision changes with an approved schema" do
+        let changed = McpBinding {server = mcpServer "git", command = "/bin/false", arguments = [LiteralArgument "--repository", WorkspaceRootArgument], environment = [], tools = [approved "git_status" logSchema, approved "git_log" logSchema]}
+        assertBool "schema" (mcpBindingRevision gitBinding /= mcpBindingRevision changed)
+        mcpBindingRevision gitBinding @?= mcpBindingRevision gitBinding
     ]
   where
     scope = CapabilityScope {runId = OneOffRun "declared-tools-test", principal = declarationCoordinate "principal_test", mode = Durable}
@@ -135,4 +158,22 @@ ceiling' :: [Text] -> CapabilityOperationClass -> CliToolCeiling
 ceiling' prefix = bound (OnPath (exe "mori")) [pat prefix AnyTrailing]
 
 catalogWith :: CliToolCeiling -> ToolCatalog
-catalogWith limit = ToolCatalog {cli = [limit]}
+catalogWith limit = ToolCatalog {cli = [limit], mcp = []}
+
+mcpName :: Text -> McpToolName
+mcpName = either (error . show) id . mkMcpToolName
+
+mcpServer :: Text -> McpServerId
+mcpServer = either (error . show) id . mkMcpServerId
+
+statusSchema :: Value
+statusSchema = Aeson.object ["type" .= ("object" :: Text), "title" .= ("statusArguments" :: Text)]
+
+logSchema :: Value
+logSchema = Aeson.object ["type" .= ("object" :: Text), "title" .= ("logArguments" :: Text)]
+
+approved :: Text -> Value -> ApprovedMcpTool
+approved remote schema = ApprovedMcpTool {remoteName = mcpName remote, description = remote, inputSchema = Text.Encoding.decodeUtf8 (LazyByteString.toStrict (Aeson.encode schema)), operationClass = Observation}
+
+gitBinding :: McpBinding
+gitBinding = McpBinding {server = mcpServer "git", command = "/bin/false", arguments = [LiteralArgument "--repository", WorkspaceRootArgument], environment = [], tools = [approved "git_status" statusSchema, approved "git_log" logSchema]}

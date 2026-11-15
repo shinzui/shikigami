@@ -189,7 +189,10 @@ let CliTool =
           }
       }
 
-let Tool = < CliTool : CliTool.Type >
+-- Approved tools of an MCP server bound in the operator's tools file.
+let McpTools = { server : Text, tools : List Text }
+
+let Tool = < CliTool : CliTool.Type | McpTools : McpTools >
 
 let Agent =
       { Type =
@@ -262,6 +265,7 @@ in  { SignalType
     , OperationClass
     , CallLimits
     , CliTool
+    , McpTools
     , Tool
     , Agent
     }

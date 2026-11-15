@@ -101,6 +101,7 @@ library
     Shikigami.Capability.Catalog
     Shikigami.Capability.Declared
     Shikigami.Capability.Declared.Catalog
+    Shikigami.Capability.Mcp
     Shikigami.Capability.Overlay
     Shikigami.Capability.Provider
     Shikigami.Capability.Tools
@@ -620,6 +621,7 @@ library local-host
   hs-source-dirs: local-host
   exposed-modules:
     Shikigami.Capability.Declared.Local
+    Shikigami.Capability.Mcp.Local
     Shikigami.CodingAgent.Local
     Shikigami.Process.Local
     Shikigami.Trust.LocalOperator.Host

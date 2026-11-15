@@ -33,9 +33,11 @@ import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Sink (..), codingAge
 import Shikigami.App.Config (AppConfig (..))
 import Shikigami.Authority
 import Shikigami.Capability.Catalog (CapabilityResolutionError (..), ResolutionSubject, mkCapabilityCatalog)
-import Shikigami.Capability.Declared (cliTools)
-import Shikigami.Capability.Declared.Catalog (ToolResolutionError (..), checkDeclaredTools, defaultToolCatalogPath, loadToolCatalog, renderToolResolutionError)
+import Shikigami.Capability.Declared (cliTools, mcpRequests)
+import Shikigami.Capability.Declared.Catalog (ToolResolutionError (..), checkDeclaredTools, checkMcpRequests, defaultToolCatalogPath, loadToolCatalog, renderToolResolutionError)
 import Shikigami.Capability.Declared.Local (CliToolHost (..), LocatedCliTool (..), cliToolProvider, locateCliTools)
+import Shikigami.Capability.Mcp (McpBinding, McpToolRequest (..))
+import Shikigami.Capability.Mcp.Local (mcpToolProvider)
 import Shikigami.Capability.Overlay (CapabilityDescriptor (..), capabilityIdText)
 import Shikigami.Capability.Provider (CapabilityProvider (..), CapabilityRuntime (..), installDurableAdapters, mkCapabilityProviderRegistry)
 import Shikigami.CodingAgent.Local (LocalCodingAgentConfig (..), localCodingAgentRunner)
@@ -137,9 +139,9 @@ lightComposition config interaction record =
       | otherwise =
           prepareDeclaredTools decl >>= \case
             Left problem -> pure (Left (CompositionFailed (renderToolResolutionError problem)))
-            Right located -> resolveGranted located RunSubject {agent = decl, principal, run, repository}
+            Right prepared -> resolveGranted prepared RunSubject {agent = decl, principal, run, repository}
 
-    resolveGranted located RunSubject {agent = decl, principal, run, repository} = do
+    resolveGranted (located, servers) RunSubject {agent = decl, principal, run, repository} = do
       approvalsPath <- maybe defaultApprovalsPath pure config.localOperatorApprovalsFile
       stateDirectory <- maybe defaultStateDirectory pure config.localOperatorStateDirectory
       loaded <- loadLocalApprovals processCheckoutResolver approvalsPath
@@ -157,10 +159,12 @@ lightComposition config interaction record =
                 Right grant -> do
                   let runAuthority = localRunAuthority record decl run grant
                       done capabilities workspace runner release = Right TierRuntime {tier = LocalOperator, authority = runAuthority, record, capabilities, workspace, grant = Just grant, codingAgents = runner, release}
-                      toolsIn root = cliToolProvider CliToolHost {record, tier = tierLabel, agent = decl.name, root, launcher = hostProcessLauncher, host = "skill"} <$> located
+                      toolsIn root =
+                        (cliToolProvider CliToolHost {record, tier = tierLabel, agent = decl.name, root, launcher = hostProcessLauncher, host = "skill"} <$> located)
+                          <> [mcpToolProvider record tierLabel decl.name root binding request.tools | (binding, request) <- servers]
                   if not (requestsMutation decl || isCodingAgent decl)
                     then
-                      if null located
+                      if null located && null servers
                         then
                           oneOffCapabilityRuntime (Just repo.source) decl <&> \case
                             Left problem -> Left (CompositionFailed (renderOneOffCapabilityError problem))
@@ -225,14 +229,17 @@ installedOnly descriptors _ descriptor
 
 -- | The declaration's CLI tools, checked against any operator ceiling and
 -- located on this host, before anything is granted or run.
-prepareDeclaredTools :: AgentDecl -> IO (Either ToolResolutionError [LocatedCliTool])
+prepareDeclaredTools :: AgentDecl -> IO (Either ToolResolutionError ([LocatedCliTool], [(McpBinding, McpToolRequest)]))
 prepareDeclaredTools decl@AgentDecl {behavior}
-  | null (cliTools decl.tools) = pure (Right [])
+  | null decl.tools = pure (Right ([], []))
   | Skill {} <- behavior = do
       catalog <- loadToolCatalog =<< defaultToolCatalogPath
       case catalog of
         Left problem -> pure (Left (ToolCatalogUnavailable problem))
-        Right loaded -> either (pure . Left) (const (locateCliTools (cliTools decl.tools))) (checkDeclaredTools loaded (cliTools decl.tools))
+        Right loaded -> case (checkDeclaredTools loaded (cliTools decl.tools), checkMcpRequests loaded (mcpRequests decl.tools)) of
+          (Left problem, _) -> pure (Left problem)
+          (_, Left problem) -> pure (Left problem)
+          (Right (), Right servers) -> fmap (,servers) <$> locateCliTools (cliTools decl.tools)
   | otherwise = pure (Left (ToolsUnsupportedForBehavior (behaviorName behavior)))
   where
     behaviorName = \case
