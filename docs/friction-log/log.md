@@ -2,6 +2,9 @@
 
 ## 2026-11-15
 
+* **Update**: FRIC-74 accepted: EP-1 complete: the workaround is permanent in the checkout resolver
+
+
 * **Addition**: FRIC-74 records detour interface friction with mori://shinzui/mori: mori status --json exits 1 whenever the project has health issues
 
 

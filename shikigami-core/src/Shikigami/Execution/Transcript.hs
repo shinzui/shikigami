@@ -306,7 +306,9 @@ instance FromJSON ExecutionSnapshot where
       Aeson.Error _ -> fail "execution tool menu is unsupported"
     forM_ snapshot.workspace \admission -> do
       unless (admission.runId == snapshot.runId && admission.assignmentId == snapshot.selection.assignmentId && Just admission.rootId == snapshot.selection.rootId && admission.owner == snapshot.identity) (fail "workspace differs from its accepted execution")
-      unless (admission.workspace.provider == workspaceCoordinate "shikigami.workspace/1" && not (Text.null (workspaceCoordinateText admission.workspace.resource)) && Text.length (workspaceCoordinateText admission.workspace.resource) <= 128 && Text.length (workspaceCoordinateText admission.bindingDigest) == 71 && "sha256:" `Text.isPrefixOf` workspaceCoordinateText admission.bindingDigest) (fail "unsupported workspace binding")
+      -- @shikigami.workspace.local/1@ is the local-operator host (ADR-124); its
+      -- admissions carry the LocalHostFilesV1 policy and no other.
+      unless (admission.workspace.provider `elem` [workspaceCoordinate "shikigami.workspace/1", workspaceCoordinate "shikigami.workspace.local/1"] && not (Text.null (workspaceCoordinateText admission.workspace.resource)) && Text.length (workspaceCoordinateText admission.workspace.resource) <= 128 && Text.length (workspaceCoordinateText admission.bindingDigest) == 71 && "sha256:" `Text.isPrefixOf` workspaceCoordinateText admission.bindingDigest) (fail "unsupported workspace binding")
       unless (maybe False (instructionPrompt admission.instructions `Text.isSuffixOf`) snapshot.initialContext.systemPrompt) (fail "workspace instructions are absent from fixed context")
     forM_ snapshot.objectiveScope \scope -> unless (ObjectiveScope.matchesExecution scope snapshot.runId snapshot.identity snapshot.sessionId snapshot.selection.rootId snapshot.selection.permittedAliases snapshot.selection.assignmentId) (fail "objective scope differs from its accepted execution")
     pure snapshot

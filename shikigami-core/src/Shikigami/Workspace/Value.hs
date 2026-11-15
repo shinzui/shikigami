@@ -320,12 +320,16 @@ instance ToJSON ProvisionReadiness where
 
 instance FromJSON ProvisionReadiness where parseJSON value = provisionReadiness <$> parseJSON value
 
-data FilePolicy = NativeFilesV1 | SupervisedFilesV1 | TransferFilesV1 deriving stock (Eq, Ord, Show)
+-- | @LocalHostFilesV1@ is the local-operator tier's policy: files are edited
+-- in the operator's own worktree by the host adapters of
+-- @shikigami-core:local-host@, which refuse every other policy (ADR-124).
+data FilePolicy = NativeFilesV1 | SupervisedFilesV1 | TransferFilesV1 | LocalHostFilesV1 deriving stock (Eq, Ord, Show)
 
 filePolicyText :: FilePolicy -> Text
 filePolicyText NativeFilesV1 = "ascii-exact-v1"
 filePolicyText SupervisedFilesV1 = "ascii-exact-process-v1"
 filePolicyText TransferFilesV1 = "ascii-exact-transfer-v1"
+filePolicyText LocalHostFilesV1 = "local-host-v1"
 
 instance ToJSON FilePolicy where
   toJSON = toJSON . filePolicyText
@@ -337,6 +341,7 @@ instance FromJSON FilePolicy where
       "ascii-exact-v1" -> pure NativeFilesV1
       "ascii-exact-process-v1" -> pure SupervisedFilesV1
       "ascii-exact-transfer-v1" -> pure TransferFilesV1
+      "local-host-v1" -> pure LocalHostFilesV1
       _ -> fail "unsupported workspace file policy"
 
 data GitMode = GitRegular | GitExecutable | GitTree deriving stock (Eq, Ord, Show)

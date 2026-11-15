@@ -20,6 +20,7 @@ where
 
 import Control.Exception (IOException, try)
 import Data.Bifunctor (first)
+import Data.Functor ((<&>))
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Set qualified as Set
 import Data.Text (Text)
@@ -27,6 +28,7 @@ import Data.Text qualified as Text
 import Data.Text.IO qualified as TextIO
 import Data.Time (getCurrentTime)
 import Shikigami.Agent.Capability.OneOff (oneOffCapabilityRuntime, renderOneOffCapabilityError)
+import Shikigami.Agent.Capability.Workspace (renderWorkspaceError, resolveWorkspaceScope, workspaceReadDescriptor, workspaceReadProvider)
 import Shikigami.Agent.Checkout (processCheckoutResolver)
 import Shikigami.Agent.Decl (AgentDecl (..), IdentityDecl (..), Sink (..))
 import Shikigami.Agent.DeclarationValue (declarationCoordinate, declarationCoordinateText)
@@ -34,6 +36,9 @@ import Shikigami.Agent.Name (AgentName, agentNameText)
 import Shikigami.Agent.Principal (compatibilityIdentity, identityText)
 import Shikigami.App.Config (AppConfig (..))
 import Shikigami.Authority
+import Shikigami.Capability.Catalog (CapabilityResolutionError (..), mkCapabilityCatalog)
+import Shikigami.Capability.Overlay (CapabilityDescriptor (..), capabilityIdText)
+import Shikigami.Capability.Provider (CapabilityRuntime (..), installDurableAdapters, mkCapabilityProviderRegistry)
 import Shikigami.Record (ActionRecord (..), RecordEvent (..), recordErrorText)
 import Shikigami.Repository (repositoryId)
 import Shikigami.Trust.LocalOperator.Approvals
@@ -41,6 +46,10 @@ import Shikigami.Trust.LocalOperator.Authority (LocalSelection (..), localOperat
 import Shikigami.Trust.LocalOperator.Grant
 import Shikigami.Trust.Runtime
 import Shikigami.Trust.Tier
+import Shikigami.Workspace.Launch (worktreeRootPath)
+import Shikigami.Workspace.Local.Adapters (LocalWorkspace (..), localWorkspaceAdapters, localWorkspaceDescriptors, localWorkspaceHost)
+import Shikigami.Workspace.Local.Launcher (hostProcessLauncher)
+import Shikigami.Workspace.Local.Worktree (RunWorktree (..), openRunWorktree, releaseRunWorktree, renderWorktreeError)
 import System.IO (hFlush, hIsTerminalDevice, stdin, stdout)
 import System.IO.Error (isEOFError)
 
@@ -107,7 +116,9 @@ lightComposition config interaction record =
                           authority = scopeToRun run decl.name (recorded record tierLabel denyAll),
                           record,
                           capabilities,
-                          grant = Nothing
+                          workspace = Nothing,
+                          grant = Nothing,
+                          release = pure ()
                         }
                   )
 
@@ -119,7 +130,7 @@ lightComposition config interaction record =
           oneOffCapabilityRuntime Nothing decl >>= \case
             Left problem -> pure (Left (CompositionFailed (renderOneOffCapabilityError problem)))
             Right capabilities ->
-              pure (Right TierRuntime {tier = LocalOperator, authority = scopeToRun run decl.name (recorded record tierLabel nothingGranted), record, capabilities, grant = Nothing})
+              pure (Right TierRuntime {tier = LocalOperator, authority = scopeToRun run decl.name (recorded record tierLabel nothingGranted), record, capabilities, workspace = Nothing, grant = Nothing, release = pure ()})
       | otherwise = do
           approvalsPath <- maybe defaultApprovalsPath pure config.localOperatorApprovalsFile
           stateDirectory <- maybe defaultStateDirectory pure config.localOperatorStateDirectory
@@ -135,21 +146,40 @@ lightComposition config interaction record =
                 (Right repo, Right grants) ->
                   resolveGrant interaction approvals grants (recordGrant principal run decl.name) decl repo >>= \case
                     Left refusal -> pure (Left (NoGrant refusal))
-                    Right grant ->
-                      oneOffCapabilityRuntime (Just repo.source) decl >>= \case
-                        Left problem -> pure (Left (CompositionFailed (renderOneOffCapabilityError problem)))
-                        Right capabilities -> do
-                          let selection = LocalSelection {agent = decl.name, principals = actingPrincipals decl, grant}
-                          pure
-                            ( Right
-                                TierRuntime
-                                  { tier = LocalOperator,
-                                    authority = scopeToRun run decl.name (recorded record tierLabel (localOperatorAuthority selection)),
-                                    record,
-                                    capabilities,
-                                    grant = Just grant
-                                  }
-                            )
+                    Right grant -> do
+                      let selection = LocalSelection {agent = decl.name, principals = actingPrincipals decl, grant}
+                          runAuthority = scopeToRun run decl.name (recorded record tierLabel (localOperatorAuthority selection))
+                          done capabilities workspace release = Right TierRuntime {tier = LocalOperator, authority = runAuthority, record, capabilities, workspace, grant = Just grant, release}
+                      if not (requestsMutation decl)
+                        then
+                          oneOffCapabilityRuntime (Just repo.source) decl <&> \case
+                            Left problem -> Left (CompositionFailed (renderOneOffCapabilityError problem))
+                            Right capabilities -> done capabilities Nothing (pure ())
+                        else case run of
+                          Nothing -> pure (Left (CompositionFailed "workspace.edit, workspace.exec and workspace.git need a durable run; use shikigami-agent-run"))
+                          Just runId ->
+                            openRunWorktree stateDirectory decl.name runId repo >>= \case
+                              Left problem -> pure (Left (CompositionFailed (renderWorktreeError problem)))
+                              Right worktree ->
+                                resolveProgram "git" >>= \case
+                                  Nothing -> pure (Left (CompositionFailed "git is not on PATH"))
+                                  Just git -> do
+                                    let local =
+                                          LocalWorkspace
+                                            { stateDirectory,
+                                              agent = decl.name,
+                                              principal = compatibilityPrincipal decl.name,
+                                              repository = repo,
+                                              grant,
+                                              authority = runAuthority,
+                                              record,
+                                              tier = tierLabel,
+                                              launcher = hostProcessLauncher,
+                                              git
+                                            }
+                                    localCapabilityRuntime (worktreeRootPath worktree.root) local <&> \case
+                                      Left problem -> Left (CompositionFailed problem)
+                                      Right capabilities -> done capabilities (Just (localWorkspaceHost local capabilities)) (releaseRunWorktree stateDirectory runId worktree)
 
     recordGrant principal run agentName grant = do
       at <- getCurrentTime
@@ -161,6 +191,33 @@ lightComposition config interaction record =
 
     nothingGranted = authority DecidedByOperator \_ requested ->
       pure (Left (PolicyDenied (actionTag requested <> " is outside the grant: the declaration requests no capabilities")))
+
+-- | Whether a declaration asks for a mutating workspace tool.
+requestsMutation :: AgentDecl -> Bool
+requestsMutation AgentDecl {capabilityOverlays} =
+  any ((`elem` ["workspace.edit", "workspace.exec", "workspace.git"]) . capabilityIdText) capabilityOverlays
+
+-- | @workspace.read@ scoped to the run's worktree, plus the local durable
+-- adapters. The catalog admits exactly these descriptors; the run's authority
+-- decides each call.
+localCapabilityRuntime :: FilePath -> LocalWorkspace -> IO (Either Text CapabilityRuntime)
+localCapabilityRuntime root local =
+  resolveWorkspaceScope (Just root) <&> \case
+    Left problem -> Left (renderWorkspaceError problem)
+    Right scope -> do
+      let descriptors = workspaceReadDescriptor : localWorkspaceDescriptors
+      catalog <- first (Text.pack . show) (mkCapabilityCatalog descriptors)
+      generic <- first (Text.pack . show) (mkCapabilityProviderRegistry [workspaceReadProvider scope])
+      providers <- first (Text.pack . show) (installDurableAdapters (localWorkspaceAdapters local) generic)
+      Right
+        CapabilityRuntime
+          { catalog,
+            providers,
+            authorize = \_ descriptor ->
+              if descriptor `elem` descriptors
+                then Right ()
+                else Left (CapabilityAuthorizationDenied descriptor.capability "only the local workspace capabilities are installed")
+          }
 
 -- | The declared principal and the compatibility principal both act for
 -- the agent: durable tools are scoped by the latter.

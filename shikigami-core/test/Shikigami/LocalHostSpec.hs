@@ -1,18 +1,29 @@
 module Shikigami.LocalHostSpec (tests) where
 
 import Control.Exception (SomeException, try)
+import Data.Aeson (Value (..), object, (.=))
+import Data.Aeson.Key qualified as Key
+import Data.Aeson.KeyMap qualified as KeyMap
+import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Unique (hashUnique, newUnique)
 import Keiro.Workflow (WorkflowId (..))
+import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Trigger (..), defaultMemoryPolicy)
+import Shikigami.Agent.DeclarationValue (agentEnablement, declarationCoordinate)
 import Shikigami.Agent.Name (AgentName, mkAgentName)
+import Shikigami.Authority (allowAllForTests)
+import Shikigami.Record (memoryRecord, unspecifiedTier)
 import Shikigami.Repository (repositoryId)
 import Shikigami.Trust.LocalOperator.Approvals
+import Shikigami.Trust.LocalOperator.Grant (Interaction (..), openGrantStore, resolveGrant)
 import Shikigami.Workspace.Launch
+import Shikigami.Workspace.Local.Adapters (LocalWorkspace (..), editTool, gitTool)
 import Shikigami.Workspace.Local.Launcher (hostProcessLauncher)
 import Shikigami.Workspace.Local.Worktree
 import System.Directory (createDirectoryIfMissing, getTemporaryDirectory, removePathForcibly)
 import System.Exit (ExitCode (..))
 import System.FilePath ((</>))
+import System.Posix.Files (createSymbolicLink)
 import System.Posix.Signals (nullSignal, signalProcess)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
@@ -60,18 +71,57 @@ tests =
         openRunWorktree state agent (WorkflowId "run-a") repository >>= \case
           Left WorktreeConflict {} -> pure ()
           other' -> assertFailure ("expected a conflict, got " <> show other'),
+      testCase "one run holds a separate worktree in each of two repositories" $ withRepository \repoA state -> withRepository \repoB _ -> do
+        Right inA <- openRunWorktree state agent (WorkflowId "run-a") (testLocalRepository (repositoryId "mori://test/a") "HEAD" repoA SeparateWorktree)
+        Right inB <- openRunWorktree state agent (WorkflowId "run-a") (testLocalRepository (repositoryId "mori://test/b") "HEAD" repoB SeparateWorktree)
+        assertBool "two roots" (inA.root /= inB.root)
+        assertBool "suffixes differ by repository" (inA.suffix /= inB.suffix),
+      testCase "replace applies, replays idempotently and refuses unsafe paths and stale reads" $ withRepository \repo state -> do
+        local <- fixtureWorkspace repo state
+        Right worktree <- openRunWorktree state agent (WorkflowId "run-a") (localRepo repo SeparateWorktree)
+        let call tool input = editTool local (WorkflowId "run-a") worktree tool input
+            replace path expected content = call "replace" (object ["path" .= (path :: Text), "expected" .= (expected :: Text), "content" .= (content :: Text)])
+        Right created <- replace "docs/NOTES.md" "" "first\n"
+        field "changed" created @?= Just (Bool True)
+        Right replayed <- replace "docs/NOTES.md" "" "first\n"
+        field "changed" replayed @?= Just (Bool False)
+        stale <- replace "docs/NOTES.md" "" "second\n"
+        assertBool "a stale expected digest is refused" (isLeft' stale)
+        Right readBack <- call "read" (object ["path" .= ("docs/NOTES.md" :: Text)])
+        Just (String digest) <- pure (field "contentDigest" readBack)
+        Right _ <- replace "docs/NOTES.md" digest "second\n"
+        mapM_
+          (\path -> replace path "" "x" >>= assertBool ("refused: " <> Text.unpack path) . isLeft')
+          ["../outside", "/etc/passwd", ".git/config", "a/../../b"]
+        createSymbolicLink "/tmp" (worktreeRootPath worktree.root </> "linked")
+        replace "linked/escape.txt" "" "x" >>= assertBool "a symbolic link is refused" . isLeft',
+      testCase "commit refuses a stale parent and records the run in its trailers" $ withRepository \repo state -> do
+        local <- fixtureWorkspace repo state
+        Right worktree <- openRunWorktree state agent (WorkflowId "run-a") (localRepo repo SeparateWorktree)
+        let git' tool input = gitTool local (WorkflowId "run-a") worktree tool input
+        Right _ <- editTool local (WorkflowId "run-a") worktree "replace" (object ["path" .= ("README.md" :: Text), "expected" .= ("" :: Text), "content" .= ("hello\n" :: Text)])
+        Right status <- git' "status" (object [])
+        Just (String parent) <- pure (field "head" status)
+        stale <- git' "commit" (object ["message" .= ("docs: add readme" :: Text), "expectedParent" .= ("0000000" :: Text)])
+        assertBool "a stale parent is refused" (isLeft' stale)
+        Right committed <- git' "commit" (object ["message" .= ("docs: add readme" :: Text), "expectedParent" .= parent])
+        Just (String commit) <- pure (field "commit" committed)
+        Right trailers <- gitIn (worktreeRootPath worktree.root) ["log", "-1", "--format=%(trailers:key=Shikigami-Run,valueonly)", commit]
+        trailers @?= "run-a"
+        again <- git' "commit" (object ["message" .= ("docs: nothing" :: Text), "expectedParent" .= commit])
+        assertBool "nothing to commit is refused" (isLeft' again),
       testCase "in place needs a clean tree and admits one run at a time" $ withRepository \repo state -> do
         let repository = localRepo repo InPlace
         Right held <- openRunWorktree state agent (WorkflowId "run-a") repository
         held.root @?= worktreeRoot repo
+        writeFile (repo </> "edited-by-the-run.txt") "x"
         openRunWorktree state agent (WorkflowId "run-a") repository >>= \case
-          Right _ -> pure ()
-          other -> assertFailure ("the holder may reopen: " <> show other)
+          Right reopened -> reopened.base @?= held.base
+          other -> assertFailure ("the holder may reopen the tree it dirtied: " <> show other)
         openRunWorktree state agent (WorkflowId "run-b") repository >>= \case
           Left CheckoutLocked {} -> pure ()
           other -> assertFailure ("expected a lock refusal, got " <> show other)
         releaseRunWorktree state (WorkflowId "run-a") held
-        writeFile (repo </> "dirty.txt") "x"
         openRunWorktree state agent (WorkflowId "run-b") repository >>= (@?= Left CheckoutDirty)
     ]
   where
@@ -87,6 +137,58 @@ tests =
 
 agent :: AgentName
 agent = either (error . Text.unpack) id (mkAgentName "local-maintainer")
+
+-- | An allow-all, in-memory-recorded workspace over a test repository.
+fixtureWorkspace :: FilePath -> FilePath -> IO LocalWorkspace
+fixtureWorkspace repo state = do
+  (record, _) <- memoryRecord
+  git <- maybe (assertFailure "no git" >> undefined) pure =<< resolveProgram "git"
+  approvals <- either (fail . show) pure =<< pure (Right emptyApprovals :: Either String LocalApprovals)
+  store <- either (fail . show) pure =<< openGrantStore state
+  grant <- either (fail . show) pure =<< resolveGrant (Interactive (\_ -> pure True)) approvals store (\_ -> pure (Right ())) fixtureDecl (localRepo repo SeparateWorktree)
+  pure
+    LocalWorkspace
+      { stateDirectory = state,
+        agent,
+        principal = declarationCoordinate "principal_local_maintainer",
+        repository = localRepo repo SeparateWorktree,
+        grant,
+        authority = allowAllForTests,
+        record,
+        tier = unspecifiedTier,
+        launcher = hostProcessLauncher,
+        git
+      }
+
+fixtureDecl :: AgentDecl
+fixtureDecl =
+  AgentDecl
+    { name = agent,
+      description = "",
+      trigger = Event {eventType = declarationCoordinate "local.maintenance.requested"},
+      behavior = Skill {path = declarationCoordinate "agents/skills/local-maintainer"},
+      sinks = [],
+      delegates = [],
+      execution = Nothing,
+      harness = Nothing,
+      decisionModels = [],
+      delegationBudget = Nothing,
+      sanctionedProfile = Nothing,
+      capabilityOverlays = [],
+      identity = Nothing,
+      memory = defaultMemoryPolicy,
+      enabled = agentEnablement True,
+      expertise = [],
+      routing = Nothing
+    }
+
+field :: Text -> Value -> Maybe Value
+field name = \case
+  Object o -> KeyMap.lookup (Key.fromText name) o
+  _ -> Nothing
+
+isLeft' :: Either a b -> Bool
+isLeft' = either (const True) (const False)
 
 localRepo :: FilePath -> WorkspacePlacement -> LocalRepository
 localRepo = testLocalRepository (repositoryId "mori://test/local-host") "HEAD"

@@ -32,6 +32,11 @@ provenance:
       at: 2026-11-15T16:40:22Z
       mode: "implement"
       note: "M1 implemented: TrustTier, approvals, confirm-once grants, local authority, shikigami-local, ADR-124"
+    - model: "claude-opus-5-5"
+      harness: "claude-code"
+      at: 2026-11-15T17:05:47Z
+      mode: "implement"
+      note: "M2 implemented: local-host launcher, worktrees, local workspace adapters and host; EP-1 complete"
 ---
 
 # Run declared agents on the operator's own machine through a local-operator trust tier
@@ -101,7 +106,7 @@ which gives the kernel its own action type, authority port and action record. Th
   checkout by path resolved the same identity and reused the grant. `LocalOperatorSpec` (13
   cases), the agent `CommandSpec`, the worker tier test and `just haskell-conventions` pass;
   ADR-124 is written.
-- [ ] Milestone 2 — LocalOperator edits, executes and commits in a worktree. The same agent
+- [x] Milestone 2 (2026-11-15) — LocalOperator edits, executes and commits in a worktree. The same agent
   with all four workspace capabilities produces a commit on
   `shikigami/local-maintainer/<suffix>` in fsrs-hs, runs the approved `build` rule under its
   deadline, and has an unapproved rule refused; `shikigami-local ledger --run <id>
@@ -110,7 +115,23 @@ which gives the kernel its own action type, authority port and action record. Th
   The same agent against a repository the operator marked `InPlace` commits directly on that
   checkout's current branch with no worktree or branch created. A second concurrent run, or
   a run against a dirty tree, is refused and appears in the action record.
-
+  Evidence: with the approvals file approving all four capabilities and the rule `build`
+  (`cabal build all --dry-run`) on `mori://shinzui/fsrs-hs`, the real run (`gpt-5.4-mini`, 24
+  turns) added a Building section to `README.md`, was refused rule `release`
+  (`refused denied: rule release is not approved for local-maintainer on mori://shinzui/fsrs-hs`
+  in `shikigami-local ledger --refusals`), ran `build` (`process.finished` … `ExitSuccess`) and
+  committed `f7e88a0` on `shikigami/local-maintainer/598f19875bf8`: one file changed, parent
+  the worktree base `a53bcfe`, trailers `Shikigami-Run:` and `Shikigami-Agent:`. The operator's
+  checkout stayed on `master` at `a53bcfe`, clean. The record holds `workspace.opened`,
+  `process.finished` and `commit.created`. An `InPlace` run against a scratch clone of fsrs-hs
+  committed `008ad08` on its `master` with no worktree or branch and released its lock; the
+  same run against the clone with an uncommitted file was refused (`the checkout has
+  uncommitted changes; an in-place run needs a clean tree`). `LocalHostSpec` covers the deadline
+  killing a detached descendant, the 10 MiB output bound, the cleared environment, worktree
+  derivation, reopening and conflicts, two repositories in one run, idempotent `replace` with
+  path, `.git` and symbolic-link refusals, a stale-parent commit refusal and trailers, and the
+  in-place lock. A dirty tree and a concurrent in-place run are refused when the run's ports are
+  resolved, before admission; they reach the operator's terminal rather than the record.
 
 ## Surprises & Discoveries
 
@@ -263,6 +284,34 @@ which gives the kernel its own action type, authority port and action record. Th
   that must resume, no wire consumers. M1 changes no workflow body or journaled value.
   Rationale: Required before each milestone.
   Date: 2026-11-15
+- Decision: The local tools are `workspace.edit` (`read`, `replace`), `workspace.exec` (`run`)
+  and `workspace.git` (`status`, `diff`, `commit`) at revision `local-1`. Each asks the run's
+  authority for `UseCapability (InvokeTool <tool>)` before IO; `workspace.exec` asks for the
+  tool `run-<rule>`, so the local policy refuses an unapproved rule as `RuleNotGranted` and the
+  refusal is recorded. `replace` names the digest it read (`expected`) instead of a
+  repository-held receipt.
+  Rationale: The kernel's effects are capability tools (EP-8 M1); a digest makes `replace`
+  idempotent without a store.
+  Date: 2026-11-15
+- Decision: The run's worktree is opened when its ports are resolved, so `workspace.read` is
+  scoped to it, and reopened by every tool and by the host's `load`. An in-place lock records
+  the run and its base; the holder reopens without the clean-tree check. `TierRuntime.release`
+  releases the lock when the run ends, whatever the outcome.
+  Rationale: Found by the real in-place run, whose own edits otherwise refused its next tool.
+  Date: 2026-11-15
+- Decision: A local run that mutates the repository enrolls a resource root with `ActiveWork`
+  1, `LifetimeDescendants` 0, the grant's model and tool attempts, `CostMicroUsd` unbounded, a
+  cutoff of the grant's minutes, and `Tokens` bounded only when `behavior.options.max_tokens`
+  is configured.
+  Rationale: The selection runtime refuses a finite token bound without an output ceiling and
+  reserves output plus the whole context window per attempt.
+  Date: 2026-11-15
+- Decision: Pre-release recheck for milestone 2, 2026-11-15: unchanged. Milestone 2 changes no
+  workflow body. It adds the persisted `FilePolicy` text `local-host-v1` and admits the provider
+  `shikigami.workspace.local/1` in the snapshot parser; both are additive, and no stored snapshot
+  uses them before this change.
+  Rationale: Required before each milestone.
+  Date: 2026-11-15
 - Decision: "`Contained` keeps today's behavior" is restated per executable. The worker's
   authority is selected by `authorization.actions.mode`; the light commands, conversations
   and the server's objective handlers hard-code deny-all.
@@ -275,7 +324,31 @@ which gives the kernel its own action type, authority port and action record. Th
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+EP-1 is complete (2026-11-15; commits 8b09eceb, d77cd183 and the milestone 2 commit). An
+operator runs a declared agent on their own Mac against their own repository with one command
+and one confirmation; it reads, edits, runs approved rules and commits on a run branch (or in
+place where they chose), and every grant, decision and effect is in the action record. No Kikan
+service is involved.
+
+What changed from the plan. The host-process code (checkout resolver, launcher, worktrees and
+the three adapters) lives in the public sublibrary `shikigami-core:local-host` and in
+`shikigami-agent`, not in the domain library, because core may not link `process`
+([ADR-125](../adr/0125-host-process-adapters-live-in-a-public-local-host-sublibrary.md)). The
+persisted execution snapshot had a provider whitelist that refused the local admission; it now
+admits `shikigami.workspace.local/1` explicitly. A finite token bound reserves each attempt's
+output plus its whole context window, so a local run bounds tokens only when
+`behavior.options.max_tokens` is set. Two real defects were found by the real runs, not by the
+plan: an in-place run's own edits made every later tool refuse (the reopen re-checked the clean
+tree), and the symbolic-link check resolved paths against the process directory instead of the
+worktree; both are fixed and tested.
+
+Left open. A run's worktree is opened when its ports are resolved, so a run that fails before its
+first tool leaves an unused branch; a cleanup command is future work. A crashed in-place run
+leaves its lock, which names the run and is removed by hand. Dirty-tree and in-place-lock
+refusals happen at resolution and so are reported on the terminal, not in the record.
+
+Friction: FRIC-74 (`mori status --json` exits 1 on any project issue) is accepted with the
+resolver's workaround.
 
 
 ## Context and Orientation

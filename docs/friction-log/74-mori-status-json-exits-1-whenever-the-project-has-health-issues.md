@@ -6,13 +6,18 @@ generated:
   by: "claude-code/claude-opus-5-5"
   at: "2026-11-15T16:38:33Z"
 frictionId: FRIC-74
-status: logged
+status: "accepted"
 impact: detour
 kind: interface
 origin: "mori://shinzui/shikigami"
 affects: "mori://shinzui/mori"
 plan: "docs/plans/126-run-declared-agents-on-the-operator-s-own-machine-through-a-local-operator-trust-tier.md"
 workaround: "parse the JSON document whatever the exit code"
+resolution: "Shikigami.Agent.Checkout reads the status document whatever the exit code and decodes it as UTF-8; an improvement request to mori for an identity-only command is worth filing by its owner."
+amended:
+  - by: "claude-code/claude-opus-5-5"
+    at: "2026-11-15T17:05:46Z"
+    change: "EP-1 complete: the workaround is permanent in the checkout resolver"
 ---
 # mori status --json exits 1 whenever the project has health issues
 

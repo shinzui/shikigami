@@ -225,3 +225,20 @@ exact. The complete proposal is limited to 32 KiB and 256 changed paths.
 The integration planner supplies no ownership authority. Transfer continues to
 require the session fence and separate real objective receipt, even when all
 worker and combined validations succeed.
+
+## Local-operator worktrees
+
+Under `trust.tier=local-operator` the light commands do not use the supervised store above. A run
+that requests `workspace.edit`, `workspace.exec` or `workspace.git` works in a Git worktree of the
+operator's own checkout, created by `git worktree add` at
+`<trust.local_operator.state_dir>/worktrees/<namespace>-<project>/<suffix>` on the branch
+`shikigami/<agent>/<suffix>`, where the suffix is derived from the run and the repository. The
+tools are `workspace.edit`, `workspace.exec` and `workspace.git` at revision `local-1`, admitted
+under the file policy `local-host-v1` and the provider `shikigami.workspace.local/1`; they run as
+the operator with no systemd, cgroup or reserved identity, which is the point of the tier and why
+it is the operator's own machine only
+([ADR-124](../adr/0124-authority-is-selected-by-trust-tier-and-the-local-operator-grants-a-declaration-once.md),
+[ADR-125](../adr/0125-host-process-adapters-live-in-a-public-local-host-sublibrary.md)). An
+`InPlace` repository is worked on directly under an exclusive lock in
+`<state_dir>/locks/<repository>.lock`; a lock left by a crashed run names its run id and is removed
+by hand once that run is known to be gone. See [the operator guide](../user/local-operator.md).

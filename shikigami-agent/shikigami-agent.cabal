@@ -73,6 +73,7 @@ library
     settei-env,
     settei-optparse-applicative,
     shikigami-core,
+    shikigami-core:local-host,
     shikigami-migrations,
     shikumi ==0.5.1.0,
     shikumi-tools ==0.4.2.1,

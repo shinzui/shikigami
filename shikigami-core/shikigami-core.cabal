@@ -610,6 +610,7 @@ library local-host
   visibility: public
   hs-source-dirs: local-host
   exposed-modules:
+    Shikigami.Workspace.Local.Adapters
     Shikigami.Workspace.Local.Launcher
     Shikigami.Workspace.Local.Worktree
 
@@ -619,10 +620,12 @@ library local-host
     base,
     bytestring,
     directory,
+    effectful-core,
     filepath,
     keiro,
     process,
     shikigami-core,
+    shikumi-tools,
     text,
     time,
     unix,

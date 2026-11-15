@@ -26,6 +26,7 @@ import Shikigami.Record (ActionRecord)
 import Shikigami.Trust.LocalOperator.Approvals (ApprovalsError, RepositorySelector, renderApprovalsError)
 import Shikigami.Trust.LocalOperator.Grant (GrantRefusal, LocalGrant, renderGrantRefusal)
 import Shikigami.Trust.Tier (TrustTier, trustTierText)
+import Shikigami.Workspace.Admission (WorkspaceHost)
 
 -- | What a run is: the declaration, the principal it acts as, its run (absent
 -- for a database-free one-off) and the repository it works in, when the
@@ -44,8 +45,14 @@ data TierRuntime = TierRuntime
     authority :: !Authority,
     record :: !ActionRecord,
     capabilities :: !CapabilityRuntime,
+    -- | The host that admits mutating workspace tools, when the tier
+    -- composes one for this run.
+    workspace :: !(Maybe WorkspaceHost),
     -- | The grant the run executes under, for tiers that have one.
-    grant :: !(Maybe LocalGrant)
+    grant :: !(Maybe LocalGrant),
+    -- | Release what the composition holds for the run (an in-place lock).
+    -- Called when the run ends, whatever its outcome.
+    release :: !(IO ())
   }
 
 data TierComposition = TierComposition

@@ -11,5 +11,6 @@ in  A.Agent::{
     , behavior = A.Behavior.Skill { path = "agents/skills/local-maintainer" }
     , trigger = A.Trigger.Event { eventType = "local.maintenance.requested" }
     , identity = Some { principal = "principal_local_maintainer" }
-    , capabilityOverlays = [ "workspace.read" ]
+    , capabilityOverlays =
+      [ "workspace.read", "workspace.edit", "workspace.exec", "workspace.git" ]
     }

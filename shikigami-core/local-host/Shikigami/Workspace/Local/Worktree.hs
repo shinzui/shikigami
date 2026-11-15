@@ -22,6 +22,7 @@ import Control.Exception (IOException, try)
 import Data.Aeson (object, (.=))
 import Data.Bifunctor (first)
 import Data.Char (isAlphaNum, isHexDigit)
+import Data.Functor ((<&>))
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Keiro.Workflow (WorkflowId (..))
@@ -110,20 +111,31 @@ openRunWorktree stateDirectory agent runId repository = case repository.placemen
                   added <- gitIn repository.source ["worktree", "add", "--quiet", "-b", runBranch, Text.pack rootPath, baseCommit]
                   pure (first GitFailed added >> Right worktree)
 
-    openInPlace = do
-      status <- gitIn repository.source ["status", "--porcelain"]
-      current <- gitIn repository.source ["symbolic-ref", "--short", "HEAD"]
-      commit <- gitIn repository.source ["rev-parse", "--verify", "HEAD^{commit}"]
-      case (status, current, commit) of
-        (Left detail, _, _) -> pure (Left (GitFailed detail))
-        (Right porcelain, _, _) | not (Text.null porcelain) -> pure (Left CheckoutDirty)
-        (_, Left _, _) -> pure (Left DetachedHead)
-        (_, _, Left detail) -> pure (Left (BaseUnresolvable detail))
-        (Right _, Right branchName, Right headCommit) ->
-          acquireLock (lockPath stateDirectory directoryName) runId >>= \case
-            Left holder -> pure (Left (CheckoutLocked holder))
-            Right () ->
-              pure (Right RunWorktree {repository = repository.identity, source = repository.source, root = worktreeRoot repository.source, branch = branchName, base = headCommit, placement = InPlace, suffix})
+    -- The run that holds the lock reopens without the clean-tree check: its
+    -- own edits are what made the tree dirty. The lock records the base.
+    openInPlace =
+      heldBy (lockPath stateDirectory directoryName) >>= \case
+        Just (holder, heldBase)
+          | holder == runId.unWorkflowId ->
+              gitIn repository.source ["symbolic-ref", "--short", "HEAD"] <&&> \branchName ->
+                pure (Right (inPlace branchName heldBase))
+        Just (holder, _) -> pure (Left (CheckoutLocked holder))
+        Nothing -> do
+          status <- gitIn repository.source ["status", "--porcelain"]
+          current <- gitIn repository.source ["symbolic-ref", "--short", "HEAD"]
+          commit <- gitIn repository.source ["rev-parse", "--verify", "HEAD^{commit}"]
+          case (status, current, commit) of
+            (Left detail, _, _) -> pure (Left (GitFailed detail))
+            (Right porcelain, _, _) | not (Text.null porcelain) -> pure (Left CheckoutDirty)
+            (_, Left _, _) -> pure (Left DetachedHead)
+            (_, _, Left detail) -> pure (Left (BaseUnresolvable detail))
+            (Right _, Right branchName, Right headCommit) ->
+              acquireLock (lockPath stateDirectory directoryName) runId headCommit <&> \case
+                Left holder -> Left (CheckoutLocked holder)
+                Right () -> Right (inPlace branchName headCommit)
+
+    inPlace branchName headCommit =
+      RunWorktree {repository = repository.identity, source = repository.source, root = worktreeRoot repository.source, branch = branchName, base = headCommit, placement = InPlace, suffix}
 
     action <&&> continue = action >>= either (pure . Left . GitFailed) continue
 
@@ -133,28 +145,38 @@ releaseRunWorktree stateDirectory runId RunWorktree {placement, repository}
   | placement /= InPlace = pure ()
   | otherwise = do
       let path = lockPath stateDirectory (Text.unpack (Text.map (\c -> if isAlphaNum c then c else '-') (snd (Text.breakOnEnd "//" (repositoryIdText repository)))))
-      holder <- try @IOException (readFile path)
-      case holder of
-        Right contents | Text.strip (Text.pack contents) == runId.unWorkflowId -> removeFile path
+      heldBy path >>= \case
+        Just (holder, _) | holder == runId.unWorkflowId -> removeFile path
         _ -> pure ()
 
 lockPath :: FilePath -> FilePath -> FilePath
 lockPath stateDirectory name = stateDirectory </> "locks" </> (name <> ".lock")
 
--- | Create the lock exclusively, or accept it when this run already holds it.
-acquireLock :: FilePath -> WorkflowId -> IO (Either Text ())
-acquireLock path runId = do
+-- | The run holding a lock and the base it recorded, when the lock exists.
+heldBy :: FilePath -> IO (Maybe (Text, Text))
+heldBy path = do
+  exists <- fileExist path
+  if not exists
+    then pure Nothing
+    else
+      try @IOException (readFile path) <&> \case
+        Right contents -> case Text.lines (Text.pack contents) of
+          holder : heldBase : _ -> Just (Text.strip holder, Text.strip heldBase)
+          [holder] -> Just (Text.strip holder, "")
+          [] -> Just ("unknown", "")
+        Left _ -> Just ("unknown", "")
+
+-- | Create the lock exclusively, recording the run and its base commit.
+acquireLock :: FilePath -> WorkflowId -> Text -> IO (Either Text ())
+acquireLock path runId baseCommit = do
   createDirectoryIfMissing True (takeDirectory path)
   created <- try (openFd path WriteOnly defaultFileFlags {exclusive = True, creat = Just 0o600})
   case created of
     Right fd -> do
       closeFd fd
-      withFile path WriteMode (`hPutStr` Text.unpack runId.unWorkflowId)
+      withFile path WriteMode (`hPutStr` Text.unpack (runId.unWorkflowId <> "\n" <> baseCommit <> "\n"))
       pure (Right ())
-    Left (_ :: IOException) -> do
-      exists <- fileExist path
-      holder <- if exists then Text.strip . Text.pack <$> readFile path else pure "unknown"
-      pure (if holder == runId.unWorkflowId then Right () else Left holder)
+    Left (_ :: IOException) -> maybe (Left "unknown") (Left . fst) <$> heldBy path
 
 -- | The @workspace.opened@ record entry: the repository, the placement, the
 -- root, the branch and the base commit (the documented undo point).

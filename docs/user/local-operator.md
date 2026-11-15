@@ -61,6 +61,34 @@ refused when it is resolved, before any model call:
 agent-run: the declaration lists outputs this composition cannot deliver: kizashi.signal
 ```
 
+## Editing, running and committing
+
+Grant `workspace.edit`, `workspace.exec` and `workspace.git` (in the approvals file, which is also
+where command rules are approved) and the agent works in its own Git worktree on a run branch:
+
+```text
+local-operator: worktree ~/.local/state/shikigami/worktrees/shinzui-fsrs-hs/598f19875bf8 on shikigami/local-maintainer/598f19875bf8 from a53bcfe
+local-operator: commit f7e88a0 on shikigami/local-maintainer/598f19875bf8
+local-operator: record 17 approved, 1 refused — shikigami-local ledger --run b96bfa61-…
+```
+
+`workspace.edit` reads and replaces files (a `replace` names the digest it read, so a stale edit
+is refused and a replay is harmless); `..`, absolute paths, `.git` and symbolic links are refused.
+`workspace.exec` runs only approved rules, each under its deadline with bounded output, in its own
+process group; any other rule is refused and recorded. `workspace.git` shows `status` and `diff`
+and makes one commit against the `HEAD` the agent last saw, with `Shikigami-Run:` and
+`Shikigami-Agent:` trailers and without signing or hooks (the branch is a proposal you review).
+Your checkout and its current branch are untouched. Review with
+`git log shikigami/local-maintainer/<suffix>`; discard with `git worktree remove <root>` and
+`git branch -D <branch>`.
+
+A repository marked `placement = L.Placement.InPlace` is worked on directly, on its current
+branch, with no worktree or branch. Use it only where nobody else is working. The run refuses a
+dirty tree or a detached `HEAD`, holds an exclusive lock under `<state>/locks/` until it ends, and
+records the starting commit, so `git reset --hard <base>` undoes it. A run that mutates the
+repository spends under a resource root sized by the grant's budget; tokens are bounded only when
+`behavior.options.max_tokens` is set.
+
 ## What you granted, and what happened
 
 ```bash
@@ -106,6 +134,6 @@ empty set of approvals.
 |-----|---------|---------|
 | `trust.tier` (`SHIKIGAMI_TRUST_TIER`) | `contained` | `local-operator`, `contained` or `multi-tenant`. |
 | `trust.local_operator.approvals_file` | `$XDG_CONFIG_HOME/shikigami/local-operator.dhall` | The explicit approvals file. |
-| `trust.local_operator.state_dir` | `$XDG_STATE_HOME/shikigami` | Stored grants (and, later, worktrees and locks). |
+| `trust.local_operator.state_dir` | `$XDG_STATE_HOME/shikigami` | Stored grants, run worktrees and in-place locks. |
 
 `shikigami-worker` refuses `local-operator`; use the two light commands.
