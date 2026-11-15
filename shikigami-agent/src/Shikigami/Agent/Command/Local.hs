@@ -48,6 +48,7 @@ import Shikigami.Capability.Mcp.Local (McpSession (..), mcpBindingRevision, open
 import Shikigami.Capability.Overlay (CapabilityDescriptor (..), capabilityIdText, capabilityRevisionText)
 import Shikigami.DeclaredTool.Local (ToolAttemptResult (..))
 import Shikigami.Migrations (verifyShikigamiMigrations)
+import Shikigami.Playbook (loadBundle, renderStepTree)
 import Shikigami.Record
 import Shikigami.Repository (repositoryId, repositoryIdText)
 import Shikigami.Trust.LocalOperator.Approvals
@@ -77,6 +78,8 @@ data LocalCommand
     -- seconds, output bound, the two output files, the program and its
     -- arguments. Prints the result as JSON when the command ends.
     ToolAttempt !Natural !Natural !FilePath !FilePath !FilePath ![Text]
+  | -- | Load and check a playbook bundle and print its step tree (EP-4).
+    ValidatePlaybook !FilePath
   | -- | Claude Code's PreToolUse hook: decide one call against the run's
     -- declared tools (@tools.json@) and record the decision beside it.
     Gate !FilePath
@@ -162,6 +165,10 @@ runLocal command config = case command of
           Left (NoStoredGrant _) -> exitWith (ExitFailure 3)
           Left _ -> exitWith (ExitFailure 1)
   Gate toolsFile -> runGate toolsFile
+  ValidatePlaybook path ->
+    loadBundle path >>= \case
+      Left problems -> mapM_ (TextIO.putStrLn . ("refused: " <>)) problems >> exitFailure
+      Right bundle -> mapM_ TextIO.putStrLn (renderStepTree bundle)
   ToolAttempt seconds outputBytes stdoutFile stderrFile program arguments -> do
     located <- resolveProgram (Text.pack program) >>= maybe (die ("the executable " <> Text.pack program <> " is not found")) pure
     deadline <- either die pure (mkLaunchDeadline seconds)

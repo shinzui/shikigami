@@ -73,6 +73,7 @@ import Shikigami.ObjectiveTrackerSpec qualified as ObjectiveTrackerSpec
 import Shikigami.OutputsSpec qualified as OutputsSpec
 import Shikigami.PackageArchitectureSpec qualified as PackageArchitectureSpec
 import Shikigami.PayloadValueSpec qualified as PayloadValueSpec
+import Shikigami.PlaybookSpec qualified as PlaybookSpec
 import Shikigami.PracticeReviewEvidenceSpec qualified as PracticeReviewEvidenceSpec
 import Shikigami.PracticeReviewSpec qualified as PracticeReviewSpec
 import Shikigami.ProcessLocalSpec qualified as ProcessLocalSpec
@@ -179,6 +180,7 @@ main =
           LocalHostSpec.tests,
           DeclaredToolsSpec.tests,
           OutputsSpec.tests,
+          PlaybookSpec.tests,
           ProcessLocalSpec.tests,
           CodingAgentSpec.tests,
           PracticeReviewEvidenceSpec.tests,

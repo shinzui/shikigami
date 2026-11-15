@@ -116,7 +116,7 @@ localRoleInfo =
         withConfigOptions
           "shikigami-local"
           "Inspect local-operator grants and the action record"
-          (subparser (newRoutine <> runRoutineCommand <> runsCommand <> doctor <> up) <|> (runLocal <$> subparser (approvals <> revoke <> ledger <> tools <> mcp <> gate <> toolAttempt)))
+          (subparser (newRoutine <> runRoutineCommand <> runsCommand <> doctor <> up) <|> (runLocal <$> subparser (approvals <> revoke <> ledger <> tools <> mcp <> gate <> toolAttempt <> playbook)))
           (pure [])
     }
   where
@@ -203,6 +203,13 @@ localRoleInfo =
                 <*> many (Text.pack <$> strArgument (metavar "ARG…"))
             )
             (progDesc "Internal: run one declared command for a durable step and print its result")
+        )
+    playbook =
+      command
+        "playbook"
+        ( info
+            (hsubparser (command "validate" (info (ValidatePlaybook <$> strArgument (metavar "BUNDLE.dhall")) (progDesc "Load and check a playbook bundle and print its step tree"))))
+            (progDesc "Work with playbook bundles")
         )
     gate = command "gate" (info (Gate <$> strArgument (metavar "TOOLS.json" <> help "The run's declared tools, written by the coding-agent runner")) (progDesc "Claude Code's PreToolUse hook: allow or deny one call against a run's declared tools"))
     approvals =

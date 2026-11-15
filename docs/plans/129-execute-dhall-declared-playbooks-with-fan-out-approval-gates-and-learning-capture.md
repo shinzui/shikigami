@@ -27,6 +27,11 @@ provenance:
       at: 2026-11-15T14:47:54Z
       mode: "update"
       note: "MasterPlan 22 review cascade: EP-8 ports, payload and step-output items, durable Tool steps, drain rule and EP-11 baseline gate"
+    - model: "claude-opus-5-5"
+      harness: "claude-code"
+      at: 2026-11-15T23:06:59Z
+      mode: "implement"
+      note: "M1 accepted: playbook format, checked loader, shikigami-local playbook validate"
 ---
 
 # Execute Dhall-declared playbooks with fan-out, approval gates, and learning capture
@@ -62,10 +67,19 @@ it is never applied to a run already in progress.
 
 ## Progress
 
-- [ ] Milestone 1: The playbook format, the `Playbook` behavior arm and the checked loader
+- [x] Milestone 1 (2026-11-15): The playbook format, the `Playbook` behavior arm and the checked loader
   exist. `shikigami playbook validate agents/two-repo-review.dhall` prints the step tree of a
   real two-repository playbook, and it refuses bad template references, unknown sub-playbooks,
   cycles and observed values in a workspace field, naming the step that is wrong.
+  Evidence: `schema/Playbook.dhall` and `Shikigami.Playbook`. `shikigami-local playbook
+  validate agents/playbooks/two-repo-review.dhall` printed the step tree (`each-repository for
+  each repository in run.repositories run review-one`, then `improve` and `continue` under
+  `review-one`). A bundle with a cycle, an unknown sibling and an undefined template reference
+  was refused with `playbooks run each other in a cycle: a -> b -> a`, `a/missing: no playbook
+  named nowhere in the bundle` and `a/fix: {{repo}} names no run parameter or enclosing item`,
+  exit 1. Tests: `playbooks` in `shikigami-core:test`. The `Playbook` behavior arm lands with
+  the interpreter in M2; there are no step outputs yet, so the observed-value rule waits for
+  M4's output fields.
 - [ ] Milestone 2: The durable interpreter runs `CodingAgent` (with attached skills and named
   output fields), `Approval`, nested `Playbook`, `ForEach` over literal items or items from the
   run's trigger payload, and conditions, and it tracks progress per item in an objective. The
@@ -182,6 +196,14 @@ it is never applied to a run already in progress.
   belongs in its skills.
   Date: 2026-11-15
 
+
+- Decision (M1): The format is simpler than the plan's sketch: steps are `CodingAgent` (prompt,
+  workspace template, deadline), `Tool`, `Approval`, `ForEach` (literal or payload items, the
+  variable name in `item`, a sibling playbook) and `RunPlaybook`; conditions, skills, output
+  fields and `Reflect` join with the milestones that run them (ADR-1). `validate` is a
+  `shikigami-local playbook` subcommand, beside the other local-operator commands.
+  Rationale: `as` is a Dhall keyword, and each field now has a runtime that honours it.
+  Date: 2026-11-15
 
 ## Outcomes & Retrospective
 

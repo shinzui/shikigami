@@ -300,6 +300,7 @@ library
     Shikigami.ObjectiveTrackerLookup.ReadModelHoles
     Shikigami.Output
     Shikigami.Output.Local
+    Shikigami.Playbook
     Shikigami.PracticeReview
     Shikigami.PracticeReview.Attention
     Shikigami.PracticeReview.Authorization
@@ -713,6 +714,7 @@ test-suite shikigami-core-test
     Shikigami.OutputsSpec
     Shikigami.PackageArchitectureSpec
     Shikigami.PayloadValueSpec
+    Shikigami.PlaybookSpec
     Shikigami.PracticeReviewEvidenceSpec
     Shikigami.PracticeReviewSpec
     Shikigami.ProcessLocalSpec
