@@ -101,6 +101,7 @@ behaviorKindText b = case b of
   Deterministic {} -> "Deterministic"
   Flow {} -> "Flow"
   CodingAgent {} -> "CodingAgent"
+  Playbook {} -> "Playbook"
 
 -- | Turn the behavior's output JSON into a memory's @content@: prefer a @summary@ or
 -- @reply@ string field, falling back to the compact JSON encoding.

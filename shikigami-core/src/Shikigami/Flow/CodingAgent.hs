@@ -14,6 +14,7 @@ module Shikigami.Flow.CodingAgent
     CodingAgentEnv (..),
     codingAgentKey,
     runCodingAgentStep,
+    runCodingAgentStepIn,
     runCodingAgent,
     unavailableCodingAgent,
   )
@@ -33,7 +34,7 @@ import Shikigami.CodingAgent.Types (CodingAgentOutcome (..), CodingAgentStep, Fa
 import Shikigami.CodingAgent.Workflow (runCodingAgentChild)
 
 data CodingAgent :: Effect where
-  RunCodingAgentStep :: DeclarationCoordinate "coding-agent-key" -> CodingAgentStep -> Value -> CodingAgent m CodingAgentOutcome
+  RunCodingAgentStep :: Maybe Text -> DeclarationCoordinate "coding-agent-key" -> CodingAgentStep -> Value -> CodingAgent m CodingAgentOutcome
 
 type instance DispatchOf CodingAgent = Dynamic
 
@@ -55,12 +56,17 @@ codingAgentKey = declarationCoordinate
 -- | Run one coding-agent step under a key, with the payload quoted to the
 -- agent as evidence.
 runCodingAgentStep :: (CodingAgent :> es) => DeclarationCoordinate "coding-agent-key" -> CodingAgentStep -> Value -> Eff es CodingAgentOutcome
-runCodingAgentStep key requested payload = send (RunCodingAgentStep key requested payload)
+runCodingAgentStep key requested payload = send (RunCodingAgentStep Nothing key requested payload)
+
+-- | Run one coding-agent step in another repository (a @mori://@ identity or
+-- a checkout path) than the run's; the tier resolves its grant and worktree.
+runCodingAgentStepIn :: (CodingAgent :> es) => Text -> DeclarationCoordinate "coding-agent-key" -> CodingAgentStep -> Value -> Eff es CodingAgentOutcome
+runCodingAgentStepIn repository key requested payload = send (RunCodingAgentStep (Just repository) key requested payload)
 
 runCodingAgent :: (Workflow :> es, Store :> es, IOE :> es) => CodingAgentEnv -> Eff (CodingAgent : es) a -> Eff es a
 runCodingAgent CodingAgentEnv {agent, identity, repository, tools} =
   interpret \_ -> \case
-    RunCodingAgentStep key requested payload -> runCodingAgentChild agent identity key requested payload repository tools
+    RunCodingAgentStep elsewhere key requested payload -> runCodingAgentChild agent identity key requested payload (maybe repository Just elsewhere) tools
 
 -- | For harnesses that run flow bodies without a run to attach children to.
 unavailableCodingAgent :: Eff (CodingAgent : es) a -> Eff es a

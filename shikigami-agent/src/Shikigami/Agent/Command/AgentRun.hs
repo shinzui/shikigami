@@ -239,7 +239,7 @@ runDurableAgent logger store@KirokuStore {pool} appEnv workspace triggerPayload 
             AgentWorkflow.rei = ReiConfig {baseUrl = (.reiBaseUrl) config},
             AgentWorkflow.http = sinkHttp,
             AgentWorkflow.hooks = AgentWorkflow.defaultAgentRunHooks,
-            AgentWorkflow.codingAgents = fixedCodingAgentRunner tierRuntime.codingAgents,
+            AgentWorkflow.codingAgents = tierRuntime.codingAgents,
             AgentWorkflow.outputs = tierRuntime.outputs,
             AgentWorkflow.declaredTools = tierRuntime.declaredTools,
             AgentWorkflow.approvalPolicy = approvalPolicy,

@@ -80,12 +80,26 @@ it is never applied to a run already in progress.
   exit 1. Tests: `playbooks` in `shikigami-core:test`. The `Playbook` behavior arm lands with
   the interpreter in M2; there are no step outputs yet, so the observed-value rule waits for
   M4's output fields.
-- [ ] Milestone 2: The durable interpreter runs `CodingAgent` (with attached skills and named
+- [x] Milestone 2 (2026-11-15): The durable interpreter runs `CodingAgent` (with attached skills and named
   output fields), `Approval`, nested `Playbook`, `ForEach` over literal items or items from the
   run's trigger payload, and conditions, and it tracks progress per item in an objective. The
   operator can start, show and approve a run, and approvals park on EP-8's `local.inbox`
   channel. On the operator's Mac, a two-repository run pauses at an approval, survives a worker
   kill and restart, and resumes without repeating its completed coding-agent step.
+  Evidence: `agents/playbooks/two-repo-review-agent.dhall` (a `Playbook` behavior, Claude Code
+  with edit access) ran `two-repo-review.dhall` over the payload's
+  `["mori://shinzui/fsrs-hs","mori://shinzui/mina"]` (run
+  `28371b10-8f51-55ed-8ad8-8b5dedf0625a`). Step `each-repository.0.improve` committed
+  `9beecfe` in fsrs-hs (a Haddock comment in `src/FSRS/Dataset.hs`) and the run stopped at
+  `each-repository.0.continue`, printing `shikigami-local approvals resolve review_c776682b…`.
+  After approval, `--resume` asked once for the mina grant and launched
+  `each-repository.1.improve` (pid 61156); `shikigami-agent-run` was killed with SIGKILL seven
+  seconds later. The next `--resume` reattached to pid 61156 (ledger
+  `coding-agent.reattached`), collected `6fed689` in mina and stopped at the second approval;
+  the last `--resume` completed with `{"outcome":"completed", … "summary":"playbook
+  two-repo-review completed 4 steps"}`. The attempts directory holds one attempt per step and
+  the fsrs-hs step was never launched again. Conditions and objectives are not part of M2 (see
+  the Decision Log).
 - [ ] Milestone 3: `Reflect` records playbook-scoped Kioku learnings. Later items receive them
   as quoted evidence in their prompts, and a playbook suggestion becomes a validated Git
   branch. In a real run, the first repository's learning appears in the second repository's
@@ -203,6 +217,28 @@ it is never applied to a run already in progress.
   fields and `Reflect` join with the milestones that run them (ADR-1). `validate` is a
   `shikigami-local playbook` subcommand, beside the other local-operator commands.
   Rationale: `as` is a Dhall keyword, and each field now has a runtime that honours it.
+  Date: 2026-11-15
+
+- Decision (M2): A playbook runs inside the agent run as a flow body, not as its own
+  `shikigami.playbook-run` child with one transition per generation. The behavior pins the
+  checked bundle in the new step `playbook-admission`, then hands `runPlaybook` to the same
+  flow interpreters as a registered flow. Every effect is an existing keyed child family
+  (`child coding-agent`, `child declared-tool`, `child approval`) keyed by the step's path in
+  the bundle (`each-repository.1.improve`), so the parent journal gains no run-time labels and
+  `just keiro-gate` checks every static one.
+  Rationale: The flow capabilities already give durable, keyed, replay-safe children and the
+  approval path; a second interpreter workflow would duplicate them. The journal grows by two
+  entries per step, which bounds a run to a bundle's size times its items; `continueAsNew`
+  waits for a playbook large enough to need it.
+  Date: 2026-11-15
+- Decision (M2): The local-operator composition resolves coding-agent runners per step
+  (`TierRuntime.codingAgents` is now `CodingAgentRunners`). A step naming another
+  repository is selected through the same approvals, granted for the declaration (asked once,
+  then read from the grant store) and works in its own worktree of the run. `playbook start`,
+  `show` and `approve` are the existing `shikigami-agent-run`, its report and
+  `shikigami-local ledger`, and `shikigami-local approvals`; progress objectives wait.
+  Rationale: The grant covers a declaration and a repository (ADR 0124), so each repository is
+  confirmed by the operator; no new command was needed to start, inspect or answer a run.
   Date: 2026-11-15
 
 ## Outcomes & Retrospective

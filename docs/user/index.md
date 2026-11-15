@@ -21,6 +21,7 @@ okf_version: "0.2"
 - [Link objectives to external trackers](objective-trackers.md) - Bind an existing Rei intention, review external proposals, and recover uncertain publication without duplicate actions.
 - [Durable objectives](objectives.md) - Create and continue an objective across runs and conversations, then explicitly accept its integrated result.
 - [Where a run's result goes](outputs.md) - Declare a run's outputs, rely on the composition's default (a local report under the local operator), require an approval before delivery, and resolve it from the local inbox.
+- [Playbooks](playbooks.md) - Declare a multi-step, multi-repository procedure in Dhall, check it, and run it durably with coding agents, declared tools and approvals.
 - [Routine agents](routine-agents.md) - Create a routine agent with one command, run it in a repository with one confirmation, schedule it on your machine, and see and fix its runs.
 - [Skills — authoring a SKILL.md behavior](skills.md) - Author and validate a skill directory for a Shikigami Skill behavior.
 - [Typed decisions in Flows](typed-decisions.md) - Configure model aliases, run the typed decision example, and preserve governed results and attempt evidence on replay.

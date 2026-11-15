@@ -301,6 +301,7 @@ library
     Shikigami.Output
     Shikigami.Output.Local
     Shikigami.Playbook
+    Shikigami.Playbook.Run
     Shikigami.PracticeReview
     Shikigami.PracticeReview.Attention
     Shikigami.PracticeReview.Authorization

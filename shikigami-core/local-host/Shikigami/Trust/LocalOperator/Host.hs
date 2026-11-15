@@ -27,7 +27,7 @@ import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Time (getCurrentTime)
 import Keiro.Workflow (WorkflowId (..))
-import Shikigami.Agent.Decl (AgentDecl (..), IdentityDecl (..), codingAgentStepOf)
+import Shikigami.Agent.Decl (AgentDecl (..), IdentityDecl (..), codingAgentAccessOf)
 import Shikigami.Agent.DeclarationValue (declarationCoordinate, declarationCoordinateText)
 import Shikigami.Agent.Name (AgentName, agentNameText)
 import Shikigami.Agent.Principal (compatibilityIdentity, identityText)
@@ -106,7 +106,7 @@ queuedCodingAgents paths record agents CodingAgentStepInput {agent, parent, repo
   case filter (\decl -> decl.name == agent) agents of
     [] -> pure (Left (TierRefused ("agent " <> agentNameText agent <> " is not loaded by this worker")))
     decl : _
-      | not (isJust (codingAgentStepOf decl.behavior)) -> pure (Left (TierRefused ("agent " <> agentNameText agent <> " does not declare a coding agent")))
+      | not (isJust (codingAgentAccessOf decl.behavior)) -> pure (Left (TierRefused ("agent " <> agentNameText agent <> " does not declare a coding agent")))
       | otherwise -> case repository of
           Nothing -> pure (Left (WorkspaceUnavailable "a queued coding-agent run names no repository; enqueue it with --workspace"))
           Just named -> do

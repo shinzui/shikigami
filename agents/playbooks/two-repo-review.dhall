@@ -21,7 +21,7 @@ in  { main = "two-repo-review"
         , steps =
           [ P.Step.CodingAgent
               { id = "improve"
-              , prompt = "In {{repository}}, address one instance of: {{run.focus}}. Change nothing else."
+              , prompt = "This worktree is {{repository}}. Fix exactly one instance of: {{run.focus}}. Add a short, accurate Haddock comment; change nothing else and do not build."
               , workspace = "{{repository}}"
               , deadlineMinutes = 20
               }

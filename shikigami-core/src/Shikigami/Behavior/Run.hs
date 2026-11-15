@@ -176,6 +176,8 @@ runBehavior env decl input
       -- recovery; it has no in-process behavior.
       CodingAgent {} ->
         pure (Left (UnsupportedBehavior "CodingAgent runs only as a durable agent run"))
+      Playbook {} ->
+        pure (Left (UnsupportedBehavior "Playbook runs only as a durable agent run"))
       CoordinatingSkill {} ->
         pure (Left (UnsupportedBehavior "CoordinatingSkill requires an admitted durable coordination scope"))
       Deterministic {} ->

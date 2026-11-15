@@ -79,7 +79,8 @@ agentView env decl = do
           Decl.Skill {} -> "skill"
           Decl.CoordinatingSkill {} -> "coordinating_skill"
           Decl.Flow {} -> "flow"
-          Decl.CodingAgent {} -> "coding_agent",
+          Decl.CodingAgent {} -> "coding_agent"
+          Decl.Playbook {} -> "playbook",
         sinks = fmap sinkKind decl.sinks,
         delegates = map agentNameText decl.delegates,
         principalId = (Decl.declarationCoordinateText . (.principal)) <$> decl.identity,

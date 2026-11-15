@@ -7,7 +7,7 @@ import Data.ByteString (ByteString)
 import Data.ByteString.Char8 qualified as ByteString.Char8
 import Data.Foldable (traverse_)
 import Data.IORef (IORef, modifyIORef', newIORef, readIORef, writeIORef)
-import Data.List (find, isSuffixOf, sort)
+import Data.List (find, isInfixOf, isSuffixOf, sort)
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Shikigami.Activity.Coordinate
@@ -274,3 +274,5 @@ isLiveManifest :: FilePath -> Bool
 isLiveManifest path =
   not ("/broken.dhall" `isSuffixOf` path)
     && not ("/detectors/schema.dhall" `isSuffixOf` path)
+    -- Playbook bundles sit beside the declarations that run them.
+    && not ("/playbooks/" `isInfixOf` path && not ("-agent.dhall" `isSuffixOf` path))

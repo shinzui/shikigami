@@ -57,6 +57,13 @@ let Behavior =
           , deadlineMinutes : Natural
           , skills : List Text
           }
+      | Playbook :
+          { bundle : Text
+          , provider : CodingAgentProvider
+          , access : WorkspaceAccess
+          , model : Optional Text
+          , effort : Optional CodingAgentEffort
+          }
       >
 
 -- The producer sink set. KizashiSignal carries the seeds' rich RaiseSignal fields.

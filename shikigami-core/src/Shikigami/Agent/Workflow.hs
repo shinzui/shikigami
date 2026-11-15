@@ -184,13 +184,16 @@ import Shikigami.Objective.Tools qualified as ObjectiveTools
 import Shikigami.Objective.Types qualified as Objective
 import Shikigami.Output (OutputDelivery (..), OutputRegistry, lookupAdapter, resolveOutputs, resolvedOutputList)
 import Shikigami.Output qualified as Output
+import Shikigami.Playbook (loadBundle)
+import Shikigami.Playbook qualified as Playbook
+import Shikigami.Playbook.Run (PlaybookAgent (..), runPlaybook)
 import Shikigami.PracticeReview.Attention qualified as PracticeReviewAttention
 import Shikigami.PracticeReview.Capability qualified as PracticeReview
 import Shikigami.PracticeReview.Memory qualified as PracticeReviewMemory
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.Program.DecisionRunner (DecisionAbort (..))
 import Shikigami.Program.DecisionRunner qualified as DecisionRunner
-import Shikigami.RuntimePolicy (defaultModelRequired)
+import Shikigami.RuntimePolicy (DefaultModelRequirement (DefaultModelOptional), defaultModelRequired)
 import Shikigami.Sink (DanwaConfig, DeliveryGuard (..), GrantSource, KanmonConfig, KawaConfig, KizashiConfig, ReiConfig, SinkContext (..), SinkOutcome (..), SinkResult (..), dispatch, sinkKindOf)
 import Shikigami.Sink.Delivery qualified as Delivery
 import Shikigami.Sink.GrantStore (withAuthority)
@@ -717,7 +720,7 @@ runSessionedAgent deps activeBehaviorEnv durableSelection resolvedProfile resolv
       addAttribute traceSpan "behavior.kind" (behaviorKindText ((.behavior) decl))
       useObjectives <- Workflow.patch (Workflow.PatchId "shikigami-objective-tracking-v1")
       let requested = isJust job.objective || maybe False (\host -> ObjectiveStore.creationAllowed host.settings (Objective.RecordedAgent job.identity)) deps.objectives
-          supported = case decl.behavior of Flow {} -> True; Skill {} -> isJust durableSelection; CoordinatingSkill {} -> isJust durableSelection; _ -> False
+          supported = case decl.behavior of Flow {} -> True; Playbook {} -> True; Skill {} -> isJust durableSelection; CoordinatingSkill {} -> isJust durableSelection; _ -> False
       if useObjectives && requested && not supported
         then pure (Left (PermanentAgentRunFailure "objective work requires durable Skill or Flow execution"))
         else do
@@ -730,6 +733,7 @@ runSessionedAgent deps activeBehaviorEnv durableSelection resolvedProfile resolv
               | Just selection <- durableSelection ->
                   first PermanentAgentRunFailure <$> runDurableSkillStep deps resolvedProfile resolvedOverlays job decl sid prior selection path
             Flow {} -> first PermanentAgentRunFailure <$> runBehaviorStep deps activeBehaviorEnv resolvedProfile approvalPolicyForRun recordedIdentity sid decl job prior
+            Playbook {} -> first PermanentAgentRunFailure <$> runBehaviorStep deps activeBehaviorEnv resolvedProfile approvalPolicyForRun recordedIdentity sid decl job prior
             CodingAgent {} | Just requested <- codingAgentStepOf decl.behavior -> first PermanentAgentRunFailure <$> runCodingAgentBehavior job decl requested
             _
               | not (null ((.delegates) decl)) ->
@@ -1216,6 +1220,13 @@ runBehaviorStep ::
 runBehaviorStep deps activeBehaviorEnv resolvedProfile approvalPolicyForRun recordedIdentity sid decl@AgentDecl {behavior = currentBehavior} job@RunJob {triggerPayload} prior =
   case currentBehavior of
     Flow {name = flowName} -> runFlowBehavior deps activeBehaviorEnv resolvedProfile approvalPolicyForRun recordedIdentity sid decl job flowName
+    -- The bundle is loaded, checked and pinned once; a replay reads the
+    -- journaled bundle, so an edited file affects only later runs (EP-4).
+    Playbook {bundle, provider, access, model, effort} -> do
+      admitted <- step (StepName "playbook-admission") (liftIO (loadBundle (Text.unpack bundle)))
+      case admitted of
+        Left problems -> pure (Left (Text.intercalate "; " problems))
+        Right pinned -> runFlowDefinition deps activeBehaviorEnv resolvedProfile approvalPolicyForRun recordedIdentity sid decl job (playbookFlow PlaybookAgent {provider, access, model, effort} pinned)
     _
       | not (null ((.delegates) decl)) -> Right <$> runDeclaredSupervisor deps decl sid job
       | otherwise ->
@@ -1238,108 +1249,132 @@ runFlowBehavior ::
 runFlowBehavior deps activeBehaviorEnv resolvedProfile approvalPolicyForRun recordedIdentity sid decl job flowName =
   case Flow.lookupFlow flowName of
     Nothing -> pure (Left ("unknown flow " <> declarationCoordinateText flowName))
-    Just flow@Flow.FlowDef {Flow.run} -> do
-      (_, childWorkflowId) <- currentWorkflow
-      let coordinator = WorkerCapability.CoordinatorRun childWorkflowId job.identity sid job.executionRootId job.executionPermissions
-      coordinationPolicy <- step (StepName "worker-coordination-policy") (liftIO (FlowWorkers.resolveCoordinationPolicy deps.coordination deps.actionAuthority coordinator))
-      useObjectives <- Workflow.patch (Workflow.PatchId "shikigami-objective-tracking-v1")
-      objectivePolicy <-
-        if useObjectives
-          then step (StepName "objectives-policy") do
-            (nativeName, nativeRun) <- currentWorkflow
-            generation <- Workflow.currentRunGeneration
-            liftIO case deps.objectives of
-              Nothing | isNothing job.objective -> pure (Right Nothing)
-              Nothing -> pure (Left Objective.ObjectiveDenied)
-              Just host ->
-                Objectives.resolveFlowScope host nativeName nativeRun (toInteger generation) job sid (either (const Nothing) id coordinationPolicy) >>= \case
-                  Left Objective.ObjectiveUnavailable -> throwIO (TransientBehaviorFailure "objective authority unavailable")
-                  value -> pure value
-          else pure (Right Nothing)
-      (watchdogNativeName, watchdogNativeRun) <- Workflow.currentWorkflow
-      useWatchdog <- Workflow.patch (Workflow.PatchId "shikigami-watchdog-v1")
-      useInitiative <- Workflow.patch (Workflow.PatchId "shikigami-initiative-v1")
-      useAdmission <- Workflow.patch (Workflow.PatchId "shikigami-initiative-admission-v1")
-      let initiativeInterpreter :: (Workflow :> es, Store :> es, IOE :> es) => Eff (FlowInitiative.Initiative : es) a -> Eff es a
-          initiativeInterpreter
-            | useInitiative =
-                FlowInitiative.runInitiative
-                  FlowInitiative.InitiativeRuntime
-                    { seed = deps.initiatives,
-                      identity = job.identity,
-                      activity = activityFromJob job,
-                      agent = decl.name,
-                      run = childWorkflowId,
-                      admission = if useAdmission then FlowInitiative.AdmissionPresent else FlowInitiative.AdmissionAbsent,
-                      directory = depsDirectory deps,
-                      declarations = deps.agents,
-                      objectiveSettings = maybe Objective.defaultObjectiveSettings (.settings) deps.objectives
-                    }
-            | otherwise = FlowInitiative.unavailableInitiative
-          observeInterpreter action
-            | useWatchdog = FlowObserve.runObserve (FlowObserve.ObserveRuntime deps.observe job.identity (Watchdog.SweepOrigin watchdogNativeName watchdogNativeRun (runJobOccurredAt job) job.identity) (WatchdogFlow.driftAlias `elem` decl.decisionModels && job.executionRootId /= Nothing)) action
-            | otherwise = FlowObserve.unavailableObserve action
-          inventory = if (not useWatchdog || not (FlowObserve.observeAvailable deps.observe)) && flow.name == WatchdogFlow.watchdogFlowName then [] else Flow.flowDecisionSlotsFor decl flow
-          decisionTimeout = DecisionContract.parseDecisionTimeout (floor (durationTime (depsRunTimeout deps) * 1000000))
-          attentionInterpreter = PracticeReviewAttention.runPracticeReviewAttentionAtomic practiceReviewAttentionEnv
-          decisionInterpreter action
-            | null inventory = FlowDecision.runDecisionDisabled action
-            | Left refusal <- decisionTimeout = EffException.throwIO (DecisionAbort (DecisionContract.decisionFailure DecisionContract.InvalidSlot refusal))
-            | Just pool <- (.deliveryPool) deps,
-              Right timeout <- decisionTimeout =
-                (if flow.name == WatchdogFlow.watchdogFlowName then FlowDecision.runDecisionAdvisory else FlowDecision.runDecision)
-                  FlowDecision.DecisionEnv
-                    { agent = decl,
-                      inventory = inventory,
-                      services = (.decisions) deps,
-                      runtime = activeBehaviorEnv.runtime,
-                      profile = resolvedProfile,
-                      evidence = DecisionEvidence.postgresDecisionEvidenceStore pool,
-                      routing = depsRouting deps,
-                      timeoutMicros = timeout,
-                      root = job.executionRootId,
-                      beforeStep = ((.hooks) deps).beforeStepBody,
-                      afterStep = ((.hooks) deps).afterStepBody
-                    }
-                  action
-            | otherwise = FlowDecision.runDecisionDisabled action
-      attempted <-
-        trySync
-          ( FlowCapability.runActivity (activityFromJob job)
-              . FlowCapability.runMemory memoryEnv
-              . FlowCapability.runSink sinkEnv
-              . FlowDelegate.runDelegate delegateEnv
-              . FlowCodingAgent.runCodingAgent FlowCodingAgent.CodingAgentEnv {agent = decl.name, identity = job.identity, repository = job.repository, tools = decl.tools}
-              . FlowDeclaredTool.runDeclaredToolCapability FlowDeclaredTool.DeclaredToolEnv {agent = decl.name, identity = job.identity, tools = decl.tools, repository = job.repository}
-              . FlowWorkers.runWorkers deps.coordination deps.actionAuthority coordinator coordinationPolicy
-              . Adaptive.runAdaptiveDelivery (adaptiveRuntime deps) coordinator resolvedProfile (Harness.narrowHarnessPolicy deps.harness decl.harness)
-              . FlowObjectives.runObjectives deps.objectives objectivePolicy
-              . observeInterpreter
-              . initiativeInterpreter
-              . FlowRouting.runRouting routingEnv
-              . decisionInterpreter
-              . acknowledgementInterpreter
-              . PracticeReview.runExecutionContext (practiceReviewExecutionContext childWorkflowId)
-              . PracticeReview.runPracticeReviewEvidence True ((.practiceReview) deps)
-              . PracticeReview.runPracticeReviewEvaluator True activeBehaviorEnv ((.practiceReview) deps)
-              . PracticeReviewMemory.runPracticeReviewMemory practiceReviewMemoryEnv
-              . attentionInterpreter
-              $ run ((.triggerPayload) job)
-          )
-      case attempted of
-        Left _ | useWatchdog && flow.name == WatchdogFlow.watchdogFlowName -> liftIO deps.observe.hooks.onSweepFailed
-        _ -> pure ()
-      when (not (null inventory)) do
-        forM_ ((.deliveryPool) deps) \pool -> do
-          finalized <- liftIO (DecisionEvidence.finalizeDecisionReport (DecisionEvidence.postgresDecisionEvidenceStore pool) (runCorrelationId (jobIdempotencyKey job)))
-          either (EffException.throwIO . DecisionAbort) (const (pure ())) finalized
-      case attempted of
-        Left err | Just (DecisionAbort failure) <- fromException err -> pure (Left (renderDecisionFailure failure))
-        Left err ->
-          case fromException err of
-            Just (ApprovalAcknowledgementFailed detail) -> pure (Left detail)
-            Nothing -> EffException.throwIO err
-        Right output -> pure (Right output)
+    Just flow -> runFlowDefinition deps activeBehaviorEnv resolvedProfile approvalPolicyForRun recordedIdentity sid decl job flow
+
+-- | A pinned playbook bundle as a flow body.
+playbookFlow :: PlaybookAgent -> Playbook.Bundle -> Flow.FlowDef
+playbookFlow agent pinned =
+  Flow.FlowDef
+    { Flow.name = declarationCoordinate "playbook",
+      Flow.lifecycle = Flow.LifecycleDiagram "flowchart LR\n Admit --> Steps --> Report" [],
+      Flow.decisionSlots = [],
+      Flow.requiresDefaultModel = DefaultModelOptional,
+      Flow.run = runPlaybook agent pinned
+    }
+
+runFlowDefinition ::
+  AgentRunDeps ->
+  BehaviorEnv ->
+  Maybe ResolvedProfile ->
+  ApprovalPolicySnapshot ->
+  ResolvedAgentIdentity ->
+  SessionId ->
+  AgentDecl ->
+  RunJob ->
+  Flow.FlowDef ->
+  Eff (Workflow : AppEffects) (Either Text Value)
+runFlowDefinition deps activeBehaviorEnv resolvedProfile approvalPolicyForRun recordedIdentity sid decl job flow@Flow.FlowDef {Flow.run} = do
+  (_, childWorkflowId) <- currentWorkflow
+  let coordinator = WorkerCapability.CoordinatorRun childWorkflowId job.identity sid job.executionRootId job.executionPermissions
+  coordinationPolicy <- step (StepName "worker-coordination-policy") (liftIO (FlowWorkers.resolveCoordinationPolicy deps.coordination deps.actionAuthority coordinator))
+  useObjectives <- Workflow.patch (Workflow.PatchId "shikigami-objective-tracking-v1")
+  objectivePolicy <-
+    if useObjectives
+      then step (StepName "objectives-policy") do
+        (nativeName, nativeRun) <- currentWorkflow
+        generation <- Workflow.currentRunGeneration
+        liftIO case deps.objectives of
+          Nothing | isNothing job.objective -> pure (Right Nothing)
+          Nothing -> pure (Left Objective.ObjectiveDenied)
+          Just host ->
+            Objectives.resolveFlowScope host nativeName nativeRun (toInteger generation) job sid (either (const Nothing) id coordinationPolicy) >>= \case
+              Left Objective.ObjectiveUnavailable -> throwIO (TransientBehaviorFailure "objective authority unavailable")
+              value -> pure value
+      else pure (Right Nothing)
+  (watchdogNativeName, watchdogNativeRun) <- Workflow.currentWorkflow
+  useWatchdog <- Workflow.patch (Workflow.PatchId "shikigami-watchdog-v1")
+  useInitiative <- Workflow.patch (Workflow.PatchId "shikigami-initiative-v1")
+  useAdmission <- Workflow.patch (Workflow.PatchId "shikigami-initiative-admission-v1")
+  let initiativeInterpreter :: (Workflow :> es, Store :> es, IOE :> es) => Eff (FlowInitiative.Initiative : es) a -> Eff es a
+      initiativeInterpreter
+        | useInitiative =
+            FlowInitiative.runInitiative
+              FlowInitiative.InitiativeRuntime
+                { seed = deps.initiatives,
+                  identity = job.identity,
+                  activity = activityFromJob job,
+                  agent = decl.name,
+                  run = childWorkflowId,
+                  admission = if useAdmission then FlowInitiative.AdmissionPresent else FlowInitiative.AdmissionAbsent,
+                  directory = depsDirectory deps,
+                  declarations = deps.agents,
+                  objectiveSettings = maybe Objective.defaultObjectiveSettings (.settings) deps.objectives
+                }
+        | otherwise = FlowInitiative.unavailableInitiative
+      observeInterpreter action
+        | useWatchdog = FlowObserve.runObserve (FlowObserve.ObserveRuntime deps.observe job.identity (Watchdog.SweepOrigin watchdogNativeName watchdogNativeRun (runJobOccurredAt job) job.identity) (WatchdogFlow.driftAlias `elem` decl.decisionModels && job.executionRootId /= Nothing)) action
+        | otherwise = FlowObserve.unavailableObserve action
+      inventory = if (not useWatchdog || not (FlowObserve.observeAvailable deps.observe)) && flow.name == WatchdogFlow.watchdogFlowName then [] else Flow.flowDecisionSlotsFor decl flow
+      decisionTimeout = DecisionContract.parseDecisionTimeout (floor (durationTime (depsRunTimeout deps) * 1000000))
+      attentionInterpreter = PracticeReviewAttention.runPracticeReviewAttentionAtomic practiceReviewAttentionEnv
+      decisionInterpreter action
+        | null inventory = FlowDecision.runDecisionDisabled action
+        | Left refusal <- decisionTimeout = EffException.throwIO (DecisionAbort (DecisionContract.decisionFailure DecisionContract.InvalidSlot refusal))
+        | Just pool <- (.deliveryPool) deps,
+          Right timeout <- decisionTimeout =
+            (if flow.name == WatchdogFlow.watchdogFlowName then FlowDecision.runDecisionAdvisory else FlowDecision.runDecision)
+              FlowDecision.DecisionEnv
+                { agent = decl,
+                  inventory = inventory,
+                  services = (.decisions) deps,
+                  runtime = activeBehaviorEnv.runtime,
+                  profile = resolvedProfile,
+                  evidence = DecisionEvidence.postgresDecisionEvidenceStore pool,
+                  routing = depsRouting deps,
+                  timeoutMicros = timeout,
+                  root = job.executionRootId,
+                  beforeStep = ((.hooks) deps).beforeStepBody,
+                  afterStep = ((.hooks) deps).afterStepBody
+                }
+              action
+        | otherwise = FlowDecision.runDecisionDisabled action
+  attempted <-
+    trySync
+      ( FlowCapability.runActivity (activityFromJob job)
+          . FlowCapability.runMemory memoryEnv
+          . FlowCapability.runSink sinkEnv
+          . FlowDelegate.runDelegate delegateEnv
+          . FlowCodingAgent.runCodingAgent FlowCodingAgent.CodingAgentEnv {agent = decl.name, identity = job.identity, repository = job.repository, tools = decl.tools}
+          . FlowDeclaredTool.runDeclaredToolCapability FlowDeclaredTool.DeclaredToolEnv {agent = decl.name, identity = job.identity, tools = decl.tools, repository = job.repository}
+          . FlowWorkers.runWorkers deps.coordination deps.actionAuthority coordinator coordinationPolicy
+          . Adaptive.runAdaptiveDelivery (adaptiveRuntime deps) coordinator resolvedProfile (Harness.narrowHarnessPolicy deps.harness decl.harness)
+          . FlowObjectives.runObjectives deps.objectives objectivePolicy
+          . observeInterpreter
+          . initiativeInterpreter
+          . FlowRouting.runRouting routingEnv
+          . decisionInterpreter
+          . acknowledgementInterpreter
+          . PracticeReview.runExecutionContext (practiceReviewExecutionContext childWorkflowId)
+          . PracticeReview.runPracticeReviewEvidence True ((.practiceReview) deps)
+          . PracticeReview.runPracticeReviewEvaluator True activeBehaviorEnv ((.practiceReview) deps)
+          . PracticeReviewMemory.runPracticeReviewMemory practiceReviewMemoryEnv
+          . attentionInterpreter
+          $ run ((.triggerPayload) job)
+      )
+  case attempted of
+    Left _ | useWatchdog && flow.name == WatchdogFlow.watchdogFlowName -> liftIO deps.observe.hooks.onSweepFailed
+    _ -> pure ()
+  when (not (null inventory)) do
+    forM_ ((.deliveryPool) deps) \pool -> do
+      finalized <- liftIO (DecisionEvidence.finalizeDecisionReport (DecisionEvidence.postgresDecisionEvidenceStore pool) (runCorrelationId (jobIdempotencyKey job)))
+      either (EffException.throwIO . DecisionAbort) (const (pure ())) finalized
+  case attempted of
+    Left err | Just (DecisionAbort failure) <- fromException err -> pure (Left (renderDecisionFailure failure))
+    Left err ->
+      case fromException err of
+        Just (ApprovalAcknowledgementFailed detail) -> pure (Left detail)
+        Nothing -> EffException.throwIO err
+    Right output -> pure (Right output)
   where
     acknowledgementInterpreter =
       runAcknowledgementWithChild

@@ -22,7 +22,7 @@ import Keiro.Workflow (WorkflowId)
 import Shikigami.Agent.Decl (AgentDecl)
 import Shikigami.Authority (Authority, Principal)
 import Shikigami.Capability.Provider (CapabilityRuntime)
-import Shikigami.CodingAgent.Workflow (CodingAgentRunner)
+import Shikigami.CodingAgent.Workflow (CodingAgentRunners)
 import Shikigami.DeclaredTool.Workflow (DeclaredToolRunners)
 import Shikigami.Output (OutputRegistry)
 import Shikigami.Record (ActionRecord)
@@ -55,7 +55,8 @@ data TierRuntime = TierRuntime
     grant :: !(Maybe LocalGrant),
     -- | The coding-agent runner of this run (EP-2); tiers that do not admit
     -- coding agents refuse.
-    codingAgents :: !CodingAgentRunner,
+    -- | Resolved per step: a playbook's step may name another repository.
+    codingAgents :: !CodingAgentRunners,
     -- | The declared-tool step runners of this run (EP-3 M4).
     declaredTools :: !DeclaredToolRunners,
     -- | Output adapters and the default output of this run (EP-8 M2).

@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-11-15
+* **Addition**: DOC-25 explains playbooks: bundles, `playbook validate`, the `Playbook` behavior, approvals and `--resume` (EP-4).
 * **Addition**: DOC-22 explains declared tools as durable steps (`run-declared-tool`, `--resume`, uncertain outcomes) (EP-3 M4).
 * **Addition**: DOC-24 is the routine-agent guide: `new`, `run`, scheduling with `up`, `runs` and `doctor` (EP-9 M3).
 * **Addition**: DOC-13 documents `shikigami-local runs` and `shikigami-local doctor` (EP-9 M2).

@@ -27,9 +27,10 @@ import Data.Maybe (isJust)
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.IO qualified as TextIO
+import Keiro.Workflow (WorkflowId (..))
 import Shikigami.Agent.Capability.OneOff (oneOffCapabilityRuntime, renderOneOffCapabilityError)
 import Shikigami.Agent.Capability.Workspace (renderWorkspaceError, resolveWorkspaceScope, workspaceReadDescriptor, workspaceReadProvider)
-import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Sink (..), codingAgentStepOf, requestedOverlays)
+import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Sink (..), codingAgentAccessOf, requestedOverlays)
 import Shikigami.App.Config (AppConfig (..))
 import Shikigami.Authority
 import Shikigami.Capability.Catalog (CapabilityResolutionError (..), ResolutionSubject, mkCapabilityCatalog)
@@ -41,7 +42,8 @@ import Shikigami.Capability.Mcp.Local (mcpToolProvider)
 import Shikigami.Capability.Overlay (CapabilityDescriptor (..), capabilityIdText)
 import Shikigami.Capability.Provider (CapabilityProvider (..), CapabilityRuntime (..), installDurableAdapters, mkCapabilityProviderRegistry)
 import Shikigami.CodingAgent.Local (LocalCodingAgentConfig (..), localCodingAgentRunner)
-import Shikigami.CodingAgent.Workflow (refusingCodingAgentRunner)
+import Shikigami.CodingAgent.Types (FailureReason (TierRefused, WorkspaceUnavailable))
+import Shikigami.CodingAgent.Workflow (CodingAgentStepInput (..), fixedCodingAgentRunner, refusingCodingAgentRunner)
 import Shikigami.DeclaredTool.Local (localDeclaredToolRunner)
 import Shikigami.DeclaredTool.Workflow (noDeclaredTools)
 import Shikigami.Output (DefaultOutput (..), emptyOutputRegistry, mkOutputRegistry, renderOutputLoadError, validateOutputs)
@@ -136,7 +138,7 @@ lightComposition config interaction record =
                           capabilities,
                           workspace = Nothing,
                           grant = Nothing,
-                          codingAgents = refusingCodingAgentRunner containedCodingAgents,
+                          codingAgents = fixedCodingAgentRunner (refusingCodingAgentRunner containedCodingAgents),
                           outputs = emptyOutputRegistry,
                           declaredTools = noDeclaredTools,
                           release = pure ()
@@ -153,7 +155,7 @@ lightComposition config interaction record =
             oneOffCapabilityRuntime Nothing decl >>= \case
               Left problem -> pure (Left (CompositionFailed (renderOneOffCapabilityError problem)))
               Right capabilities ->
-                pure (Right TierRuntime {tier = LocalOperator, authority = scopeToRun run decl.name (recorded record tierLabel nothingGranted), record, capabilities, workspace = Nothing, grant = Nothing, codingAgents = refusingCodingAgentRunner containedCodingAgents, declaredTools = noDeclaredTools, outputs = localOutputs stateDirectory, release = pure ()})
+                pure (Right TierRuntime {tier = LocalOperator, authority = scopeToRun run decl.name (recorded record tierLabel nothingGranted), record, capabilities, workspace = Nothing, grant = Nothing, codingAgents = fixedCodingAgentRunner (refusingCodingAgentRunner containedCodingAgents), declaredTools = noDeclaredTools, outputs = localOutputs stateDirectory, release = pure ()})
       | otherwise =
           prepareDeclaredTools decl >>= \case
             Left problem -> pure (Left (CompositionFailed (renderToolResolutionError problem)))
@@ -186,11 +188,11 @@ lightComposition config interaction record =
                         then
                           oneOffCapabilityRuntime (Just repo.source) decl <&> \case
                             Left problem -> Left (CompositionFailed (renderOneOffCapabilityError problem))
-                            Right capabilities -> done capabilities Nothing (refusingCodingAgentRunner containedCodingAgents) noDeclaredTools (pure ())
+                            Right capabilities -> done capabilities Nothing (fixedCodingAgentRunner (refusingCodingAgentRunner containedCodingAgents)) noDeclaredTools (pure ())
                         else
                           readToolsRuntime repo.source (toolsIn repo.source) <&> \case
                             Left problem -> Left (CompositionFailed problem)
-                            Right capabilities -> done capabilities Nothing (refusingCodingAgentRunner containedCodingAgents) noDeclaredTools (pure ())
+                            Right capabilities -> done capabilities Nothing (fixedCodingAgentRunner (refusingCodingAgentRunner containedCodingAgents)) noDeclaredTools (pure ())
                     else case run of
                       Nothing -> pure (Left (CompositionFailed "workspace.edit, workspace.exec, workspace.git and coding agents need a durable run; use shikigami-agent-run"))
                       Just runId ->
@@ -199,22 +201,42 @@ lightComposition config interaction record =
                           Right (local, worktree) -> do
                             launcherPath <- codingAgentLauncher
                             gatePath <- gateExecutable
-                            let runner = localCodingAgentRunner LocalCodingAgentConfig {launcher = launcherPath, gate = gatePath} local
+                            let config' = LocalCodingAgentConfig {launcher = launcherPath, gate = gatePath}
+                                runner = localCodingAgentRunner config' local
+                                -- A playbook step may name another repository: it
+                                -- is selected through the same approvals, granted
+                                -- for this declaration (asked once, then stored)
+                                -- and worked in its own worktree of this run.
+                                runners input = case input.repository of
+                                  Just named ->
+                                    selectRepository processCheckoutResolver approvals (repositorySelectorText named) >>= \case
+                                      Left problem -> pure (Left (WorkspaceUnavailable (renderApprovalsError problem)))
+                                      Right other
+                                        | other.identity == repo.identity -> pure (Right runner)
+                                        | otherwise ->
+                                            resolveGrant interaction approvals grants (recordGrantIn record principal (Just (WorkflowId input.parent)) decl.name) decl other >>= \case
+                                              Left refusal -> pure (Left (TierRefused (renderGrantRefusal refusal)))
+                                              Right otherGrant ->
+                                                openLocalRun stateDirectory record decl (localRunAuthority record decl (Just (WorkflowId input.parent)) otherGrant) otherGrant other (WorkflowId input.parent) <&> \case
+                                                  Left problem -> Left (WorkspaceUnavailable problem)
+                                                  Right (otherLocal, _) -> Right (localCodingAgentRunner config' otherLocal)
+                                  Nothing -> pure (Right runner)
                             localCapabilityRuntime (worktreeRootPath worktree.root) local (toolsIn (worktreeRootPath worktree.root)) <&> \case
                               Left problem -> Left (CompositionFailed problem)
-                              Right capabilities -> done capabilities (Just (localWorkspaceHost local capabilities)) runner (\_ -> pure (Right (localDeclaredToolRunner gatePath local))) (releaseRunWorktree stateDirectory runId worktree)
+                              Right capabilities -> done capabilities (Just (localWorkspaceHost local capabilities)) runners (\_ -> pure (Right (localDeclaredToolRunner gatePath local))) (releaseRunWorktree stateDirectory runId worktree)
 
 containedCodingAgents :: Text
 containedCodingAgents = "coding agents run only under trust.tier=local-operator until the batch qualification of ADR-40 passes"
 
 isCodingAgent :: AgentDecl -> Bool
-isCodingAgent AgentDecl {behavior} = isJust (codingAgentStepOf behavior)
+isCodingAgent AgentDecl {behavior} = isJust (codingAgentAccessOf behavior)
 
 -- | A flow with declared tools runs them as durable steps in the run's
 -- worktree (EP-3 M4).
 runsToolSteps :: AgentDecl -> Bool
 runsToolSteps AgentDecl {behavior, tools} = case behavior of
   Flow {} -> not (null (cliTools tools))
+  Playbook {} -> not (null (cliTools tools))
   _ -> False
 
 -- | Whether a declaration asks for a mutating workspace tool.
@@ -265,6 +287,7 @@ prepareDeclaredTools decl@AgentDecl {behavior}
   | Flow {} <- behavior =
       -- Checked and located now, run as durable steps by the flow.
       fmap (const ([], [])) <$> checkedTools
+  | Playbook {} <- behavior = fmap (const ([], [])) <$> checkedTools
   | otherwise = pure (Left (ToolsUnsupportedForBehavior (behaviorName behavior)))
   where
     checkedTools = do
@@ -282,6 +305,7 @@ prepareDeclaredTools decl@AgentDecl {behavior}
       Deterministic {} -> "Deterministic"
       CoordinatingSkill {} -> "CoordinatingSkill"
       Skill {} -> "Skill"
+      Playbook {} -> "Playbook"
 
 -- | The output kinds a declaration's sinks would deliver through.
 sinkKindNames :: AgentDecl -> [Text]

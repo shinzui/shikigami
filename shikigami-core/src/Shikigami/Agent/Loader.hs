@@ -17,14 +17,14 @@ import Data.Foldable (traverse_)
 import Data.List (isSuffixOf, sort)
 import Data.Text qualified as Text
 import Dhall (auto, inputFile)
-import Shikigami.Agent.Decl (AgentDecl (..))
+import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..))
 import Shikigami.Agent.DeclarationValue
 import Shikigami.Log qualified as Log
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.RuntimePolicy
 import System.Directory (listDirectory)
 import System.Exit (exitFailure)
-import System.FilePath ((</>))
+import System.FilePath (isRelative, normalise, takeDirectory, (</>))
 
 -- | A typed loader error. The Text carries Dhall's own (already very precise)
 -- type-error / parse-error message.
@@ -47,7 +47,13 @@ loadAgent path = do
   result <- try (inputFile auto path) :: IO (Either SomeException AgentDecl)
   pure $ case result of
     Left err -> Left (LoadError (Text.pack (show err)))
-    Right decl -> Right decl
+    Right decl -> Right (anchorBundle decl)
+  where
+    -- A playbook bundle named relative to the declaration is found beside it,
+    -- wherever the run is started (EP-4).
+    anchorBundle decl@AgentDecl {behavior = Playbook {bundle, provider, access, model, effort}}
+      | isRelative (Text.unpack bundle) = decl {behavior = Playbook {bundle = Text.pack (normalise (takeDirectory path </> Text.unpack bundle)), provider, access, model, effort}}
+    anchorBundle decl = decl
 
 -- | Load every manifest once, preserving both successes and failures in
 -- filename order so callers can inspect, report, or persist the complete view.

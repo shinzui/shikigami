@@ -39,6 +39,7 @@ workflow AgentRun
       child adaptive-delivery id input via admittedAdaptiveWorkflowId -> AdaptiveDeliveryResult
     }
     step route-catalog-architecture-practice -> CandidateCatalog
+    step playbook-admission -> PlaybookAdmission
     step worker-coordination-policy -> CoordinationPolicyResolution
     patch shikigami-objective-tracking-v1 {
       step objectives-policy -> ObjectivePolicyResolution

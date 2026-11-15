@@ -27,6 +27,7 @@ module Shikigami.Agent.Decl
     RouterPolicy (..),
     Behavior (..),
     codingAgentStepOf,
+    codingAgentAccessOf,
     requestedOverlays,
     declaredToolCapabilities,
     Trigger (..),
@@ -270,8 +271,26 @@ data Behavior
         deadlineMinutes :: !DeadlineMinutes,
         skills :: ![SkillDirectory]
       }
+  | -- | Run a playbook bundle (EP-4 of MasterPlan 22): the bundle file
+    -- (absolute, or relative to the declaration) is loaded, checked and
+    -- pinned when the run starts, and its coding-agent steps use this
+    -- provider, access, model and effort.
+    Playbook
+      { bundle :: !Text,
+        provider :: !CodingAgentProvider,
+        access :: !WorkspaceAccess,
+        model :: !(Maybe VendorModelId),
+        effort :: !(Maybe CodingAgentEffort)
+      }
   deriving stock (Eq, Show, Generic)
   deriving anyclass (FromDhall, ToJSON, FromJSON)
+
+-- | The vendor and access of a behavior that runs coding agents.
+codingAgentAccessOf :: Behavior -> Maybe (CodingAgentProvider, WorkspaceAccess)
+codingAgentAccessOf = \case
+  CodingAgent {provider, access} -> Just (provider, access)
+  Playbook {provider, access} -> Just (provider, access)
+  _ -> Nothing
 
 -- | The step a declaration's @CodingAgent@ arm asks for.
 codingAgentStepOf :: Behavior -> Maybe CodingAgentStep
