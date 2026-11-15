@@ -27,6 +27,7 @@ import Shikigami.Agent.DeclarationValue
 import Shikigami.App.Config
 import Shikigami.App.Config.Load (ConfigRun (..), appConfigRun)
 import Shikigami.Trigger.Stream (IncludeAgentActors (..))
+import Shikigami.Trust.Tier (TrustTier (..))
 import Shikigami.Workers.Command
   ( RoleInfo (..),
     consumeEventsRoleInfo,
@@ -35,6 +36,7 @@ import Shikigami.Workers.Command
     workerRoleInfo,
     workerRoles,
   )
+import Shikigami.Workers.Command.Worker (workerTierAdmission)
 import System.Exit (ExitCode (ExitSuccess))
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
@@ -55,7 +57,11 @@ tests :: TestTree
 tests =
   testGroup
     "worker command lines"
-    [ testCase "every worker executable renders --help" $
+    [ testCase "the worker refuses the local-operator tier and a multi-tenant tier without a service authority" do
+        workerTierAdmission defaultAppConfig @?= Right ()
+        assertBool "local-operator refused" (either (const True) (const False) (workerTierAdmission defaultAppConfig {trustTier = LocalOperator}))
+        assertBool "bare multi-tenant refused" (either (const True) (const False) (workerTierAdmission defaultAppConfig {trustTier = MultiTenant})),
+      testCase "every worker executable renders --help" $
         mapM_
           ( \info -> do
               let rendered = helpTextOf info

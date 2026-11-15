@@ -344,6 +344,11 @@ library
     Shikigami.Trigger.RequestKey
     Shikigami.Trigger.Schedule
     Shikigami.Trigger.Stream
+    Shikigami.Trust.LocalOperator.Approvals
+    Shikigami.Trust.LocalOperator.Authority
+    Shikigami.Trust.LocalOperator.Grant
+    Shikigami.Trust.Runtime
+    Shikigami.Trust.Tier
     Shikigami.Watchdog.Admission
     Shikigami.Watchdog.Classify
     Shikigami.Watchdog.Delivery
@@ -639,6 +644,7 @@ test-suite shikigami-core-test
     Shikigami.InitiativeValueSpec
     Shikigami.KanmonClientSpec
     Shikigami.KeiroSpecificationSpec
+    Shikigami.LocalOperatorSpec
     Shikigami.LogSpec
     Shikigami.MandateSpec
     Shikigami.ObjectiveSpec

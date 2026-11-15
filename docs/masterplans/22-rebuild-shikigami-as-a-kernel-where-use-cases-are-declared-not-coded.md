@@ -378,7 +378,7 @@ rule.
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| EP-1 | Run declared agents on the operator's own machine through a local-operator trust tier | [docs/plans/126-run-declared-agents-on-the-operator-s-own-machine-through-a-local-operator-trust-tier.md](../plans/126-run-declared-agents-on-the-operator-s-own-machine-through-a-local-operator-trust-tier.md) | EP-8 M1 | None | Not Started |
+| EP-1 | Run declared agents on the operator's own machine through a local-operator trust tier | [docs/plans/126-run-declared-agents-on-the-operator-s-own-machine-through-a-local-operator-trust-tier.md](../plans/126-run-declared-agents-on-the-operator-s-own-machine-through-a-local-operator-trust-tier.md) | EP-8 M1 | None | In Progress |
 | EP-2 | Run Claude Code and Codex as durable harness workers inside agent runs | [docs/plans/127-run-claude-code-and-codex-as-durable-harness-workers-inside-agent-runs.md](../plans/127-run-claude-code-and-codex-as-durable-harness-workers-inside-agent-runs.md) | EP-1 | None | Not Started |
 | EP-3 | Let agents declare CLI tools and MCP servers with authority attached to the declaration | [docs/plans/128-let-agents-declare-cli-tools-and-mcp-servers-with-authority-attached-to-the-declaration.md](../plans/128-let-agents-declare-cli-tools-and-mcp-servers-with-authority-attached-to-the-declaration.md) | EP-1; EP-2 M1 (for M3); EP-2 M2 (for M4) | None | Not Started |
 | EP-4 | Execute Dhall-declared playbooks with fan-out, approval gates, and learning capture | [docs/plans/129-execute-dhall-declared-playbooks-with-fan-out-approval-gates-and-learning-capture.md](../plans/129-execute-dhall-declared-playbooks-with-fan-out-approval-gates-and-learning-capture.md) | EP-2; EP-8 M2 (for M2); EP-3 M4 (for M4) | EP-3 | Not Started |
@@ -893,9 +893,12 @@ implemented.
 
 ## Progress
 
-Eleven child plans exist. EP-8 M1 (the kernel action vocabulary, authority port and action
-record) was accepted on 2026-11-15, which unblocks EP-1. EP-8 stays In Progress until its M2 and
-M3, which need EP-1. EP-5 and EP-11 M1 can still start in parallel. Stage 1 (the pilot) ends at
+Eleven child plans exist. On 2026-11-15 EP-8 M1 (the kernel action vocabulary, authority port
+and action record) and EP-1 M1 (the trust tier, confirm-once grants, the local authority and
+`shikigami-local`) were accepted: an operator can now run a read-only declared agent against
+their own repository with one command and one confirmation. EP-1 M2 (worktrees, the launcher
+and mutating tools) is next; EP-8 M2 and M3 wait on EP-1. EP-5 and EP-11 M1 can still start
+in parallel. Stage 1 (the pilot) ends at
 the declaration baseline, and stage 2 at the kernel baseline.
 
 - [ ] Architectural acceptance: the keiro modernization campaign runs for real on at least
@@ -912,6 +915,13 @@ the declaration baseline, and stage 2 at the kernel baseline.
 
 
 ## Surprises & Discoveries
+
+- Observation: `shikigami-core` may not link `process`, so every host-process adapter the
+  stock composition needs (EP-1's `git` and `mori` resolver, its M2 launcher and worktree
+  commands, EP-2's coding-agent launcher, EP-3's CLI tool runner) lives in a leaf package, with
+  the kernel holding only the port.
+  Evidence: EP-1 M1 tripped `core links the neutral tool registry without a provider adapter`;
+  see EP-1's Surprises.
 
 - Observation: Every kernel-owned effect is already a capability-tool invocation, so EP-1's
   `LocalOperator` authority decides `UseCapability (InvokeTool …)` on `shikigami.workspace`

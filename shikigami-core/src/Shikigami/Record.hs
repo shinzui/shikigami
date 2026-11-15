@@ -54,12 +54,16 @@ module Shikigami.Record
     defaultRecordLimit,
     readRecord,
     readRecordFile,
+
+    -- * Rendering
+    renderRecordEvent,
   )
 where
 
 import Control.Exception (IOException, try)
 import Data.Aeson (Value, (.:), (.:?), (.=))
 import Data.Aeson qualified as Aeson
+import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Bifunctor (first)
 import Data.ByteString qualified as ByteString
 import Data.ByteString.Char8 qualified as ByteString.Char8
@@ -70,6 +74,8 @@ import Data.Functor.Contravariant ((>$<))
 import Data.IORef (atomicModifyIORef', newIORef, readIORef)
 import Data.Int (Int64)
 import Data.Text qualified as Text
+import Data.Text.Encoding qualified as Text.Encoding
+import Data.Time.Format.ISO8601 (iso8601Show)
 import Hasql.Decoders qualified as Decoders
 import Hasql.Encoders qualified as Encoders
 import Hasql.Pool (Pool)
@@ -80,7 +86,7 @@ import Keiro.Workflow (WorkflowId (..))
 import Numeric.Natural (Natural)
 import Shikigami.Agent.Name (AgentName, agentNameText, mkAgentName)
 import Shikigami.Log qualified as Log
-import Shikigami.Prelude hiding ((.=))
+import Shikigami.Prelude hiding (at, matching, (.=))
 import Shikigami.Telemetry.Metrics (ShikigamiMetrics, recordActionRecordEvent)
 import System.Directory (createDirectoryIfMissing, doesFileExist)
 import System.FilePath (takeDirectory)
@@ -387,3 +393,34 @@ newtype DecisionField = DecisionField Text
 
 instance Aeson.FromJSON DecisionField where
   parseJSON = Aeson.withObject "DecisionField" \value -> DecisionField <$> value .: "decision"
+
+-- | One event on one line: time, run, agent, principal, kind, then the
+-- action, resource, decision and who decided when the payload carries them.
+renderRecordEvent :: RecordEvent -> Text
+renderRecordEvent RecordEvent {at, run, principal, tier, agent, entry} =
+  let (kind, payload) = recordEntry entry
+      field name = case payload of
+        Aeson.Object object -> case KeyMap.lookup name object of
+          Just (Aeson.String value) -> Just value
+          _ -> Nothing
+        _ -> Nothing
+      decided = case (field "decision", field "detail") of
+        (Just "allowed", _) -> ["allowed"]
+        (Just _, Just detail) -> ["refused " <> detail]
+        (Just decision, Nothing) -> ["refused " <> decision]
+        _ -> []
+      source = maybe [] (\by -> ["(source: " <> by <> ")"]) (field "decidedBy")
+   in Text.unwords
+        ( [ Text.pack (iso8601Show at),
+            maybe "-" (.unWorkflowId) run,
+            maybe "-" agentNameText agent,
+            principal,
+            tierLabelText tier,
+            recordKindText kind
+          ]
+            <> maybe [] pure (field "action")
+            <> maybe [] pure (field "resource")
+            <> decided
+            <> source
+            <> [Text.take 200 (Text.Encoding.decodeUtf8Lenient (LazyByteString.toStrict (Aeson.encode payload))) | null decided]
+        )

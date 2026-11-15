@@ -1,5 +1,9 @@
 # Bundle Update Log
 
+## 2026-11-15
+* **Addition**: DOC-21 explains the local-operator trust tier: one confirmation per declaration, the explicit approvals file, `shikigami-local` and the action record (MasterPlan 22, EP-1 M1).
+* **Correction**: DOC-13 (`cli.md`) documents `shikigami record list`, the record written by both one-off commands, `shikigami-agent-run --payload/--no-confirm` and `shikigami-local`, and replaces the deny-all limitation with the local-operator path.
+
 ## 2026-11-06
 * **Correction**: Refresh all three HTML artifacts and their supporting Markdown roadmap through plan 124 and IR-21, including completed workspace/objective providers, native adaptive recovery evidence, watchdog delivery, unrequested-work admission, and the planned machine-daemon lane.
 * **Correction**: DOC-1/13 remove obsolete absent-provider wording; DOC-1 links DOC-18–20. DOC-4/5/6 link delivered schedule and Flow paths; DOC-13 covers objective/tracker, proposal and watchdog commands; DOC-19 distinguishes passing native qualification from the remaining actual-model trial; DOC-20 expands scoped inspection and independent overdue monitoring.

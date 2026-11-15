@@ -16,16 +16,17 @@ import Shikigami.Agent.Capability.OneOff (renderOneOffCapabilityError, withOneOf
 import Shikigami.Agent.Decl (AgentDecl (..), ProfileRequirement (..))
 import Shikigami.Agent.Loader (loadAgent)
 import Shikigami.Agent.Payload (readPayloadArgument)
+import Shikigami.Agent.Trust (compatibilityPrincipal, lightComposition, parseWorkspaceArgument, terminalInteraction, workspaceSelector)
 import Shikigami.App.Config (AppConfig)
 import Shikigami.App.Config qualified as Config
 import Shikigami.Attestation.Profile (ProfileId (..))
-import Shikigami.Authority (Authority, denyAll, recorded, scopeToRun)
 import Shikigami.Behavior.Provider (newBehaviorEnvFor)
 import Shikigami.Behavior.Run (triggerOnly)
 import Shikigami.Duration
 import Shikigami.Execution.Ephemeral (EphemeralResult (..), runEphemeralBehavior)
 import Shikigami.Log qualified as Log
-import Shikigami.Record (ActionRecord (..), fileRecord, observedRecord, unspecifiedTier)
+import Shikigami.Record (ActionRecord (..), fileRecord, observedRecord)
+import Shikigami.Trust.Runtime (RunSubject (..), TierComposition (..), TierRuntime (..), renderTierRefusal)
 import System.Directory (XdgDirectory (XdgState), getXdgDirectory)
 import System.Exit (exitFailure)
 import System.FilePath ((</>))
@@ -41,8 +42,8 @@ import System.IO (hPutStrLn, stderr)
 -- happened, so the two are never confused. That line is a structured
 -- @behavior.provider.selected@ event on standard error; the command's own output
 -- stays on standard out, so piping the result to @jq@ is unaffected.
-runRunBehavior :: FilePath -> Maybe String -> Maybe FilePath -> AppConfig -> IO ()
-runRunBehavior path mpayload workspace config = do
+runRunBehavior :: FilePath -> Maybe String -> Maybe String -> Bool -> AppConfig -> IO ()
+runRunBehavior path mpayload workspace noConfirm config = do
   logger <- Log.newStderrLogger Log.Info
   supplied <- readPayloadArgument mpayload
   payload <- case supplied of
@@ -67,9 +68,13 @@ runRunBehavior path mpayload workspace config = do
           -- No recalled memories: recall needs a database and this command opens
           -- none, so the behavior runs on the trigger payload alone.
           Log.logInfo logger "execution.mode" ["mode" .= ("ephemeral" :: Text), "resumable" .= False]
-          authority <- oneOffAuthority logger decl
+          interaction <- terminalInteraction noConfirm
+          record <- oneOffRecord logger
+          let subject = RunSubject {agent = decl, principal = compatibilityPrincipal decl.name, run = Nothing, repository = workspaceSelector . parseWorkspaceArgument <$> workspace}
+          runtime <- (lightComposition config interaction record).resolve subject >>= either (\refusal -> hPutStrLn stderr ("run-behavior: " <> Text.unpack (renderTierRefusal refusal)) >> exitFailure) pure
+          let checkout = maybe workspace (\grant -> Just grant.source) runtime.grant
           resultE <-
-            withOneOffCapabilityOverlays logger authority workspace decl env \derivedEnv ->
+            withOneOffCapabilityOverlays logger runtime.authority checkout decl env \derivedEnv ->
               runEphemeralBehavior (durationTime config.runTimeout) config.harness derivedEnv decl (triggerOnly payload)
           case resultE of
             Left overlayErr -> do
@@ -86,14 +91,12 @@ runRunBehavior path mpayload workspace config = do
 -- operator's state directory, outside every workspace. If that file cannot be
 -- opened every action is refused, because an unrecorded action never
 -- proceeds.
-oneOffAuthority :: Log.Logger -> AgentDecl -> IO Authority
-oneOffAuthority logger AgentDecl {name} = do
+oneOffRecord :: Log.Logger -> IO ActionRecord
+oneOffRecord logger = do
   stateDirectory <- getXdgDirectory XdgState "shikigami"
-  record <-
-    fileRecord (stateDirectory </> "record.jsonl") <&> \case
-      Right opened -> opened
-      Left failure -> ActionRecord {append = \_ -> pure (Left failure)}
-  pure (scopeToRun Nothing name (recorded (observedRecord logger Nothing record) unspecifiedTier denyAll))
+  fileRecord (stateDirectory </> "record.jsonl") <&> \case
+    Right opened -> observedRecord logger Nothing opened
+    Left failure -> ActionRecord {append = \_ -> pure (Left failure)}
 
 -- | This command deliberately opens no database, so it cannot honestly run an
 -- agent whose policy must first be resolved. Refuse before constructing the

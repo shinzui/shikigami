@@ -2,6 +2,9 @@
 
 ## 2026-11-15
 
+* **Addition**: FRIC-74 records detour interface friction with mori://shinzui/mori: mori status --json exits 1 whenever the project has health issues
+
+
 * **Addition**: FRIC-73 records slowdown tooling friction with mori://shinzui/shikigami: keiro-gate refuses any uncommitted change under shikigami-core/src
 
 

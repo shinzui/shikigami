@@ -223,6 +223,7 @@ import Shikigami.RuntimePolicy
 import Shikigami.Sink.Permission (SinkKind)
 import Shikigami.Trigger.Schedule (CatchUpPolicy (..))
 import Shikigami.Trigger.Stream (IncludeAgentActors (..), agentActorInclusion, agentActorsIncluded)
+import Shikigami.Trust.Tier (TrustTier (..), trustTierText)
 import Shikigami.Watchdog.Settings (WatchdogSettings (..))
 import Shikigami.Workspace.Settings (WorkspaceSettings, WorkspaceSupervisorSettings)
 
@@ -525,7 +526,16 @@ data AppConfig = AppConfig
     objectiveSettings :: !ObjectiveSettings,
     trackerSettings :: !TrackerSettings,
     watchdog :: !(Maybe WatchdogSettings),
-    initiativeSettings :: !(Maybe InitiativeSettings)
+    initiativeSettings :: !(Maybe InitiativeSettings),
+    -- | @trust.tier@: who decides a run's actions and how its processes are
+    -- contained (ADR-124). @contained@ keeps what each executable does today.
+    trustTier :: !TrustTier,
+    -- | @trust.local_operator.approvals_file@; absent means
+    -- @$XDG_CONFIG_HOME/shikigami/local-operator.dhall@.
+    localOperatorApprovalsFile :: !(Maybe FilePath),
+    -- | @trust.local_operator.state_dir@; absent means
+    -- @$XDG_STATE_HOME/shikigami@. Grants, worktrees and locks live here.
+    localOperatorStateDirectory :: !(Maybe FilePath)
   }
   deriving stock (Generic, Eq)
 
@@ -590,6 +600,9 @@ appConfig =
     <*> withDefault (secretSetting (stableKey "objective_trackers") "Provider-neutral objective tracker connections and explicit use/export grants" jsonDecoder) (constant "trackers-disabled" "External objective tracking requires explicit enablement" defaultTrackerSettings)
     <*> optional (publicSettingWithRenderer watchdogKey "Read-only active work observation: exact principal, scope, windows and bounded sweep size" jsonDecoder renderJson)
     <*> optional (publicSettingWithRenderer initiativesKey "Observer allowances: which principals may observe which sources, at what evaluation envelope and attention limits" jsonDecoder renderJson)
+    <*> withDefault trustTierSetting (constant "contained-tier" "Each executable keeps its configured authority and containment" Contained)
+    <*> optional (publicSettingWithRenderer trustApprovalsFileKey "The local operator's explicit approvals file (schema/LocalOperator.dhall)" (Text.unpack <$> textDecoder) Text.pack)
+    <*> optional (publicSettingWithRenderer trustStateDirectoryKey "The local operator's state directory for grants, worktrees and locks" (Text.unpack <$> textDecoder) Text.pack)
 
 -- | Which provider runs a Skill behavior, and what the real branch needs.
 --
@@ -1288,6 +1301,19 @@ anthropicApiKeySetting =
     "Anthropic API key, required when behavior.provider is anthropic"
     (SecretText <$> textDecoder)
 
+trustTierSetting :: Setting TrustTier
+trustTierSetting =
+  publicSettingWithRenderer
+    trustTierKey
+    "Trust tier: local-operator makes the operator the authority on this machine; contained and multi-tenant keep the configured authority"
+    (enumDecoder [("local-operator", LocalOperator), ("contained", Contained), ("multi-tenant", MultiTenant)])
+    trustTierText
+
+trustTierKey, trustApprovalsFileKey, trustStateDirectoryKey :: Key
+trustTierKey = stableKey "trust.tier"
+trustApprovalsFileKey = stableKey "trust.local_operator.approvals_file"
+trustStateDirectoryKey = stableKey "trust.local_operator.state_dir"
+
 actionAuthorizationModeSetting :: Setting ActionAuthorizationChoice
 actionAuthorizationModeSetting =
   publicSettingWithRenderer
@@ -1603,6 +1629,9 @@ environmentBindings =
           binding (EnvName "SHIKIGAMI_BEHAVIOR_OPTIONS_TOOL_CHOICE") (optionKey "tool_choice"),
           binding (EnvName "SHIKIGAMI_BEHAVIOR_OPTIONS_HEADERS") (optionKey "headers"),
           binding (EnvName "SHIKIGAMI_BEHAVIOR_OPTIONS_METADATA") (optionKey "metadata"),
+          binding (EnvName "SHIKIGAMI_TRUST_TIER") trustTierKey,
+          binding (EnvName "SHIKIGAMI_TRUST_LOCAL_OPERATOR_APPROVALS_FILE") trustApprovalsFileKey,
+          binding (EnvName "SHIKIGAMI_TRUST_LOCAL_OPERATOR_STATE_DIR") trustStateDirectoryKey,
           binding (EnvName "SHIKIGAMI_ACTION_AUTHORIZATION_MODE") actionAuthorizationModeKey,
           binding (EnvName "SHIKIGAMI_ACTION_KIKAN_EN_BASE_URL") actionKikanBaseUrlKey,
           binding (EnvName "SHIKIGAMI_ACTION_SHOMEI_BASE_URL") actionShomeiBaseUrlKey,
@@ -1636,6 +1665,7 @@ data Role
   | EventConsumerRole
   | RunBehaviorRole
   | AgentRunRole
+  | LocalRole
   | MigrateRole
   deriving stock (Generic, Eq, Ord, Show, Bounded, Enum)
 
@@ -1651,6 +1681,7 @@ roleBinary = \case
   EventConsumerRole -> "shikigami-consume-events"
   RunBehaviorRole -> "shikigami-run-behavior"
   AgentRunRole -> "shikigami-agent-run"
+  LocalRole -> "shikigami-local"
   MigrateRole -> "shikigami-migrate"
 
 -- | The probe port a role binds when @health.port@ names none.
@@ -1673,6 +1704,7 @@ defaultHealthPort = \case
   AdminRole -> Nothing
   RunBehaviorRole -> Nothing
   AgentRunRole -> Nothing
+  LocalRole -> Nothing
   MigrateRole -> Nothing
 
 -- | Which port this role's probe listener binds, if it has one.
@@ -1712,6 +1744,7 @@ roleRequiredKeys = \case
   MigrateRole -> [databaseConnectionStringKey]
   AdminRole -> []
   RunBehaviorRole -> []
+  LocalRole -> []
 
 -- | Which of a role's required keys resolution did not supply.
 --

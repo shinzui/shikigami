@@ -54,6 +54,7 @@
     "Sink",
     "StateRevision",
     "Trigger",
+    "Trust",
     "Watchdog",
     "WorkerSession",
     "WorkerSessionLifecycle",

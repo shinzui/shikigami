@@ -77,6 +77,9 @@ maximum lifetime.
 * Amended by [ADR 0123](0123-the-kernel-owns-its-action-vocabulary-authority-port-and-action-record.md)
   — the decision is restated over the kernel's own `Action` type; Kikan-En is an adapter, and
   every decision is recorded before the effect.
+* Amended by [ADR 0124](0124-authority-is-selected-by-trust-tier-and-the-local-operator-grants-a-declaration-once.md)
+  — the authority is selected by trust tier, and under `local-operator` the operator grants a
+  declaration once.
 * `mori://shinzui/en/plans/27-per-action-authorization-for-agent-tool-and-sink-dispatch` —
   coordinated implementation and cross-repository evidence.
 * `mori://shinzui/kikan-en` — closed action contract, policy schema, authenticated endpoint, and

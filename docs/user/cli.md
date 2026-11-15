@@ -238,14 +238,15 @@ traversal, symlinks, Git internals, noisy build directories, binary files, and e
 input or output are refused. Agents without the request receive no workspace tools, and the
 command performs no Git discovery for them.
 
-**Current limitation:** both one-off commands install the deny-all authority.
-A workspace request therefore fails before acquiring its provider; neither
-`--workspace` nor Kikan authorization settings override that wiring. These commands
-do not currently provide a working workspace-read run. Each refusal is still
-recorded: `shikigami-agent-run` appends to the action record in the database, and
-`shikigami-run-behavior` appends JSON Lines to
-`$XDG_STATE_HOME/shikigami/record.jsonl` (normally
-`~/.local/state/shikigami/record.jsonl`, mode 0600).
+**Authority.** Under the default `contained` trust tier both one-off commands install the
+deny-all authority, so a workspace request fails before acquiring its provider. Under
+`--set trust.tier=local-operator` you are the authority: the command shows what the declaration
+asks for, asks once, and runs what you granted; see
+[Running agents on your own machine](./local-operator.md). Every decision is recorded:
+`shikigami-agent-run` appends to the action record in the database, and `shikigami-run-behavior`
+appends JSON Lines to `$XDG_STATE_HOME/shikigami/record.jsonl` (normally
+`~/.local/state/shikigami/record.jsonl`, mode 0600). Both take `--workspace DIR|mori://…`,
+`--payload JSON|-` and `--no-confirm`.
 
 `shikigami-run-behavior` rejects sanctioned-profile requirements before dispatch;
 use `shikigami-agent-run` to resolve those from the database. It also rejects
@@ -413,6 +414,19 @@ pages most-significant first (1–200 rows, default 50); `--by` is recorded in t
 no cache to invalidate. **Needs the DB** (`database.connection_string`).
 
 → See [Sinks](./sinks.md).
+
+## `shikigami-local`
+
+```bash
+$ shikigami-local approvals
+$ shikigami-local revoke <DIGEST>
+$ shikigami-local ledger [--run <WORKFLOW-ID>] [--refusals] [--limit <N>] [--json]
+```
+
+The local operator's view under the `local-operator` trust tier. `approvals` validates the
+approvals file and lists its repositories, approvals and every stored confirmation; `revoke`
+deletes a stored confirmation (give at least eight characters of its digest); `ledger` prints the
+action record oldest first. → See [Running agents on your own machine](./local-operator.md).
 
 ## `shikigami record`
 

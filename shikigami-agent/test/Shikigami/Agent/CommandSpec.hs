@@ -24,6 +24,7 @@ import Shikigami.Agent.Command
   ( RoleInfo (..),
     agentRoles,
     agentRunRoleInfo,
+    localRoleInfo,
     runBehaviorRoleInfo,
   )
 import Shikigami.Agent.Command.RunBehavior (profileRequirementRefusal)
@@ -31,6 +32,7 @@ import Shikigami.Agent.Decl (AgentDecl (..), ProfileRequirement (..), Trigger (.
 import Shikigami.Agent.Decl qualified as Agent
 import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Name (AgentName, mkAgentName)
+import Shikigami.Agent.Trust (WorkspaceArgument (..), parseWorkspaceArgument)
 import Shikigami.App.Config (Role (..))
 import Shikigami.Attestation.Profile (ProfileId (..), ProfileVersion (..))
 import Shikigami.Trigger.Schedule (parseCron)
@@ -65,9 +67,9 @@ tests =
           agentRoles,
       testCase "the two one-off roles are named exactly once each" $
         fmap (.binaryName) agentRoles
-          @?= ["shikigami-run-behavior", "shikigami-agent-run"],
+          @?= ["shikigami-run-behavior", "shikigami-agent-run", "shikigami-local"],
       testCase "each binary is wired to the role whose requirements it must meet" $
-        fmap (.role) agentRoles @?= [RunBehaviorRole, AgentRunRole],
+        fmap (.role) agentRoles @?= [RunBehaviorRole, AgentRunRole, LocalRole],
       testCase "every one-off executable offers the same configuration and diagnostic options" $
         mapM_ (`assertHasAll` configurationFlags) agentRoles,
       testCase "every one-off executable reports its version offline" $
@@ -75,7 +77,12 @@ tests =
       testCase "run-behavior keeps its agent and payload options" $
         assertHasAll runBehaviorRoleInfo ["--agent", "--payload", "--workspace"],
       testCase "agent-run keeps its agent and activity options" $
-        assertHasAll agentRunRoleInfo ["--agent", "--from-activity", "--workspace"],
+        assertHasAll agentRunRoleInfo ["--agent", "--from-activity", "--workspace", "--payload", "--no-confirm"],
+      testCase "shikigami-local names its three verbs" $
+        assertHasAll localRoleInfo ["approvals", "revoke", "ledger"],
+      testCase "a mori:// workspace argument selects an identity and anything else a path" do
+        parseWorkspaceArgument "mori://shinzui/fsrs-hs" @?= WorkspaceRepository "mori://shinzui/fsrs-hs"
+        parseWorkspaceArgument "../fsrs-hs" @?= WorkspacePath "../fsrs-hs",
       testCase "run-behavior accepts a declaration with no profile" $
         profileRequirementRefusal (testDecl Nothing) @?= Nothing,
       testCase "run-behavior refuses a profile it cannot resolve before dispatch" $

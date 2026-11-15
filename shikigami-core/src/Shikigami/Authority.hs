@@ -76,7 +76,7 @@ import Shikigami.Agent.DeclarationValue (DeclarationCoordinate, declarationCoord
 import Shikigami.Agent.Name (AgentName)
 import Shikigami.Behavior.Error (boundedBehaviorDetail)
 import Shikigami.Log qualified as Log
-import Shikigami.Prelude hiding ((.=))
+import Shikigami.Prelude hiding (at, matching, (.=))
 import Shikigami.Record
   ( ActionRecord (..),
     RecordEntry,

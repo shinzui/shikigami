@@ -26,11 +26,14 @@ module Shikigami.Agent.Command
     -- * The individual roles
     runBehaviorRoleInfo,
     agentRunRoleInfo,
+    localRoleInfo,
   )
 where
 
+import Data.Text qualified as Text
 import Options.Applicative
 import Shikigami.Agent.Command.AgentRun (runAgentRun)
+import Shikigami.Agent.Command.Local (LedgerOptions (..), LocalCommand (..), runLocal)
 import Shikigami.Agent.Command.RunBehavior (runRunBehavior)
 import Shikigami.Agent.Payload (payloadArgument)
 import Shikigami.App.Config (Role (..))
@@ -44,7 +47,8 @@ import Shikigami.App.Role (RoleInfo (..), runRole)
 agentRoles :: [RoleInfo]
 agentRoles =
   [ runBehaviorRoleInfo,
-    agentRunRoleInfo
+    agentRunRoleInfo,
+    localRoleInfo
   ]
 
 -- | @shikigami-run-behavior@: run one agent's behavior, with no database.
@@ -65,7 +69,8 @@ runBehaviorRoleInfo =
           ( runRunBehavior
               <$> strOption (long "agent" <> metavar "FILE" <> help "Agent manifest (.dhall)")
               <*> payloadArgument
-              <*> optional (strOption (long "workspace" <> metavar "DIR" <> help "Git worktree for requested capability overlays"))
+              <*> optional (strOption (long "workspace" <> metavar "DIR|mori://…" <> help "Repository for requested capability overlays: a checkout path or a Mori identity"))
+              <*> switch (long "no-confirm" <> help "Never ask to grant a declaration; use only stored or file grants")
           )
           (pure [])
     }
@@ -88,7 +93,42 @@ agentRunRoleInfo =
           ( runAgentRun
               <$> strOption (long "agent" <> metavar "NAME|FILE" <> help "Agent name (agents/<name>.dhall) or manifest path")
               <*> optional (strOption (long "from-activity" <> metavar "FILE" <> help "Record an activity.v1 envelope as a memory instead of running"))
-              <*> optional (strOption (long "workspace" <> metavar "DIR" <> help "Git worktree for requested capability overlays"))
+              <*> optional (strOption (long "workspace" <> metavar "DIR|mori://…" <> help "Repository for requested capability overlays: a checkout path or a Mori identity"))
+              <*> payloadArgument
+              <*> switch (long "no-confirm" <> help "Never ask to grant a declaration; use only stored or file grants")
           )
           (pure [])
     }
+
+-- | @shikigami-local@: what the local operator granted and what their agents
+-- did, under the @local-operator@ trust tier.
+localRoleInfo :: RoleInfo
+localRoleInfo =
+  RoleInfo
+    { binaryName = "shikigami-local",
+      role = LocalRole,
+      parserInfo =
+        withConfigOptions
+          "shikigami-local"
+          "Inspect local-operator grants and the action record"
+          (runLocal <$> subparser (approvals <> revoke <> ledger))
+          (pure [])
+    }
+  where
+    approvals = command "approvals" (info (pure ShowApprovals) (progDesc "Validate the approvals file and list every grant"))
+    revoke = command "revoke" (info (RevokeGrant . Text.pack <$> strArgument (metavar "DIGEST" <> help "At least eight characters of a stored grant's digest")) (progDesc "Delete a stored confirmation"))
+    ledger =
+      command
+        "ledger"
+        ( info
+            ( fmap
+                Ledger
+                ( LedgerOptions
+                    <$> optional (Text.pack <$> strOption (long "run" <> metavar "WORKFLOW-ID" <> help "Only events of this run"))
+                    <*> switch (long "refusals" <> help "Only decisions that did not allow")
+                    <*> optional (option auto (long "limit" <> metavar "N" <> help "Most recent N events (1-1000, default 50)"))
+                    <*> switch (long "json" <> help "Print JSON Lines")
+                )
+            )
+            (progDesc "Print the action record, oldest first")
+        )

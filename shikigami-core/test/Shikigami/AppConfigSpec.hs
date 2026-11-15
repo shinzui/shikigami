@@ -178,6 +178,9 @@ surfaceTests =
                 "sinks.kizashi.base_url",
                 "sinks.kizashi.default_recipient",
                 "sinks.rei.base_url",
+                "trust.local_operator.approvals_file",
+                "trust.local_operator.state_dir",
+                "trust.tier",
                 "watchdog",
                 "worker.capacity",
                 "worker.run_timeout_seconds",
@@ -267,6 +270,9 @@ surfaceTests =
               ("SHIKIGAMI_SINKS_KIZASHI_DEFAULT_RECIPIENT", "sinks.kizashi.default_recipient"),
               ("SHIKIGAMI_SCHEDULER_CATCH_UP", "scheduler.catch_up"),
               ("SHIKIGAMI_SINKS_REI_BASE_URL", "sinks.rei.base_url"),
+              ("SHIKIGAMI_TRUST_TIER", "trust.tier"),
+              ("SHIKIGAMI_TRUST_LOCAL_OPERATOR_APPROVALS_FILE", "trust.local_operator.approvals_file"),
+              ("SHIKIGAMI_TRUST_LOCAL_OPERATOR_STATE_DIR", "trust.local_operator.state_dir"),
               ("SHIKIGAMI_WORKER_CAPACITY", "worker.capacity"),
               ("SHIKIGAMI_RUN_TIMEOUT_SECONDS", "worker.run_timeout_seconds")
             ],
@@ -647,7 +653,7 @@ requirementTests =
       testCase "roles that open no database require nothing" $
         mapM_
           (\role -> missingRequirements role defaultAppConfig @?= [])
-          [AdminRole, RunBehaviorRole],
+          [AdminRole, RunBehaviorRole, LocalRole],
       testCase "a supplied connection string satisfies the requirement" do
         config <- resolveOrFail (optionsWith [] []) [] [("PG_CONNECTION_STRING", "postgresql:///shikigami")]
         missingRequirements WorkerRole config @?= [],
@@ -694,7 +700,7 @@ requirementTests =
       testCase "roles with no listener of their own get no probe port" $
         mapM_
           (\role -> fmap portNumber (defaultHealthPort role) @?= Nothing)
-          [ServerRole, AdminRole, RunBehaviorRole, AgentRunRole, MigrateRole, WorkspaceSupervisorRole],
+          [ServerRole, AdminRole, RunBehaviorRole, AgentRunRole, LocalRole, MigrateRole, WorkspaceSupervisorRole],
       testCase "an unset health.port leaves each role on its own default" $
         fmap portNumber (healthPortFor WorkerRole defaultAppConfig) @?= Just 8091,
       testCase "a configured health.port overrides the role default" do

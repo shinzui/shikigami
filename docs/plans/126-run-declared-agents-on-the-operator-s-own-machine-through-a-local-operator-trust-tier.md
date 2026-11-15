@@ -27,6 +27,11 @@ provenance:
       at: 2026-11-15T14:50:34Z
       mode: "update"
       note: "Cascaded MasterPlan 22 review: EP-8 M1 dependency, kernel authority and record ports, per-run resolution, confirm-once grants"
+    - model: "claude-opus-5-5"
+      harness: "claude-code"
+      at: 2026-11-15T16:40:22Z
+      mode: "implement"
+      note: "M1 implemented: TrustTier, approvals, confirm-once grants, local authority, shikigami-local, ADR-124"
 ---
 
 # Run declared agents on the operator's own machine through a local-operator trust tier
@@ -71,7 +76,7 @@ which gives the kernel its own action type, authority port and action record. Th
 
 ## Progress
 
-- [ ] Milestone 1 — the tier exists and a read-only LocalOperator run works. `TrustTier`,
+- [x] Milestone 1 (2026-11-15) — the tier exists and a read-only LocalOperator run works. `TrustTier`,
   the per-run `TierComposition`, grants (the approvals file and the confirm-once store), the
   local authority adapter, the record kinds, `shikigami-local` and the tier ADR are in
   place. On this Mac, `shikigami-agent-run` runs `agents/local-maintainer.dhall`
@@ -80,6 +85,22 @@ which gives the kernel its own action type, authority port and action record. Th
   the grant and the approved decisions. `agents/triage-note.dhall`, which declares a Kizashi
   sink, is refused when it is resolved, before any model call. Without a tier setting the
   read-only command fails exactly as before.
+  Evidence (this Mac, `behavior.provider=openai`, `behavior.model=gpt-5.4-mini`, grants in a
+  scratch `trust.local_operator.state_dir`, no approvals file): the first run of
+  `agents/local-maintainer.dhall` against `mori://shinzui/fsrs-hs` printed the request, asked
+  `Grant this declaration? [y/N]`, and on `y` answered from `src/FSRS.hs`,
+  `src/FSRS/Scheduler.hs`, `fsrs-hs.cabal` and `README.md`, ending `record 17 approved, 0
+  refused`. The second run did not ask. An edited copy of the declaration run with no terminal
+  refused with `no stored grant for this declaration; run it once in a terminal to confirm it`
+  before any model call, as did the unedited one before its confirmation. `shikigami-local
+  ledger --run <id>` showed `authority.granted` and the approved `authority.decided` events
+  with the run id; `shikigami-local approvals` listed the stored grant. `triage-note` was
+  refused with `the declaration lists outputs this composition cannot deliver:
+  kizashi.signal`. Without `trust.tier` the read-only command failed with today's deny-all
+  refusal (`ExecutionPolicyRefused "exact capability lease is unavailable"`). Selecting the
+  checkout by path resolved the same identity and reused the grant. `LocalOperatorSpec` (13
+  cases), the agent `CommandSpec`, the worker tier test and `just haskell-conventions` pass;
+  ADR-124 is written.
 - [ ] Milestone 2 — LocalOperator edits, executes and commits in a worktree. The same agent
   with all four workspace capabilities produces a commit on
   `shikigami/local-maintainer/<suffix>` in fsrs-hs, runs the approved `build` rule under its
@@ -93,7 +114,21 @@ which gives the kernel its own action type, authority port and action record. Th
 
 ## Surprises & Discoveries
 
-(None yet.)
+- Observation: `shikigami-core` may not link `process`; the package-architecture test treats it
+  as a provider adapter. Every host process the local operator needs (`git`, `mori`, and in
+  milestone 2 the command launcher and worktree commands) must live outside core.
+  Evidence: `core links the neutral tool registry without a provider adapter` failed with
+  `core links ["process"]`. M1 injects a `CheckoutResolver` into the approvals module and puts
+  the process adapter in `shikigami-agent/src/Shikigami/Agent/Checkout.hs`.
+- Observation: `mori status --json` exits 1 whenever it lists any project issue, while still
+  printing the identity; its text contains non-ASCII characters. See FRIC-74.
+- Observation: `shikigami-agent-run` printed no answer, only the session and the learning.
+  Evidence: `renderRunResult` ignored `behaviorOutput`. M1 prints the reply, because the
+  operator needs to read what the agent did.
+- Observation: Workspace effects are capability tools of `shikigami.workspace`, not separate
+  workspace actions (EP-8 M1). Milestone 2's policy therefore maps a granted `workspace.edit`,
+  `workspace.exec` or `workspace.git` to `UseCapability` on those capability ids at revision
+  `local-1`.
 
 
 ## Decision Log
@@ -194,6 +229,39 @@ which gives the kernel its own action type, authority port and action record. Th
   Rationale: MasterPlan 22 replaces the closed `Sink` union with an output port. A run that
   completes with its only output silently denied teaches the operator nothing, and a
   refusal constructor here would be deleted by EP-8.
+  Date: 2026-11-15
+- Decision: Landed names for EP-8 M1's contracts. `Authority` is abstract
+  (`authority.decide`), `Action` is `UseCapability (ConnectProvider | InvokeTool)` or
+  `EmitOutput`, and `RecordEvent.tier` is a `TierLabel` (`trustTierLabel`). The local policy
+  therefore approves `UseCapability` for granted capability ids and refuses `EmitOutput` as
+  `OutsideGrant`; `ReadWorkspace`, `WriteWorkspace` and `ExecuteWorkspace` do not exist.
+  Rationale: EP-8 M1 declared only executed actions (ADR-1).
+  Date: 2026-11-15
+- Decision: M1 defers `ProcessLauncher`, the `TierRuntime.workspace` and `launcher` fields and
+  the worker's `TierComposition` wrapper to milestone 2 and EP-2. `TierRuntime` carries the
+  resolved `grant` instead. The worker refuses `local-operator`, and `multi-tenant` with
+  `authorization.actions.mode=disabled`, at boot (`workerTierAdmission`).
+  Rationale: ADR-1; none has an executed consumer in M1, and wrapping the worker's existing
+  values changes no behavior.
+  Date: 2026-11-15
+- Decision: The record kinds live with their producers: `grantEntry` (`authority.granted`) in
+  `Shikigami.Trust.LocalOperator.Grant`, `authority.decided` from EP-8's `recorded`. No
+  `Records` module is added; milestone 2 adds its kinds beside the worktree and launcher code.
+  Rationale: EP-8's rule that a producer owns its kind.
+  Date: 2026-11-15
+- Decision: `RunSubject.repository` is a `RepositorySelector` (identity or path), not a
+  `RepositoryId`. An unlisted path takes its Mori identity from `mori status --json` and
+  otherwise `file://<toplevel>`.
+  Rationale: `--workspace` takes either form, and a path must resolve to the same grant as its
+  identity.
+  Date: 2026-11-15
+- Decision: A grant confirmation is appended to the record before it is stored, and a failed
+  append refuses the grant. End of input at the prompt is a no.
+  Rationale: K3; and a piped or closed terminal must never become consent.
+  Date: 2026-11-15
+- Decision: Pre-release recheck for M1, 2026-11-15: no `git tag`, no deployment, no journals
+  that must resume, no wire consumers. M1 changes no workflow body or journaled value.
+  Rationale: Required before each milestone.
   Date: 2026-11-15
 - Decision: "`Contained` keeps today's behavior" is restated per executable. The worker's
   authority is selected by `authorization.actions.mode`; the light commands, conversations

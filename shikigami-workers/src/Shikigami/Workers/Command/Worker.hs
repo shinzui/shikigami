@@ -1,6 +1,7 @@
 module Shikigami.Workers.Command.Worker
   ( runWorkerCmd,
     runResumeCmd,
+    workerTierAdmission,
   )
 where
 
@@ -20,7 +21,7 @@ import Shikigami.Agent.Decl (AgentDecl (..))
 import Shikigami.Agent.Loader (enabledAgentsFromReport, loadAgentsLoud)
 import Shikigami.Agent.Workflow.Resume (runBoundedResumeWorker)
 import Shikigami.App (AppEnv (..), runAppIO)
-import Shikigami.App.Config (AppConfig, Role (WorkerRole))
+import Shikigami.App.Config (ActionAuthorizationConfig (ActionAuthorizationDisabled), AppConfig (..), Role (WorkerRole))
 import Shikigami.App.Config qualified as Config
 import Shikigami.App.Config.Load (requireDatabaseUrl)
 import Shikigami.Authority (Authority, recordedIn)
@@ -51,6 +52,7 @@ import Shikigami.Sink.Permission (sinkKindText)
 import Shikigami.Telemetry (withRunTelemetry)
 import Shikigami.Telemetry.Metrics (recordInitiativeAdmission, recordInitiativeCandidate, recordInitiativeProposal, recordInitiativeRefusal)
 import Shikigami.Telemetry.Sampler (watchdogHooks)
+import Shikigami.Trust.Tier (TrustTier (..))
 import Shikigami.Workers.Config (WorkerEnv (..), directoryLoopRegistration, persistAgentLoadReport, schedulerSchedules, startProcessDirectory)
 import Shikigami.Workers.Registry (runWorkers)
 import Shikigami.Workspace.ConfiguredHost (configuredWorkspaceHostWithTransfers, configuredWorkspaceTransfers)
@@ -88,6 +90,7 @@ runResumeCmd passes candidates force config
 runWorkerCmdWith :: Maybe (Int, Int) -> AppConfig -> IO ()
 runWorkerCmdWith resumeBudget config = do
   logger <- Log.newStderrLogger Log.Info
+  either Exit.die pure (workerTierAdmission config)
   connStr <- Config.revealSecretText <$> requireDatabaseUrl "shikigami-worker" config
   verifyShikigamiMigrations connStr
   withRunTelemetry "shikigami.worker" \tr keiroMetrics shikigamiMetrics -> do
@@ -266,6 +269,17 @@ refuseInvalidSinkHttp :: Log.Logger -> SinkHttpError -> IO SinkHttp
 refuseInvalidSinkHttp logger failure = do
   Log.logError logger "worker.sink_http.invalid" ["error" .= show failure]
   Exit.die "shikigami-worker: refusing to start; invalid sink HTTP configuration"
+
+-- | The worker composes the @contained@ and @multi-tenant@ tiers only. It
+-- refuses @local-operator@ until EP-2 of MasterPlan 22 lets it run local
+-- work, and refuses @multi-tenant@ without a configured service authority.
+workerTierAdmission :: AppConfig -> Either String ()
+workerTierAdmission config = case (config.trustTier, config.actionAuthorization) of
+  (LocalOperator, _) ->
+    Left "shikigami-worker: refusing to start; trust.tier=local-operator runs only through shikigami-agent-run and shikigami-run-behavior"
+  (MultiTenant, ActionAuthorizationDisabled) ->
+    Left "shikigami-worker: refusing to start; trust.tier=multi-tenant requires authorization.actions.mode=kikan"
+  _ -> Right ()
 
 buildActionAuthorizer :: Log.Logger -> AppConfig -> IO Authority
 buildActionAuthorizer logger config =

@@ -150,6 +150,9 @@ nested under `kafka`.
 | `credentials.sinks.kizashi.token` | *(none — secret)* | `SHIKIGAMI_KIZASHI_TOKEN` | Optional bearer token sent only to the configured kizashi host. |
 | `credentials.sinks.kanmon.token` | *(none — secret)* | `SHIKIGAMI_KANMON_TOKEN` | Optional bearer token authenticating Shikigami to Kanmon; it is not a provider credential. |
 | `credentials.sinks.danwa.token` | *(none — secret)* | `SHIKIGAMI_DANWA_TOKEN` | Optional bearer token sent only to the configured danwa host. |
+| `trust.tier` | `contained` | `SHIKIGAMI_TRUST_TIER` | Who decides a run's actions: `contained` keeps each executable's configured authority; `multi-tenant` additionally requires `authorization.actions.mode=kikan` in the worker; `local-operator` makes the operator the authority in the two one-off commands and is refused by the worker ([ADR-124](../adr/0124-authority-is-selected-by-trust-tier-and-the-local-operator-grants-a-declaration-once.md)). |
+| `trust.local_operator.approvals_file` | `$XDG_CONFIG_HOME/shikigami/local-operator.dhall` | `SHIKIGAMI_TRUST_LOCAL_OPERATOR_APPROVALS_FILE` | The explicit local-operator approvals file (`schema/LocalOperator.dhall`); a missing file is empty. |
+| `trust.local_operator.state_dir` | `$XDG_STATE_HOME/shikigami` | `SHIKIGAMI_TRUST_LOCAL_OPERATOR_STATE_DIR` | Where confirmed local-operator grants are stored, outside every workspace. |
 | `authorization.actions.mode` | `disabled` | `SHIKIGAMI_ACTION_AUTHORIZATION_MODE` | `disabled` authorizes no protected external action; `kikan` requires the complete trust group below. |
 | `authorization.actions.kikan_en.base_url` | *(none)* | `SHIKIGAMI_ACTION_KIKAN_EN_BASE_URL` | Kikan-En base URL, required in `kikan` mode. |
 | `authorization.actions.shomei.base_url` | *(none)* | `SHIKIGAMI_ACTION_SHOMEI_BASE_URL` | Shomei base URL, required in `kikan` mode. |

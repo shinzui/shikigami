@@ -234,7 +234,20 @@ These came from reading the working tree on 2026-11-15, before implementation.
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+M1 (2026-11-15, commit 3c9ba841). The kernel decides every external action through its own
+`Action` and `Authority`, and every decision is a row in `shikigami.action_record`. Results
+on this Mac, suites run one at a time with `TASTY_NUM_THREADS=2` (FRIC-51, FRIC-59):
+`shikigami-core-test` 880 of 882 (the two failures are the 100 ms deadline race of FRIC-72,
+which passes alone), `shikigami-core-postgres-test` 686 of 686, `shikigami-workers-test` 352
+of 353 with the Git provider group then passing 17 of 17 at one thread,
+`shikigami-server-test` and `shikigami-agent-test` all passing, the migrations suites
+passing, `just haskell-conventions` passing and `just keiro-gate HEAD^` passing with no
+workflow change. A real `shikigami-agent-run` of `agents/triage-note.dhall` left its refusal
+in the record (see Progress).
+
+Friction under M1: FRIC-71 (stale migration lock, a recurrence of FRIC-58), FRIC-72 (a
+deadline test that races under load) and FRIC-73 (`keiro-gate` runs only on a committed
+tree). They are triaged when this plan completes.
 
 
 ## Context and Orientation
