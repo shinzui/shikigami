@@ -206,6 +206,7 @@ declForIdentity identity capabilityOverlays =
       delegationBudget = Nothing,
       sanctionedProfile = Nothing,
       capabilityOverlays,
+      tools = [],
       identity,
       memory = defaultMemoryPolicy,
       enabled = agentEnablement (True),

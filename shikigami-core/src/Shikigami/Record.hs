@@ -404,10 +404,21 @@ renderRecordEvent RecordEvent {at, run, principal, tier, agent, entry} =
           Just (Aeson.String value) -> Just value
           _ -> Nothing
         _ -> Nothing
-      decided = case (field "decision", field "detail") of
-        (Just "allowed", _) -> ["allowed"]
-        (Just _, Just detail) -> ["refused " <> detail]
-        (Just decision, Nothing) -> ["refused " <> decision]
+      number name = case payload of
+        Aeson.Object object | Just (Aeson.Number value) <- KeyMap.lookup name object -> Just (Text.pack (show (round value :: Integer)))
+        _ -> Nothing
+      arguments = case payload of
+        Aeson.Object object | Just value <- KeyMap.lookup "arguments" object -> Text.Encoding.decodeUtf8Lenient (LazyByteString.toStrict (Aeson.encode value))
+        _ -> "[]"
+      -- A declared tool call (EP-3): admitted with its exit, or refused with why.
+      decided = case (recordKindText kind, field "decision", field "detail") of
+        ("tool.called", Just decision, _) ->
+          [decision, maybe "?" id (field "tool"), "run", arguments]
+            <> maybe [] (\code -> ["exit " <> code]) (number "exitCode")
+            <> maybe [] pure (field "reason")
+        (_, Just "allowed", _) -> ["allowed"]
+        (_, Just _, Just detail) -> ["refused " <> detail]
+        (_, Just decision, Nothing) -> ["refused " <> decision]
         _ -> []
       source = maybe [] (\by -> ["(source: " <> by <> ")"]) (field "decidedBy")
    in Text.unwords

@@ -75,6 +75,7 @@ tests =
               delegates,
               delegationBudget,
               capabilityOverlays,
+              tools = [],
               enabled
             } -> do
               identity @?= Nothing

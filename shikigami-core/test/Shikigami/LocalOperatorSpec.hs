@@ -201,6 +201,7 @@ decl capabilities =
       delegationBudget = Nothing,
       sanctionedProfile = Nothing,
       capabilityOverlays = capability <$> capabilities,
+      tools = [],
       identity = Just IdentityDecl {principal},
       memory = defaultMemoryPolicy,
       enabled = agentEnablement True,

@@ -27,6 +27,7 @@ module Shikigami.Agent.Decl
     RouterPolicy (..),
     Behavior (..),
     codingAgentStepOf,
+    requestedOverlays,
     Trigger (..),
     StreamMatch (..),
     Sink (..),
@@ -49,6 +50,7 @@ import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.ExpertiseKey (ExpertiseKey)
 import Shikigami.Agent.Name (AgentName)
 import Shikigami.Attestation.Profile (ProfileId, ProfileVersion)
+import Shikigami.Capability.Declared (CliToolDecl (..), ToolDecl, cliCapabilityId, cliTools)
 import Shikigami.Capability.Overlay (CapabilityId)
 import Shikigami.CodingAgent.Types (CodingAgentEffort, CodingAgentPrompt, CodingAgentProvider, CodingAgentStep (..), DeadlineMinutes, SkillDirectory, VendorModelId, WorkspaceAccess)
 import Shikigami.Decision.ModelAlias (ModelAlias)
@@ -317,6 +319,9 @@ data AgentDecl = AgentDecl
     delegationBudget :: !(Maybe DelegationBudget),
     sanctionedProfile :: !(Maybe ProfileRequirement),
     capabilityOverlays :: ![CapabilityId],
+    -- | Declared CLI tools (EP-3). Each is offered as the overlay
+    -- @cli.<name>@; omitted from the journal when empty.
+    tools :: ![ToolDecl],
     identity :: !(Maybe IdentityDecl),
     memory :: !MemoryPolicy,
     enabled :: !AgentEnablement,
@@ -326,6 +331,13 @@ data AgentDecl = AgentDecl
   deriving stock (Eq, Show, Generic)
   deriving anyclass (FromDhall)
 
+-- | Every overlay the declaration requests: its capability overlays, then
+-- @cli.<name>@ for each declared CLI tool (EP-3). Resolution, the grant and
+-- the behavior environment all read this, never the field alone.
+requestedOverlays :: AgentDecl -> [CapabilityId]
+requestedOverlays AgentDecl {capabilityOverlays, tools} =
+  capabilityOverlays <> [cliCapabilityId tool.name | tool <- cliTools tools]
+
 -- Defaulted additions preserve the pre-change journal bytes.
 instance ToJSON AgentDecl where
   toJSON declaration = case Aeson.genericToJSON Aeson.defaultOptions declaration of
@@ -333,7 +345,8 @@ instance ToJSON AgentDecl where
       let decisions = if null declaration.decisionModels then KeyMap.delete "decisionModels" fields else fields
           execution = if isNothing declaration.execution then KeyMap.delete "execution" decisions else decisions
           harness = if isNothing declaration.harness then KeyMap.delete "harness" execution else execution
-       in Aeson.Object harness
+          tools = if null declaration.tools then KeyMap.delete "tools" harness else harness
+       in Aeson.Object tools
     value -> value
 
 instance FromJSON AgentDecl where
@@ -341,4 +354,5 @@ instance FromJSON AgentDecl where
     let decisions = if KeyMap.member "decisionModels" fields then fields else KeyMap.insert "decisionModels" (Aeson.toJSON ([] :: [ModelAlias])) fields
         execution = if KeyMap.member "execution" decisions then decisions else KeyMap.insert "execution" Aeson.Null decisions
         harness = if KeyMap.member "harness" execution then execution else KeyMap.insert "harness" Aeson.Null execution
-     in Aeson.genericParseJSON Aeson.defaultOptions (Aeson.Object harness)
+        tools = if KeyMap.member "tools" harness then harness else KeyMap.insert "tools" (Aeson.toJSON ([] :: [ToolDecl])) harness
+     in Aeson.genericParseJSON Aeson.defaultOptions (Aeson.Object tools)

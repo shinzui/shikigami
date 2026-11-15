@@ -13,6 +13,7 @@ okf_version: "0.2"
 # Guide
 
 - [Finite adaptive delivery](adaptive-delivery.md) - Run one objective through the compiled adaptive-delivery Flow with a finite resource root and cutoff.
+- [Give an agent your command-line tools](declared-tools.md) - Declare the CLI tools an agent may call, with the argument patterns it may use, grant the declaration once, bound it with an optional operator ceiling, and read every call in the action record.
 - [Detectors — the intelligence layer as declared agents](detectors.md) - Check detector execution support and configure supported agents.
 - [Flows](flows.md) - Implement, register, and inspect durable lifecycle-backed Flow behaviors.
 - [HTTP API — agents and runs](http-api.md) - Authenticate, discover declared agents, request an idempotent run, and follow its lifecycle through the typed client or HTTP.

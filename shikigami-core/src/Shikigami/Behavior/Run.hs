@@ -43,7 +43,7 @@ import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Time (NominalDiffTime, nominalDiffTimeToSeconds)
 import GHC.Generics (Generic)
-import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..))
+import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), requestedOverlays)
 import Shikigami.Agent.DeclarationValue
 import Shikigami.Behavior.Error
   ( FailureClass (..),
@@ -152,7 +152,7 @@ runBehavior env decl input
       pure
         ( Left
             ( CapabilityOverlayMismatch
-                ((.capabilityOverlays) decl)
+                (requestedOverlays decl)
                 (Set.toAscList ((.activeOverlays) env))
             )
         )
@@ -183,11 +183,11 @@ runBehavior env decl input
         pure (Left (UnsupportedBehavior "Deterministic"))
 
 overlaysMatch :: BehaviorEnv -> AgentDecl -> Bool
-overlaysMatch BehaviorEnv {activeOverlays} AgentDecl {capabilityOverlays} =
-  length capabilityOverlays == Set.size requested
+overlaysMatch BehaviorEnv {activeOverlays} decl =
+  length (requestedOverlays decl) == Set.size requested
     && requested == activeOverlays
   where
-    requested = Set.fromList capabilityOverlays
+    requested = Set.fromList (requestedOverlays decl)
 
 -- | Bound one synchronous behavior call. Retryable failures and timeouts throw
 -- before a workflow step can append them; permanent failures remain a bounded

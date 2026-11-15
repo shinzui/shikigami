@@ -27,6 +27,11 @@ provenance:
       at: 2026-11-15T14:50:34Z
       mode: "update"
       note: "Cascaded MasterPlan 22 review: RunDeclaredTool and tool.called on kernel ports, confirmed declaration as grant, M4 durable tool steps"
+    - model: "claude-opus-5-5"
+      harness: "claude-code"
+      at: 2026-11-15T20:03:27Z
+      mode: "implement"
+      note: "M1 accepted: declared CLI tools as cli.* overlays, shikigami-local tools, real repo-inventory run on keiro"
 ---
 
 # Let agents declare CLI tools and MCP servers with authority attached to the declaration
@@ -71,11 +76,34 @@ survives a worker kill, and is launched exactly once.
 
 ## Progress
 
-- [ ] M1: Declared CLI tools run for `Skill` agents under `LocalOperator`. With no tools
+- [x] M1 (2026-11-15): Declared CLI tools run for `Skill` agents under `LocalOperator`. With no tools
   file, a real Skill run on a keiro worktree asks the operator once, listing the declared
   `mori` and `mina` tools, then calls them; a call outside the declared argument patterns is
   refused, and the action record shows both. `shikigami-tools check` prints the resolution
   and whether each tool is granted.
+  Evidence: `agents/repo-inventory.dhall` ran under `local-operator` with
+  `--workspace mori://shinzui/keiro` and OpenAI `gpt-5.4-mini`. The one confirmation listed
+  `mori (mori, Observation): registry show …; path …` and `mina (mina, Observation): docket
+  status; exec-plan remaining …`. A second run (`b787f0f4-e84f-532e-8273-411a4d926fd8`, no
+  terminal) asked nothing and its reply quoted the Mori registration ("Event sourcing
+  framework and workflow engine", registered path `/Users/shinzui/Keikaku/bokuno/keiro`) and
+  the unfinished plans from `mina docket status`. Asked also to run `mori registry list`, the
+  agent's call was refused. `shikigami-local ledger --run b787f0f4-…` shows:
+
+  ```text
+  tool.called admitted cli.mori run ["registry","show","shinzui/keiro"] exit 0
+  tool.called admitted cli.mina run ["docket","status"] exit 0
+  tool.called refused cli.mori run ["registry","list"] arguments outside declared patterns for mori
+  ```
+
+  Adding a `mina` pattern made `shikigami-local tools` report `needs confirmation` (exit 3) and
+  a run with no terminal refuse with "no stored grant for this declaration". A ceiling file
+  allowing `mori` only `["path"]` made the check print `refused: mori pattern [registry show
+  …] is outside the operator ceiling` and a run refuse with the same message. Under
+  `trust.tier=contained` the run refused with "declared tools need trust.tier=local-operator".
+  Tests: the `declared tools` group in `shikigami-core:test` (10 cases: patterns, ceilings,
+  checked words, the example's codecs and journal bytes, the revision, and the runner with
+  `/bin/echo`, `/bin/sleep` and `/usr/bin/yes`).
 - [ ] M2: MCP bindings (ADR-65) work for `Skill` agents. `shikigami-tools mcp discover git`
   lists a real `mcp-server-git`, a Skill run calls its approved `git_status` tool on the
   keiro worktree, unapproved tools are never offered, and a changed schema refuses
@@ -112,6 +140,13 @@ survives a worker kill, and is launched exactly once.
   finds only `@orval/mcp` (TypeScript). The Baikai MCP plans 30–32 are all unchecked, and
   `mori://shinzui/baikai/okf/improvement-requests/concepts/IR-2` and
   `mori://shinzui/shikumi/okf/improvement-requests/concepts/IR-1` are still `proposed`.
+- Observation: A durable run that requests any overlay needs a declared principal: without
+  `identity` the composition refuses with `MissingCapabilityIdentity`.
+  Evidence: the first `repo-inventory` run; the declaration now names
+  `principal_repo_inventory`, as `agents/local-maintainer.dhall` does.
+- Observation: The Dhall decoder treats a one-constructor Haskell sum as its record, so
+  `ToolDecl` needs a hand-written union decoder until M2 adds `McpTools`.
+  Evidence: `Expression doesn't match annotation … (a record type) + < … > (a union type)`.
 - Observation: Codex 0.169.0 has no tool allow-list flag; Baikai's
   `docs/user/unattended-agent-runs.md` (in `mori://shinzui/baikai`) refuses a non-empty
   `allowed-tools` for Codex for the same reason. Codex lists a stable `hooks` feature,
@@ -209,6 +244,44 @@ survives a worker kill, and is launched exactly once.
   restart-safe, but a step can, with the machinery EP-2 already builds.
   Date: 2026-11-15
 
+
+- Decision: Each declared CLI tool is offered as an ordinary capability overlay, `cli.<name>`,
+  and `requestedOverlays decl` (declared overlays plus `cli.*` ids) replaces
+  `decl.capabilityOverlays` wherever overlays are requested: the journaled
+  `resolve-capability-overlays` step, the behavior environment check, the grant and the
+  one-off path. There is no new `resolve-declared-tools` step and no `ResolvedToolSet`.
+  Rationale: The overlay path already journals exact descriptors, decides connect and each
+  invocation through the run's authority, rebuilds providers in durable execution children,
+  and refuses non-observations in durable runs. Reusing it changes no workflow shape, so no
+  pre-release recheck or patch is needed for M1. A refused resolution surfaces before the run
+  starts (in the composition), which is earlier than the planned step.
+  Date: 2026-11-15
+- Decision: Each call is authorized as the existing `UseCapability (InvokeTool cli.<name>
+  run)` decision, and `tool.called` records the pattern decision and exit; no
+  `RunDeclaredTool` action is added in M1.
+  Rationale: The overlay guard already asks the authority per call and records it. A second
+  action per call would decide the same thing twice. EP-3 M3's coding-agent gate and M4's
+  durable step, which have no overlay guard, are where `RunDeclaredTool` is needed.
+  Date: 2026-11-15
+- Decision: The check is `shikigami-local tools <agent> [--workspace]`, not a new
+  `shikigami-tools` executable; the confirmation lists each tool by its declared executable
+  and patterns, and the located path appears in the check, the revision and the tool
+  description.
+  Rationale: `shikigami-local` is already the local operator's inspection command; a new
+  executable would need a new configuration role. The grant request is built from the
+  declaration alone.
+  Date: 2026-11-15
+- Decision: Declared tools run with the operator's whole environment under `local-operator`.
+  Rationale: The first real run failed because `mori` needs `MORI_PG_CONNECTION_STRING`; the
+  launcher's cleared environment suits approved rules, but a declared tool is the operator's
+  own command, as the plan's runner section says.
+  Date: 2026-11-15
+- Decision: The tools file is `$XDG_CONFIG_HOME/shikigami/tools.dhall` with only CLI
+  ceilings in M1 (`schema/Tools.dhall`); refusing a catalog file inside the workspace is not
+  implemented.
+  Rationale: The XDG location is enough for one operator; the file is the operator's, not the
+  repository's. M2 adds MCP bindings to the same file.
+  Date: 2026-11-15
 
 ## Outcomes & Retrospective
 

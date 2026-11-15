@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-11-15
+* **Addition**: DOC-22 explains declared CLI tools: the `tools` field, the one-time grant, `shikigami-local tools`, the optional ceiling file and the `tool.called` record (EP-3 M1). DOC-13 lists `shikigami-local tools`.
 * **Addition**: DOC-21 explains queued coding agents in a `local-operator` worker; DOC-13 documents `shikigami enqueue-run --workspace` (EP-2 M2b).
 * **Addition**: DOC-13 documents `shikigami-agent-run --resume`; DOC-5 says how an interrupted coding-agent step is continued (EP-2 M2).
 * **Addition**: DOC-5 documents the `CodingAgent` behavior arm: Claude Code or Codex as a durable step that commits on the run branch, its outcomes, attached skills and the local-operator tier requirement (MasterPlan 22, EP-2 M1).

@@ -955,6 +955,7 @@ reviewerDecl =
       delegationBudget = Nothing,
       sanctionedProfile = Nothing,
       capabilityOverlays = [],
+      tools = [],
       identity = Nothing,
       memory = defaultMemoryPolicy & #recordPolicy .~ Never,
       enabled = agentEnablement (True),

@@ -22,23 +22,30 @@ import Data.Text.IO qualified as TextIO
 import Data.Time.Format.ISO8601 (iso8601Show)
 import Keiro.Workflow (WorkflowId (..))
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
+import Shikigami.Agent.Decl (AgentDecl (..))
+import Shikigami.Agent.Loader (loadAgent)
 import Shikigami.Agent.Name (agentNameText)
 import Shikigami.App.Config (AppConfig (..), revealSecretText)
 import Shikigami.App.Config.Load (requireDatabaseUrl)
-import Shikigami.Capability.Overlay (capabilityIdText)
+import Shikigami.Capability.Declared (CliToolDecl (..), cliCapabilityName, cliTools, renderCliToolDecl, toolNameText)
+import Shikigami.Capability.Declared.Catalog (CliToolCeiling (..), ToolCatalog (..), checkDeclaredTools, defaultToolCatalogPath, loadToolCatalog, renderToolResolutionError)
+import Shikigami.Capability.Declared.Local (LocatedCliTool (..), locateCliTools)
+import Shikigami.Capability.Overlay (CapabilityDescriptor (..), capabilityIdText, capabilityRevisionText)
 import Shikigami.Migrations (verifyShikigamiMigrations)
 import Shikigami.Record
-import Shikigami.Repository (repositoryIdText)
+import Shikigami.Repository (repositoryId, repositoryIdText)
 import Shikigami.Trust.LocalOperator.Approvals
 import Shikigami.Trust.LocalOperator.Grant
 import Shikigami.Workspace.Local.Checkout (processCheckoutResolver)
-import System.Exit (exitFailure)
+import System.Exit (ExitCode (..), exitFailure, exitWith)
 import System.IO (hPutStrLn, stderr)
 
 data LocalCommand
   = ShowApprovals
   | RevokeGrant !Text
   | Ledger !LedgerOptions
+  | -- | A declaration file and the repository it would run in.
+    CheckTools !FilePath !(Maybe FilePath)
 
 data LedgerOptions = LedgerOptions
   { run :: !(Maybe Text),
@@ -75,7 +82,55 @@ runLocal command config = case command of
         Right events
           | json -> mapM_ (LazyChar8.putStrLn . Aeson.encode) events
           | otherwise -> mapM_ (TextIO.putStrLn . renderRecordEvent) events
+  CheckTools path workspace -> do
+    decl <- loadAgent path >>= either (die . Text.pack . show) pure
+    let declared = cliTools decl.tools
+    if null declared then putStrLn "the declaration declares no tools" else pure ()
+    catalogPath <- defaultToolCatalogPath
+    catalog <- loadToolCatalog catalogPath >>= either die pure
+    checked <- case checkDeclaredTools catalog declared of
+      Left problem -> pure (Left problem)
+      Right () -> locateCliTools declared
+    case checked of
+      Left problem -> TextIO.putStrLn ("refused: " <> renderToolResolutionError problem) >> exitWith (ExitFailure 1)
+      Right located -> do
+        approvalsPath <- maybe defaultApprovalsPath pure config.localOperatorApprovalsFile
+        approvals <- loadLocalApprovals processCheckoutResolver approvalsPath >>= either (die . renderApprovalsError) pure
+        repository <- selectRepository processCheckoutResolver approvals (maybe (SelectByPath ".") repositorySelector workspace) >>= either (die . renderApprovalsError) pure
+        store <- stateStore
+        granted <- resolveGrant Unattended approvals store (\_ -> pure (Right ())) decl repository
+        let status = case granted of
+              Right _ -> "granted"
+              Left (NoStoredGrant _) -> "needs confirmation"
+              Left refusal -> "refused: " <> renderGrantRefusal refusal
+            bounded tool = if any (\bound -> bound.name == tool.name) catalog.cli then "bounded by " <> Text.pack catalogPath else "no ceiling"
+        mapM_
+          ( \LocatedCliTool {decl = tool, program, descriptor} ->
+              TextIO.putStrLn
+                ( status
+                    <> "  "
+                    <> cliCapabilityName tool.name
+                    <> "  "
+                    <> programPathText program
+                    <> "  "
+                    <> capabilityRevisionText descriptor.revision
+                    <> "  overlay__cli-"
+                    <> toolNameText tool.name
+                    <> "__run  "
+                    <> bounded tool
+                    <> "\n    "
+                    <> renderCliToolDecl tool
+                )
+          )
+          located
+        case granted of
+          Right _ -> pure ()
+          Left (NoStoredGrant _) -> exitWith (ExitFailure 3)
+          Left _ -> exitWith (ExitFailure 1)
   where
+    repositorySelector named
+      | "mori://" `Text.isPrefixOf` Text.pack named = SelectByIdentity (repositoryId (Text.pack named))
+      | otherwise = SelectByPath named
     stateStore = do
       directory <- maybe defaultStateDirectory pure config.localOperatorStateDirectory
       openGrantStore directory >>= either (die . Text.pack . show) pure

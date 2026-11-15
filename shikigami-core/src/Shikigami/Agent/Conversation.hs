@@ -82,7 +82,7 @@ import Kiroku.Store.Error (StoreError)
 import Kiroku.Store.Transaction (runTransaction)
 import Kiroku.Store.Types (EventId)
 import Shikigami.Agent.Conversation.SessionIndex qualified as SessionIndex
-import Shikigami.Agent.Decl (AgentDecl (..), IdentityDecl (..))
+import Shikigami.Agent.Decl (AgentDecl (..), IdentityDecl (..), requestedOverlays)
 import Shikigami.Agent.Decl qualified as Agent
 import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Name (AgentName, agentNameText, mkAgentName)
@@ -857,7 +857,7 @@ processRotatingTurn ::
   Eff (Workflow : AppEffects) (Either Text ConversationTurnResult)
 processRotatingTurn env recordedIdentity decl msg executionContext = do
   admitted <-
-    if not (null decl.capabilityOverlays)
+    if not (null (requestedOverlays decl))
       then pure (Left "capability overlay mismatch: conversations do not admit overlays")
       else admitConversationExecution env recordedIdentity decl msg executionContext
   case admitted of

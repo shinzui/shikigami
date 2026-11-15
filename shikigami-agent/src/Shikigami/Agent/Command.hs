@@ -112,10 +112,20 @@ localRoleInfo =
         withConfigOptions
           "shikigami-local"
           "Inspect local-operator grants and the action record"
-          (runLocal <$> subparser (approvals <> revoke <> ledger))
+          (runLocal <$> subparser (approvals <> revoke <> ledger <> tools))
           (pure [])
     }
   where
+    tools =
+      command
+        "tools"
+        ( info
+            ( CheckTools
+                <$> strArgument (metavar "AGENT.dhall" <> help "The declaration whose tools to check")
+                <*> optional (strOption (long "workspace" <> metavar "DIR|mori://…" <> help "The repository it would run in (default: the current directory)"))
+            )
+            (progDesc "Check a declaration's CLI tools: located, within any ceiling, and granted (exit 0), awaiting confirmation (3) or refused (1)")
+        )
     approvals = command "approvals" (info (pure ShowApprovals) (progDesc "Validate the approvals file and list every grant"))
     revoke = command "revoke" (info (RevokeGrant . Text.pack <$> strArgument (metavar "DIGEST" <> help "At least eight characters of a stored grant's digest")) (progDesc "Delete a stored confirmation"))
     ledger =

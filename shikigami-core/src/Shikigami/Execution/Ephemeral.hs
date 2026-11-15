@@ -17,7 +17,7 @@ import Data.Time (NominalDiffTime)
 import Data.Vector qualified as Vector
 import Effectful (runEff)
 import Effectful.Error.Static (runErrorNoCallStack)
-import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..))
+import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), requestedOverlays)
 import Shikigami.Agent.DeclarationValue
 import Shikigami.Behavior.Compatibility (renderResponseCompatibilityError, validateResponseRequest)
 import Shikigami.Behavior.Error (FailureClass (..), RunError (..), boundedBehaviorDetail, failureClass)
@@ -55,7 +55,7 @@ runEphemeralBehavior :: NominalDiffTime -> HarnessPolicy -> BehaviorEnv -> Agent
 runEphemeralBehavior duration base env decl input = case narrowHarnessPolicy base decl.harness of
   Left reason -> pure (Left (HarnessPolicyRefused reason))
   Right policy
-    | Set.fromList decl.capabilityOverlays /= env.activeOverlays || length decl.capabilityOverlays /= Set.size env.activeOverlays -> pure (Left (CapabilityOverlayMismatch decl.capabilityOverlays (Set.toAscList env.activeOverlays)))
+    | Set.fromList (requestedOverlays decl) /= env.activeOverlays || length (requestedOverlays decl) /= Set.size env.activeOverlays -> pure (Left (CapabilityOverlayMismatch (requestedOverlays decl) (Set.toAscList env.activeOverlays)))
     | otherwise -> case decl.behavior of
         Skill {path} -> do
           loaded <- loadSkillManifest (SkillDir (Text.unpack (declarationCoordinateText path)))

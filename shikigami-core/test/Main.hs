@@ -41,6 +41,7 @@ import Shikigami.CodingAgentSpec qualified as CodingAgentSpec
 import Shikigami.DecisionContractSpec qualified as DecisionContractSpec
 import Shikigami.DecisionModelCatalogSpec qualified as DecisionModelCatalogSpec
 import Shikigami.DecisionRunnerSpec qualified as DecisionRunnerSpec
+import Shikigami.DeclaredToolsSpec qualified as DeclaredToolsSpec
 import Shikigami.DelegateContextSpec qualified as DelegateContextSpec
 import Shikigami.DelegationBatchSpec qualified as DelegationBatchSpec
 import Shikigami.Directory (disabledDirectoryHandle)
@@ -175,6 +176,7 @@ main =
           RecordSpec.tests,
           LocalOperatorSpec.tests,
           LocalHostSpec.tests,
+          DeclaredToolsSpec.tests,
           ProcessLocalSpec.tests,
           CodingAgentSpec.tests,
           PracticeReviewEvidenceSpec.tests,

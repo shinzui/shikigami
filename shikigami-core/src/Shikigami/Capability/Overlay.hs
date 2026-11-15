@@ -128,6 +128,8 @@ data CapabilityOperationClass
   | IrreversibleEmission
   deriving stock (Eq, Ord, Show, Generic)
 
+instance FromDhall CapabilityOperationClass
+
 instance ToJSON CapabilityOperationClass where
   toJSON =
     Aeson.String . \case

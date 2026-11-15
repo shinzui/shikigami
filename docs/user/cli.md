@@ -433,12 +433,15 @@ no cache to invalidate. **Needs the DB** (`database.connection_string`).
 $ shikigami-local approvals
 $ shikigami-local revoke <DIGEST>
 $ shikigami-local ledger [--run <WORKFLOW-ID>] [--refusals] [--limit <N>] [--json]
+$ shikigami-local tools <AGENT.dhall> [--workspace <DIR|mori://…>]
 ```
 
 The local operator's view under the `local-operator` trust tier. `approvals` validates the
 approvals file and lists its repositories, approvals and every stored confirmation; `revoke`
 deletes a stored confirmation (give at least eight characters of its digest); `ledger` prints the
-action record oldest first. → See [Running agents on your own machine](./local-operator.md).
+action record oldest first; `tools` checks a declaration's CLI tools without running it (exit 0
+granted, 3 awaiting confirmation, 1 refused). → See [Running agents on your own machine](./local-operator.md)
+and [Giving an agent your command-line tools](./declared-tools.md).
 
 ## `shikigami record`
 

@@ -175,6 +175,7 @@ fixtureDecl =
       delegationBudget = Nothing,
       sanctionedProfile = Nothing,
       capabilityOverlays = [],
+      tools = [],
       identity = Nothing,
       memory = defaultMemoryPolicy,
       enabled = agentEnablement True,

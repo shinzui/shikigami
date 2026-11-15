@@ -24,28 +24,24 @@ import Data.Bifunctor (first)
 import Data.Functor ((<&>))
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Maybe (isJust)
-import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.IO qualified as TextIO
-import Data.Time (getCurrentTime)
 import Shikigami.Agent.Capability.OneOff (oneOffCapabilityRuntime, renderOneOffCapabilityError)
 import Shikigami.Agent.Capability.Workspace (renderWorkspaceError, resolveWorkspaceScope, workspaceReadDescriptor, workspaceReadProvider)
-import Shikigami.Agent.Decl (AgentDecl (..), IdentityDecl (..), Sink (..), codingAgentStepOf)
-import Shikigami.Agent.DeclarationValue (declarationCoordinate, declarationCoordinateText)
-import Shikigami.Agent.Name (AgentName, agentNameText)
-import Shikigami.Agent.Principal (compatibilityIdentity, identityText)
+import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Sink (..), codingAgentStepOf, requestedOverlays)
 import Shikigami.App.Config (AppConfig (..))
 import Shikigami.Authority
-import Shikigami.Capability.Catalog (CapabilityResolutionError (..), mkCapabilityCatalog)
+import Shikigami.Capability.Catalog (CapabilityResolutionError (..), ResolutionSubject, mkCapabilityCatalog)
+import Shikigami.Capability.Declared (cliTools)
+import Shikigami.Capability.Declared.Catalog (ToolResolutionError (..), checkDeclaredTools, defaultToolCatalogPath, loadToolCatalog, renderToolResolutionError)
+import Shikigami.Capability.Declared.Local (CliToolHost (..), LocatedCliTool (..), cliToolProvider, locateCliTools)
 import Shikigami.Capability.Overlay (CapabilityDescriptor (..), capabilityIdText)
-import Shikigami.Capability.Provider (CapabilityRuntime (..), installDurableAdapters, mkCapabilityProviderRegistry)
+import Shikigami.Capability.Provider (CapabilityProvider (..), CapabilityRuntime (..), installDurableAdapters, mkCapabilityProviderRegistry)
 import Shikigami.CodingAgent.Local (LocalCodingAgentConfig (..), localCodingAgentRunner)
 import Shikigami.CodingAgent.Workflow (refusingCodingAgentRunner)
-import Shikigami.Record (ActionRecord (..), RecordEvent (..), recordErrorText)
-import Shikigami.Repository (repositoryId)
+import Shikigami.Record (ActionRecord (..))
 import Shikigami.Trust.LocalOperator.Approvals
-import Shikigami.Trust.LocalOperator.Authority (LocalSelection (..), localOperatorAuthority)
 import Shikigami.Trust.LocalOperator.Grant
 import Shikigami.Trust.LocalOperator.Host (codingAgentLauncher, compatibilityPrincipal, localRunAuthority, nothingGranted, openLocalRun, recordGrantIn, repositorySelectorText)
 import Shikigami.Trust.Runtime
@@ -54,10 +50,7 @@ import Shikigami.Workspace.Launch (worktreeRootPath)
 import Shikigami.Workspace.Local.Adapters (LocalWorkspace (..), localWorkspaceAdapters, localWorkspaceDescriptors, localWorkspaceHost)
 import Shikigami.Workspace.Local.Checkout (processCheckoutResolver)
 import Shikigami.Workspace.Local.Launcher (hostProcessLauncher)
-import Shikigami.Workspace.Local.Worktree (RunWorktree (..), openRunWorktree, releaseRunWorktree, renderWorktreeError)
-import System.Directory (doesFileExist, findExecutable)
-import System.Environment (getExecutablePath, lookupEnv)
-import System.FilePath (takeDirectory, (</>))
+import Shikigami.Workspace.Local.Worktree (RunWorktree (..), releaseRunWorktree)
 import System.IO (hFlush, hIsTerminalDevice, stdin, stdout)
 import System.IO.Error (isEOFError)
 
@@ -109,6 +102,7 @@ lightComposition config interaction record =
     tierLabel = trustTierLabel config.trustTier
     resolve subject@RunSubject {agent = decl, run, repository} = case config.trustTier of
       LocalOperator -> resolveLocal subject
+      _ | not (null decl.tools) -> pure (Left (CompositionFailed (renderToolResolutionError (ToolsUnsupportedForTier (trustTierText config.trustTier)))))
       _ -> do
         workspace <- sequence <$> traverse (selectRepository processCheckoutResolver emptyApprovals) repository
         case workspace of
@@ -133,47 +127,59 @@ lightComposition config interaction record =
 
     resolveLocal RunSubject {agent = decl, principal, run, repository}
       | sinkKinds <- sinkKindNames decl, (first' : rest) <- sinkKinds = pure (Left (OutputsUnavailable (first' :| rest)))
-      | null decl.capabilityOverlays && not (isCodingAgent decl) =
+      | null (requestedOverlays decl) && not (isCodingAgent decl) =
           -- Nothing to grant: no repository is opened and every action is
           -- outside the (empty) grant.
           oneOffCapabilityRuntime Nothing decl >>= \case
             Left problem -> pure (Left (CompositionFailed (renderOneOffCapabilityError problem)))
             Right capabilities ->
               pure (Right TierRuntime {tier = LocalOperator, authority = scopeToRun run decl.name (recorded record tierLabel nothingGranted), record, capabilities, workspace = Nothing, grant = Nothing, codingAgents = refusingCodingAgentRunner containedCodingAgents, release = pure ()})
-      | otherwise = do
-          approvalsPath <- maybe defaultApprovalsPath pure config.localOperatorApprovalsFile
-          stateDirectory <- maybe defaultStateDirectory pure config.localOperatorStateDirectory
-          loaded <- loadLocalApprovals processCheckoutResolver approvalsPath
-          case loaded of
-            Left problem -> pure (Left (RepositoryUnavailable problem))
-            Right approvals -> do
-              selected <- selectRepository processCheckoutResolver approvals (maybe (SelectByPath ".") id repository)
-              store <- openGrantStore stateDirectory
-              case (selected, store) of
-                (Left problem, _) -> pure (Left (RepositoryUnavailable problem))
-                (_, Left problem) -> pure (Left (CompositionFailed (Text.pack (show problem))))
-                (Right repo, Right grants) ->
-                  resolveGrant interaction approvals grants (recordGrantIn record principal run decl.name) decl repo >>= \case
-                    Left refusal -> pure (Left (NoGrant refusal))
-                    Right grant -> do
-                      let runAuthority = localRunAuthority record decl run grant
-                          done capabilities workspace runner release = Right TierRuntime {tier = LocalOperator, authority = runAuthority, record, capabilities, workspace, grant = Just grant, codingAgents = runner, release}
-                      if not (requestsMutation decl || isCodingAgent decl)
+      | otherwise =
+          prepareDeclaredTools decl >>= \case
+            Left problem -> pure (Left (CompositionFailed (renderToolResolutionError problem)))
+            Right located -> resolveGranted located RunSubject {agent = decl, principal, run, repository}
+
+    resolveGranted located RunSubject {agent = decl, principal, run, repository} = do
+      approvalsPath <- maybe defaultApprovalsPath pure config.localOperatorApprovalsFile
+      stateDirectory <- maybe defaultStateDirectory pure config.localOperatorStateDirectory
+      loaded <- loadLocalApprovals processCheckoutResolver approvalsPath
+      case loaded of
+        Left problem -> pure (Left (RepositoryUnavailable problem))
+        Right approvals -> do
+          selected <- selectRepository processCheckoutResolver approvals (maybe (SelectByPath ".") id repository)
+          store <- openGrantStore stateDirectory
+          case (selected, store) of
+            (Left problem, _) -> pure (Left (RepositoryUnavailable problem))
+            (_, Left problem) -> pure (Left (CompositionFailed (Text.pack (show problem))))
+            (Right repo, Right grants) ->
+              resolveGrant interaction approvals grants (recordGrantIn record principal run decl.name) decl repo >>= \case
+                Left refusal -> pure (Left (NoGrant refusal))
+                Right grant -> do
+                  let runAuthority = localRunAuthority record decl run grant
+                      done capabilities workspace runner release = Right TierRuntime {tier = LocalOperator, authority = runAuthority, record, capabilities, workspace, grant = Just grant, codingAgents = runner, release}
+                      toolsIn root = cliToolProvider CliToolHost {record, tier = tierLabel, agent = decl.name, root, launcher = hostProcessLauncher, host = "skill"} <$> located
+                  if not (requestsMutation decl || isCodingAgent decl)
+                    then
+                      if null located
                         then
                           oneOffCapabilityRuntime (Just repo.source) decl <&> \case
                             Left problem -> Left (CompositionFailed (renderOneOffCapabilityError problem))
                             Right capabilities -> done capabilities Nothing (refusingCodingAgentRunner containedCodingAgents) (pure ())
-                        else case run of
-                          Nothing -> pure (Left (CompositionFailed "workspace.edit, workspace.exec, workspace.git and coding agents need a durable run; use shikigami-agent-run"))
-                          Just runId ->
-                            openLocalRun stateDirectory record decl runAuthority grant repo runId >>= \case
-                              Left problem -> pure (Left (CompositionFailed problem))
-                              Right (local, worktree) -> do
-                                launcherPath <- codingAgentLauncher
-                                let runner = localCodingAgentRunner LocalCodingAgentConfig {launcher = launcherPath} local
-                                localCapabilityRuntime (worktreeRootPath worktree.root) local <&> \case
-                                  Left problem -> Left (CompositionFailed problem)
-                                  Right capabilities -> done capabilities (Just (localWorkspaceHost local capabilities)) runner (releaseRunWorktree stateDirectory runId worktree)
+                        else
+                          readToolsRuntime repo.source (toolsIn repo.source) <&> \case
+                            Left problem -> Left (CompositionFailed problem)
+                            Right capabilities -> done capabilities Nothing (refusingCodingAgentRunner containedCodingAgents) (pure ())
+                    else case run of
+                      Nothing -> pure (Left (CompositionFailed "workspace.edit, workspace.exec, workspace.git and coding agents need a durable run; use shikigami-agent-run"))
+                      Just runId ->
+                        openLocalRun stateDirectory record decl runAuthority grant repo runId >>= \case
+                          Left problem -> pure (Left (CompositionFailed problem))
+                          Right (local, worktree) -> do
+                            launcherPath <- codingAgentLauncher
+                            let runner = localCodingAgentRunner LocalCodingAgentConfig {launcher = launcherPath} local
+                            localCapabilityRuntime (worktreeRootPath worktree.root) local (toolsIn (worktreeRootPath worktree.root)) <&> \case
+                              Left problem -> Left (CompositionFailed problem)
+                              Right capabilities -> done capabilities (Just (localWorkspaceHost local capabilities)) runner (releaseRunWorktree stateDirectory runId worktree)
 
 containedCodingAgents :: Text
 containedCodingAgents = "coding agents run only under trust.tier=local-operator until the batch qualification of ADR-40 passes"
@@ -189,24 +195,53 @@ requestsMutation AgentDecl {capabilityOverlays} =
 -- | @workspace.read@ scoped to the run's worktree, plus the local durable
 -- adapters. The catalog admits exactly these descriptors; the run's authority
 -- decides each call.
-localCapabilityRuntime :: FilePath -> LocalWorkspace -> IO (Either Text CapabilityRuntime)
-localCapabilityRuntime root local =
+localCapabilityRuntime :: FilePath -> LocalWorkspace -> [CapabilityProvider] -> IO (Either Text CapabilityRuntime)
+localCapabilityRuntime root local tools =
   resolveWorkspaceScope (Just root) <&> \case
     Left problem -> Left (renderWorkspaceError problem)
     Right scope -> do
-      let descriptors = workspaceReadDescriptor : localWorkspaceDescriptors
+      let descriptors = workspaceReadDescriptor : localWorkspaceDescriptors <> ((.descriptor) <$> tools)
       catalog <- first (Text.pack . show) (mkCapabilityCatalog descriptors)
-      generic <- first (Text.pack . show) (mkCapabilityProviderRegistry [workspaceReadProvider scope])
+      generic <- first (Text.pack . show) (mkCapabilityProviderRegistry (workspaceReadProvider scope : tools))
       providers <- first (Text.pack . show) (installDurableAdapters (localWorkspaceAdapters local) generic)
-      Right
-        CapabilityRuntime
-          { catalog,
-            providers,
-            authorize = \_ descriptor ->
-              if descriptor `elem` descriptors
-                then Right ()
-                else Left (CapabilityAuthorizationDenied descriptor.capability "only the local workspace capabilities are installed")
-          }
+      Right CapabilityRuntime {catalog, providers, authorize = installedOnly descriptors}
+
+-- | @workspace.read@ of the checkout plus the declared CLI tools, for a
+-- declaration that edits nothing.
+readToolsRuntime :: FilePath -> [CapabilityProvider] -> IO (Either Text CapabilityRuntime)
+readToolsRuntime root tools =
+  resolveWorkspaceScope (Just root) <&> \case
+    Left problem -> Left (renderWorkspaceError problem)
+    Right scope -> do
+      let descriptors = workspaceReadDescriptor : ((.descriptor) <$> tools)
+      catalog <- first (Text.pack . show) (mkCapabilityCatalog descriptors)
+      providers <- first (Text.pack . show) (mkCapabilityProviderRegistry (workspaceReadProvider scope : tools))
+      Right CapabilityRuntime {catalog, providers, authorize = installedOnly descriptors}
+
+installedOnly :: [CapabilityDescriptor] -> ResolutionSubject -> CapabilityDescriptor -> Either CapabilityResolutionError ()
+installedOnly descriptors _ descriptor
+  | descriptor `elem` descriptors = Right ()
+  | otherwise = Left (CapabilityAuthorizationDenied descriptor.capability "only the local workspace capabilities and declared tools are installed")
+
+-- | The declaration's CLI tools, checked against any operator ceiling and
+-- located on this host, before anything is granted or run.
+prepareDeclaredTools :: AgentDecl -> IO (Either ToolResolutionError [LocatedCliTool])
+prepareDeclaredTools decl@AgentDecl {behavior}
+  | null (cliTools decl.tools) = pure (Right [])
+  | Skill {} <- behavior = do
+      catalog <- loadToolCatalog =<< defaultToolCatalogPath
+      case catalog of
+        Left problem -> pure (Left (ToolCatalogUnavailable problem))
+        Right loaded -> either (pure . Left) (const (locateCliTools (cliTools decl.tools))) (checkDeclaredTools loaded (cliTools decl.tools))
+  | otherwise = pure (Left (ToolsUnsupportedForBehavior (behaviorName behavior)))
+  where
+    behaviorName = \case
+      CodingAgent {} -> "CodingAgent"
+      Flow {} -> "Flow"
+      ShikumiProgram {} -> "ShikumiProgram"
+      Deterministic {} -> "Deterministic"
+      CoordinatingSkill {} -> "CoordinatingSkill"
+      Skill {} -> "Skill"
 
 -- | The output kinds a declaration's sinks would deliver through.
 sinkKindNames :: AgentDecl -> [Text]

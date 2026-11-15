@@ -99,6 +99,8 @@ library
     Shikigami.Behavior.Skill
     Shikigami.Behavior.StubProvider
     Shikigami.Capability.Catalog
+    Shikigami.Capability.Declared
+    Shikigami.Capability.Declared.Catalog
     Shikigami.Capability.Overlay
     Shikigami.Capability.Provider
     Shikigami.Capability.Tools
@@ -617,6 +619,7 @@ library local-host
   visibility: public
   hs-source-dirs: local-host
   exposed-modules:
+    Shikigami.Capability.Declared.Local
     Shikigami.CodingAgent.Local
     Shikigami.Process.Local
     Shikigami.Trust.LocalOperator.Host
@@ -668,6 +671,7 @@ test-suite shikigami-core-test
     Shikigami.DecisionContractSpec
     Shikigami.DecisionModelCatalogSpec
     Shikigami.DecisionRunnerSpec
+    Shikigami.DeclaredToolsSpec
     Shikigami.DelegateContextSpec
     Shikigami.DelegationBatchSpec
     Shikigami.DirectorySpec

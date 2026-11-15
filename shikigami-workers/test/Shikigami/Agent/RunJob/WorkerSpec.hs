@@ -404,6 +404,7 @@ drainAgent =
       delegationBudget = Nothing,
       sanctionedProfile = Nothing,
       capabilityOverlays = [],
+      tools = [],
       identity = Just IdentityDecl {principal = declarationCoordinate ("agent_codec")},
       memory = defaultMemoryPolicy,
       enabled = agentEnablement (True),

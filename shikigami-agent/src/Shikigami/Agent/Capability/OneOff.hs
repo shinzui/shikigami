@@ -21,7 +21,7 @@ import Shikigami.Agent.Capability.Workspace
     workspaceReadId,
     workspaceReadProvider,
   )
-import Shikigami.Agent.Decl (AgentDecl (..), IdentityDecl (..))
+import Shikigami.Agent.Decl (AgentDecl (..), IdentityDecl (..), requestedOverlays)
 import Shikigami.Agent.Decl qualified as Agent
 import Shikigami.Agent.DeclarationValue
 import Shikigami.Authority (Authority)
@@ -75,8 +75,8 @@ renderOneOffCapabilityError = \case
 -- provider, or workspace and therefore returns the shared empty runtime without
 -- touching the filesystem.
 oneOffCapabilityRuntime :: Maybe FilePath -> AgentDecl -> IO (Either OneOffCapabilityError CapabilityRuntime)
-oneOffCapabilityRuntime workspaceArgument AgentDecl {capabilityOverlays}
-  | null capabilityOverlays = pure (Right emptyCapabilityRuntime)
+oneOffCapabilityRuntime workspaceArgument decl
+  | null (requestedOverlays decl) = pure (Right emptyCapabilityRuntime)
   | otherwise =
       case mkCapabilityCatalog [workspaceReadDescriptor] of
         Left err -> pure (Left (OneOffCatalogInvalid err))
@@ -106,13 +106,13 @@ withOneOffCapabilityOverlays ::
   BehaviorEnv ->
   (BehaviorEnv -> IO value) ->
   IO (Either OneOffCapabilityError value)
-withOneOffCapabilityOverlays logger actionAuthority workspaceArgument decl@AgentDecl {capabilityOverlays} baseEnv callback
-  | null capabilityOverlays = Right <$> callback baseEnv
+withOneOffCapabilityOverlays logger actionAuthority workspaceArgument decl baseEnv callback
+  | null (requestedOverlays decl) = Right <$> callback baseEnv
   | otherwise =
       case mkCapabilityCatalog [workspaceReadDescriptor] of
         Left err -> pure (Left (OneOffCatalogInvalid err))
         Right catalog ->
-          case resolveCapabilityOverlays catalog (authorizeForMode OneOff) subject capabilityOverlays of
+          case resolveCapabilityOverlays catalog (authorizeForMode OneOff) subject (requestedOverlays decl) of
             Left err -> pure (Left (OneOffResolutionRefused err))
             Right resolved -> do
               workspace <- resolveWorkspaceScope workspaceArgument

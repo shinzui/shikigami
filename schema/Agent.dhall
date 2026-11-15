@@ -154,6 +154,43 @@ let Harness =
           }
       }
 
+-- Declared CLI tools (EP-3 of MasterPlan 22). Each runs as the overlay
+-- cli.<name>; the operator grants the declaration once.
+let ExecutableRef = < OnPath : Text | AtPath : Text >
+
+let Trailing = < NoTrailing | AnyTrailing | AtMostTrailing : Natural >
+
+let ArgumentPattern = { prefix : List Text, trailing : Trailing }
+
+let pattern =
+      \(prefix : List Text) ->
+      \(trailing : Trailing) ->
+        { prefix, trailing } : ArgumentPattern
+
+let WorkingDirectoryPolicy = < WorkspaceRoot | WorkspaceSubdirectory : Text >
+
+let OperationClass = < Observation | IdempotentMutation | IrreversibleEmission >
+
+let CallLimits = { timeoutSeconds : Natural, outputBytes : Natural }
+
+let CliTool =
+      { Type =
+          { name : Text
+          , executable : ExecutableRef
+          , allow : List ArgumentPattern
+          , workingDirectory : WorkingDirectoryPolicy
+          , operationClass : OperationClass
+          , limits : Optional CallLimits
+          }
+      , default =
+          { workingDirectory = WorkingDirectoryPolicy.WorkspaceRoot
+          , operationClass = OperationClass.Observation
+          , limits = None CallLimits
+          }
+      }
+
+let Tool = < CliTool : CliTool.Type >
+
 let Agent =
       { Type =
           { name : Text
@@ -168,6 +205,7 @@ let Agent =
           , delegationBudget : Optional Natural
           , sanctionedProfile : Optional ProfileRequirement.Type
           , capabilityOverlays : List Text
+          , tools : List Tool
           , identity : Optional Identity
           , memory : MemoryPolicy
           , enabled : Bool
@@ -184,6 +222,7 @@ let Agent =
           , delegationBudget = None Natural
           , sanctionedProfile = None ProfileRequirement.Type
           , capabilityOverlays = [] : List Text
+          , tools = [] : List Tool
           , identity = None Identity
           , memory = defaultMemoryPolicy
           , enabled = True
@@ -215,5 +254,14 @@ in  { SignalType
     , Execution
     , Harness
     , OutputRequirement
+    , ExecutableRef
+    , Trailing
+    , ArgumentPattern
+    , pattern
+    , WorkingDirectoryPolicy
+    , OperationClass
+    , CallLimits
+    , CliTool
+    , Tool
     , Agent
     }

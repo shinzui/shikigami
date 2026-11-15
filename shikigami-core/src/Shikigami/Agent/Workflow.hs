@@ -97,7 +97,7 @@ import Shikigami.Agent.Approval
     requiresApprovalFor,
   )
 import Shikigami.Agent.Approval.Workflow qualified as ApprovalWorkflow
-import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), DelegationBudget, IdentityDecl (..), MemoryPolicy (..), ProfileRequirement (..), RecordPolicy (..), Sink, Trigger (..), codingAgentStepOf)
+import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), DelegationBudget, IdentityDecl (..), MemoryPolicy (..), ProfileRequirement (..), RecordPolicy (..), Sink, Trigger (..), codingAgentStepOf, requestedOverlays)
 import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Delegate (awaitAllDelegated, delegate)
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
@@ -438,8 +438,8 @@ requestsWorkspace :: AgentDecl -> Bool
 requestsWorkspace decl = any ((`elem` ["workspace.edit", "workspace.exec", "workspace.git"]) . capabilityIdText) decl.capabilityOverlays
 
 resolveRunCapabilities :: (CapabilityDescriptor -> Bool) -> CapabilityRuntime -> AgentDecl -> Maybe ResolvedProfile -> Either Capability.CapabilityResolutionError ResolvedCapabilitySet
-resolveRunCapabilities installed CapabilityRuntime {catalog, authorize} AgentDecl {behavior, capabilityOverlays, delegates, identity} resolvedProfile
-  | not (null capabilityOverlays) && not (null delegates) =
+resolveRunCapabilities installed CapabilityRuntime {catalog, authorize} decl@AgentDecl {behavior, delegates, identity} resolvedProfile
+  | not (null (requestedOverlays decl)) && not (null delegates) =
       Left Capability.CapabilityBehaviorUnsupported {Capability.behaviorKind = "DelegatingSkill"}
   | otherwise =
       Capability.resolveGovernedCapabilityOverlays
@@ -452,7 +452,7 @@ resolveRunCapabilities installed CapabilityRuntime {catalog, authorize} AgentDec
             Capability.behavior = behavior,
             Capability.profile = resolvedProfile
           }
-        capabilityOverlays
+        (requestedOverlays decl)
   where
     declared IdentityDecl {principal} = principal
 

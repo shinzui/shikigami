@@ -105,6 +105,7 @@ testDecl sanctionedProfile =
       delegationBudget = Nothing,
       sanctionedProfile,
       capabilityOverlays = [],
+      tools = [],
       identity = Nothing,
       memory = defaultMemoryPolicy,
       enabled = agentEnablement (True),

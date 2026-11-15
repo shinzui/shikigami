@@ -50,8 +50,9 @@ import Data.Text qualified as Text
 import Data.Time (UTCTime, getCurrentTime)
 import GHC.Generics (Generic)
 import GHC.Records (HasField (..))
-import Shikigami.Agent.Decl (AgentDecl (..), codingAgentStepOf)
+import Shikigami.Agent.Decl (AgentDecl (..), codingAgentStepOf, requestedOverlays)
 import Shikigami.Agent.Name (AgentName, agentNameText, mkAgentName)
+import Shikigami.Capability.Declared (cliTools, renderCliToolDecl)
 import Shikigami.Capability.Overlay (CapabilityId, capabilityIdText, mkCapabilityId)
 import Shikigami.CodingAgent.Types (CodingAgentStep (..), accessText, providerText)
 import Shikigami.Decision.Contract (versionedDigest)
@@ -72,33 +73,37 @@ data GrantRequest = GrantRequest
     -- | The vendor coding tool and access a @CodingAgent@ declaration asks
     -- to launch.
     codingAgent :: !(Maybe (Text, Text)),
+    -- | Each declared CLI tool, rendered with its executable and patterns.
+    tools :: ![Text],
     budget :: !Budget
   }
   deriving stock (Eq, Show)
 
 requestedGrant :: AgentDecl -> LocalRepository -> GrantRequest
-requestedGrant AgentDecl {name, capabilityOverlays, behavior} repository =
+requestedGrant decl@AgentDecl {name, behavior, tools} repository =
   GrantRequest
     { agent = name,
       repository,
       placement = repository.placement,
-      capabilities = Set.fromList capabilityOverlays,
+      capabilities = Set.fromList (requestedOverlays decl),
       codingAgent = (\step -> (providerText step.provider, accessText step.access)) <$> codingAgentStepOf behavior,
+      tools = renderCliToolDecl <$> cliTools tools,
       budget = defaultBudget
     }
 
 -- | Show and grant a caller's own bounded budget instead of 'defaultBudget'.
 proposeBudget :: Budget -> GrantRequest -> GrantRequest
-proposeBudget proposed GrantRequest {agent, repository, placement, capabilities, codingAgent} = GrantRequest {agent, repository, placement, capabilities, codingAgent, budget = proposed}
+proposeBudget proposed GrantRequest {agent, repository, placement, capabilities, codingAgent, tools} = GrantRequest {agent, repository, placement, capabilities, codingAgent, tools, budget = proposed}
 
 renderGrantRequest :: GrantRequest -> Text
-renderGrantRequest GrantRequest {agent, repository, placement, capabilities, codingAgent, budget = Budget {modelAttempts, toolAttempts, tokens, minutes}} =
+renderGrantRequest GrantRequest {agent, repository, placement, capabilities, codingAgent, tools, budget = Budget {modelAttempts, toolAttempts, tokens, minutes}} =
   Text.unlines
     ( [ "local-operator: " <> agentNameText agent <> " asks for",
         "  repository   " <> repositoryIdText repository.identity <> " (" <> Text.pack repository.source <> ")",
         "  placement    " <> placementText placement
       ]
         <> maybe [] (\(provider, access) -> ["  coding agent " <> provider <> " with " <> access <> " access, unattended"]) codingAgent
+        <> (("  tool         " <>) <$> tools)
         <> [ "  capabilities " <> if Set.null capabilities then "none" else Text.intercalate ", " (capabilityIdText <$> Set.toList capabilities),
              "  budget       "
                <> Text.pack (show modelAttempts)
