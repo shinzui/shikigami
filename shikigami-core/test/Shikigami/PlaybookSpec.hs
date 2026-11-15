@@ -2,7 +2,9 @@
 module Shikigami.PlaybookSpec (tests) where
 
 import Data.Map.Strict qualified as Map
+import Data.Text qualified as Text
 import Shikigami.Playbook
+import Shikigami.Playbook.Run (Reflection (..), parseReflection)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertFailure, testCase, (@?=))
 
@@ -38,5 +40,13 @@ tests =
         validateBundle bundle @?= [],
       testCase "templates render run parameters and item variables" do
         renderTemplate (Map.fromList [("focus", "docs")]) (Map.fromList [("repo", "mina")]) "In {{repo}}, fix {{ run.focus }}." @?= "In mina, fix docs."
-        templateReferences "a {{x}} b {{run.y}}" @?= ["x", "run.y"]
+        templateReferences "a {{x}} b {{run.y}}" @?= ["x", "run.y"],
+      testCase "{{learnings}} is always defined" do
+        validateBundle Bundle {main = "m", playbooks = [Playbook {name = "m", steps = [Reflect {id = "r", prompt = "Given {{learnings}}", workspace = ""}]}]} @?= [],
+      testCase "a reflection is the last JSON line with learnings, bounded" do
+        let message = "I looked.\n{\"learnings\": [\"a\", \"b\", \"c\", \"d\"], \"playbookSuggestion\": \"" <> Text.replicate 5000 "x" <> "\"}\n"
+        fmap (.learnings) (parseReflection message) @?= Just ["a", "b", "c"]
+        fmap (fmap Text.length . (.suggestion)) (parseReflection message) @?= Just (Just 4096)
+        parseReflection "no json here" @?= Nothing
+        parseReflection "{\"learnings\": [], \"playbookSuggestion\": null}" @?= Just Reflection {learnings = [], suggestion = Nothing}
     ]

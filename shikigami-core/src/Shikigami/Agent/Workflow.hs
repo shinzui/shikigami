@@ -184,7 +184,7 @@ import Shikigami.Objective.Tools qualified as ObjectiveTools
 import Shikigami.Objective.Types qualified as Objective
 import Shikigami.Output (OutputDelivery (..), OutputRegistry, lookupAdapter, resolveOutputs, resolvedOutputList)
 import Shikigami.Output qualified as Output
-import Shikigami.Playbook (loadBundle)
+import Shikigami.Playbook (pinPlaybook)
 import Shikigami.Playbook qualified as Playbook
 import Shikigami.Playbook.Run (PlaybookAgent (..), runPlaybook)
 import Shikigami.PracticeReview.Attention qualified as PracticeReviewAttention
@@ -1223,7 +1223,7 @@ runBehaviorStep deps activeBehaviorEnv resolvedProfile approvalPolicyForRun reco
     -- The bundle is loaded, checked and pinned once; a replay reads the
     -- journaled bundle, so an edited file affects only later runs (EP-4).
     Playbook {bundle, provider, access, model, effort} -> do
-      admitted <- step (StepName "playbook-admission") (liftIO (loadBundle (Text.unpack bundle)))
+      admitted <- step (StepName "playbook-admission") (liftIO (pinPlaybook (Text.unpack bundle)))
       case admitted of
         Left problems -> pure (Left (Text.intercalate "; " problems))
         Right pinned -> runFlowDefinition deps activeBehaviorEnv resolvedProfile approvalPolicyForRun recordedIdentity sid decl job (playbookFlow PlaybookAgent {provider, access, model, effort} pinned)
@@ -1252,7 +1252,7 @@ runFlowBehavior deps activeBehaviorEnv resolvedProfile approvalPolicyForRun reco
     Just flow -> runFlowDefinition deps activeBehaviorEnv resolvedProfile approvalPolicyForRun recordedIdentity sid decl job flow
 
 -- | A pinned playbook bundle as a flow body.
-playbookFlow :: PlaybookAgent -> Playbook.Bundle -> Flow.FlowDef
+playbookFlow :: PlaybookAgent -> Playbook.PinnedPlaybook -> Flow.FlowDef
 playbookFlow agent pinned =
   Flow.FlowDef
     { Flow.name = declarationCoordinate "playbook",

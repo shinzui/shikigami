@@ -12,6 +12,7 @@ let Step =
       | Approval : { id : Text, prompt : Text }
       | ForEach : { id : Text, items : Items, item : Text, playbook : Text }
       | RunPlaybook : { id : Text, playbook : Text }
+      | Reflect : { id : Text, prompt : Text, workspace : Text }
       >
 
 let Playbook = { name : Text, steps : List Step }

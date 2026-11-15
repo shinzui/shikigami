@@ -5,7 +5,8 @@
 -- fan-out name a sibling (@RunPlaybook@, @ForEach@) instead of embedding
 -- steps, because Dhall has no recursive types. Text fields are templates:
 -- @{{run.NAME}}@ reads a top-level string of the run's trigger payload and
--- @{{NAME}}@ reads a variable bound by an enclosing @ForEach@. Validation
+-- @{{NAME}}@ reads a variable bound by an enclosing @ForEach@, and
+-- @{{learnings}}@ the learnings recorded so far. Validation
 -- refuses a reference to nothing, an unknown sibling and a cycle, naming the
 -- step that is wrong.
 module Shikigami.Playbook
@@ -22,6 +23,8 @@ module Shikigami.Playbook
     templateReferences,
     renderStepTree,
     loadBundle,
+    PinnedPlaybook (..),
+    pinPlaybook,
   )
 where
 
@@ -36,6 +39,8 @@ import Dhall (FromDhall)
 import Dhall qualified
 import GHC.Generics (Generic)
 import Numeric.Natural (Natural)
+import System.Directory (doesPathExist, makeAbsolute)
+import System.FilePath (makeRelative, takeDirectory, (</>))
 
 data Bundle = Bundle
   { main :: !Text,
@@ -70,6 +75,11 @@ data PlaybookStep
     -- variable named @item@.
     ForEach {id :: !Text, items :: !Items, item :: !Text, playbook :: !Text}
   | RunPlaybook {id :: !Text, playbook :: !Text}
+  | -- | A read-only coding agent reflects on the work in @workspace@ and
+    -- answers with learnings (quoted to later steps through
+    -- @{{learnings}}@ and kept for later runs) and an optional suggestion
+    -- for the bundle, which the run proposes on a branch when it ends.
+    Reflect {id :: !Text, prompt :: !Text, workspace :: !Text}
   deriving stock (Eq, Show, Generic)
   deriving anyclass (FromDhall, ToJSON, FromJSON)
 
@@ -80,6 +90,7 @@ stepId = \case
   Approval {id = value} -> value
   ForEach {id = value} -> value
   RunPlaybook {id = value} -> value
+  Reflect {id = value} -> value
 
 data PlaybookError
   = UnknownMainPlaybook !Text
@@ -132,11 +143,12 @@ validateBundle bundle@Bundle {main, playbooks} =
       | otherwise = case lookupPlaybook bundle target of
           Nothing -> [UnknownSubPlaybook playbookName step target]
           Just child -> walk path variables child
-    defined variables reference = "run." `Text.isPrefixOf` reference || reference `elem` variables
+    defined variables reference = "run." `Text.isPrefixOf` reference || reference == "learnings" || reference `elem` variables
     references = \case
       CodingAgent {prompt, workspace} -> templateReferences prompt <> templateReferences workspace
       Tool {args} -> concatMap templateReferences args
       Approval {prompt} -> templateReferences prompt
+      Reflect {prompt, workspace} -> templateReferences prompt <> templateReferences workspace
       ForEach {items = FromPayload _} -> []
       _ -> []
 
@@ -180,6 +192,7 @@ renderStepTree bundle@Bundle {main} = maybe [] (go 0 []) (lookupPlaybook bundle 
       Approval {} -> "approval"
       ForEach {items, item, playbook} -> "for each " <> item <> " in " <> itemsText items <> " run " <> playbook
       RunPlaybook {playbook} -> "run " <> playbook
+      Reflect {workspace} -> "reflect" <> (if Text.null workspace then "" else " in " <> workspace)
     itemsText = \case
       Literal values -> "[" <> Text.intercalate ", " values <> "]"
       FromPayload field -> "run." <> field
@@ -194,3 +207,33 @@ loadBundle path = do
     Right bundle -> case validateBundle bundle of
       [] -> Right bundle
       problems -> Left (renderPlaybookError <$> problems)
+
+-- | A checked bundle as a run pins it: the bundle, its file, and the Git
+-- repository that holds the file (where a suggestion is proposed).
+data PinnedPlaybook = PinnedPlaybook
+  { bundle :: !Bundle,
+    file :: !FilePath,
+    repository :: !(Maybe FilePath),
+    -- | The file relative to 'repository'.
+    relative :: !FilePath
+  }
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (ToJSON, FromJSON)
+
+pinPlaybook :: FilePath -> IO (Either [Text] PinnedPlaybook)
+pinPlaybook path = do
+  file <- makeAbsolute path
+  loaded <- loadBundle file
+  case loaded of
+    Left problems -> pure (Left problems)
+    Right bundle -> do
+      repository <- enclosingRepository (takeDirectory file)
+      pure (Right PinnedPlaybook {bundle, file, repository, relative = maybe file (`makeRelative` file) repository})
+  where
+    enclosingRepository directory = do
+      found <- doesPathExist (directory </> ".git")
+      if found
+        then pure (Just directory)
+        else
+          let parent = takeDirectory directory
+           in if parent == directory then pure Nothing else enclosingRepository parent

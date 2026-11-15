@@ -40,6 +40,8 @@ workflow AgentRun
     }
     step route-catalog-architecture-practice -> CandidateCatalog
     step playbook-admission -> PlaybookAdmission
+    step recall-playbook-learnings -> RecalledLearnings
+    step remember-playbook-learnings -> RecordedLearning
     step worker-coordination-policy -> CoordinationPolicyResolution
     patch shikigami-objective-tracking-v1 {
       step objectives-policy -> ObjectivePolicyResolution
