@@ -2,6 +2,15 @@
 
 ## 2026-11-15
 
+* **Update**: FRIC-76 accepted: Recorded the likely cause and the group-level reproduction.
+
+
+* **Update**: FRIC-76 accepted: Status set to accepted.
+
+
+* **Update**: FRIC-75 resolved: Status set to resolved.
+
+
 * **Addition**: FRIC-76 records slowdown tooling friction with mori://shinzui/shikigami: workers integration test fails under parallel tasty threads
 
 

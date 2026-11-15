@@ -11,6 +11,7 @@ module Shikigami.CodingAgent.Local
   ( LocalCodingAgentConfig (..),
     localCodingAgentRunner,
     settleEnvelope,
+    finalMessageOf,
   )
 where
 
@@ -304,10 +305,21 @@ finalMessageOf envelope = Text.take 16384 case envelope of
       -- Claude Code's JSON output is the event list; its last event of type
       -- @result@ carries the final message.
       Just (Array events) | (result : _) <- reverse [r | Object event <- foldr (:) [] events, KeyMap.lookup "type" event == Just (String "result"), Just (String r) <- [KeyMap.lookup "result" event]] -> result
+      -- Codex's @--json@ output is one event per line; the final message is
+      -- the text of its last completed @agent_message@ item.
+      _ | (message : _) <- reverse (mapMaybe codexMessage (Text.lines out)) -> message
       _ -> lastNonEmpty out
     _ -> ""
   _ -> ""
   where
+    codexMessage line = case Aeson.decodeStrict (Text.Encoding.encodeUtf8 line) of
+      Just (Object event)
+        | KeyMap.lookup "type" event == Just (String "item.completed"),
+          Just (Object item) <- KeyMap.lookup "item" event,
+          KeyMap.lookup "type" item == Just (String "agent_message"),
+          Just (String text) <- KeyMap.lookup "text" item ->
+            Just text
+      _ -> Nothing
     lastNonEmpty out = case reverse (filter (not . Text.null . Text.strip) (Text.lines out)) of
       line : _ -> line
       [] -> ""

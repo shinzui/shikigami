@@ -6,7 +6,7 @@ generated:
   by: "claude-code/claude-opus-5-5"
   at: "2026-11-15T18:14:44Z"
 frictionId: FRIC-75
-status: logged
+status: "resolved"
 impact: slowdown
 kind: tooling
 origin: "mori://shinzui/shikigami"
@@ -16,6 +16,11 @@ plan: "docs/plans/127-run-claude-code-and-codex-as-durable-harness-workers-insid
 workaround: "Run the shikigami-agent suite with TASTY_NUM_THREADS=1."
 tags:
   - "tests"
+resolution: "LaunchSpec is a sequentialTestGroup; the agent suite passes three times in a row at TASTY_NUM_THREADS=4 (EP-2 M3)."
+amended:
+  - by: "claude-code/claude-opus-5-5"
+    at: "2026-11-15T19:12:33Z"
+    change: "Status set to resolved."
 ---
 # shikigami-agent launch tests hang under parallel tasty threads
 

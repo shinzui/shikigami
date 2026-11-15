@@ -180,6 +180,7 @@ library
     Shikigami.Flow.AdaptiveDelivery
     Shikigami.Flow.AtRiskCustomer
     Shikigami.Flow.Capability
+    Shikigami.Flow.CodingAgent
     Shikigami.Flow.Decision
     Shikigami.Flow.Delegate
     Shikigami.Flow.Initiative
@@ -800,6 +801,7 @@ test-suite shikigami-core-postgres-test
     Shikigami.AgentRun.LedgerSpec
     Shikigami.AgentWorkflowSpec
     Shikigami.AppSpec
+    Shikigami.CodingAgentFlowSpec
     Shikigami.DecisionEvidenceSpec
     Shikigami.DecisionExecutionSpec
     Shikigami.DecisionWorkflowSpec

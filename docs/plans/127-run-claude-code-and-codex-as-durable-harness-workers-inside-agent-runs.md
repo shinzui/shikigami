@@ -32,6 +32,11 @@ provenance:
       at: 2026-11-15T17:50:40Z
       mode: "implement"
       note: "M1 accepted: CodingAgent arm, durable child workflow, local-host runner, real Claude Code run on mina; ADR 0126"
+    - model: "claude-opus-5-5"
+      harness: "claude-code"
+      at: 2026-11-15T19:13:08Z
+      mode: "implement"
+      note: "M2, M2b, M3 accepted; EP-2 complete"
 ---
 
 # Run Claude Code and Codex as durable harness workers inside agent runs
@@ -136,9 +141,18 @@ target repository can read skills kept beside the declaration.
   probe branch was removed. Tests: the worker's tier admission now admits `local-operator`;
   `queuedCodingAgents` refuses a step with no repository or an unloaded agent; a run job
   keeps its repository across the queue and the journal (`WireCompatSpec`).
-- [ ] M3: The same declaration shape runs Codex on a real repository. A flow body calls
+- [x] M3 (2026-11-15): The same declaration shape runs Codex on a real repository. A flow body calls
   the capability twice under two keys and replays without relaunching. The new ADR
   amending ADR-40 is accepted, and the operations runbook documents the durable path.
+  Evidence: a `Codex` declaration ran on `mori://shinzui/mina` under `local-operator`
+  (runs `3f62e98c-…` and `dbbed19b-e7b5-5f03-b329-edbc326837b7`); Codex 0.169.0 created the
+  requested file, Shikigami committed it (`67f597d`, `246d8b9`), and the second run printed
+  Codex's own final message after `finalMessageOf` learned Codex's event lines. Baikai's
+  evidence strength for Codex is `correlated`. Codex did not try to commit. Both branches were
+  removed. The `coding-agent flow capability` postgres test runs a body that calls
+  `runCodingAgentStep` under keys `first` and `second`: two children, two attempts, and a
+  replay of the completed flow and both children adds none. `docs/operations/baikai-execution.md`
+  has the section "Durable coding-agent steps (LocalOperator)", and ADR 0126 is accepted.
 
 
 ## Surprises & Discoveries
@@ -362,9 +376,42 @@ target repository can read skills kept beside the declaration.
   runs need per-run capability runtimes in the worker, which nothing requires yet.
   Date: 2026-11-15
 
+- Decision: The flow capability is `Shikigami.Flow.CodingAgent` (`runCodingAgentStep key step
+  payload`, keys from `codingAgentKey`), a `FlowEffects` member interpreted over
+  `runCodingAgentChild`; harnesses without a run use `unavailableCodingAgent`.
+  Rationale: As recorded above, `FlowDef.run` only sees `FlowEffects`. The interpreter
+  carries the run's agent, identity and repository, so the body holds no `IOE` or `Store`.
+  Date: 2026-11-15
+- Decision: `extra-dirs` stays unset after M3; skills remain inlined.
+  Rationale: The Codex runs needed no skill, and for Codex `--add-dir` grants write access.
+  Inlining keeps a skill read-only for both vendors; a later plan that needs a skill's
+  supporting files can add read-only copies through `extra-dirs` for Claude only.
+  Date: 2026-11-15
+
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Complete on 2026-11-15. A declaration with the `CodingAgent` arm now runs Claude Code or
+Codex on a real repository as a durable keyed child workflow, from `shikigami-agent-run`,
+from `--resume` after the command was killed, or from a `local-operator` `shikigami-worker`
+draining `shikigami enqueue-run --workspace`. A completed step is one commit on the run
+branch; `shikigami runs show` and `shikigami-local ledger` show the outcome, the commit, the
+changes, the evidence summary and the launch, reattach, uncertain and settled records. A
+flow body uses the same step through the `CodingAgent` capability under call-site keys,
+which is the shape EP-4's playbooks need.
+
+What EP-3 M4 can reuse: `Shikigami.Process.Local.runAttempt` takes any command that writes
+its result to standard output when it exits, with the pure `recoverAttempt` deciding
+collect, reattach or uncertain, an atomic launch claim, and hooks for the record.
+
+Not done here: the workspace tools (`workspace.edit`, `exec`, `git`) are still composed only
+by the light commands, so a queued run in a worker can use coding agents but not those
+tools. A skill's files other than `SKILL.md` are not reachable (no `extra-dirs`). Reattach
+inside the worker was not shown live, because the dead worker's five-minute lease outlasted
+the probe agent; it uses the same runner as M2's reattach.
+
+Friction: FRIC-75 (launch tests hung under parallel threads) is resolved by a sequential
+group. FRIC-76 (a Git integration case that fails under parallel load) is accepted with a
+rerun workaround; with FRIC-72 it is a recurring parallel-suite surface across children.
 
 
 ## Context and Orientation

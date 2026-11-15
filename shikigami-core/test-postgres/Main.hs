@@ -6,6 +6,7 @@ import Shikigami.AdaptiveWorkflowSpec qualified as AdaptiveWorkflowSpec
 import Shikigami.AgentRun.LedgerSpec qualified as LedgerSpec
 import Shikigami.AgentWorkflowSpec qualified as AgentWorkflowSpec
 import Shikigami.AppSpec qualified as AppSpec
+import Shikigami.CodingAgentFlowSpec qualified as CodingAgentFlowSpec
 import Shikigami.DecisionEvidenceSpec qualified as DecisionEvidenceSpec
 import Shikigami.DecisionExecutionSpec qualified as DecisionExecutionSpec
 import Shikigami.DecisionWorkflowSpec qualified as DecisionWorkflowSpec
@@ -100,6 +101,7 @@ suite = withShikigamiMigratedSuite \databaseFixture ->
           WorkerSessionCapabilitySpec.tests databaseFixture,
           DirectoryStoreSpec.tests databaseFixture,
           FlowLifecycleSpec.tests databaseFixture,
+          CodingAgentFlowSpec.tests databaseFixture,
           GrantStoreSpec.tests databaseFixture,
           ActionRecordStoreSpec.tests databaseFixture,
           PracticeReviewMemorySpec.tests databaseFixture,

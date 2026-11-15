@@ -9,6 +9,7 @@ import Shikigami.Agent.Decl (AgentDecl (..), codingAgentStepOf)
 import Shikigami.Agent.DeclarationValue (declarationCoordinate)
 import Shikigami.Agent.Loader (loadAgent)
 import Shikigami.Agent.Principal (compatibilityIdentity)
+import Shikigami.CodingAgent.Local (finalMessageOf)
 import Shikigami.CodingAgent.Types
 import Shikigami.CodingAgent.Workflow (CodingAgentStepInput (..))
 import Shikigami.Process.Attempt
@@ -72,6 +73,13 @@ tests =
         case unknown of
           TierRefused _ -> pure ()
           other -> assertFailure ("expected TierRefused, got " <> show other),
+      testCase "the final message is read from Claude's event list and from Codex's event lines" do
+        let envelope out = object ["outcome" .= ("ran" :: Text), "stdout" .= (out :: Text)]
+            claude = "[{\"type\":\"system\"},{\"type\":\"result\",\"result\":\"Added one comment.\"}]"
+            codex = "{\"type\":\"thread.started\"}\n{\"type\":\"item.completed\",\"item\":{\"type\":\"agent_message\",\"text\":\"Reading.\"}}\n{\"type\":\"item.completed\",\"item\":{\"type\":\"command_execution\"}}\n{\"type\":\"item.completed\",\"item\":{\"type\":\"agent_message\",\"text\":\"Created the file.\"}}\n{\"type\":\"turn.completed\"}\n"
+        finalMessageOf (envelope claude) @?= "Added one comment."
+        finalMessageOf (envelope codex) @?= "Created the file."
+        finalMessageOf (envelope "plain text\nlast line\n") @?= "last line",
       testCase "outcomes keep their codec" do
         let outcome = Uncertain UncertainRun {reason = LauncherGoneWithoutResult, uncommitted = ChangeSummary [ChangedFile "src/A.hs" Modified] 0, launcherPid = Just 42}
         Aeson.decode (Aeson.encode outcome) @?= Just outcome

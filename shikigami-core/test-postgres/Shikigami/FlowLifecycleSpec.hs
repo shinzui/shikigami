@@ -65,6 +65,7 @@ import Shikigami.Flow.Capability
     runMemory,
     runSink,
   )
+import Shikigami.Flow.CodingAgent qualified as FlowCodingAgent
 import Shikigami.Flow.Decision qualified as FlowDecision
 import Shikigami.Flow.Delegate qualified as FlowDelegate
 import Shikigami.Flow.Initiative qualified as FlowInitiative
@@ -571,6 +572,7 @@ runFlowBodyUsing decision onAppend appEnv runtime flowAgent FlowDef {run} workfl
             . Adaptive.runAdaptiveDeliveryDisabled
             . (case decision of Nothing -> FlowDecision.runDecisionDisabled; Just environment -> FlowDecision.runDecision environment)
             . FlowDelegate.runDelegate delegateEnv
+            . FlowCodingAgent.unavailableCodingAgent
             . FlowObjectives.runObjectives Nothing (Right Nothing)
             . FlowObserve.unavailableObserve
             . FlowInitiative.unavailableInitiative

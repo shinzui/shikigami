@@ -229,6 +229,75 @@ Inherited output goes to real streams; it is not fabricated from returned text.
 A process result is not a durable model Response. This wrapper does not qualify
 workspace-tool authorization, idempotent durable jobs, memory or delivery.
 
+## Durable coding-agent steps (LocalOperator)
+
+Under `trust.tier=local-operator` a declared `CodingAgent` behavior runs Claude Code or
+Codex as a durable step of an agent run ([ADR 0126](../adr/0126-coding-agents-are-durable-workers-and-batch-qualification-is-tier-scoped.md)).
+The batch qualification above still gates `contained` and `multi-tenant`, where the step is
+refused before any process starts.
+
+```dhall
+behavior = A.Behavior.CodingAgent
+  { provider = A.CodingAgentProvider.Codex      -- or ClaudeCode
+  , prompt = "Add one accurate Haddock comment to an exported function in src/."
+  , access = A.WorkspaceAccess.EditWorkspace     -- ReadOnly | EditWorkspace | FullAccess
+  , model = None Text, effort = None A.CodingAgentEffort
+  , deadlineMinutes = 20
+  , skills = [ "agents/skills/exec-plan" ]
+  }
+```
+
+```sh
+shikigami-agent-run --set trust.tier=local-operator --agent agents/haddock-gaps.dhall \
+  --workspace mori://shinzui/mina
+shikigami-agent-run --set trust.tier=local-operator --agent agents/haddock-gaps.dhall \
+  --resume <WORKFLOW_ID>                      # after an interruption
+shikigami enqueue-run haddock-gaps --workspace mori://shinzui/mina   # for a local-operator worker
+shikigami runs show shikigami.agent-run <WORKFLOW_ID> [--json]
+shikigami-local ledger --run <WORKFLOW_ID>
+```
+
+What happens, in order:
+
+* **Admission.** The run's authority decides `launch_coding_agent` for the provider, access
+  and repository; the local-operator grant must name that repository. The step opens the
+  parent run's worktree and branch, fixes an absolute deadline, and prepares an attempt
+  directory under `<state_dir>/attempts/<child id>/`, outside the worktree.
+* **Attempt.** The step writes `job.kdl` (one job, `shikigami-step`: the provider, `working-dir
+  "."`, the deadline as `timeout`, captured JSON output bounded at 1 MiB per stream, and the
+  `safety { capability }`) and `prompt.md`, then runs
+  `shikigami-agent-launch unattended agent run shikigami-step --config job.kdl --prompt-file
+  prompt.md --run-id <child id> --evidence-file evidence.json --json` detached in its own
+  session. Baikai's loader, the operator ceiling in `~/.config/baikai/agents.kdl`, its
+  deadline and output bounds and its exit codes all apply; the job file cannot raise the
+  ceiling. `intent.json` is written before the spawn, `launch.json` (pid and start time)
+  after it, and the launcher's JSON envelope lands in `envelope.json` when it exits.
+* **Recovery.** Re-executing the attempt reads that directory: a complete envelope is
+  collected; a live launcher (same pid and start time, not a zombie) is reattached and waited
+  for until the deadline plus 60 s; anything else ends `uncertain` and is recorded as
+  `coding-agent.uncertain` with the launcher pid. Shikigami never resumes a vendor session,
+  never kills an overrunning launcher and never launches a second attempt. A fresh launch
+  claims the attempt by linking a complete `intent.json` into place, so two drivers launch at
+  most once.
+* **Settlement.** Exit 75 is `timed_out`; Baikai's refusals (64, 69, 77, 78) are `failed`;
+  anything else is `completed`, and Shikigami commits the worktree's changes on the run branch
+  with `Shikigami-Run` and `Shikigami-Agent` trailers. Partial work from a timed-out or
+  uncertain step stays uncommitted. Codex's `workspace-write` sandbox may refuse `git commit`
+  inside a linked worktree, because the worktree's Git directory lies outside the sandbox;
+  the agent does not need to commit.
+
+Attached `skills` are copied into the attempt directory and their `SKILL.md` is given to the
+agent with the prompt (at most 32 KiB each); a skill's other files are not reachable. The
+trigger payload is quoted to the agent as evidence, never as instructions.
+
+A flow body calls the same step through the `CodingAgent` capability,
+`runCodingAgent (codingAgentKey "first") step payload`; each key is its own keyed child
+workflow, so a flow can run several and replays read their journaled outcomes.
+
+The attempt machinery is command-parameterized (`Shikigami.Process.Local.runAttempt` in
+`shikigami-core:local-host`): any long, mutating external command that writes its result to
+standard output when it exits gets the same collect, reattach or uncertain recovery.
+
 ## Process ownership and promotion
 
 Vendor binaries and authenticated login are external host prerequisites. A

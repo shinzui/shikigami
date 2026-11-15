@@ -17,13 +17,17 @@ import System.Directory
 import System.Exit (ExitCode (..))
 import System.FilePath ((</>))
 import System.IO (hClose, openTempFile)
-import Test.Tasty (TestTree, testGroup)
+import Test.Tasty (DependencyType (AllFinish), TestTree, sequentialTestGroup)
 import Test.Tasty.HUnit
 
+-- | Sequential: a fake vendor reads its standard input to the end, and a
+-- launch spawned concurrently by another case can inherit and hold that pipe
+-- open, hanging the suite (FRIC-75).
 tests :: TestTree
 tests =
-  testGroup
+  sequentialTestGroup
     "foreground Baikai launch"
+    AllFinish
     [ testCase "config check starts no process and needs no model or API key" do
         case launchConfigRun (options CheckConfig []) (Right []) emptyEnvironment of
           Left (ExitSuccess, _, _) -> pure ()

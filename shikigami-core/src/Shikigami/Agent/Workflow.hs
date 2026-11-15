@@ -160,6 +160,7 @@ import Shikigami.Flow.Acknowledgement
     runAcknowledgementWithChild,
   )
 import Shikigami.Flow.Capability qualified as FlowCapability
+import Shikigami.Flow.CodingAgent qualified as FlowCodingAgent
 import Shikigami.Flow.Decision qualified as FlowDecision
 import Shikigami.Flow.Delegate qualified as FlowDelegate
 import Shikigami.Flow.Initiative qualified as FlowInitiative
@@ -1224,6 +1225,7 @@ runFlowBehavior deps activeBehaviorEnv resolvedProfile approvalPolicyForRun reco
               . FlowCapability.runMemory memoryEnv
               . FlowCapability.runSink sinkEnv
               . FlowDelegate.runDelegate delegateEnv
+              . FlowCodingAgent.runCodingAgent FlowCodingAgent.CodingAgentEnv {agent = decl.name, identity = job.identity, repository = job.repository}
               . FlowWorkers.runWorkers deps.coordination deps.actionAuthority coordinator coordinationPolicy
               . Adaptive.runAdaptiveDelivery (adaptiveRuntime deps) coordinator resolvedProfile (Harness.narrowHarnessPolicy deps.harness decl.harness)
               . FlowObjectives.runObjectives deps.objectives objectivePolicy

@@ -40,6 +40,7 @@ import Shikigami.Flow.Acknowledgement (Acknowledgement)
 import Shikigami.Flow.AdaptiveDelivery (adaptiveDelivery)
 import Shikigami.Flow.AtRiskCustomer (atRiskCustomerFlow)
 import Shikigami.Flow.Capability (Activity, Memory, Sink)
+import Shikigami.Flow.CodingAgent (CodingAgent)
 import Shikigami.Flow.Decision (Decision)
 import Shikigami.Flow.Delegate (Delegate)
 import Shikigami.Flow.Delegate qualified as Delegate
@@ -96,6 +97,7 @@ type FlowEffects es =
     Activity :> es,
     Acknowledgement :> es,
     Delegate :> es,
+    CodingAgent :> es,
     Workers :> es,
     AdaptiveDelivery :> es,
     Objectives :> es,
