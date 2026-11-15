@@ -34,6 +34,7 @@ import Data.Text qualified as Text
 import Options.Applicative
 import Shikigami.Agent.Command.AgentRun (runAgentRun)
 import Shikigami.Agent.Command.Local (LedgerOptions (..), LocalCommand (..), runLocal)
+import Shikigami.Agent.Command.Routine (NewRoutine (..), RunRoutine (..), runNewRoutine, runRoutine)
 import Shikigami.Agent.Command.RunBehavior (runRunBehavior)
 import Shikigami.Agent.Payload (payloadArgument)
 import Shikigami.App.Config (Role (..))
@@ -112,7 +113,7 @@ localRoleInfo =
         withConfigOptions
           "shikigami-local"
           "Inspect local-operator grants and the action record"
-          (runLocal <$> subparser (approvals <> revoke <> ledger <> tools <> mcp <> gate))
+          (subparser (newRoutine <> runRoutineCommand) <|> (runLocal <$> subparser (approvals <> revoke <> ledger <> tools <> mcp <> gate)))
           (pure [])
     }
   where
@@ -135,6 +136,35 @@ localRoleInfo =
                 <*> optional (strOption (long "workspace" <> metavar "DIR|mori://…" <> help "The repository to start it in (default: the current directory)"))
             )
             (progDesc "Connect to a bound MCP server and list its tools as approved, approved-schema-changed or not approved")
+        )
+    newRoutine =
+      command
+        "new"
+        ( info
+            ( fmap
+                runNewRoutine
+                ( NewRoutine . Text.pack
+                    <$> strArgument (metavar "NAME" <> help "The agent's name")
+                    <*> switch (long "coder" <> help "A Claude Code coding agent instead of a Skill")
+                    <*> optional (Text.pack <$> strOption (long "every" <> metavar "CRON" <> help "Run on this schedule instead of by hand"))
+                )
+            )
+            (progDesc "Write a routine agent's declaration and skill under ~/.config/shikigami/agents")
+        )
+    runRoutineCommand =
+      command
+        "run"
+        ( info
+            ( fmap
+                runRoutine
+                ( RunRoutine
+                    <$> strArgument (metavar "AGENT" <> help "A routine agent's name, or a declaration path")
+                    <*> many (Text.pack <$> strArgument (metavar "TASK…" <> help "What to do this time; becomes the payload's task"))
+                    <*> optional (strOption (long "in" <> metavar "DIR|mori://…" <> help "The repository (default: the current checkout)"))
+                    <*> switch (long "no-confirm" <> help "Never ask; use only stored or file grants")
+                )
+            )
+            (progDesc "Run a routine agent in this repository under the local-operator tier")
         )
     gate = command "gate" (info (Gate <$> strArgument (metavar "TOOLS.json" <> help "The run's declared tools, written by the coding-agent runner")) (progDesc "Claude Code's PreToolUse hook: allow or deny one call against a run's declared tools"))
     approvals =

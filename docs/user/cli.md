@@ -430,6 +430,8 @@ no cache to invalidate. **Needs the DB** (`database.connection_string`).
 ## `shikigami-local`
 
 ```bash
+$ shikigami-local new <NAME> [--coder] [--every <CRON>]
+$ shikigami-local run <AGENT> [TASK…] [--in <DIR|mori://…>] [--no-confirm]
 $ shikigami-local approvals
 $ shikigami-local approvals pending
 $ shikigami-local approvals resolve <REVIEW-ID> [--reject <REASON>]
@@ -439,7 +441,11 @@ $ shikigami-local tools <AGENT.dhall> [--workspace <DIR|mori://…>]
 $ shikigami-local mcp <SERVER> [--workspace <DIR|mori://…>]
 ```
 
-The local operator's view under the `local-operator` trust tier. `approvals` validates the
+The local operator's command under the `local-operator` trust tier. `new` writes a routine
+agent — a declaration of a few lines built on `schema/Routine.dhall` and, for a Skill, its
+`SKILL.md` — under `~/.config/shikigami/agents`; `run` runs one by name (or path) in the current
+checkout, with the words after it as the payload's `task`, asks once, and prints where its
+report went. `approvals` validates the
 approvals file and lists its repositories, approvals and every stored confirmation; `revoke`
 deletes a stored confirmation (give at least eight characters of its digest); `ledger` prints the
 action record oldest first; `approvals pending` and `approvals resolve` list and answer the asks

@@ -65,6 +65,7 @@ import Shikigami.Flow.Observe qualified as FlowObserve
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations (verifyShikigamiMigrations)
+import Shikigami.Output (OutputReceipt (..))
 import Shikigami.PracticeReview.Capability qualified as PracticeReviewCapability
 import Shikigami.Record (KindFilter (..), RecordEvent (..), RecordQuery (..), mkRecordLimit, observedRecord, postgresRecord, readRecord, recordEntry, recordErrorText)
 import Shikigami.Repository (repositoryIdText)
@@ -267,6 +268,7 @@ runDurableAgent logger store@KirokuStore {pool} appEnv workspace triggerPayload 
         Right (Completed (Right result)) -> do
           renderRunResult decl result
           reportLocalRun pool tierRuntime job
+          reportOutputs appEnv job
         Right Suspended -> do
           Log.logInfo logger "execution.durable.accepted" ["workflowId" .= (runJobWorkflowId job).unWorkflowId]
           putStrLn "Agent run accepted; a durable wake is pending."
@@ -403,6 +405,19 @@ boundsTokens config = case config.behaviorProvider of
   _ -> False
 
 -- | Under the local operator, name the repository, the run and its record.
+-- | Where the run's outputs went: each delivery receipt journaled by
+-- @deliver-outputs@, or that the result stayed in the journal (EP-8 M2).
+reportOutputs :: AppEnv -> RunJob -> IO ()
+reportOutputs appEnv job = do
+  steps <- runAppIO appEnv (loadStepIndex agentRunWorkflowName (runJobWorkflowId job) 0)
+  let journal = either (const Map.empty) id steps
+  case Map.lookup "deliver-outputs" journal of
+    Nothing -> TIO.putStrLn "report  none (the result is in the journal)"
+    Just value -> case Aeson.fromJSON value of
+      Aeson.Success (receipts :: [Either Text OutputReceipt]) ->
+        mapM_ (either (\problem -> TIO.putStrLn ("report  failed: " <> problem)) (\receipt -> TIO.putStrLn ("report  " <> receipt.location))) receipts
+      Aeson.Error _ -> TIO.putStrLn "report  unreadable delivery receipt"
+
 reportLocalRun :: Hasql.Pool.Pool -> TierRuntime -> RunJob -> IO ()
 reportLocalRun pool tierRuntime job = case tierRuntime.grant of
   Nothing -> pure ()

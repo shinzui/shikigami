@@ -22,6 +22,11 @@ provenance:
       at: 2026-11-15T15:08:44Z
       mode: "update"
       note: "Routine short form states no output and uses the composition default (user decision 2026-11-15)"
+    - model: "claude-opus-5-5"
+      harness: "claude-code"
+      at: 2026-11-15T22:12:03Z
+      mode: "implement"
+      note: "M1 accepted: Routine.dhall, shikigami-local new and run, report path from the delivery receipt"
 ---
 
 # Declare and run a routine agent with one file and one command
@@ -58,12 +63,21 @@ commands, the refusal messages and the user guide.
 
 ## Progress
 
-- [ ] Milestone 1 — one file, one command, one confirmation. `shikigami-local new repo-digest`
+- [x] Milestone 1 (2026-11-15) — one file, one command, one confirmation. `shikigami-local new repo-digest`
   writes a declaration of at most fifteen lines and a `SKILL.md`. On this Mac,
   `shikigami-local run repo-digest` in `/Users/shinzui/Keikaku/bokuno/keiro` asks once, runs,
   and writes a `local.report` file through the composition's default output, with no
   `outputs` line in the declaration; a second run does not ask. Changing the declaration
   asks again.
+  Evidence: with a scratch `XDG_CONFIG_HOME`, `shikigami-local new repo-digest` wrote a
+  five-line declaration (eight after adding `tools = [ R.cli "git" [ [ "log" ], [ "status" ]
+  ] ]` and a description) and its `SKILL.md`. In `/Users/shinzui/Keikaku/bokuno/keiro`,
+  `shikigami-local run repo-digest` (OpenAI `gpt-5.4-mini`) asked once, listing the git tool
+  and `cli.git, workspace.read`, ran, and printed `report …/reports/repo-digest/4b2ca292-…-0.md`
+  through the composition default, with no `outputs` line. A second run with no terminal and
+  a task ("focus on the release") asked nothing and wrote its report. Adding a `show` prefix
+  made the next run with no terminal refuse with "no stored grant for this declaration; run
+  it once in a terminal to confirm it". Tests: `routine agents` in `shikigami-agent:test`.
 - [ ] Milestone 2 — the operator can see and fix. `shikigami-local runs` lists runs with
   outcome, duration and report path, and `shikigami-local runs <id>` shows one run's actions
   from the action record. `shikigami-local doctor` reports every missing prerequisite with
@@ -147,6 +161,19 @@ commands, the refusal messages and the user guide.
   writes an `outputs` line, which always wins.
   Date: 2026-11-15
 
+
+- Decision (M1): `shikigami-local new` writes absolute paths: the prelude import (found by
+  walking up from the executable to the checkout's `schema/`, or `SHIKIGAMI_SCHEMA`) and the
+  skill directory. `R.skill` takes the skill directory as its second argument.
+  Rationale: A routine agent runs from any checkout, and a Skill path is resolved from the
+  process's directory. An environment import of a directory prefix would need the variable at
+  every load. `doctor` (M2) can detect a stale path.
+  Date: 2026-11-15
+- Decision (M1): `--yes` and `routineBudget` are not added; `run` takes EP-1's confirmation and
+  default budget, and `--no-confirm` for unattended use.
+  Rationale: EP-1's default budget (30 model attempts, 120 tool attempts, 3,000,000 tokens,
+  60 minutes) is already bounded and shown at confirmation.
+  Date: 2026-11-15
 
 ## Outcomes & Retrospective
 
