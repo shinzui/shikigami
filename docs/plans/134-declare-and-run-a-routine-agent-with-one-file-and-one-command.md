@@ -78,10 +78,19 @@ commands, the refusal messages and the user guide.
   a task ("focus on the release") asked nothing and wrote its report. Adding a `show` prefix
   made the next run with no terminal refuse with "no stored grant for this declaration; run
   it once in a terminal to confirm it". Tests: `routine agents` in `shikigami-agent:test`.
-- [ ] Milestone 2 — the operator can see and fix. `shikigami-local runs` lists runs with
+- [x] Milestone 2 (2026-11-15) — the operator can see and fix. `shikigami-local runs` lists runs with
   outcome, duration and report path, and `shikigami-local runs <id>` shows one run's actions
   from the action record. `shikigami-local doctor` reports every missing prerequisite with
   the command that fixes it. Each refusal a routine agent can meet names the next step.
+  Evidence: `shikigami-local runs --limit 4` listed `repo-digest`, `plain-note` and an earlier
+  probe newest first, each with start time, `completed in 5s`, allowed and refused counts and
+  its report path; `runs eb3b96ee-…` printed that run's decisions and `tool.called` entries
+  and its report. `doctor` printed five `ok` lines in the working setup; with an unreachable
+  database, the stub provider and a tool named `no-such-tool` it printed three `FAIL` lines,
+  each with a `fix:` line. A run outside a repository now refuses with "… is not inside a Git
+  repository; run from a checkout or pass --in DIR|mori://…", and a run from
+  `keiro/keiro` used the checkout's top level and its stored grant. Tests: the refusal texts
+  in `routine agents`.
 - [ ] Milestone 3 — scheduled, and a coding agent. `shikigami-local up` starts the local
   worker and scheduler. A `repo-digest` scheduled every two minutes produces two reports
   without a prompt, an agent with no stored approval is not armed and says why, and a
@@ -173,6 +182,14 @@ commands, the refusal messages and the user guide.
   default budget, and `--no-confirm` for unattended use.
   Rationale: EP-1's default budget (30 model attempts, 120 tool attempts, 3,000,000 tokens,
   60 minutes) is already bounded and shown at confirmation.
+  Date: 2026-11-15
+
+- Decision (M2): `runs` reads the action record (the last 1000 events, grouped by run), the
+  keiro instance row and the journaled `deliver-outputs` receipts, in `shikigami-agent`; no
+  shared module moved to `inspection`. Routine refusals are a small sum
+  (`AgentNotFound`, `AgentExists`, `NotInRepository`); refusals of other plans keep their own
+  text, which already names a next step ("run it once in a terminal to confirm it").
+  `doctor` does not yet check scheduled agents' approvals; that belongs to M3's arming rule.
   Date: 2026-11-15
 
 ## Outcomes & Retrospective

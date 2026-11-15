@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-11-15
+* **Addition**: DOC-13 documents `shikigami-local runs` and `shikigami-local doctor` (EP-9 M2).
 * **Addition**: DOC-13 documents `shikigami-local new` and `shikigami-local run` for routine agents (EP-9 M1).
 * **Addition**: DOC-23 explains outputs, the composition default (a local report), `Trigger.Manual` as the default, `approval.require_outputs` and the local approval inbox (EP-8 M2). DOC-13 lists `shikigami-local approvals pending|resolve`.
 * **Addition**: DOC-22 explains declared tools for coding agents: the gate hook, strict MCP configuration, the Codex rule and the Baikai ceiling setting (EP-3 M3).

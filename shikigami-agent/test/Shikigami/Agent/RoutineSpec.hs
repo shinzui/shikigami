@@ -3,7 +3,7 @@
 module Shikigami.Agent.RoutineSpec (tests) where
 
 import Data.Unique (hashUnique, newUnique)
-import Shikigami.Agent.Command.Routine (NewRoutine (..), scaffoldRoutine)
+import Shikigami.Agent.Command.Routine (NewRoutine (..), RoutineRefusal (..), renderRoutineRefusal, scaffoldRoutine)
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Trigger (..))
 import Shikigami.Agent.Loader (loadAgent)
 import System.Directory (getTemporaryDirectory, makeAbsolute, removePathForcibly)
@@ -37,7 +37,11 @@ tests =
         decl <- either (assertFailure . show) pure loaded
         case (decl.behavior, decl.trigger) of
           (CodingAgent {}, Schedule {}) -> pure ()
-          other -> assertFailure (show other)
+          other -> assertFailure (show other),
+      testCase "every routine refusal names the next step" do
+        renderRoutineRefusal (AgentNotFound "nope" "/agents") @?= "no routine agent nope in /agents; create it with: shikigami-local new nope"
+        renderRoutineRefusal (NotInRepository "/tmp") @?= "/tmp is not inside a Git repository; run from a checkout or pass --in DIR|mori://…"
+        renderRoutineRefusal (AgentExists "/agents/x.dhall") @?= "refusing to overwrite /agents/x.dhall; edit it, or pick another name"
     ]
 
 withDirectory :: (FilePath -> IO a) -> IO a

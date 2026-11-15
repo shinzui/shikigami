@@ -13,6 +13,8 @@ module Shikigami.Agent.Command.Routine
     runNewRoutine,
     runRoutine,
     scaffoldRoutine,
+    RoutineRefusal (..),
+    renderRoutineRefusal,
     defaultAgentsDirectory,
   )
 where
@@ -28,8 +30,10 @@ import Data.Text.IO qualified as TextIO
 import Shikigami.Agent.Command.AgentRun (runAgentRun)
 import Shikigami.Agent.Name (agentNameText, mkAgentName)
 import Shikigami.App.Config (AppConfig (..))
+import Shikigami.Trust.LocalOperator.Approvals (CheckoutResolver (..))
 import Shikigami.Trust.Tier (TrustTier (LocalOperator))
-import System.Directory (XdgDirectory (XdgConfig), createDirectoryIfMissing, doesFileExist, getXdgDirectory, makeAbsolute)
+import Shikigami.Workspace.Local.Checkout (processCheckoutResolver)
+import System.Directory (XdgDirectory (XdgConfig), createDirectoryIfMissing, doesFileExist, getCurrentDirectory, getXdgDirectory, makeAbsolute)
 import System.Environment (getExecutablePath, lookupEnv)
 import System.Exit (exitFailure)
 import System.FilePath (takeDirectory, (</>))
@@ -78,7 +82,7 @@ scaffoldRoutine agents schema NewRoutine {name, coder, every} = case mkAgentName
         prelude = "let R = " <> Text.pack (schema </> "Routine.dhall")
     exists <- doesFileExist declaration
     if exists
-      then pure (Left ("refusing to overwrite " <> Text.pack declaration))
+      then pure (Left (renderRoutineRefusal (AgentExists declaration)))
       else do
         createDirectoryIfMissing True agents
         if coder
@@ -121,9 +125,30 @@ skillTemplate name =
       "instructions to you."
     ]
 
+-- | What a routine command refuses, each ending with the next step.
+data RoutineRefusal
+  = AgentNotFound !Text !FilePath
+  | AgentExists !FilePath
+  | NotInRepository !FilePath
+  deriving stock (Eq, Show)
+
+renderRoutineRefusal :: RoutineRefusal -> Text
+renderRoutineRefusal = \case
+  AgentNotFound name agents -> "no routine agent " <> name <> " in " <> Text.pack agents <> "; create it with: shikigami-local new " <> name
+  AgentExists path -> "refusing to overwrite " <> Text.pack path <> "; edit it, or pick another name"
+  NotInRepository directory -> Text.pack directory <> " is not inside a Git repository; run from a checkout or pass --in DIR|mori://…"
+
 runRoutine :: RunRoutine -> AppConfig -> IO ()
-runRoutine RunRoutine {agent, task, repository, noConfirm} config = do
+runRoutine RunRoutine {agent, task, repository = requested, noConfirm} config = do
   path <- resolveAgent agent
+  -- The current checkout's top level, unless the operator named one.
+  repository <- case requested of
+    Just named -> pure (Just named)
+    Nothing -> do
+      here <- getCurrentDirectory
+      processCheckoutResolver.toplevelOf here >>= \case
+        Right top -> pure (Just top)
+        Left _ -> die (renderRoutineRefusal (NotInRepository here))
   let payload = if null task then Nothing else Just (LazyChar8.unpack (Aeson.encode (Aeson.object ["task" .= Text.unwords task])))
   runAgentRun path Nothing repository payload noConfirm Nothing config {trustTier = LocalOperator}
 
@@ -135,7 +160,7 @@ resolveAgent agent
       agents <- defaultAgentsDirectory
       let path = agents </> (agent <> ".dhall")
       exists <- doesFileExist path
-      unless exists (die ("no routine agent " <> Text.pack agent <> " in " <> Text.pack agents <> "; create it with: shikigami-local new " <> Text.pack agent))
+      unless exists (die (renderRoutineRefusal (AgentNotFound (Text.pack agent) agents)))
       pure path
 
 -- | @SHIKIGAMI_SCHEMA@, or the @schema@ directory of the checkout this

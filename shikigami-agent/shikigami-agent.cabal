@@ -41,8 +41,10 @@ library
     Shikigami.Agent.Capability.Workspace
     Shikigami.Agent.Command
     Shikigami.Agent.Command.AgentRun
+    Shikigami.Agent.Command.Doctor
     Shikigami.Agent.Command.Launch
     Shikigami.Agent.Command.Local
+    Shikigami.Agent.Command.LocalRuns
     Shikigami.Agent.Command.Routine
     Shikigami.Agent.Command.RunBehavior
     Shikigami.Agent.Trust

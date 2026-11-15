@@ -33,7 +33,9 @@ where
 import Data.Text qualified as Text
 import Options.Applicative
 import Shikigami.Agent.Command.AgentRun (runAgentRun)
+import Shikigami.Agent.Command.Doctor (runDoctor)
 import Shikigami.Agent.Command.Local (LedgerOptions (..), LocalCommand (..), runLocal)
+import Shikigami.Agent.Command.LocalRuns (RunsQuery (..), runLocalRuns)
 import Shikigami.Agent.Command.Routine (NewRoutine (..), RunRoutine (..), runNewRoutine, runRoutine)
 import Shikigami.Agent.Command.RunBehavior (runRunBehavior)
 import Shikigami.Agent.Payload (payloadArgument)
@@ -113,7 +115,7 @@ localRoleInfo =
         withConfigOptions
           "shikigami-local"
           "Inspect local-operator grants and the action record"
-          (subparser (newRoutine <> runRoutineCommand) <|> (runLocal <$> subparser (approvals <> revoke <> ledger <> tools <> mcp <> gate)))
+          (subparser (newRoutine <> runRoutineCommand <> runsCommand <> doctor) <|> (runLocal <$> subparser (approvals <> revoke <> ledger <> tools <> mcp <> gate)))
           (pure [])
     }
   where
@@ -165,6 +167,20 @@ localRoleInfo =
                 )
             )
             (progDesc "Run a routine agent in this repository under the local-operator tier")
+        )
+    doctor = command "doctor" (info (pure runDoctor) (progDesc "Check every prerequisite of routine agents; each failure names its fix"))
+    runsCommand =
+      command
+        "runs"
+        ( info
+            ( fmap
+                runLocalRuns
+                ( RunsQuery
+                    <$> optional (Text.pack <$> strArgument (metavar "RUN-ID" <> help "Show one run's record and outputs"))
+                    <*> option auto (long "limit" <> metavar "N" <> value 20 <> help "How many recent runs (default 20)")
+                )
+            )
+            (progDesc "List recent runs with outcome, decisions and report, or show one run")
         )
     gate = command "gate" (info (Gate <$> strArgument (metavar "TOOLS.json" <> help "The run's declared tools, written by the coding-agent runner")) (progDesc "Claude Code's PreToolUse hook: allow or deny one call against a run's declared tools"))
     approvals =
