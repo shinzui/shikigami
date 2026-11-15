@@ -96,12 +96,27 @@ target repository can read skills kept beside the declaration.
   title "ExecPlan Skill" from its `SKILL.md`; its unchanged branch was removed. Unit tests:
   `CodingAgent` group in `shikigami-core:test` (10 cases, checked values, the example
   declaration, the recovery table and the outcome codec).
-- [ ] M2: Killing the worker mid-run and resuming reattaches to the surviving attempt and
+- [x] M2 (2026-11-15): Killing the worker mid-run and resuming reattaches to the surviving attempt and
   completes without a second launch. Resuming a completed run reads the journal without
   launching. An attempt whose launcher died without a result ends `Uncertain` and is
   reported. Shown on a real repository and by the recovery tests. The attempt machinery
   takes its command as a parameter, proven by a test that drives it with a plain shell
   command; this milestone is the named prerequisite of EP-3 M4.
+  Evidence: on `mori://shinzui/mina`, `shikigami-agent-run` for a probe declaration was
+  killed with SIGKILL four seconds after `launch.json` appeared (run
+  `d3d39e89-aa92-5d5c-85d4-bf8e5d831ec6`); its launcher (pid 50080) kept running.
+  `shikigami-agent-run --resume d3d39e89-…` reattached, completed and committed `224d192`;
+  the ledger holds one `coding-agent.launched`, one `coding-agent.reattached` and one
+  `coding-agent.settled`. Resuming it again printed the same result and added no ledger
+  entry. A second run (`f5fcb190-5a89-59f1-ba71-c9eb25dec851`) had its worker, launcher and
+  Claude process killed; `--resume` ended it `uncertain` (`LauncherGoneWithoutResult`),
+  recorded `coding-agent.uncertain` with the launcher pid, exited 1, and `shikigami runs show
+  shikigami.agent-run f5fcb190-…` prints the outcome, reason and pid. Both probe branches
+  were removed. Tests: the `process attempt` group in `shikigami-core:test` drives
+  `Shikigami.Process.Local.runAttempt` with `/bin/sh` commands (8 cases: collect and
+  re-collect, a killed driver followed by a reattach, gone without result, partial result,
+  intent without launch, failed spawn, two concurrent drivers launching once, overrun
+  without a kill), each counting launches.
 - [ ] M2b: `shikigami-worker` accepts the `local-operator` tier, lifting EP-1's interim
   refusal. A `CodingAgent` run queued with `shikigami enqueue-run` is executed by a
   `shikigami-worker` started on this Mac. Killing the worker by its saved PID and starting
@@ -276,6 +291,30 @@ target repository can read skills kept beside the declaration.
   replaces the unreleased baseline without a patch id. `just keiro-gate` reports the expected
   `WorkflowBodyChanged` for `shikigami.agent-run`, recorded in
   `docs/evidence/plan-127/keiro-diff.txt`.
+  Date: 2026-11-15
+
+- Decision: The generic attempt runner is `Shikigami.Process.Local` in
+  `shikigami-core:local-host`, not a `shikigami-agent` module, and its command is an
+  `AttemptCommand` value prepared only on a fresh launch, with `AttemptHooks` for the
+  launched and reattached records.
+  Rationale: ADR 0125 keeps host processes in `local-host` so `shikigami-worker` (M2b) and
+  EP-3 M4 can use the same runner.
+  Date: 2026-11-15
+- Decision: A fresh launch claims the attempt by hard-linking a complete intent file into
+  place (`createLink`, which fails if the file exists). A driver that loses the claim waits
+  up to ten seconds for the winner's launch record and decides again.
+  Rationale: Two drivers of one workflow (two resumes, or a resume racing the worker) must
+  not both launch. A link publishes a complete file atomically and exactly once.
+  Date: 2026-11-15
+- Decision: A zombie counts as gone, and a launch the operating system refused is the
+  result `NotLaunched`, which settles as `Failed (Unstartable …)` rather than uncertain.
+  Rationale: A killed driver's child stays a zombie of a still-running process until it is
+  reaped; `ps` still reports its start time. A failed `createProcess` proves nothing ran.
+  Date: 2026-11-15
+- Decision: `--resume` performs no lease check, against this plan's original wording.
+  Rationale: A foreground run is a direct keiro run (`runWorkflowWith` without a
+  `leaseHeartbeat`), so it takes no lease to wait for. The attempt claim above makes a
+  concurrent duplicate resume safe; journal appends are idempotent per step.
   Date: 2026-11-15
 
 ## Outcomes & Retrospective

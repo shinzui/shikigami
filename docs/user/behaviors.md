@@ -166,7 +166,9 @@ The outcome is one of `completed` (with the exit code, commit and changes), `fai
 (the launch was refused or did not run), `timed_out` (partial changes are left
 uncommitted) or `uncertain`. A run ends `uncertain` when the launcher was lost without a
 result after a restart; Shikigami never launches a second agent on the same worktree, so
-an operator inspects the worktree and the attempt directory instead.
+an operator inspects the worktree and the attempt directory instead. If the command running
+the step is interrupted, `shikigami-agent-run --resume <WORKFLOW_ID>` continues it and
+reattaches to the agent if it is still running.
 
 Coding agents run only under the `local-operator` trust tier, as the operator's own
 `claude` or `codex` would ([local operator](local-operator.md)). The first run asks to

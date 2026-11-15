@@ -617,6 +617,7 @@ library local-host
   hs-source-dirs: local-host
   exposed-modules:
     Shikigami.CodingAgent.Local
+    Shikigami.Process.Local
     Shikigami.Workspace.Local.Adapters
     Shikigami.Workspace.Local.Launcher
     Shikigami.Workspace.Local.Worktree
@@ -694,6 +695,7 @@ test-suite shikigami-core-test
     Shikigami.PayloadValueSpec
     Shikigami.PracticeReviewEvidenceSpec
     Shikigami.PracticeReviewSpec
+    Shikigami.ProcessLocalSpec
     Shikigami.RecordSpec
     Shikigami.RouterCatalogSpec
     Shikigami.RouterDecisionSpec

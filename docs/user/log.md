@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-11-15
+* **Addition**: DOC-13 documents `shikigami-agent-run --resume`; DOC-5 says how an interrupted coding-agent step is continued (EP-2 M2).
 * **Addition**: DOC-5 documents the `CodingAgent` behavior arm: Claude Code or Codex as a durable step that commits on the run branch, its outcomes, attached skills and the local-operator tier requirement (MasterPlan 22, EP-2 M1).
 * **Addition**: DOC-21 covers editing, approved command rules, commits on a run branch and in-place repositories (EP-1 M2).
 * **Addition**: DOC-21 explains the local-operator trust tier: one confirmation per declaration, the explicit approvals file, `shikigami-local` and the action record (MasterPlan 22, EP-1 M1).

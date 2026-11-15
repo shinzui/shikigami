@@ -10,28 +10,24 @@
 module Shikigami.CodingAgent.Local
   ( LocalCodingAgentConfig (..),
     localCodingAgentRunner,
-    runAttempt,
-    readAttemptFacts,
     settleEnvelope,
   )
 where
 
-import Control.Concurrent (threadDelay)
 import Control.Exception (IOException, try)
-import Control.Monad (forM, void, when)
+import Control.Monad (forM, void)
 import Data.Aeson (Value (..), object, (.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Key qualified as Key
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.ByteString qualified as ByteString
-import Data.ByteString.Lazy qualified as LazyByteString
 import Data.Char (isAlphaNum)
 import Data.Maybe (fromMaybe, mapMaybe)
 import Data.Scientific (toBoundedInteger)
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Text.Encoding
-import Data.Time (UTCTime, addUTCTime, diffUTCTime, getCurrentTime)
+import Data.Time (addUTCTime, diffUTCTime, getCurrentTime)
 import Keiro.Workflow (WorkflowId (..))
 import Shikigami.Agent.DeclarationValue (declarationCoordinateText)
 import Shikigami.Agent.Name (agentNameText)
@@ -40,15 +36,15 @@ import Shikigami.CodingAgent.Types
 import Shikigami.CodingAgent.Workflow (CodingAgentAdmission (..), CodingAgentRunner (..), CodingAgentStepInput (..), codingAgentStepWorkflowId)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Process.Attempt
+import Shikigami.Process.Local
 import Shikigami.Record (ActionRecord (..), RecordEvent (..), mkRecordEntry, mkRecordKind)
 import Shikigami.Repository (repositoryIdText)
 import Shikigami.Workspace.Launch (worktreeRootPath)
 import Shikigami.Workspace.Local.Adapters (LocalWorkspace (..))
 import Shikigami.Workspace.Local.Worktree (RunWorktree (..), gitIn, openRunWorktree, renderWorktreeError)
-import System.Directory (createDirectoryIfMissing, doesFileExist, makeAbsolute, renameFile)
+import System.Directory (createDirectoryIfMissing, doesFileExist, makeAbsolute)
 import System.Exit (ExitCode (..))
 import System.FilePath (takeFileName, (</>))
-import System.IO (IOMode (WriteMode), openFile)
 import System.Process
 
 data LocalCodingAgentConfig = LocalCodingAgentConfig
@@ -118,23 +114,29 @@ copySkills directory requested
             pure if code == ExitSuccess then Right (name, target) else Left ("copying skill " <> name <> " failed: " <> Text.pack err)
       pure (sequence copies)
 
-files :: FilePath -> (FilePath, FilePath, FilePath, FilePath, FilePath, FilePath, FilePath)
-files directory =
-  ( directory </> "intent.json",
-    directory </> "launch.json",
-    directory </> "envelope.json",
-    directory </> "stderr.log",
-    directory </> "evidence.json",
-    directory </> "job.kdl",
-    directory </> "prompt.md"
-  )
+-- | The coding agent's own files in its attempt directory, beside the
+-- generic ones of "Shikigami.Process.Local".
+data AgentFiles = AgentFiles {evidence :: !FilePath, job :: !FilePath, prompt :: !FilePath}
+
+agentFiles :: FilePath -> AgentFiles
+agentFiles directory =
+  AgentFiles
+    { evidence = directory </> "evidence.json",
+      job = directory </> "job.kdl",
+      prompt = directory </> "prompt.md"
+    }
 
 -- | Launch or reattach, restart-safely.
 attemptStep :: LocalCodingAgentConfig -> LocalWorkspace -> CodingAgentAdmission -> IO (AttemptResult Value)
 attemptStep config local admission@CodingAgentAdmission {attemptDirectory, root, child} =
-  runAttempt attemptDirectory admission.deadline parseEnvelope launch
+  runAttempt attemptDirectory admission.deadline parseEnvelope hooks launch
   where
-    (_, _, _, _, evidenceFile, jobFile, promptFile) = files attemptDirectory
+    AgentFiles {evidence = evidenceFile, job = jobFile, prompt = promptFile} = agentFiles attemptDirectory
+    hooks =
+      AttemptHooks
+        { launched = \LaunchRecord {pid} -> appendEntry local admission "coding-agent.launched" (object ["provider" .= providerText admission.step.provider, "access" .= accessText admission.step.access, "attempt" .= attemptDirectory, "pid" .= pid, "child" .= child]),
+          reattached = \LaunchRecord {pid} -> appendEntry local admission "coding-agent.reattached" (object ["attempt" .= attemptDirectory, "pid" .= pid, "child" .= child])
+        }
     launch = do
       now <- getCurrentTime
       let minutesLeft = max 1 (ceiling (diffUTCTime admission.deadline now / 60) :: Integer)
@@ -142,110 +144,11 @@ attemptStep config local admission@CodingAgentAdmission {attemptDirectory, root,
       ByteString.writeFile jobFile (Text.Encoding.encodeUtf8 (jobKdl admission.step minutesLeft))
       ByteString.writeFile promptFile (Text.Encoding.encodeUtf8 prompt)
       pure
-        ( config.launcher,
-          ["unattended", "agent", "run", "shikigami-step", "--config", Text.pack jobFile, "--prompt-file", Text.pack promptFile, "--run-id", child, "--evidence-file", Text.pack evidenceFile, "--json"],
-          root,
-          \pid -> appendEntry local admission "coding-agent.launched" (object ["provider" .= providerText admission.step.provider, "access" .= accessText admission.step.access, "attempt" .= attemptDirectory, "pid" .= pid, "child" .= child])
-        )
-
--- | The generic restart-safe attempt: read the facts, decide, and launch
--- fresh in a new session, reattach and wait, or give up. The launched
--- process must write its result to @envelope.json@ (standard output) when it
--- exits.
-runAttempt ::
-  FilePath ->
-  UTCTime ->
-  (ByteString.ByteString -> Maybe r) ->
-  IO (FilePath, [Text], FilePath, Int -> IO ()) ->
-  IO (AttemptResult r)
-runAttempt directory deadline parse prepare = do
-  facts <- readAttemptFacts directory deadline parse
-  case recoverAttempt facts of
-    Collect result -> pure (Collected result)
-    GiveUp reason -> pure (GaveUp reason)
-    Reattach record -> waitFor record >> settled
-    LaunchFresh -> do
-      (program, arguments, workingDirectory, onLaunch) <- prepare
-      let (intentFile, launchFile, envelopeFile, stderrFile, _, _, _) = files directory
-      now <- getCurrentTime
-      writeJson intentFile (AttemptIntent {at = now})
-      out <- openFile envelopeFile WriteMode
-      err <- openFile stderrFile WriteMode
-      spawned <-
-        try
-          ( createProcess
-              (proc program (Text.unpack <$> arguments))
-                { cwd = Just workingDirectory,
-                  std_in = NoStream,
-                  std_out = UseHandle out,
-                  std_err = UseHandle err,
-                  new_session = True,
-                  close_fds = True
-                }
-          )
-      case spawned of
-        Left (problem :: IOException) -> do
-          writeFile stderrFile (show problem)
-          pure (GaveUp IntentWithoutLaunch)
-        Right (_, _, _, handle) ->
-          getPid handle >>= \case
-            Nothing -> pure (GaveUp IntentWithoutLaunch)
-            Just pidValue -> do
-              let pid = fromIntegral pidValue
-              started <- processStart pid
-              writeJson launchFile LaunchRecord {pid, startedAt = fromMaybe "" started}
-              onLaunch pid
-              void (waitForProcess handle)
-              settled
-  where
-    settled = do
-      facts <- readAttemptFacts directory deadline parse
-      pure case facts.envelope of
-        Envelope result -> Collected result
-        PartialEnvelope -> GaveUp UnreadableResult
-        NoEnvelope -> GaveUp LauncherGoneWithoutResult
-    -- Wait for a reattached launcher until it exits or the deadline plus grace.
-    waitFor LaunchRecord {pid, startedAt} = do
-      let loop = do
-            alive <- isLive pid startedAt
-            now <- getCurrentTime
-            when (alive && now <= addUTCTime reattachGrace deadline) (threadDelay 2000000 >> loop)
-      loop
-
--- | The facts of an attempt directory, for 'recoverAttempt'.
-readAttemptFacts :: FilePath -> UTCTime -> (ByteString.ByteString -> Maybe r) -> IO (AttemptFacts r)
-readAttemptFacts directory deadline parse = do
-  let (intentFile, launchFile, envelopeFile, _, _, _, _) = files directory
-  intent <- readJson intentFile
-  launch <- readJson launchFile
-  envelope <- do
-    exists <- doesFileExist envelopeFile
-    if not exists
-      then pure NoEnvelope
-      else do
-        bytes <- ByteString.readFile envelopeFile
-        pure
-          if ByteString.null bytes
-            then NoEnvelope
-            else maybe PartialEnvelope Envelope (parse bytes)
-  launcher <- case launch of
-    Nothing -> pure LauncherAbsent
-    Just LaunchRecord {pid, startedAt} -> (\alive -> if alive then LauncherRunning else LauncherGone) <$> isLive pid startedAt
-  now <- getCurrentTime
-  pure AttemptFacts {intent, launch, envelope, launcher, now, deadline}
-
--- | A pid is the recorded launcher only while its start time still matches.
-isLive :: Int -> Text -> IO Bool
-isLive pid startedAt = do
-  current <- processStart pid
-  pure (maybe False (\started -> Text.null startedAt || started == startedAt) current)
-
-processStart :: Int -> IO (Maybe Text)
-processStart pid = do
-  result <- try @IOException (readProcessWithExitCode "ps" ["-o", "lstart=", "-p", show pid] "")
-  pure case result of
-    Right (ExitSuccess, out, _) | not (null (words out)) -> Just (Text.strip (Text.pack out))
-    _ -> Nothing
+        AttemptCommand
+          { program = config.launcher,
+            arguments = ["unattended", "agent", "run", "shikigami-step", "--config", Text.pack jobFile, "--prompt-file", Text.pack promptFile, "--run-id", child, "--evidence-file", Text.pack evidenceFile, "--json"],
+            workingDirectory = root
+          }
 
 -- | A complete Baikai envelope is a JSON object with an @outcome@.
 parseEnvelope :: ByteString.ByteString -> Maybe Value
@@ -301,8 +204,10 @@ settleStep local admission result = do
   outcome <- case result of
     GaveUp reason -> do
       uncommitted <- statusSummary admission.root
-      launch <- readJson (let (_, l, _, _, _, _, _) = files admission.attemptDirectory in l)
+      launch <- readJson (attemptFiles admission.attemptDirectory).launch
+      appendEntry local admission "coding-agent.uncertain" (object ["reason" .= reason, "child" .= admission.child, "pid" .= ((\LaunchRecord {pid} -> pid) <$> launch)])
       pure (Uncertain UncertainRun {reason, uncommitted, launcherPid = (\LaunchRecord {pid} -> pid) <$> launch})
+    NotLaunched detail -> pure (Failed (Unstartable detail))
     Collected envelope -> do
       evidence <- evidenceSummary admission.attemptDirectory
       settleEnvelope local admission envelope evidence
@@ -409,7 +314,7 @@ finalMessageOf envelope = Text.take 16384 case envelope of
 
 evidenceSummary :: FilePath -> IO (Maybe EvidenceSummary)
 evidenceSummary directory = do
-  let (_, _, _, _, evidenceFile, _, _) = files directory
+  let evidenceFile = (agentFiles directory).evidence
   exists <- doesFileExist evidenceFile
   if not exists
     then pure Nothing
@@ -437,11 +342,6 @@ appendEntry local admission kindText payload = do
       | Right entry <- mkRecordEntry kind payload ->
           void (local.record.append RecordEvent {at, run = Just (WorkflowId (fst (Text.breakOn ":coding-agent:" admission.child))), principal = declarationCoordinateText local.principal, tier = local.tier, agent = Just local.agent, entry})
     _ -> pure ()
-
-writeJson :: (Aeson.ToJSON a) => FilePath -> a -> IO ()
-writeJson path value = do
-  LazyByteString.writeFile (path <> ".tmp") (Aeson.encode value)
-  renameFile (path <> ".tmp") path
 
 readJson :: (Aeson.FromJSON a) => FilePath -> IO (Maybe a)
 readJson path = do

@@ -62,7 +62,7 @@ use just these:
 
 ```text
 shikigami-run-behavior --agent <FILE> [--payload <JSON>] [--workspace <DIR>]
-shikigami-agent-run --agent <NAME|FILE> [--from-activity <FILE>] [--workspace <DIR>]
+shikigami-agent-run --agent <NAME|FILE> [--from-activity <FILE>] [--workspace <DIR>] [--resume <WORKFLOW_ID>]
 ```
 
 **Long-running roles** — from `shikigami-workers`:
@@ -257,7 +257,7 @@ use `shikigami-agent-run` to resolve those from the database. It also rejects
 ## `shikigami-agent-run`
 
 ```bash
-$ shikigami-agent-run --agent <NAME|FILE> [--from-activity <FILE>] [--workspace <DIR>]
+$ shikigami-agent-run --agent <NAME|FILE> [--from-activity <FILE>] [--workspace <DIR>] [--resume <WORKFLOW_ID>]
 ```
 
 Run an agent through the full **kioku** lifecycle — open session, recall prior learnings, run
@@ -274,6 +274,14 @@ the acquisition boundary is after memory recall and release precedes learning
 recording. The deny-all authorizer currently prevents acquisition. The activity-ingest
 branch does not resolve or use a workspace. One-off runs use compatibility identity
 and also deny protected sink actions; they do not publish an agent's sinks to services.
+
+`--resume <WORKFLOW_ID>` continues an interrupted run of the same agent from its journal,
+for example after the command was killed. Give the same `--agent` and `--workspace` as the
+first invocation; the workflow id is the one `shikigami-local ledger --run` prints. Completed
+steps are read back, not repeated, and a `CodingAgent` step whose launcher is still running
+is reattached and waited for. A coding agent is never launched a second time: if its
+launcher is gone without a result, the run ends `uncertain` and leaves the worktree for you
+to inspect. Resuming a finished run prints its result again without doing anything.
 
 → See [Memory & Sessions](./memory.md).
 

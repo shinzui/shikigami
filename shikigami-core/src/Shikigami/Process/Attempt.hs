@@ -20,6 +20,7 @@ module Shikigami.Process.Attempt
     recoverAttempt,
     reattachGrace,
     AttemptResult (..),
+    UncertainReason (..),
   )
 where
 
@@ -101,5 +102,7 @@ recoverAttempt AttemptFacts {intent, launch, envelope, launcher, now, deadline} 
 data AttemptResult r
   = Collected !r
   | GaveUp !UncertainReason
+  | -- | The spawn itself failed, so nothing ran.
+    NotLaunched !Text
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
