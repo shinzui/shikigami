@@ -105,3 +105,5 @@ and approvals. EP-9 builds the routine-agent commands on `resolveGrant`.
 * [docs/plans/126-run-declared-agents-on-the-operator-s-own-machine-through-a-local-operator-trust-tier.md](../plans/126-run-declared-agents-on-the-operator-s-own-machine-through-a-local-operator-trust-tier.md)
   — the implementing plan.
 * [docs/user/local-operator.md](../user/local-operator.md) — the operator walkthrough.
+* Amended by [ADR 0126](0126-coding-agents-are-durable-workers-and-batch-qualification-is-tier-scoped.md)
+  — `shikigami-worker` composes `local-operator` for queued coding-agent steps.

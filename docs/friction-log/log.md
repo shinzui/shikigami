@@ -2,6 +2,9 @@
 
 ## 2026-11-15
 
+* **Addition**: FRIC-76 records slowdown tooling friction with mori://shinzui/shikigami: workers integration test fails under parallel tasty threads
+
+
 * **Addition**: FRIC-75 records slowdown tooling friction with mori://shinzui/shikigami: shikigami-agent launch tests hang under parallel tasty threads
 
 

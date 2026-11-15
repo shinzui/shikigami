@@ -12,6 +12,7 @@ module Shikigami.Agent.Trust
   ( WorkspaceArgument (..),
     parseWorkspaceArgument,
     workspaceSelector,
+    workspaceArgumentText,
     lightComposition,
     terminalInteraction,
     compatibilityPrincipal,
@@ -30,7 +31,6 @@ import Data.Text.IO qualified as TextIO
 import Data.Time (getCurrentTime)
 import Shikigami.Agent.Capability.OneOff (oneOffCapabilityRuntime, renderOneOffCapabilityError)
 import Shikigami.Agent.Capability.Workspace (renderWorkspaceError, resolveWorkspaceScope, workspaceReadDescriptor, workspaceReadProvider)
-import Shikigami.Agent.Checkout (processCheckoutResolver)
 import Shikigami.Agent.Decl (AgentDecl (..), IdentityDecl (..), Sink (..), codingAgentStepOf)
 import Shikigami.Agent.DeclarationValue (declarationCoordinate, declarationCoordinateText)
 import Shikigami.Agent.Name (AgentName, agentNameText)
@@ -47,10 +47,12 @@ import Shikigami.Repository (repositoryId)
 import Shikigami.Trust.LocalOperator.Approvals
 import Shikigami.Trust.LocalOperator.Authority (LocalSelection (..), localOperatorAuthority)
 import Shikigami.Trust.LocalOperator.Grant
+import Shikigami.Trust.LocalOperator.Host (codingAgentLauncher, compatibilityPrincipal, localRunAuthority, nothingGranted, openLocalRun, recordGrantIn, repositorySelectorText)
 import Shikigami.Trust.Runtime
 import Shikigami.Trust.Tier
 import Shikigami.Workspace.Launch (worktreeRootPath)
 import Shikigami.Workspace.Local.Adapters (LocalWorkspace (..), localWorkspaceAdapters, localWorkspaceDescriptors, localWorkspaceHost)
+import Shikigami.Workspace.Local.Checkout (processCheckoutResolver)
 import Shikigami.Workspace.Local.Launcher (hostProcessLauncher)
 import Shikigami.Workspace.Local.Worktree (RunWorktree (..), openRunWorktree, releaseRunWorktree, renderWorktreeError)
 import System.Directory (doesFileExist, findExecutable)
@@ -71,9 +73,13 @@ parseWorkspaceArgument raw
   | otherwise = WorkspacePath raw
 
 workspaceSelector :: WorkspaceArgument -> RepositorySelector
-workspaceSelector = \case
-  WorkspacePath path -> SelectByPath path
-  WorkspaceRepository identity -> SelectByIdentity (repositoryId identity)
+workspaceSelector = repositorySelectorText . workspaceArgumentText
+
+-- | How a run journals the repository it was given.
+workspaceArgumentText :: WorkspaceArgument -> Text
+workspaceArgumentText = \case
+  WorkspacePath path -> Text.pack path
+  WorkspaceRepository identity -> identity
 
 -- | Ask on the terminal only when standard input and output are both
 -- terminals and the caller did not pass @--no-confirm@.
@@ -94,10 +100,6 @@ terminalInteraction noConfirm = do
           Right line -> Text.toLower (Text.strip line) `elem` ["y", "yes"]
           Left (problem :: IOException) | isEOFError problem -> False
           Left _ -> False
-
--- | The principal the durable executor scopes an agent's tools by.
-compatibilityPrincipal :: AgentName -> Principal
-compatibilityPrincipal name = declarationCoordinate (either (const (agentNameText name)) id (identityText (compatibilityIdentity name)))
 
 -- | The composition of one light command invocation.
 lightComposition :: AppConfig -> Interaction -> ActionRecord -> TierComposition
@@ -151,11 +153,10 @@ lightComposition config interaction record =
                 (Left problem, _) -> pure (Left (RepositoryUnavailable problem))
                 (_, Left problem) -> pure (Left (CompositionFailed (Text.pack (show problem))))
                 (Right repo, Right grants) ->
-                  resolveGrant interaction approvals grants (recordGrant principal run decl.name) decl repo >>= \case
+                  resolveGrant interaction approvals grants (recordGrantIn record principal run decl.name) decl repo >>= \case
                     Left refusal -> pure (Left (NoGrant refusal))
                     Right grant -> do
-                      let selection = LocalSelection {agent = decl.name, principals = actingPrincipals decl, grant}
-                          runAuthority = scopeToRun run decl.name (recorded record tierLabel (localOperatorAuthority selection))
+                      let runAuthority = localRunAuthority record decl run grant
                           done capabilities workspace runner release = Right TierRuntime {tier = LocalOperator, authority = runAuthority, record, capabilities, workspace, grant = Just grant, codingAgents = runner, release}
                       if not (requestsMutation decl || isCodingAgent decl)
                         then
@@ -165,60 +166,20 @@ lightComposition config interaction record =
                         else case run of
                           Nothing -> pure (Left (CompositionFailed "workspace.edit, workspace.exec, workspace.git and coding agents need a durable run; use shikigami-agent-run"))
                           Just runId ->
-                            openRunWorktree stateDirectory decl.name runId repo >>= \case
-                              Left problem -> pure (Left (CompositionFailed (renderWorktreeError problem)))
-                              Right worktree ->
-                                resolveProgram "git" >>= \case
-                                  Nothing -> pure (Left (CompositionFailed "git is not on PATH"))
-                                  Just git -> do
-                                    let local =
-                                          LocalWorkspace
-                                            { stateDirectory,
-                                              agent = decl.name,
-                                              principal = compatibilityPrincipal decl.name,
-                                              repository = repo,
-                                              grant,
-                                              authority = runAuthority,
-                                              record,
-                                              tier = tierLabel,
-                                              launcher = hostProcessLauncher,
-                                              git
-                                            }
-                                    launcherPath <- codingAgentLauncher
-                                    let runner = localCodingAgentRunner LocalCodingAgentConfig {launcher = launcherPath} local
-                                    localCapabilityRuntime (worktreeRootPath worktree.root) local <&> \case
-                                      Left problem -> Left (CompositionFailed problem)
-                                      Right capabilities -> done capabilities (Just (localWorkspaceHost local capabilities)) runner (releaseRunWorktree stateDirectory runId worktree)
-
-    recordGrant principal run agentName grant = do
-      at <- getCurrentTime
-      case grantEntry grant of
-        Left problem -> pure (Left problem)
-        Right entry ->
-          first recordErrorText
-            <$> record.append RecordEvent {at, run, principal = declarationCoordinateText principal, tier = tierLabel, agent = Just agentName, entry}
-
-    nothingGranted = authority DecidedByOperator \_ requested ->
-      pure (Left (PolicyDenied (actionTag requested <> " is outside the grant: the declaration requests no capabilities")))
+                            openLocalRun stateDirectory record decl runAuthority grant repo runId >>= \case
+                              Left problem -> pure (Left (CompositionFailed problem))
+                              Right (local, worktree) -> do
+                                launcherPath <- codingAgentLauncher
+                                let runner = localCodingAgentRunner LocalCodingAgentConfig {launcher = launcherPath} local
+                                localCapabilityRuntime (worktreeRootPath worktree.root) local <&> \case
+                                  Left problem -> Left (CompositionFailed problem)
+                                  Right capabilities -> done capabilities (Just (localWorkspaceHost local capabilities)) runner (releaseRunWorktree stateDirectory runId worktree)
 
 containedCodingAgents :: Text
 containedCodingAgents = "coding agents run only under trust.tier=local-operator until the batch qualification of ADR-40 passes"
 
 isCodingAgent :: AgentDecl -> Bool
 isCodingAgent AgentDecl {behavior} = isJust (codingAgentStepOf behavior)
-
--- | The @shikigami-agent-launch@ that mounts Baikai's CLI:
--- @SHIKIGAMI_AGENT_LAUNCH@, the executable beside this one, or @PATH@.
-codingAgentLauncher :: IO FilePath
-codingAgentLauncher = do
-  configured <- lookupEnv "SHIKIGAMI_AGENT_LAUNCH"
-  case configured of
-    Just path -> pure path
-    Nothing -> do
-      self <- getExecutablePath
-      let sibling = takeDirectory self </> "shikigami-agent-launch"
-      exists <- doesFileExist sibling
-      if exists then pure sibling else maybe "shikigami-agent-launch" id <$> findExecutable "shikigami-agent-launch"
 
 -- | Whether a declaration asks for a mutating workspace tool.
 requestsMutation :: AgentDecl -> Bool
@@ -246,12 +207,6 @@ localCapabilityRuntime root local =
                 then Right ()
                 else Left (CapabilityAuthorizationDenied descriptor.capability "only the local workspace capabilities are installed")
           }
-
--- | The declared principal and the compatibility principal both act for
--- the agent: durable tools are scoped by the latter.
-actingPrincipals :: AgentDecl -> Set.Set Principal
-actingPrincipals AgentDecl {name, identity} =
-  Set.fromList (compatibilityPrincipal name : [principal | Just IdentityDecl {principal} <- [identity]])
 
 -- | The output kinds a declaration's sinks would deliver through.
 sinkKindNames :: AgentDecl -> [Text]

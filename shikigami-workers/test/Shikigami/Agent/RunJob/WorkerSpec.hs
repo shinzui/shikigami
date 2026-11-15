@@ -377,6 +377,7 @@ sampleJob =
       identity = compatibilityIdentity (fixtureAgentName "codec-agent"),
       triggerKind = TriggeredByEvent,
       objective = Nothing,
+      repository = Nothing,
       routeKind = AgentWorkflowRoute,
       occurredAt = UTCTime (fromGregorian 2026 8 19) 0,
       triggerPayload = Aeson.object ["kind" .= ("test" :: Text)],

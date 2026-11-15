@@ -64,9 +64,9 @@ domainCodec =
       encode = Queue.encodeRunJobMessage . toMessage,
       decode = \_ value -> do
         message <- Queue.parseRunJobMessage value
-        (root, request, permissions, input, objective) <- parseValue (Aeson.withObject "RunInput" (\o -> (,,,,) <$> o .: "executionRootId" <*> o .: "executionRequest" <*> o .: "executionPermissions" <*> o .: "input" <*> o .:? "objective")) message.triggerPayload
+        (root, request, permissions, input, objective, repository) <- parseValue (Aeson.withObject "RunInput" (\o -> (,,,,,) <$> o .: "executionRootId" <*> o .: "executionRequest" <*> o .: "executionPermissions" <*> o .: "input" <*> o .:? "objective" <*> o .:? "repository")) message.triggerPayload
         let domain = Queue.encodeRunJobMessage message
-        parseValue (Aeson.withObject "RunJob" (\o -> Aeson.parseJSON (Aeson.Object (KeyMap.insert "objective" (toJSON (objective :: Maybe ObjectiveAssociation)) (KeyMap.insert "executionRootId" (toJSON (root :: Maybe ExecutionRootId)) (KeyMap.insert "executionRequest" (toJSON (request :: Maybe ExecutionRequest)) (KeyMap.insert "executionPermissions" (toJSON (permissions :: Maybe [Text])) (KeyMap.insert "triggerPayload" input o)))))))) domain,
+        parseValue (Aeson.withObject "RunJob" (\o -> Aeson.parseJSON (Aeson.Object (KeyMap.insert "repository" (toJSON (repository :: Maybe Text)) $ KeyMap.insert "objective" (toJSON (objective :: Maybe ObjectiveAssociation)) (KeyMap.insert "executionRootId" (toJSON (root :: Maybe ExecutionRootId)) (KeyMap.insert "executionRequest" (toJSON (request :: Maybe ExecutionRequest)) (KeyMap.insert "executionPermissions" (toJSON (permissions :: Maybe [Text])) (KeyMap.insert "triggerPayload" input o)))))))) domain,
       upcasters = []
     }
 
@@ -83,7 +83,7 @@ toMessage job =
       identity = toJSON job.identity,
       triggerKind = job.triggerKind,
       occurredAt = job.occurredAt,
-      triggerPayload = Aeson.object (maybe [] (\value -> ["objective" .= value]) job.objective <> ["executionRootId" .= job.executionRootId, "executionRequest" .= job.executionRequest, "executionPermissions" .= job.executionPermissions, "input" .= job.triggerPayload]),
+      triggerPayload = Aeson.object (maybe [] (\value -> ["objective" .= value]) job.objective <> maybe [] (\value -> ["repository" .= value]) job.repository <> ["executionRootId" .= job.executionRootId, "executionRequest" .= job.executionRequest, "executionPermissions" .= job.executionPermissions, "input" .= job.triggerPayload]),
       idempotencyKey = runKeyText job.idempotencyKey,
       parentSessionId = idText <$> job.parentSessionId,
       parentRunWorkflowId = (.unWorkflowId) <$> job.parentRunWorkflowId,

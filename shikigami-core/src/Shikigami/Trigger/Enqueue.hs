@@ -14,6 +14,9 @@ module Shikigami.Trigger.Enqueue
     integrationRunKey,
     enqueueAddressedRun,
     enqueueAddressedRunWithKey,
+    enqueueAddressedRunIn,
+    addressedRunKeyIn,
+    enqueueAddressedRunWithKeyIn,
     addressedRunJob,
     scheduleRunIdempotencyKey,
     enqueueScheduledRun,
@@ -24,6 +27,7 @@ where
 import Data.Aeson (Value, (.=))
 import Data.Aeson qualified as Aeson
 import Data.List.NonEmpty (NonEmpty ((:|)))
+import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Time.Format.ISO8601 (iso8601ParseM)
 import Hasql.Pool (Pool, UsageError)
@@ -79,6 +83,7 @@ runJobFromEnvelopeWithIdentity resolvedOccurredAt identity decl env =
       identity,
       triggerKind = TriggeredByStream,
       objective = Nothing,
+      repository = Nothing,
       routeKind = AgentWorkflowRoute,
       occurredAt = resolvedOccurredAt,
       triggerPayload = toJSON env,
@@ -143,6 +148,13 @@ addressedRunKey :: AgentName -> RunRouteKind -> Value -> RunKey
 addressedRunKey agent route payload =
   runKeyWithPrefix ('a' :| "ddressed-run-v2:") (versionedDigest "shikigami.addressed-run/2" (Aeson.object ["agent" .= agent, "route" .= route, "payload" .= payload]))
 
+-- | The key of an addressed run in a named repository; without one it is
+-- 'addressedRunKey' unchanged.
+addressedRunKeyIn :: AgentName -> RunRouteKind -> Value -> Maybe Text -> RunKey
+addressedRunKeyIn agent route payload = \case
+  Nothing -> addressedRunKey agent route payload
+  Just named -> addressedRunKey agent route (Aeson.object ["payload" .= payload, "repository" .= named])
+
 addressedRunKeyWithKey :: AgentName -> RunRouteKind -> Addressed.RequestKey -> RunKey
 addressedRunKeyWithKey agent route key =
   runKeyWithPrefix ('a' :| "ddressed-run-v2:") (versionedDigest "shikigami.addressed-run/2" (Aeson.object ["agent" .= agent, "route" .= route, "key" .= key]))
@@ -154,15 +166,25 @@ integrationRunKey agent route event =
   runKeyWithPrefix ('e' :| "vent-run-v2:") (versionedDigest "shikigami.integration-run/2" (Aeson.object ["agent" .= agent, "route" .= route, "message" .= event.messageId]))
 
 enqueueAddressedRun :: Pool -> AgentIdentity -> AgentName -> RunRouteKind -> Value -> IO (Either UsageError MessageId)
-enqueueAddressedRun pool identity agent route payload = do
+enqueueAddressedRun pool identity agent route payload = enqueueAddressedRunIn pool identity agent route payload Nothing
+
+-- | An addressed run that works in a named repository (a Mori identity or a
+-- checkout path). The repository is part of the run's key: the same request
+-- against two repositories is two runs.
+enqueueAddressedRunIn :: Pool -> AgentIdentity -> AgentName -> RunRouteKind -> Value -> Maybe Text -> IO (Either UsageError MessageId)
+enqueueAddressedRunIn pool identity agent route payload repository = do
   now <- getCurrentTime
-  enqueueRunJob pool (addressedRunJob now identity agent route payload (addressedRunKey agent route payload))
+  let key = addressedRunKeyIn agent route payload repository
+  enqueueRunJob pool (addressedRunJob now identity agent route payload key) {repository}
 
 -- | The caller key stays distinct from the full scoped run coordinate.
 enqueueAddressedRunWithKey :: Pool -> AgentIdentity -> AgentName -> RunRouteKind -> Value -> Addressed.RequestKey -> IO (Either UsageError MessageId)
-enqueueAddressedRunWithKey pool identity agent route payload key = do
+enqueueAddressedRunWithKey pool identity agent route payload key = enqueueAddressedRunWithKeyIn pool identity agent route payload key Nothing
+
+enqueueAddressedRunWithKeyIn :: Pool -> AgentIdentity -> AgentName -> RunRouteKind -> Value -> Addressed.RequestKey -> Maybe Text -> IO (Either UsageError MessageId)
+enqueueAddressedRunWithKeyIn pool identity agent route payload key repository = do
   now <- getCurrentTime
-  enqueueRunJob pool (addressedRunJob now identity agent route payload (addressedRunKeyWithKey agent route key))
+  enqueueRunJob pool (addressedRunJob now identity agent route payload (addressedRunKeyWithKey agent route key)) {repository}
 
 -- | The CLI and HTTP producers share this exact queue payload constructor.
 addressedRunJob :: UTCTime -> AgentIdentity -> AgentName -> RunRouteKind -> Value -> RunKey -> RunJob
@@ -172,6 +194,7 @@ addressedRunJob now identity agent route payload key =
       identity,
       triggerKind = TriggeredByEvent,
       objective = Nothing,
+      repository = Nothing,
       routeKind = route,
       occurredAt = now,
       triggerPayload = payload,
@@ -197,6 +220,7 @@ scheduledRunJob identity agent dueAt =
       identity,
       triggerKind = TriggeredBySchedule,
       objective = Nothing,
+      repository = Nothing,
       routeKind = AgentWorkflowRoute,
       occurredAt = dueAt,
       triggerPayload =

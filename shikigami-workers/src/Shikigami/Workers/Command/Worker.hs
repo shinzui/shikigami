@@ -13,12 +13,14 @@ import Data.Foldable (traverse_)
 import Data.Set qualified as Set
 import Data.Text qualified as Text
 import Data.Time (nominalDiffTimeToSeconds)
+import Hasql.Pool (Pool)
 import Kiroku.Store.Connection qualified as StoreConnection
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Agent.Approval (ApprovalPolicySnapshot (..), renderApprovalChannel)
 import Shikigami.Agent.Approval.Notification qualified as ApprovalNotification
 import Shikigami.Agent.Decl (AgentDecl (..))
 import Shikigami.Agent.Loader (enabledAgentsFromReport, loadAgentsLoud)
+import Shikigami.Agent.Workflow qualified as AgentWorkflow
 import Shikigami.Agent.Workflow.Resume (runBoundedResumeWorker)
 import Shikigami.App (AppEnv (..), runAppIO)
 import Shikigami.App.Config (ActionAuthorizationConfig (ActionAuthorizationDisabled), AppConfig (..), Role (WorkerRole))
@@ -27,6 +29,7 @@ import Shikigami.App.Config.Load (requireDatabaseUrl)
 import Shikigami.Authority (Authority, recordedIn)
 import Shikigami.Authority.KikanEn.Config (buildConfiguredAuthority)
 import Shikigami.Behavior.Provider (newBehaviorEnvFor)
+import Shikigami.CodingAgent.Workflow (CodingAgentRunners)
 import Shikigami.Directory (DirectoryRuntime (..))
 import Shikigami.Duration
 import Shikigami.Execution.Capacity qualified as Capacity
@@ -44,14 +47,18 @@ import Shikigami.Objective.Tracker.Runtime qualified as TrackerRuntime
 import Shikigami.Objective.Tracker.Store qualified as Tracker
 import Shikigami.Objective.Tracker.Worker (trackerLoopRegistration)
 import Shikigami.Prelude (Text)
+import Shikigami.Record (observedRecord, postgresRecord)
 import Shikigami.Repository (repositoryIdText)
 import Shikigami.Runtime (registerRuntimeCatalog, runtimeConnectionSettings)
 import Shikigami.Sink (DanwaConfig (..), GrantSource (DbGrants), KanmonConfig (..), KawaConfig (..), KizashiConfig (..), ReiConfig (..))
 import Shikigami.Sink.Http (HttpLimits (..), SinkHttp, SinkHttpError, credentialsFromConfig, newSinkHttp)
 import Shikigami.Sink.Permission (sinkKindText)
 import Shikigami.Telemetry (withRunTelemetry)
-import Shikigami.Telemetry.Metrics (recordInitiativeAdmission, recordInitiativeCandidate, recordInitiativeProposal, recordInitiativeRefusal)
+import Shikigami.Telemetry.Metrics (ShikigamiMetrics, recordInitiativeAdmission, recordInitiativeCandidate, recordInitiativeProposal, recordInitiativeRefusal)
 import Shikigami.Telemetry.Sampler (watchdogHooks)
+import Shikigami.Trust.LocalOperator.Approvals (defaultApprovalsPath)
+import Shikigami.Trust.LocalOperator.Grant (defaultStateDirectory)
+import Shikigami.Trust.LocalOperator.Host (LocalOperatorPaths (..), queuedCodingAgents)
 import Shikigami.Trust.Tier (TrustTier (..))
 import Shikigami.Workers.Config (WorkerEnv (..), directoryLoopRegistration, persistAgentLoadReport, schedulerSchedules, startProcessDirectory)
 import Shikigami.Workers.Registry (runWorkers)
@@ -135,6 +142,7 @@ runWorkerCmdWith resumeBudget config = do
           Left failure -> refuseInvalidSinkHttp logger failure
           Right clients -> pure clients
       actionAuthority <- recordedIn logger (Just shikigamiMetrics) storePool <$> buildActionAuthorizer logger config
+      codingAgents <- workerCodingAgents logger shikigamiMetrics storePool config agents
       let policy =
             ApprovalPolicySnapshot
               { requireFor = (.approvalRequiredSinks) config,
@@ -206,6 +214,7 @@ runWorkerCmdWith resumeBudget config = do
                   decisions = FlowDecision.defaultDecisionServices (either (error . show) id config.decisionModelCatalog),
                   actionAuthority,
                   workspace,
+                  codingAgents,
                   workspaceTransfers = config.workspaceSettings >>= configuredWorkspaceTransfers,
                   runTimeout = (.runTimeout) config,
                   harness = (.harness) config,
@@ -270,16 +279,25 @@ refuseInvalidSinkHttp logger failure = do
   Log.logError logger "worker.sink_http.invalid" ["error" .= show failure]
   Exit.die "shikigami-worker: refusing to start; invalid sink HTTP configuration"
 
--- | The worker composes the @contained@ and @multi-tenant@ tiers only. It
--- refuses @local-operator@ until EP-2 of MasterPlan 22 lets it run local
--- work, and refuses @multi-tenant@ without a configured service authority.
+-- | The worker composes every tier. Under @local-operator@ it runs queued
+-- coding-agent steps on the operator's machine, resolving each step's grant,
+-- repository and worktree from the step (EP-2 M2b of MasterPlan 22); it
+-- refuses @multi-tenant@ without a configured service authority.
 workerTierAdmission :: AppConfig -> Either String ()
 workerTierAdmission config = case (config.trustTier, config.actionAuthorization) of
-  (LocalOperator, _) ->
-    Left "shikigami-worker: refusing to start; trust.tier=local-operator runs only through shikigami-agent-run and shikigami-run-behavior"
   (MultiTenant, ActionAuthorizationDisabled) ->
     Left "shikigami-worker: refusing to start; trust.tier=multi-tenant requires authorization.actions.mode=kikan"
   _ -> Right ()
+
+-- | The coding-agent runners of this worker's tier.
+workerCodingAgents :: Log.Logger -> ShikigamiMetrics -> Pool -> AppConfig -> [AgentDecl] -> IO CodingAgentRunners
+workerCodingAgents logger metrics pool config agents = case config.trustTier of
+  LocalOperator -> do
+    approvalsFile <- maybe defaultApprovalsPath pure config.localOperatorApprovalsFile
+    stateDirectory <- maybe defaultStateDirectory pure config.localOperatorStateDirectory
+    Log.logInfo logger "worker.local_operator.enabled" ["approvals" .= approvalsFile, "state" .= stateDirectory]
+    pure (queuedCodingAgents LocalOperatorPaths {approvalsFile, stateDirectory} (observedRecord logger (Just metrics) (postgresRecord pool)) agents)
+  _ -> pure AgentWorkflow.noCodingAgents
 
 buildActionAuthorizer :: Log.Logger -> AppConfig -> IO Authority
 buildActionAuthorizer logger config =

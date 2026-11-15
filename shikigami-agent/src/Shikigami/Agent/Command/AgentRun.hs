@@ -36,7 +36,7 @@ import Shikigami.Agent.Principal (compatibilityIdentity)
 import Shikigami.Agent.Run (AgentRunResult (..), recordActivityAsMemory, renderMemoryRecord)
 import Shikigami.Agent.Run.Key (newCliRunKey)
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (AgentWorkflowRoute), TriggerKind (TriggeredByEvent), runJobWorkflowId)
-import Shikigami.Agent.Trust (WorkspaceArgument, compatibilityPrincipal, lightComposition, parseWorkspaceArgument, terminalInteraction, workspaceSelector)
+import Shikigami.Agent.Trust (WorkspaceArgument (..), compatibilityPrincipal, lightComposition, parseWorkspaceArgument, terminalInteraction, workspaceArgumentText, workspaceSelector)
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
 import Shikigami.Agent.Workflow.Name (agentRunWorkflowName, ingestJobStepName)
 import Shikigami.App (AppEnv (..), noopTracer, runAppIO)
@@ -46,7 +46,7 @@ import Shikigami.App.Config.Load (requireDatabaseUrl)
 import Shikigami.Attestation.Resolve qualified as Profile
 import Shikigami.Behavior.Provider (newBehaviorEnvFor)
 import Shikigami.CodingAgent.Types (renderOutcome)
-import Shikigami.CodingAgent.Workflow (codingAgentChildId, codingAgentStepWorkflow, codingAgentStepWorkflowName)
+import Shikigami.CodingAgent.Workflow (codingAgentChildId, codingAgentStepWorkflow, codingAgentStepWorkflowName, fixedCodingAgentRunner)
 import Shikigami.Directory (disabledDirectoryHandle)
 import Shikigami.Execution.Admission (enrollRootRun)
 import Shikigami.Execution.Driver (ExecutionStart (..))
@@ -72,6 +72,7 @@ import Shikigami.Trust.LocalOperator.Approvals (Budget (..))
 import Shikigami.Trust.LocalOperator.Grant (Interaction)
 import Shikigami.Trust.Runtime (RunSubject (..), TierComposition (..), TierRuntime (..), renderTierRefusal)
 import Shikigami.Workflow.Versioning (shikigamiWorkflowRunOptions)
+import System.Directory (makeAbsolute)
 import System.Exit (exitFailure)
 import System.IO (hPutStrLn, stderr)
 
@@ -126,6 +127,10 @@ runDurableAgent logger store@KirokuStore {pool} appEnv workspace triggerPayload 
   -- same workflow id replays its journal, so completed steps are read back and
   -- an interrupted coding-agent attempt is reattached, never relaunched.
   journaled <- traverse (journaledJob store decl) resume
+  -- The run journals the repository it was given, as an absolute path or a
+  -- Mori identity, so a resume (or a worker) finds the same one.
+  given <- traverse absoluteWorkspace workspace
+  let named = maybe (parseWorkspaceArgument . Text.unpack <$> (journaled >>= (.repository))) Just given
   let fresh =
         RunJob
           { agentName = ((.name) decl),
@@ -143,7 +148,8 @@ runDurableAgent logger store@KirokuStore {pool} appEnv workspace triggerPayload 
             executionRootId = Nothing,
             delegationBudgetId = Nothing,
             objective = Nothing,
-            routeKind = AgentWorkflowRoute
+            routeKind = AgentWorkflowRoute,
+            repository = workspaceArgumentText <$> given
           }
       unrooted = maybe fresh id journaled
       record = observedRecord logger Nothing (postgresRecord pool)
@@ -152,7 +158,7 @@ runDurableAgent logger store@KirokuStore {pool} appEnv workspace triggerPayload 
           { agent = decl,
             principal = compatibilityPrincipal decl.name,
             run = Just (runJobWorkflowId unrooted),
-            repository = workspaceSelector <$> workspace
+            repository = workspaceSelector <$> named
           }
   -- Resolve the run's ports before any model call: a refused grant, an
   -- unavailable repository or an undeliverable output stops here.
@@ -216,7 +222,7 @@ runDurableAgent logger store@KirokuStore {pool} appEnv workspace triggerPayload 
             AgentWorkflow.rei = ReiConfig {baseUrl = (.reiBaseUrl) config},
             AgentWorkflow.http = sinkHttp,
             AgentWorkflow.hooks = AgentWorkflow.defaultAgentRunHooks,
-            AgentWorkflow.codingAgents = tierRuntime.codingAgents,
+            AgentWorkflow.codingAgents = fixedCodingAgentRunner tierRuntime.codingAgents,
             AgentWorkflow.approvalPolicy = Approval.autoApprovePolicy ((.approvalDeadline) config),
             AgentWorkflow.approvalWorkflow = ApprovalWorkflow.defaultApprovalWorkflowEnv,
             AgentWorkflow.runTimeout = (.runTimeout) config,
@@ -259,7 +265,7 @@ runDurableAgent logger store@KirokuStore {pool} appEnv workspace triggerPayload 
       -- the parent generation is 0) and then resumes the parent.
       Right Suspended | isJust (codingAgentStepOf decl.behavior) -> do
         let childId = codingAgentChildId (runJobWorkflowId job).unWorkflowId 0 (declarationCoordinate "behavior")
-        driven <- runAppIO appEnv (runChildWorkflow (shikigamiWorkflowRunOptions appEnv) codingAgentStepWorkflowName childId (codingAgentStepWorkflow tierRuntime.codingAgents Nothing))
+        driven <- runAppIO appEnv (runChildWorkflow (shikigamiWorkflowRunOptions appEnv) codingAgentStepWorkflowName childId (codingAgentStepWorkflow (fixedCodingAgentRunner tierRuntime.codingAgents) Nothing))
         case driven of
           Right (Completed outcome) -> TIO.putStrLn ("coding-agent: " <> renderOutcome outcome) >> runParent >>= finish
           Right other -> dieAgentRun ("the coding-agent step did not finish: " <> Text.pack (show (void other)))
@@ -273,6 +279,11 @@ runDurableAgent logger store@KirokuStore {pool} appEnv workspace triggerPayload 
           Right Nothing -> finish initial
           Left err -> dieAgentRun ("accepted execution requires recovery: " <> Text.pack (show err))
       _ -> finish initial
+
+absoluteWorkspace :: WorkspaceArgument -> IO WorkspaceArgument
+absoluteWorkspace = \case
+  WorkspacePath path -> WorkspacePath <$> makeAbsolute path
+  named -> pure named
 
 -- | The job journaled by an earlier invocation of this one-off run. One-off
 -- runs never continue as new, so the job is in generation 0.

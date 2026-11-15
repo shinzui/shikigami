@@ -4,7 +4,7 @@ module Shikigami.Server.Command.EnqueueRun
 where
 
 import Data.Aeson qualified as Aeson
-import Data.List (find)
+import Data.List (find, isPrefixOf)
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as TE
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
@@ -20,9 +20,10 @@ import Shikigami.Directory (DirectoryRuntime (..))
 import Shikigami.Directory qualified as Directory
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations (verifyShikigamiMigrations)
-import Shikigami.Trigger.Enqueue (addressedRunKey, addressedRunKeyWithKey, enqueueAddressedRun, enqueueAddressedRunWithKey, ensureRunQueue)
+import Shikigami.Trigger.Enqueue (addressedRunKeyIn, addressedRunKeyWithKey, enqueueAddressedRunIn, enqueueAddressedRunWithKeyIn, ensureRunQueue)
 import Shikigami.Trigger.RequestKey qualified as Addressed
 import System.Exit (exitFailure)
+import System.FilePath (isAbsolute)
 import System.IO (hPutStrLn, stderr)
 
 -- | @enqueue-run <agent> [--payload <json>] [--conversation] [--key <text>]@:
@@ -43,8 +44,17 @@ import System.IO (hPutStrLn, stderr)
 -- @database.connection_string@. It is demanded here rather than by the whole
 -- @shikigami@ command line because sibling subcommands such as @validate@ run
 -- entirely offline.
-runEnqueueRun :: AgentName -> Maybe String -> Bool -> Maybe Addressed.RequestKey -> AppConfig -> IO ()
-runEnqueueRun target mpayload conversation mkey config = do
+runEnqueueRun :: AgentName -> Maybe String -> Bool -> Maybe Addressed.RequestKey -> Maybe String -> AppConfig -> IO ()
+runEnqueueRun target mpayload conversation mkey workspace config = do
+  -- The repository the run works in, journaled as a Mori identity or an
+  -- absolute checkout path (the local-operator tier resolves it).
+  -- A worker resolves a path from its own directory, so only an absolute
+  -- path or a Mori identity names the same checkout for both.
+  repository <- case workspace of
+    Nothing -> pure Nothing
+    Just named
+      | "mori://" `isPrefixOf` named || isAbsolute named -> pure (Just (Text.pack named))
+      | otherwise -> die "--workspace must be a mori:// identity or an absolute checkout path"
   let agent = Text.unpack (agentNameText target)
   supplied <- readPayloadArgument mpayload
   payload <- case supplied of
@@ -81,10 +91,10 @@ runEnqueueRun target mpayload conversation mkey config = do
         exitFailure
       Right () -> pure ()
     let route = if conversation then ConversationWorkflowRoute else AgentWorkflowRoute
-        key = maybe (addressedRunKey target route payload) (addressedRunKeyWithKey target route) mkey
+        key = maybe (addressedRunKeyIn target route payload repository) (addressedRunKeyWithKey target route) mkey
     res <- case mkey of
-      Nothing -> enqueueAddressedRun (pool st) admittedIdentity target route payload
-      Just requestKey -> enqueueAddressedRunWithKey (pool st) admittedIdentity target route payload requestKey
+      Nothing -> enqueueAddressedRunIn (pool st) admittedIdentity target route payload repository
+      Just requestKey -> enqueueAddressedRunWithKeyIn (pool st) admittedIdentity target route payload requestKey repository
     case res of
       Left e -> do
         hPutStrLn stderr ("enqueue-run: " <> show e)

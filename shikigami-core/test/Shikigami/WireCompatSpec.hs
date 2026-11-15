@@ -157,6 +157,10 @@ queueTests =
       testCase "current jobs retain root and typed selection constraints" do
         let enrolled = sampleRunJob & #executionRootId .~ Just (fixtureRootId "root-1") & #executionRequest .~ Just (ExecutionRequest (Just (fixtureModelAlias "worker")) Nothing Nothing) & #executionPermissions .~ Just (map fixtureModelAlias ["worker"])
         RunJobs.decodeRunJob (RunJobs.encodeRunJob enrolled) @?= Right enrolled,
+      testCase "a job keeps the repository it names across the queue and the journal" do
+        let named = sampleRunJob & #repository .~ Just "mori://shinzui/mina"
+        RunJobs.decodeRunJob (RunJobs.encodeRunJob named) @?= Right named
+        Aeson.fromJSON (toJSON named) @?= Aeson.Success named,
       testCase "current jobs reject empty inherited alias metadata" do
         RunJobs.decodeRunJob (RunJobs.encodeRunJob sampleRunJob) @?= Right sampleRunJob
         case toJSON sampleRunJob of
@@ -196,6 +200,7 @@ sampleRunJob =
       identity = compatibilityIdentity (fixtureAgentName "at-risk-watch"),
       triggerKind = TriggeredByStream,
       objective = Nothing,
+      repository = Nothing,
       routeKind = AgentWorkflowRoute,
       occurredAt = sampleTime,
       triggerPayload = triggerPayloadValue,

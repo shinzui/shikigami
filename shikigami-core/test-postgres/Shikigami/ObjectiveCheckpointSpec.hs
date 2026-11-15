@@ -498,7 +498,7 @@ retainCoordinatorSource env objective actor worker = do
   now <- getCurrentTime
   memory <- maybe (fail "source session missing") pure worker.context.sessionId
   let reference = ObjectiveAssociation objective parent.assignmentId
-      job = RunJob declaration.name actor TriggeredByEvent now Aeson.Null (checked parseRunKey "objective-coordinator-source") Nothing Nothing Nothing [declaration.name] Nothing worker.context.executionPermissions worker.context.executionRootId Nothing (Just reference) AgentWorkflowRoute
+      job = RunJob declaration.name actor TriggeredByEvent now Aeson.Null (checked parseRunKey "objective-coordinator-source") Nothing Nothing Nothing [declaration.name] Nothing worker.context.executionPermissions worker.context.executionRootId Nothing (Just reference) AgentWorkflowRoute Nothing
       workflow = runJobWorkflowId job
       coordinator = Worker.CoordinatorRun workflow actor memory worker.context.executionRootId worker.context.executionPermissions
   right =<< run env (runTransaction (Association.admitRunTx Association.NewRun (defaultObjectiveSettings & #enabled .~ ObjectivesEnabled) (VerifiedCaller (checked parseCallerId "owner")) actor workflow reference))

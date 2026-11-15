@@ -258,7 +258,7 @@ renderApprovalsError = \case
 
 -- | How a composition finds checkouts. The kernel spawns no process, so the
 -- host adapter that runs @git@ and @mori@ is supplied by the composition
--- (@Shikigami.Agent.Checkout@ for the light commands).
+-- (@Shikigami.Workspace.Local.Checkout@ in @local-host@).
 data CheckoutResolver = CheckoutResolver
   { -- | The canonical top level of the Git checkout containing a directory.
     toplevelOf :: !(FilePath -> IO (Either Text FilePath)),

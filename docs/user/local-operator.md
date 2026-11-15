@@ -136,4 +136,20 @@ empty set of approvals.
 | `trust.local_operator.approvals_file` | `$XDG_CONFIG_HOME/shikigami/local-operator.dhall` | The explicit approvals file. |
 | `trust.local_operator.state_dir` | `$XDG_STATE_HOME/shikigami` | Stored grants, run worktrees and in-place locks. |
 
-`shikigami-worker` refuses `local-operator`; use the two light commands.
+## Queued coding agents in a worker
+
+A `shikigami-worker` started with `trust.tier=local-operator` runs queued `CodingAgent`
+declarations on your machine, so a long run survives the terminal that started it:
+
+```bash
+shikigami-worker --set trust.tier=local-operator          # keep it running
+shikigami enqueue-run haddock-gaps --workspace mori://shinzui/mina
+```
+
+`--workspace` is a Mori identity or an absolute checkout path; the run journals it and
+the worker opens the run's worktree there. A worker never asks for a grant: confirm the
+declaration once with `shikigami-agent-run`, or list it in the approvals file. If the
+worker stops while the agent runs, start it again; once the old worker's lease expires
+(about five minutes), it collects the agent's result or reattaches to it, and never
+launches a second agent. A worker under `local-operator` runs only coding-agent steps
+locally; its other agents keep the configured authority.

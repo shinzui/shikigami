@@ -13,6 +13,8 @@ module Shikigami.CodingAgent.Workflow
   ( CodingAgentStepInput (..),
     CodingAgentAdmission (..),
     CodingAgentRunner (..),
+    CodingAgentRunners,
+    fixedCodingAgentRunner,
     refusingCodingAgentRunner,
     codingAgentStepWorkflowId,
     codingAgentChildId,
@@ -66,7 +68,10 @@ data CodingAgentStepInput = CodingAgentStepInput
     identity :: !AgentIdentity,
     step :: !CodingAgentStep,
     -- | The trigger payload, quoted to the agent as evidence (ADR-112).
-    payload :: !Value
+    payload :: !Value,
+    -- | The repository the parent run names, if any (a Mori identity or a
+    -- checkout path); a composition that resolves the runner per step reads it.
+    repository :: !(Maybe Text)
   }
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
@@ -98,6 +103,15 @@ data CodingAgentRunner = CodingAgentRunner
     settle :: !(CodingAgentAdmission -> AttemptResult Value -> IO CodingAgentOutcome)
   }
 
+-- | How a composition finds the runner of one step. A one-off command has
+-- resolved its run's ports already ('fixedCodingAgentRunner'); a worker
+-- serving many runs resolves the grant, repository and worktree from the
+-- step's input, on every replay.
+type CodingAgentRunners = CodingAgentStepInput -> IO (Either FailureReason CodingAgentRunner)
+
+fixedCodingAgentRunner :: CodingAgentRunner -> CodingAgentRunners
+fixedCodingAgentRunner runner _ = pure (Right runner)
+
 -- | The runner of tiers that do not admit coding agents (ADR-40's
 -- qualification gate still applies to @contained@ and @multi-tenant@).
 refusingCodingAgentRunner :: Text -> CodingAgentRunner
@@ -120,23 +134,28 @@ codingAgentChildId :: Text -> Int -> DeclarationCoordinate "coding-agent-key" ->
 codingAgentChildId parent generation key =
   WorkflowId (parent <> ":coding-agent:" <> Text.pack (show generation) <> ":" <> declarationCoordinateText key)
 
-codingAgentStepWorkflow :: CodingAgentRunner -> Maybe CodingAgentStepInput -> Eff (Workflow : AppEffects) CodingAgentOutcome
-codingAgentStepWorkflow runner supplied = do
+codingAgentStepWorkflow :: CodingAgentRunners -> Maybe CodingAgentStepInput -> Eff (Workflow : AppEffects) CodingAgentOutcome
+codingAgentStepWorkflow runners supplied = do
   input <- step (StepName "ingest-coding-agent-step") (ingest supplied)
-  admitted <- step (StepName "admit") (liftIO (runner.admit input))
-  case admitted of
+  -- Not a step: the runner is the composition's, resolved again on replay.
+  resolved <- liftIO (runners input)
+  case resolved of
     Left reason -> pure (Failed reason)
-    Right admission -> do
-      attempted <- step (StepName "attempt") (liftIO (runner.attempt admission))
-      step (StepName "settle") (liftIO (runner.settle admission attempted))
+    Right runner -> do
+      admitted <- step (StepName "admit") (liftIO (runner.admit input))
+      case admitted of
+        Left reason -> pure (Failed reason)
+        Right admission -> do
+          attempted <- step (StepName "attempt") (liftIO (runner.attempt admission))
+          step (StepName "settle") (liftIO (runner.settle admission attempted))
   where
     ingest = \case
       Just value -> pure value
       Nothing -> liftIO (ioError (userError "coding-agent step resumed before ingest-coding-agent-step was journaled"))
 
-codingAgentStepRegistry :: CodingAgentRunner -> WorkflowRegistry AppEffects
-codingAgentStepRegistry runner =
-  Map.singleton codingAgentStepWorkflowName (WorkflowDef \_workflowId -> codingAgentStepWorkflow runner Nothing)
+codingAgentStepRegistry :: CodingAgentRunners -> WorkflowRegistry AppEffects
+codingAgentStepRegistry runners =
+  Map.singleton codingAgentStepWorkflowName (WorkflowDef \_workflowId -> codingAgentStepWorkflow runners Nothing)
 
 -- | Spawn (or, on replay, find) the keyed child and await its outcome. The
 -- child is driven by whoever drives the registry: the resume worker, or the
@@ -148,11 +167,12 @@ runCodingAgentChild ::
   DeclarationCoordinate "coding-agent-key" ->
   CodingAgentStep ->
   Value ->
+  Maybe Text ->
   Eff es CodingAgentOutcome
-runCodingAgentChild agent identity key requested payload = do
+runCodingAgentChild agent identity key requested payload repository = do
   (_, parentId) <- currentWorkflow
   generation <- currentRunGeneration
-  let input = CodingAgentStepInput {parent = parentId.unWorkflowId, generation, key, agent, identity, step = requested, payload}
+  let input = CodingAgentStepInput {parent = parentId.unWorkflowId, generation, key, agent, identity, step = requested, payload, repository}
       childId = codingAgentStepWorkflowId input
   child <- spawnChild codingAgentStepWorkflowName childId (pure (Failed (TierRefused "the coding-agent child is driven from the workflow registry")))
   now <- liftIO getCurrentTime

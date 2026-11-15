@@ -389,6 +389,7 @@ routerJob key =
       identity = compatibilityIdentity (fixtureAgentName "router"),
       triggerKind = TriggeredByEvent,
       objective = Nothing,
+      repository = Nothing,
       routeKind = AgentWorkflowRoute,
       occurredAt = fixedTime,
       triggerPayload = secretPayload,

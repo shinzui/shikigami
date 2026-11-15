@@ -618,7 +618,9 @@ library local-host
   exposed-modules:
     Shikigami.CodingAgent.Local
     Shikigami.Process.Local
+    Shikigami.Trust.LocalOperator.Host
     Shikigami.Workspace.Local.Adapters
+    Shikigami.Workspace.Local.Checkout
     Shikigami.Workspace.Local.Launcher
     Shikigami.Workspace.Local.Worktree
 
@@ -627,6 +629,7 @@ library local-host
     async,
     base,
     bytestring,
+    containers,
     directory,
     effectful-core,
     filepath,

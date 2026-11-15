@@ -130,6 +130,7 @@ library
     shibuya-metrics >=0.12.0.0 && <0.13,
     shikigami-core,
     shikigami-core:inspection,
+    shikigami-core:local-host,
     shikigami-migrations,
     shikumi-tools,
     text >=2.1,

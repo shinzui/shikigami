@@ -27,7 +27,7 @@ $ cabal run <binary> -- [command] [options]
 ```text
 shikigami validate <FILE>
 shikigami render-lifecycle <FILE>
-shikigami enqueue-run <AGENT> [--payload <JSON>] [--conversation] [--key <TEXT>]
+shikigami enqueue-run <AGENT> [--payload <JSON>] [--conversation] [--key <TEXT>] [--workspace <DIR|mori://…>]
 shikigami resolve-approval <TOKEN> (--approve | --reject <REASON>)
 shikigami publish-fixture <FILE> [--broker <HOST:PORT>] [--topic <TOPIC>]
 shikigami stub-kawa --port <PORT> [--republish-topic <TOPIC>] [--broker <HOST:PORT>]
@@ -288,7 +288,7 @@ to inspect. Resuming a finished run prints its result again without doing anythi
 ## `shikigami enqueue-run`
 
 ```bash
-$ shikigami enqueue-run <AGENT> [--payload <JSON>] [--conversation] [--key <TEXT>]
+$ shikigami enqueue-run <AGENT> [--payload <JSON>] [--conversation] [--key <TEXT>] [--workspace <DIR|mori://…>]
 ```
 
 Enqueue an **addressed run job** for a named agent onto the worker's `shikigami_run_jobs`
@@ -296,6 +296,10 @@ queue — the Event trigger class. `--payload` is the addressed run payload as J
 `worker` drains and executes it. `--conversation` selects the Danwa conversation
 route explicitly; `--key` overrides the idempotency key. By default that key is
 derived from the agent and payload, so repeat submissions can deduplicate.
+`--workspace` names the repository the run works in, as a Mori identity or an absolute
+path; it joins the derived key, so the same request against two repositories is two runs.
+A `local-operator` worker opens a queued coding agent's worktree there
+([local operator](local-operator.md)).
 
 → See [Triggers](./triggers.md), [The Living Loop](./living-loop.md).
 

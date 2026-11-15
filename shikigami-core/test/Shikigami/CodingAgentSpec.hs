@@ -6,9 +6,14 @@ import Data.Either (isLeft, isRight)
 import Data.Text (Text)
 import Data.Time (UTCTime (..), addUTCTime, fromGregorian)
 import Shikigami.Agent.Decl (AgentDecl (..), codingAgentStepOf)
+import Shikigami.Agent.DeclarationValue (declarationCoordinate)
 import Shikigami.Agent.Loader (loadAgent)
+import Shikigami.Agent.Principal (compatibilityIdentity)
 import Shikigami.CodingAgent.Types
+import Shikigami.CodingAgent.Workflow (CodingAgentStepInput (..))
 import Shikigami.Process.Attempt
+import Shikigami.Record (memoryRecord)
+import Shikigami.Trust.LocalOperator.Host (LocalOperatorPaths (..), queuedCodingAgents)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertFailure, testCase, (@?=))
 
@@ -49,6 +54,24 @@ tests =
           testCase "nothing attempted launches fresh" $
             recoverAttempt (facts Nothing Nothing NoEnvelope LauncherAbsent 0) @?= (LaunchFresh :: RecoveryDecision Value)
         ],
+      testCase "a worker's queued runner refuses what it cannot resolve before opening anything" do
+        loaded <- loadAgent "../agents/coding-agent-example.dhall"
+        decl <- either (assertFailure . show) pure loaded
+        let paths = LocalOperatorPaths {approvalsFile = "/nonexistent/approvals.dhall", stateDirectory = "/nonexistent/state"}
+            input repository agent =
+              CodingAgentStepInput {parent = "run-q", generation = 0, key = declarationCoordinate "behavior", agent, identity = compatibilityIdentity agent, step = maybe (error "no step") id (codingAgentStepOf decl.behavior), payload = Aeson.Null, repository}
+            refusal = \case
+              Left reason -> pure reason
+              Right _ -> assertFailure "resolved a runner"
+        (record, _) <- memoryRecord
+        unnamed <- refusal =<< queuedCodingAgents paths record [decl] (input Nothing decl.name)
+        case unnamed of
+          WorkspaceUnavailable _ -> pure ()
+          other -> assertFailure ("expected WorkspaceUnavailable, got " <> show other)
+        unknown <- refusal =<< queuedCodingAgents paths record [] (input (Just "mori://shinzui/mina") decl.name)
+        case unknown of
+          TierRefused _ -> pure ()
+          other -> assertFailure ("expected TierRefused, got " <> show other),
       testCase "outcomes keep their codec" do
         let outcome = Uncertain UncertainRun {reason = LauncherGoneWithoutResult, uncommitted = ChangeSummary [ChangedFile "src/A.hs" Modified] 0, launcherPid = Just 42}
         Aeson.decode (Aeson.encode outcome) @?= Just outcome

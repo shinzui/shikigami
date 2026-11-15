@@ -130,7 +130,7 @@ import Shikigami.Capability.Provider
     withCapabilityOverlays,
   )
 import Shikigami.CodingAgent.Types qualified as CodingAgent
-import Shikigami.CodingAgent.Workflow (CodingAgentRunner, codingAgentStepRegistry, refusingCodingAgentRunner, runCodingAgentChild)
+import Shikigami.CodingAgent.Workflow (CodingAgentRunners, codingAgentStepRegistry, fixedCodingAgentRunner, refusingCodingAgentRunner, runCodingAgentChild)
 import Shikigami.Coordination.Capability qualified as Adaptive
 import Shikigami.Coordination.DecisionAuthority qualified as AdaptiveAuthority
 import Shikigami.Coordination.Runtime qualified as AdaptiveRuntime
@@ -242,7 +242,7 @@ data AgentRunDeps = AgentRunDeps
     hooks :: !AgentRunHooks,
     -- | The tier's coding-agent runner, resolved per run (EP-2). Tiers that
     -- do not admit coding agents use 'noCodingAgents'.
-    codingAgents :: !CodingAgentRunner,
+    codingAgents :: !CodingAgentRunners,
     -- | Mutable process policy, snapshotted once in each new run.
     approvalPolicy :: !ApprovalPolicySnapshot,
     -- | Process resources for the approval child registered alongside this
@@ -289,8 +289,8 @@ data AgentRunHooks = AgentRunHooks
   deriving stock (Generic)
 
 -- | The runner of compositions that admit no coding agent.
-noCodingAgents :: CodingAgentRunner
-noCodingAgents = refusingCodingAgentRunner "coding agents are admitted only under the local-operator trust tier until the batch qualification of ADR-40 passes"
+noCodingAgents :: CodingAgentRunners
+noCodingAgents = fixedCodingAgentRunner . refusingCodingAgentRunner $ "coding agents are admitted only under the local-operator trust tier until the batch qualification of ADR-40 passes"
 
 defaultAgentRunHooks :: AgentRunHooks
 defaultAgentRunHooks =
@@ -763,7 +763,7 @@ runSessionedAgent deps activeBehaviorEnv durableSelection resolvedProfile resolv
 -- the run's failure, and stays readable from the child either way.
 runCodingAgentBehavior :: RunJob -> AgentDecl -> CodingAgent.CodingAgentStep -> Eff (Workflow : AppEffects) (Either Text Value)
 runCodingAgentBehavior job decl requested = do
-  outcome <- runCodingAgentChild decl.name job.identity (declarationCoordinate "behavior") requested job.triggerPayload
+  outcome <- runCodingAgentChild decl.name job.identity (declarationCoordinate "behavior") requested job.triggerPayload job.repository
   pure case outcome of
     CodingAgent.Completed CodingAgent.CompletedRun {exit = 0, finalMessage} -> Right (Aeson.object ["reply" .= finalMessage, "codingAgent" .= outcome])
     _ -> Left (CodingAgent.renderOutcome outcome)

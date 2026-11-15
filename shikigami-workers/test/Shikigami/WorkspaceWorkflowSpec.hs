@@ -352,7 +352,7 @@ withWorkflowAuthority authorizer configure fixture use = Fixture.withFixture fix
   let declaration = original & #name .~ fixtureAgentName "workspace-worker" & #behavior .~ Skill (declarationCoordinate ((Text.pack skill))) & #identity .~ Just (IdentityDecl (declarationCoordinate ("workspace-principal"))) & #capabilityOverlays .~ [workspaceEditDescriptor.capability] & #sinks .~ []
       identity = CompatibilityIdentity (fixtureAgentName "workspace-worker")
       rootId = fixtureRootId "workflow-root"
-      job = RunJob (fixtureAgentName "workspace-worker") identity TriggeredBySchedule now Aeson.Null (fixtureRunKey "workspace-workflow-fixture") Nothing Nothing Nothing [] Nothing Nothing (Just rootId) Nothing Nothing AgentWorkflowRoute
+      job = RunJob (fixtureAgentName "workspace-worker") identity TriggeredBySchedule now Aeson.Null (fixtureRunKey "workspace-workflow-fixture") Nothing Nothing Nothing [] Nothing Nothing (Just rootId) Nothing Nothing AgentWorkflowRoute Nothing
       deps =
         Agent.AgentRunDeps
           { appEnv = env,

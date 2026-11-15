@@ -59,6 +59,7 @@ import Shikigami.Attestation.Resolve qualified as Profile
 import Shikigami.Authority (Authority)
 import Shikigami.Behavior.Run (BehaviorEnv)
 import Shikigami.Capability.Provider (emptyCapabilityRuntime)
+import Shikigami.CodingAgent.Workflow (CodingAgentRunners)
 import Shikigami.Directory (DirectoryHandle, DirectoryRuntime (..), DirectorySettings (..), startDirectoryWithHeartbeat)
 import Shikigami.Directory.Store (recordLoadStates)
 import Shikigami.Duration
@@ -118,6 +119,9 @@ data WorkerEnv = WorkerEnv
     decisions :: !FlowDecision.DecisionServices,
     actionAuthority :: !Authority,
     workspace :: !(Maybe WorkspaceHost),
+    -- | How each coding-agent step finds its runner: per step under
+    -- @local-operator@ (EP-2 M2b), refused otherwise.
+    codingAgents :: !CodingAgentRunners,
     workspaceTransfers :: !(Maybe WorkspaceProvider),
     runTimeout :: !(Duration "agent-run"),
     harness :: !HarnessPolicy,
@@ -245,7 +249,7 @@ agentRunDeps env =
       AgentWorkflow.rei = (.rei) env,
       AgentWorkflow.http = (.http) env,
       AgentWorkflow.hooks = AgentWorkflow.defaultAgentRunHooks,
-      AgentWorkflow.codingAgents = AgentWorkflow.noCodingAgents,
+      AgentWorkflow.codingAgents = env.codingAgents,
       AgentWorkflow.approvalPolicy = envApprovalPolicy env,
       AgentWorkflow.approvalWorkflow = ApprovalWorkflow.ApprovalWorkflowEnv {ApprovalWorkflow.notifier = envApprovalNotifier env},
       AgentWorkflow.runTimeout = envRunTimeout env,

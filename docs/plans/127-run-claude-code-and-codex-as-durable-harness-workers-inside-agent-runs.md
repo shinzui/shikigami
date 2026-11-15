@@ -117,11 +117,25 @@ target repository can read skills kept beside the declaration.
   re-collect, a killed driver followed by a reattach, gone without result, partial result,
   intent without launch, failed spawn, two concurrent drivers launching once, overrun
   without a kill), each counting launches.
-- [ ] M2b: `shikigami-worker` accepts the `local-operator` tier, lifting EP-1's interim
+- [x] M2b (2026-11-15): `shikigami-worker` accepts the `local-operator` tier, lifting EP-1's interim
   refusal. A `CodingAgent` run queued with `shikigami enqueue-run` is executed by a
   `shikigami-worker` started on this Mac. Killing the worker by its saved PID and starting
   it again resumes the run exactly as `--resume` does in M2. EP-4 and EP-7 run playbooks
   under this worker (MasterPlan 22 Decision Log, 2026-11-15).
+  Evidence: against a disposable database (`shikigami_m2b`, dropped afterwards), a
+  `shikigami-worker` started with `trust.tier=local-operator` drained
+  `shikigami enqueue-run resume-probe --workspace mori://shinzui/mina`; the parent suspended,
+  the resume worker drove the child, and the launcher started four seconds later (run
+  `f66d61e5-bbc4-530f-89bc-e3696804f6ca`). The worker was killed with SIGKILL by its saved
+  pid and a second worker started. After the first worker's lease expired (5 min 20 s) the
+  second collected the finished attempt without relaunching: the ledger holds one
+  `coding-agent.launched` and one `coding-agent.settled`, the run committed `90ab971` on its
+  branch, and `shikigami runs show shikigami.agent-run f66d61e5-…` reports `completed` with the
+  change and evidence. The agent finished before the lease expired, so this run collected
+  rather than reattached; reattach itself is M2's evidence and uses the same runner. The
+  probe branch was removed. Tests: the worker's tier admission now admits `local-operator`;
+  `queuedCodingAgents` refuses a step with no repository or an unloaded agent; a run job
+  keeps its repository across the queue and the journal (`WireCompatSpec`).
 - [ ] M3: The same declaration shape runs Codex on a real repository. A flow body calls
   the capability twice under two keys and replays without relaunching. The new ADR
   amending ADR-40 is accepted, and the operations runbook documents the durable path.
@@ -161,6 +175,11 @@ target repository can read skills kept beside the declaration.
   by the child id would open a second worktree, so the coding agent's commit would not be on
   the branch the rest of the run (and `runs show`) reports.
   Evidence: `admit` in `Shikigami.CodingAgent.Local` opens `openRunWorktree` with the parent id.
+- Observation: A restarted worker resumes a killed worker's runs only after the old lease
+  expires, about five minutes here.
+  Evidence: run `f66d61e5-…` was killed at 18:47:36 and settled at 18:53:05 under the second
+  worker. A coding agent that finishes inside that window is collected; a longer one is
+  reattached.
 - Observation: The foreground `shikigami-agent-run` has no resume worker, so a parent that
   spawns the child suspends on `awaitChild` and nothing drives the child.
   Evidence: the first coding-agent run ended `Suspended`. The command now drives the child
@@ -315,6 +334,32 @@ target repository can read skills kept beside the declaration.
   Rationale: A foreground run is a direct keiro run (`runWorkflowWith` without a
   `leaseHeartbeat`), so it takes no lease to wait for. The attempt claim above makes a
   concurrent duplicate resume safe; journal appends are idempotent per step.
+  Date: 2026-11-15
+
+- Decision: A worker resolves each coding-agent step's runner from the step's input
+  (`CodingAgentRunners = CodingAgentStepInput -> IO (Either FailureReason CodingAgentRunner)`),
+  outside any step and again on every replay, through
+  `Shikigami.Trust.LocalOperator.Host.queuedCodingAgents` in `local-host`. The light
+  commands pass `fixedCodingAgentRunner` of the ports they resolved up front.
+  Rationale: The worker's other ports are process-global, but a coding agent's grant,
+  repository and worktree belong to its run. Resolving inside the child, by the agent name,
+  parent id and repository it already journals, needs no change to the parent body and no
+  per-run copy of `AgentRunDeps`.
+  Date: 2026-11-15
+- Decision: `RunJob` gains `repository :: Maybe Text` (a Mori identity or an absolute
+  path), journaled and carried through the queue payload, written only when present;
+  `shikigami enqueue-run --workspace` sets it and joins it to the derived run key;
+  `shikigami-agent-run` journals its `--workspace` and `--resume` falls back to it.
+  Rationale: A queued run has no terminal argument to name its repository, and EP-4's
+  playbooks select repositories per run. Omitting the field when absent keeps every existing
+  wire fixture and key unchanged.
+  Date: 2026-11-15
+- Decision: The light composition's checkout resolver, launcher lookup, grant recording and
+  worktree-plus-workspace opening move to `local-host` (`Shikigami.Workspace.Local.Checkout`,
+  `Shikigami.Trust.LocalOperator.Host`) and both compositions use them. The workspace tools
+  (`workspace.edit`, `exec`, `git`) are still composed only by the light commands.
+  Rationale: The worker may not depend on `shikigami-agent` (ADR 0125). Queued workspace-tool
+  runs need per-run capability runtimes in the worker, which nothing requires yet.
   Date: 2026-11-15
 
 ## Outcomes & Retrospective

@@ -65,7 +65,11 @@ data RunJob = RunJob
     executionRootId :: !(Maybe ExecutionRootId),
     delegationBudgetId :: !(Maybe DelegationBudgetId),
     objective :: !(Maybe ObjectiveAssociation),
-    routeKind :: !RunRouteKind
+    routeKind :: !RunRouteKind,
+    -- | The repository the run works in, as the operator named it (a Mori
+    -- identity or a checkout path), when the trigger names one. The
+    -- local-operator tier resolves its worktree and grant from it.
+    repository :: !(Maybe Text)
   }
   deriving stock (Eq, Show, Generic)
 
@@ -75,6 +79,7 @@ instance ToJSON RunJob where
   toJSON job =
     Aeson.object
       ( maybe [] (\value -> ["objective" .= value]) job.objective
+          <> maybe [] (\value -> ["repository" .= value]) job.repository
           <> [ "agentName" .= job.agentName,
                "identity" .= job.identity,
                "triggerKind" .= job.triggerKind,
@@ -114,7 +119,8 @@ instance FromJSON RunJob where
     delegationBudgetId <- value .: "delegationBudgetId"
     objective <- value .:? "objective"
     routeKind <- value .: "routeKind"
-    pure RunJob {agentName, identity, triggerKind, occurredAt, triggerPayload, idempotencyKey, parentSessionId, parentRunWorkflowId, delegationDepth, lineage, delegationBudgetId, executionRootId, executionRequest, executionPermissions, objective, routeKind}
+    repository <- value .:? "repository"
+    pure RunJob {repository, agentName, identity, triggerKind, occurredAt, triggerPayload, idempotencyKey, parentSessionId, parentRunWorkflowId, delegationDepth, lineage, delegationBudgetId, executionRootId, executionRequest, executionPermissions, objective, routeKind}
 
 -- | Preserve valid natural workflow keys. Keys containing Keiro journal
 -- separators become deterministic UUIDv5 technical identities; they are not

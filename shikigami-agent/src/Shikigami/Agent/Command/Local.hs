@@ -22,7 +22,6 @@ import Data.Text.IO qualified as TextIO
 import Data.Time.Format.ISO8601 (iso8601Show)
 import Keiro.Workflow (WorkflowId (..))
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
-import Shikigami.Agent.Checkout (processCheckoutResolver)
 import Shikigami.Agent.Name (agentNameText)
 import Shikigami.App.Config (AppConfig (..), revealSecretText)
 import Shikigami.App.Config.Load (requireDatabaseUrl)
@@ -32,6 +31,7 @@ import Shikigami.Record
 import Shikigami.Repository (repositoryIdText)
 import Shikigami.Trust.LocalOperator.Approvals
 import Shikigami.Trust.LocalOperator.Grant
+import Shikigami.Workspace.Local.Checkout (processCheckoutResolver)
 import System.Exit (exitFailure)
 import System.IO (hPutStrLn, stderr)
 

@@ -186,6 +186,7 @@ delegateWithObjective objective expectedIdentity executionRequest declarations d
             identity = childIdentity,
             triggerKind = TriggeredByDelegation,
             objective,
+            repository = Nothing,
             routeKind = AgentWorkflowRoute,
             occurredAt = now,
             triggerPayload = payload,

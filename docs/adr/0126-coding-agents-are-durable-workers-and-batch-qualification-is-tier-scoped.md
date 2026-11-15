@@ -55,6 +55,13 @@ capture, the operator's Baikai ceiling, the operator's one-time grant of the dec
 recorded `LaunchCodingAgent` decision, and the recovery policy above. ADR 0040's decision text
 is otherwise unchanged; foreground launches and HTTP responses keep their separate authority.
 
+`shikigami-worker` composes `local-operator` too, amending
+[ADR 0124](0124-authority-is-selected-by-trust-tier-and-the-local-operator-grants-a-declaration-once.md),
+which had it refuse the tier. A worker serves many runs, so it resolves each coding-agent step's
+ports from the step itself: the declaration by name, the repository the run names (a queued run
+carries it from `shikigami enqueue-run --workspace`), a stored or approvals-file grant (a worker
+never asks), and the parent run's worktree. Its other runs keep the configured authority.
+
 The process-spawning runner lives in `shikigami-core:local-host`
 ([ADR 0125](0125-host-process-adapters-live-in-a-public-local-host-sublibrary.md)), so both
 the light commands and `shikigami-worker` can compose it.

@@ -39,7 +39,6 @@ library
   exposed-modules:
     Shikigami.Agent.Capability.OneOff
     Shikigami.Agent.Capability.Workspace
-    Shikigami.Agent.Checkout
     Shikigami.Agent.Command
     Shikigami.Agent.Command.AgentRun
     Shikigami.Agent.Command.Launch

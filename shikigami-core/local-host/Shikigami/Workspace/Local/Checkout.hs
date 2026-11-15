@@ -1,8 +1,8 @@
 -- | The host adapter that finds checkouts for the local-operator tier: it
 -- runs @git rev-parse --show-toplevel@, @mori path@ and @mori status --json@.
 -- The kernel spawns no process ("Shikigami.PackageArchitectureSpec"), so this
--- lives with the light commands that compose the tier.
-module Shikigami.Agent.Checkout (processCheckoutResolver) where
+-- lives in @local-host@ with the tier's other host adapters (ADR 0125).
+module Shikigami.Workspace.Local.Checkout (processCheckoutResolver) where
 
 import Control.Exception (IOException, try)
 import Data.Aeson ((.:))

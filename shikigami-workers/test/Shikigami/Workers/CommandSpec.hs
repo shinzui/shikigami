@@ -57,9 +57,9 @@ tests :: TestTree
 tests =
   testGroup
     "worker command lines"
-    [ testCase "the worker refuses the local-operator tier and a multi-tenant tier without a service authority" do
+    [ testCase "the worker admits the local-operator tier and refuses a multi-tenant tier without a service authority" do
         workerTierAdmission defaultAppConfig @?= Right ()
-        assertBool "local-operator refused" (either (const True) (const False) (workerTierAdmission defaultAppConfig {trustTier = LocalOperator}))
+        workerTierAdmission defaultAppConfig {trustTier = LocalOperator} @?= Right ()
         assertBool "bare multi-tenant refused" (either (const True) (const False) (workerTierAdmission defaultAppConfig {trustTier = MultiTenant})),
       testCase "every worker executable renders --help" $
         mapM_
