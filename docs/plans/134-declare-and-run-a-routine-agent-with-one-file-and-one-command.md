@@ -91,11 +91,20 @@ commands, the refusal messages and the user guide.
   repository; run from a checkout or pass --in DIR|mori://…", and a run from
   `keiro/keiro` used the checkout's top level and its stored grant. Tests: the refusal texts
   in `routine agents`.
-- [ ] Milestone 3 — scheduled, and a coding agent. `shikigami-local up` starts the local
+- [x] Milestone 3 (2026-11-15) — scheduled, and a coding agent. `shikigami-local up` starts the local
   worker and scheduler. A `repo-digest` scheduled every two minutes produces two reports
   without a prompt, an agent with no stored approval is not armed and says why, and a
   `readme-keeper` coding agent run by hand commits a real README change in fsrs-hs. The user
   guide is published and the routine-agent acceptance in the MasterPlan is checked off.
+  Evidence: `repo-digest` with `trigger = R.every "*/2 * * * *"` was confirmed once by hand;
+  `shikigami-local up --for 5` printed `armed repo-digest */2 * * * * mori://shinzui/keiro`
+  and `skipped weekly-audit 0 9 * * 1 no stored approval; run once by hand: …`, then ran
+  `repo-digest` at 22:22, 22:24 and 22:26 with no prompt, each with a report. `shikigami-local
+  new readme-keeper --coder` with the plan's prompt, run by hand in
+  `/Users/shinzui/Keikaku/bokuno/fsrs-hs`, asked once (naming the Claude coding agent), and
+  committed `311bdb8` ("shikigami(readme-keeper): coding-agent behavior", a new Building
+  section in README.md) on `shikigami/readme-keeper/a03507c07874`, left for review.
+  `docs/user/routine-agents.md` (DOC-24) is published.
 
 
 ## Surprises & Discoveries
@@ -192,9 +201,29 @@ commands, the refusal messages and the user guide.
   `doctor` does not yet check scheduled agents' approvals; that belongs to M3's arming rule.
   Date: 2026-11-15
 
+- Decision (M3): `shikigami-local up` runs its own scheduler loop: it arms each scheduled
+  agent whose current declaration has a stored grant (in that grant's repository), fires each
+  due minute once, and runs the agent through the same function as `run`, unattended.
+  Rationale: The worker composes local-operator ports only for coding-agent steps (EP-2 M2b),
+  so a scheduled Skill with declared tools and a local report would get none of them there.
+  Running scheduled agents through the light composition gives them exactly the ports a run by
+  hand has, and the arming rule falls out of the grant digest: a changed declaration has no
+  grant. Supervising the worker and scheduler waits for per-run composition in the worker.
+  Date: 2026-11-15
+
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Complete on 2026-11-15. A routine agent is one short file built on `schema/Routine.dhall`:
+`shikigami-local new` writes it, `shikigami-local run` runs it in the current checkout with one
+confirmation and prints its report, `up` runs scheduled agents that have a stored approval and
+says why it skips the others, and `runs` and `doctor` show what happened and what to fix.
+
+Differences from the plan, recorded above: `up` is a local scheduler inside `shikigami-local`,
+not a supervisor of `shikigami-worker` and `shikigami-scheduler`; scheduled runs go through the
+light composition, so a run interrupted by a crash is continued with `shikigami-agent-run
+--resume`, not by a resume worker. The worker's local-operator composition covers only
+coding-agent steps (EP-2 M2b); giving it per-run tools and outputs is the follow-up that would
+let `up` delegate to the worker.
 
 
 ## Context and Orientation

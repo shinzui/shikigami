@@ -434,6 +434,7 @@ $ shikigami-local new <NAME> [--coder] [--every <CRON>]
 $ shikigami-local run <AGENT> [TASK…] [--in <DIR|mori://…>] [--no-confirm]
 $ shikigami-local runs [RUN-ID] [--limit <N>]
 $ shikigami-local doctor
+$ shikigami-local up [--for <MINUTES>]
 $ shikigami-local approvals
 $ shikigami-local approvals pending
 $ shikigami-local approvals resolve <REVIEW-ID> [--reject <REASON>]
@@ -450,7 +451,8 @@ checkout (its top level, or `--in`), with the words after it as the payload's `t
 and prints where its report went. `runs` lists recent runs with outcome, duration, allowed and
 refused decisions and report path, or one run's record; `doctor` checks the database, the model
 provider, the agents directory, each declaration and its tools and vendor CLI, and prints the fix
-for each failure. `approvals` validates the
+for each failure; `up` runs scheduled routine agents that have a stored approval and says why the
+others are skipped ([Routine agents](./routine-agents.md)). `approvals` validates the
 approvals file and lists its repositories, approvals and every stored confirmation; `revoke`
 deletes a stored confirmation (give at least eight characters of its digest); `ledger` prints the
 action record oldest first; `approvals pending` and `approvals resolve` list and answer the asks

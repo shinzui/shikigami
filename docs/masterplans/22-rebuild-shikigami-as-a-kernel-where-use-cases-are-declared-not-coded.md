@@ -386,7 +386,7 @@ rule.
 | EP-6 | Shrink shikigami-core to the kernel by moving or retiring use-case subsystems | [docs/plans/131-shrink-shikigami-core-to-the-kernel-by-moving-or-retiring-use-case-subsystems.md](../plans/131-shrink-shikigami-core-to-the-kernel-by-moving-or-retiring-use-case-subsystems.md) | EP-5 | None | Not Started |
 | EP-7 | Modernize the keiro services with a declared campaign playbook | [docs/plans/132-modernize-the-keiro-services-with-a-declared-campaign-playbook.md](../plans/132-modernize-the-keiro-services-with-a-declared-campaign-playbook.md) | EP-3, EP-4 | EP-5 | Not Started |
 | EP-8 | Give the kernel its own action, record, output, approval and trigger contracts with local adapters | [docs/plans/133-give-the-kernel-its-own-action-record-output-approval-and-trigger-contracts-with-local-adapters.md](../plans/133-give-the-kernel-its-own-action-record-output-approval-and-trigger-contracts-with-local-adapters.md) | EP-1 (for M2 and M3) | None | In Progress |
-| EP-9 | Declare and run a routine agent with one file and one command | [docs/plans/134-declare-and-run-a-routine-agent-with-one-file-and-one-command.md](../plans/134-declare-and-run-a-routine-agent-with-one-file-and-one-command.md) | EP-1; EP-8 M2; EP-2 M2b (for the scheduled milestone) | EP-3 | In Progress |
+| EP-9 | Declare and run a routine agent with one file and one command | [docs/plans/134-declare-and-run-a-routine-agent-with-one-file-and-one-command.md](../plans/134-declare-and-run-a-routine-agent-with-one-file-and-one-command.md) | EP-1; EP-8 M2; EP-2 M2b (for the scheduled milestone) | EP-3 | Complete |
 | EP-10 | Move the Kikan service bindings out of shikigami-core and compose a Kikan distribution | [docs/plans/135-move-the-kikan-service-bindings-out-of-shikigami-core-and-compose-a-kikan-distribution.md](../plans/135-move-the-kikan-service-bindings-out-of-shikigami-core-and-compose-a-kikan-distribution.md) | EP-5, EP-8 | EP-6 | Not Started |
 | EP-11 | Freeze the v1 API baseline with a surface inventory and compatibility checks | [docs/plans/136-freeze-the-v1-api-baseline-with-a-surface-inventory-and-compatibility-checks.md](../plans/136-freeze-the-v1-api-baseline-with-a-surface-inventory-and-compatibility-checks.md) | EP-1 to EP-4, EP-8, EP-9; EP-6 M1; EP-7 M3 (for M2); EP-5, EP-6, EP-10 (for M3 and M4) | None | Not Started |
 
@@ -907,14 +907,17 @@ Code (through a PreToolUse gate) and Codex (MCP only) use exactly those tools, w
 the action record. Next in the recommended order are EP-8 M2, EP-9 and EP-3 M4; EP-5 and EP-11
 M1 can still start in parallel. EP-8 M2 is accepted: outputs with a composition default (a
 local report), a local approval inbox, and `Trigger.Manual` as the default; the Kikan sinks
-keep their path until EP-10. Stage 1 (the pilot) ends at
+keep their path until EP-10. EP-9 is complete: a routine agent is one short file, `shikigami-local
+run` runs it with one confirmation, and `shikigami-local up` runs scheduled ones locally (the
+worker still composes local-operator ports only for coding agents; Surprises). Stage 1 (the pilot) ends at
 the declaration baseline, and stage 2 at the kernel baseline.
 
 - [ ] Architectural acceptance: the keiro modernization campaign runs for real on at least
   two of the user's repositories with no change to `shikigami-core` in the commits that
   introduced it, and EP-5's fitness check passes.
-- [ ] Routine-agent acceptance: EP-9's one-file, one-command, confirm-once agent runs by
-  hand and on a local schedule on this Mac.
+- [x] Routine-agent acceptance: EP-9's one-file, one-command, confirm-once agent runs by
+  hand and on a local schedule on this Mac. (2026-11-15: `repo-digest` by hand in keiro and
+  three scheduled runs under `shikigami-local up`; `readme-keeper` committed in fsrs-hs.)
 - [ ] Portability acceptance: one declaration runs unchanged under the stock composition
   and the Kikan distribution, with K1 to K8 holding in both.
 - [ ] Declaration baseline: the declaration, playbook, operator-file and local-command
@@ -1043,6 +1046,14 @@ the declaration baseline, and stage 2 at the kernel baseline.
   group; the others are rerun singly. Promote if a third child meets one.
   Evidence: `docs/friction-log/72-…`, `75-…`, `76-…`.
 
+
+- Observation (EP-9): scheduled routine agents run through the light composition inside
+  `shikigami-local up`, not `shikigami-worker`, because the worker composes local-operator
+  ports only for coding-agent steps. EP-4 and EP-7, which planned to run under the worker,
+  need per-run tier composition in the worker (tools, outputs, workspace) or the same local
+  loop.
+  Evidence: `docs/plans/134-declare-and-run-a-routine-agent-with-one-file-and-one-command.md`,
+  Decision Log, M3.
 
 ## Decision Log
 

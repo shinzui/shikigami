@@ -47,6 +47,7 @@ library
     Shikigami.Agent.Command.LocalRuns
     Shikigami.Agent.Command.Routine
     Shikigami.Agent.Command.RunBehavior
+    Shikigami.Agent.Command.Up
     Shikigami.Agent.Trust
 
   build-depends:

@@ -38,6 +38,7 @@ import Shikigami.Agent.Command.Local (LedgerOptions (..), LocalCommand (..), run
 import Shikigami.Agent.Command.LocalRuns (RunsQuery (..), runLocalRuns)
 import Shikigami.Agent.Command.Routine (NewRoutine (..), RunRoutine (..), runNewRoutine, runRoutine)
 import Shikigami.Agent.Command.RunBehavior (runRunBehavior)
+import Shikigami.Agent.Command.Up (UpOptions (..), runUp)
 import Shikigami.Agent.Payload (payloadArgument)
 import Shikigami.App.Config (Role (..))
 import Shikigami.App.Config.Load (withConfigOptions)
@@ -115,7 +116,7 @@ localRoleInfo =
         withConfigOptions
           "shikigami-local"
           "Inspect local-operator grants and the action record"
-          (subparser (newRoutine <> runRoutineCommand <> runsCommand <> doctor) <|> (runLocal <$> subparser (approvals <> revoke <> ledger <> tools <> mcp <> gate)))
+          (subparser (newRoutine <> runRoutineCommand <> runsCommand <> doctor <> up) <|> (runLocal <$> subparser (approvals <> revoke <> ledger <> tools <> mcp <> gate)))
           (pure [])
     }
   where
@@ -167,6 +168,13 @@ localRoleInfo =
                 )
             )
             (progDesc "Run a routine agent in this repository under the local-operator tier")
+        )
+    up =
+      command
+        "up"
+        ( info
+            (runUp . UpOptions <$> optional (option auto (long "for" <> metavar "MINUTES" <> help "Stop after this many minutes")))
+            (progDesc "Run scheduled routine agents on this machine: arms each agent with a stored approval and says why the others are not armed")
         )
     doctor = command "doctor" (info (pure runDoctor) (progDesc "Check every prerequisite of routine agents; each failure names its fix"))
     runsCommand =
