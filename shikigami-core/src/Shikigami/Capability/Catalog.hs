@@ -213,3 +213,4 @@ behaviorKindText = \case
   Skill {} -> "Skill"
   CoordinatingSkill {} -> "Skill"
   Flow {} -> "Flow"
+  CodingAgent {} -> "CodingAgent"

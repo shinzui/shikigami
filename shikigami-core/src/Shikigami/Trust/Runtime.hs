@@ -22,6 +22,7 @@ import Keiro.Workflow (WorkflowId)
 import Shikigami.Agent.Decl (AgentDecl)
 import Shikigami.Authority (Authority, Principal)
 import Shikigami.Capability.Provider (CapabilityRuntime)
+import Shikigami.CodingAgent.Workflow (CodingAgentRunner)
 import Shikigami.Record (ActionRecord)
 import Shikigami.Trust.LocalOperator.Approvals (ApprovalsError, RepositorySelector, renderApprovalsError)
 import Shikigami.Trust.LocalOperator.Grant (GrantRefusal, LocalGrant, renderGrantRefusal)
@@ -50,6 +51,9 @@ data TierRuntime = TierRuntime
     workspace :: !(Maybe WorkspaceHost),
     -- | The grant the run executes under, for tiers that have one.
     grant :: !(Maybe LocalGrant),
+    -- | The coding-agent runner of this run (EP-2); tiers that do not admit
+    -- coding agents refuse.
+    codingAgents :: !CodingAgentRunner,
     -- | Release what the composition holds for the run (an in-place lock).
     -- Called when the run ends, whatever its outcome.
     release :: !(IO ())

@@ -570,6 +570,7 @@ withFixtureUsingTracer databaseFixture tracer label sinks kizashi danwa use =
                 AgentWorkflow.rei = ReiConfig {baseUrl = Nothing},
                 AgentWorkflow.http = sinkHttp,
                 AgentWorkflow.hooks = AgentWorkflow.defaultAgentRunHooks,
+                AgentWorkflow.codingAgents = AgentWorkflow.noCodingAgents,
                 AgentWorkflow.approvalPolicy = autoApprovePolicy (((either (error . show) id . parseDuration) (secondsToNominalDiffTime 900))),
                 AgentWorkflow.approvalWorkflow = ApprovalWorkflow.defaultApprovalWorkflowEnv,
                 AgentWorkflow.runTimeout = (either (error . show) id (parseDuration (secondsToNominalDiffTime 300))),

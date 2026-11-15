@@ -50,9 +50,10 @@ import Data.Text qualified as Text
 import Data.Time (UTCTime, getCurrentTime)
 import GHC.Generics (Generic)
 import GHC.Records (HasField (..))
-import Shikigami.Agent.Decl (AgentDecl (..))
+import Shikigami.Agent.Decl (AgentDecl (..), codingAgentStepOf)
 import Shikigami.Agent.Name (AgentName, agentNameText, mkAgentName)
 import Shikigami.Capability.Overlay (CapabilityId, capabilityIdText, mkCapabilityId)
+import Shikigami.CodingAgent.Types (CodingAgentStep (..), accessText, providerText)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Record (RecordEntry, mkRecordEntry, mkRecordKind, recordErrorText)
 import Shikigami.Repository (RepositoryId, repositoryId, repositoryIdText)
@@ -68,41 +69,48 @@ data GrantRequest = GrantRequest
     repository :: !LocalRepository,
     placement :: !WorkspacePlacement,
     capabilities :: !(Set CapabilityId),
+    -- | The vendor coding tool and access a @CodingAgent@ declaration asks
+    -- to launch.
+    codingAgent :: !(Maybe (Text, Text)),
     budget :: !Budget
   }
   deriving stock (Eq, Show)
 
 requestedGrant :: AgentDecl -> LocalRepository -> GrantRequest
-requestedGrant AgentDecl {name, capabilityOverlays} repository =
+requestedGrant AgentDecl {name, capabilityOverlays, behavior} repository =
   GrantRequest
     { agent = name,
       repository,
       placement = repository.placement,
       capabilities = Set.fromList capabilityOverlays,
+      codingAgent = (\step -> (providerText step.provider, accessText step.access)) <$> codingAgentStepOf behavior,
       budget = defaultBudget
     }
 
 -- | Show and grant a caller's own bounded budget instead of 'defaultBudget'.
 proposeBudget :: Budget -> GrantRequest -> GrantRequest
-proposeBudget proposed GrantRequest {agent, repository, placement, capabilities} = GrantRequest {agent, repository, placement, capabilities, budget = proposed}
+proposeBudget proposed GrantRequest {agent, repository, placement, capabilities, codingAgent} = GrantRequest {agent, repository, placement, capabilities, codingAgent, budget = proposed}
 
 renderGrantRequest :: GrantRequest -> Text
-renderGrantRequest GrantRequest {agent, repository, placement, capabilities, budget = Budget {modelAttempts, toolAttempts, tokens, minutes}} =
+renderGrantRequest GrantRequest {agent, repository, placement, capabilities, codingAgent, budget = Budget {modelAttempts, toolAttempts, tokens, minutes}} =
   Text.unlines
-    [ "local-operator: " <> agentNameText agent <> " asks for",
-      "  repository   " <> repositoryIdText repository.identity <> " (" <> Text.pack repository.source <> ")",
-      "  placement    " <> placementText placement,
-      "  capabilities " <> if Set.null capabilities then "none" else Text.intercalate ", " (capabilityIdText <$> Set.toList capabilities),
-      "  budget       "
-        <> Text.pack (show modelAttempts)
-        <> " model attempts, "
-        <> Text.pack (show toolAttempts)
-        <> " tool attempts, "
-        <> Text.pack (show tokens)
-        <> " tokens, "
-        <> Text.pack (show minutes)
-        <> " minutes"
-    ]
+    ( [ "local-operator: " <> agentNameText agent <> " asks for",
+        "  repository   " <> repositoryIdText repository.identity <> " (" <> Text.pack repository.source <> ")",
+        "  placement    " <> placementText placement
+      ]
+        <> maybe [] (\(provider, access) -> ["  coding agent " <> provider <> " with " <> access <> " access, unattended"]) codingAgent
+        <> [ "  capabilities " <> if Set.null capabilities then "none" else Text.intercalate ", " (capabilityIdText <$> Set.toList capabilities),
+             "  budget       "
+               <> Text.pack (show modelAttempts)
+               <> " model attempts, "
+               <> Text.pack (show toolAttempts)
+               <> " tool attempts, "
+               <> Text.pack (show tokens)
+               <> " tokens, "
+               <> Text.pack (show minutes)
+               <> " minutes"
+           ]
+    )
 
 -- | @versionedDigest "shikigami.local-grant/1"@ over the declaration's
 -- journal JSON and the repository identity.

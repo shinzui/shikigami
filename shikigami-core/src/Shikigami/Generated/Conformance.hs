@@ -21,6 +21,7 @@ import Shikigami.WorkerSessionLookup.Generated.ReadModelHarness qualified as Wor
 import Shikigami.AdaptiveDelivery.Generated.WorkflowFacts qualified as AdaptiveDelivery
 import Shikigami.AgentRun.Generated.WorkflowFacts qualified as AgentRun
 import Shikigami.Approval.Generated.WorkflowFacts qualified as Approval
+import Shikigami.CodingAgentStep.Generated.WorkflowFacts qualified as CodingAgentStep
 import Shikigami.ContinuingWorker.Generated.WorkflowFacts qualified as ContinuingWorker
 import Shikigami.DanwaConversation.Generated.WorkflowFacts qualified as DanwaConversation
 import Shikigami.ExecutionDriver.Generated.WorkflowFacts qualified as ExecutionDriver
@@ -54,6 +55,7 @@ serviceConformanceFacts =
     <> [("workflow/AdaptiveDelivery/" <> fact, value) | (fact, value) <- AdaptiveDelivery.workflowFactValues]
     <> [("workflow/AgentRun/" <> fact, value) | (fact, value) <- AgentRun.workflowFactValues]
     <> [("workflow/Approval/" <> fact, value) | (fact, value) <- Approval.workflowFactValues]
+    <> [("workflow/CodingAgentStep/" <> fact, value) | (fact, value) <- CodingAgentStep.workflowFactValues]
     <> [("workflow/ContinuingWorker/" <> fact, value) | (fact, value) <- ContinuingWorker.workflowFactValues]
     <> [("workflow/DanwaConversation/" <> fact, value) | (fact, value) <- DanwaConversation.workflowFactValues]
     <> [("workflow/ExecutionDriver/" <> fact, value) | (fact, value) <- ExecutionDriver.workflowFactValues]

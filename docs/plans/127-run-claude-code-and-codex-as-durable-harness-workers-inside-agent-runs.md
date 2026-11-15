@@ -27,6 +27,11 @@ provenance:
       at: 2026-11-15T14:50:34Z
       mode: "update"
       note: "Cascaded MasterPlan 22 review: command-parameterized attempt machinery, skills on steps, kernel authority and record ports"
+    - model: "claude-opus-5-5"
+      harness: "claude-code"
+      at: 2026-11-15T17:50:40Z
+      mode: "implement"
+      note: "M1 accepted: CodingAgent arm, durable child workflow, local-host runner, real Claude Code run on mina; ADR 0126"
 ---
 
 # Run Claude Code and Codex as durable harness workers inside agent runs
@@ -70,13 +75,27 @@ target repository can read skills kept beside the declaration.
 
 ## Progress
 
-- [ ] M1: A declared `CodingAgent` agent runs Claude Code on a real repository on this
+- [x] M1 (2026-11-15): A declared `CodingAgent` agent runs Claude Code on a real repository on this
   Mac, commits on the run branch, and `shikigami runs show` prints its outcome, commit,
   changed files and evidence path. The `CodingAgent` arm and the `CodingAgentStep` child
   workflow are in the v1 baseline, the pre-release facts are rechecked and recorded, and the
   `just keiro-gate` findings are recorded. The launch is decided as `LaunchCodingAgent` by
   the tier authority and appears in the action record. A step that attaches a skill
   directory reads that skill in a real run.
+  Evidence: `agents/coding-agent-example.dhall` ran under `local-operator` on
+  `mori://shinzui/mina` (run `cea2a2c7-2866-5c4d-9fd1-4c2be8c99a96`): Claude Code added one
+  Haddock comment and Shikigami committed it as `c94de20` on
+  `shikigami/haddock-gaps/ab167062bc7b` (left for review). The run printed
+  `coding-agent: coding agent completed with exit 0, commit c94de20, 1 files changed`;
+  `shikigami-local ledger` shows `launch_coding_agent` approved plus
+  `coding-agent.launched` and `coding-agent.settled`; `shikigami runs show --json` carries the
+  `codingAgent` field with the outcome, commit, changes and an evidence summary whose
+  `run_id` is the child id. The same declaration under `trust.tier=contained` ended
+  `TierRefused` before any process started. A probe declaration attaching
+  `agents/skills/exec-plan` (run `b0d7d1d9-b92a-5fa8-ac37-6d10813bcd87`) quoted the skill's
+  title "ExecPlan Skill" from its `SKILL.md`; its unchanged branch was removed. Unit tests:
+  `CodingAgent` group in `shikigami-core:test` (10 cases, checked values, the example
+  declaration, the recovery table and the outcome codec).
 - [ ] M2: Killing the worker mid-run and resuming reattaches to the surviving attempt and
   completes without a second launch. Resuming a completed run reads the journal without
   launching. An attempt whose launcher died without a result ends `Uncertain` and is
@@ -112,6 +131,25 @@ target repository can read skills kept beside the declaration.
   member of `FlowEffects` in `shikigami-core/src/Shikigami/Flow.hs`. See the Decision Log
   for what that means for this capability.
 
+
+- Observation: Claude Code's `--output-format json` with Baikai's capture is an array of
+  stream events, not one object; the final message is the `result` of the last event whose
+  `type` is `result`.
+  Evidence: the first real run printed the whole event array as the run's reply;
+  `finalMessageOf` in `shikigami-core/local-host/Shikigami/CodingAgent/Local.hs` now reads the
+  last `result` event, and the skill-probe run's reply is the agent's own sentence.
+- Observation: The launched Claude Code uses the operator's whole Claude configuration,
+  including their MCP servers and tools. That is the operator's own authority, as ADR 0126
+  states for `local-operator`, and one more reason the gate stays closed for other tiers.
+  Evidence: the `init` event of run `cea2a2c7-…` lists the operator's MCP tools.
+- Observation: The worktree must be opened on the parent run, not the child. A step keyed
+  by the child id would open a second worktree, so the coding agent's commit would not be on
+  the branch the rest of the run (and `runs show`) reports.
+  Evidence: `admit` in `Shikigami.CodingAgent.Local` opens `openRunWorktree` with the parent id.
+- Observation: The foreground `shikigami-agent-run` has no resume worker, so a parent that
+  spawns the child suspends on `awaitChild` and nothing drives the child.
+  Evidence: the first coding-agent run ended `Suspended`. The command now drives the child
+  with `runChildWorkflow` when the parent suspends on it, then re-runs the parent.
 
 ## Decision Log
 
@@ -198,6 +236,47 @@ target repository can read skills kept beside the declaration.
   final package here when M2b lands.
   Date: 2026-11-15
 
+
+- Decision: The runner lives in `shikigami-core:local-host`
+  (`Shikigami.CodingAgent.Local`), not `shikigami-agent`.
+  Rationale: ADR 0125 put EP-1's host adapters there so that `shikigami-worker` (M2b) can
+  compose them without depending on `shikigami-agent`. This resolves the earlier decision's
+  "move this one module" clause before the move was needed.
+  Date: 2026-11-15
+- Decision: In M1 an attached skill's `SKILL.md` is inlined into the prompt (at most 32 KiB
+  per skill) after the skill directory is copied into the attempt directory; Baikai's
+  `extra-dirs` is not set yet.
+  Rationale: Inlining gives the agent the skill regardless of each vendor's directory
+  permissions and grants Codex no write access to the copy. A skill's supporting files are
+  therefore not reachable in M1. M3 decides `extra-dirs` with Codex, where `--add-dir`
+  grants write access.
+  Date: 2026-11-15
+- Decision: Workflow ids in the coding-agent values are `Text` (`parent`, `child`), and the
+  foreground driver computes the child id with generation 0.
+  Rationale: keiro's `WorkflowId` has no JSON instances, and the foreground command always
+  runs generation 0 of a fresh run. The worker path (M2b) derives the generation from the
+  workflow as `runCodingAgentChild` does.
+  Date: 2026-11-15
+- Decision: The local-operator authority approves `LaunchCodingAgent` only when the target
+  repository is the granted repository; the grant prompt names the provider and access.
+  Kikan-En maps the action to `NoKikanAction` and so refuses it.
+  Rationale: The grant digest covers the declaration and repository; a launch elsewhere is
+  outside what the operator confirmed.
+  Date: 2026-11-15
+- Decision: A `CodingAgent` declaration does not bound tokens; Shikigami does not translate
+  the vendor's token use into the execution resource bounds.
+  Rationale: The vendor CLI owns its model loop and reports no enforceable token ceiling; the
+  deadline is the enforced bound (ADR 0040 forbids substituting an unsupported option).
+  Date: 2026-11-15
+- Decision: Pre-release recheck, 2026-11-15, before adding `child coding-agent` to the
+  agent-run body. (1) No resumable workflow journal must survive: the only journals are the
+  developer database's and this session's disposable runs. (2) No queued or stored payload
+  needs an old codec. (3) There are no external wire consumers. (4) There is no release or
+  deployment: `git tag` prints nothing. ADR 0027's exception therefore applies: the new entry
+  replaces the unreleased baseline without a patch id. `just keiro-gate` reports the expected
+  `WorkflowBodyChanged` for `shikigami.agent-run`, recorded in
+  `docs/evidence/plan-127/keiro-diff.txt`.
+  Date: 2026-11-15
 
 ## Outcomes & Retrospective
 

@@ -102,6 +102,11 @@ library
     Shikigami.Capability.Overlay
     Shikigami.Capability.Provider
     Shikigami.Capability.Tools
+    Shikigami.CodingAgent.Inspect
+    Shikigami.CodingAgent.Types
+    Shikigami.CodingAgent.Workflow
+    Shikigami.CodingAgentStep.Generated.WorkflowFacts
+    Shikigami.CodingAgentStep.Generated.WorkflowRuntime
     Shikigami.Coordination.Capability
     Shikigami.Coordination.Checkpoint
     Shikigami.Coordination.Commands
@@ -292,6 +297,7 @@ library
     Shikigami.PracticeReview.IdentityStore
     Shikigami.PracticeReview.Memory
     Shikigami.Prelude
+    Shikigami.Process.Attempt
     Shikigami.Program.Decision
     Shikigami.Program.Decision.Adaptive
     Shikigami.Program.Decision.Drift
@@ -610,6 +616,7 @@ library local-host
   visibility: public
   hs-source-dirs: local-host
   exposed-modules:
+    Shikigami.CodingAgent.Local
     Shikigami.Workspace.Local.Adapters
     Shikigami.Workspace.Local.Launcher
     Shikigami.Workspace.Local.Worktree
@@ -624,6 +631,7 @@ library local-host
     filepath,
     keiro,
     process,
+    scientific,
     shikigami-core,
     shikumi-tools,
     text,
@@ -651,6 +659,7 @@ test-suite shikigami-core-test
     Shikigami.BehaviorToolSpec
     Shikigami.CapabilityOverlaySpec
     Shikigami.CapabilityProviderSpec
+    Shikigami.CodingAgentSpec
     Shikigami.DecisionContractSpec
     Shikigami.DecisionModelCatalogSpec
     Shikigami.DecisionRunnerSpec

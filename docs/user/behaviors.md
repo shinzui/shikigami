@@ -1,9 +1,9 @@
 ---
 type: "Reference"
 title: "Behaviors — what an agent does"
-description: "Compare deterministic, ShikumiProgram, Skill, CoordinatingSkill, and Flow behavior declarations."
+description: "Compare deterministic, ShikumiProgram, Skill, CoordinatingSkill, CodingAgent, and Flow behavior declarations."
 docId: "DOC-5"
-timestamp: "2026-11-05T13:11:17Z"
+timestamp: "2026-11-15T12:00:00Z"
 tags: ["behaviors"]
 generated:
   by: process:shikigami-user-docs-okf-migration
@@ -25,6 +25,11 @@ let Behavior =
       | Skill : { path : Text }
       | CoordinatingSkill : { path : Text }
       | Flow : { name : Text }
+      | CodingAgent :
+          { provider : CodingAgentProvider, prompt : Text
+          , access : WorkspaceAccess, model : Optional Text
+          , effort : Optional CodingAgentEffort
+          , deadlineMinutes : Natural, skills : List Text }
       >
 ```
 
@@ -35,6 +40,7 @@ let Behavior =
 | **Skill** | `mori://shinzui/baikai` | Only when the skill calls a model | "follow these instructions, maybe call these tools" |
 | **CoordinatingSkill** | admitted durable execution | When the selected provider requires one | instructions controlling a bounded set of continuing workers |
 | **Flow** | `mori://shinzui/keiro` durable workflow | Only if the flow body calls a model | lifecycle-backed work that can park, resume, and escalate |
+| **CodingAgent** | Claude Code or Codex through `mori://shinzui/baikai`, as a durable child workflow | The vendor CLI's own login | "change this repository and commit the result", under the local-operator tier |
 
 Supported behaviors return JSON to the shared session, memory, and sink lifecycle.
 Flows execute through the durable agent workflow, while the synchronous runner
@@ -125,6 +131,56 @@ requires the configured process-backed workspace supervisor; file-only settings
 provide no process fence. See [worker operations](../operations/operator-cli.md)
 for configuration, command semantics and provider requirements.
 
+## CodingAgent — a vendor coding agent as a durable step
+
+```dhall
+behavior = A.Behavior.CodingAgent
+  { provider = A.CodingAgentProvider.ClaudeCode
+  , prompt = "Find one exported function in src/ without a Haddock comment and add an accurate one."
+  , access = A.WorkspaceAccess.EditWorkspace
+  , model = None Text
+  , effort = None A.CodingAgentEffort
+  , deadlineMinutes = 20
+  , skills = [] : List Text
+  }
+```
+
+A `CodingAgent` behavior runs Claude Code (`ClaudeCode`) or Codex (`Codex`) on the run's
+repository through Baikai's unattended agent command. It works in the run's own worktree
+and branch, and when it completes Shikigami commits its changes there with the trailers
+`Shikigami-Run` and `Shikigami-Agent`. The step is a durable child workflow: its launch,
+its attempt and its settlement are journaled, so `shikigami runs show <id>` prints the
+outcome, the commit, the changed files and the evidence summary.
+
+* `access` is Baikai's capability: `ReadOnly`, `EditWorkspace` (edit inside the
+  worktree) or `FullAccess`.
+* `model` is a vendor model id; `None` means the vendor default. `effort` is one of
+  `EffortLow`, `EffortMedium`, `EffortHigh`, `EffortXHigh` or `EffortMax`; `None` leaves
+  it to the vendor.
+* `deadlineMinutes` (1–720) is enforced by Baikai, which ends the agent and reports
+  `timed_out`. The prompt is at most 64 KiB.
+* `skills` lists skill directories next to the declaration. Each is copied for the
+  attempt, and its `SKILL.md` is given to the agent with the prompt.
+
+The outcome is one of `completed` (with the exit code, commit and changes), `failed`
+(the launch was refused or did not run), `timed_out` (partial changes are left
+uncommitted) or `uncertain`. A run ends `uncertain` when the launcher was lost without a
+result after a restart; Shikigami never launches a second agent on the same worktree, so
+an operator inspects the worktree and the attempt directory instead.
+
+Coding agents run only under the `local-operator` trust tier, as the operator's own
+`claude` or `codex` would ([local operator](local-operator.md)). The first run asks to
+confirm the declaration, naming the provider and its workspace access; every launch is
+recorded as a `launch_coding_agent` decision in `shikigami record list`. Under the
+`contained` and `multi-tenant` tiers the step is refused before any process starts.
+
+```bash
+shikigami-agent-run --set trust.tier=local-operator \
+  --agent agents/coding-agent-example.dhall --workspace mori://shinzui/mina
+```
+
+`run-behavior` does not run a `CodingAgent`; it needs a durable agent run.
+
 ## Flow — the durable lifecycle path
 
 ```dhall
@@ -170,5 +226,6 @@ quickest way to iterate on what an agent produces.
 | a typed pipeline you want to evaluate/optimize | `ShikumiProgram` |
 | natural-language instructions, optionally with tools | `Skill` |
 | instructions controlling admitted continuing workers | `CoordinatingSkill` after provider qualification |
+| a change to a repository made by Claude Code or Codex | `CodingAgent` under `local-operator` |
 | a durable process that must wait or resume | `Flow` |
 | typed decisions that branch into governed actions and survive restart | `Flow` with the `Decision` capability |

@@ -77,7 +77,8 @@ agentView env decl = do
           Decl.ShikumiProgram {} -> "shikumi_program"
           Decl.Skill {} -> "skill"
           Decl.CoordinatingSkill {} -> "coordinating_skill"
-          Decl.Flow {} -> "flow",
+          Decl.Flow {} -> "flow"
+          Decl.CodingAgent {} -> "coding_agent",
         sinks = fmap sinkKind decl.sinks,
         delegates = map agentNameText decl.delegates,
         principalId = (Decl.declarationCoordinateText . (.principal)) <$> decl.identity,

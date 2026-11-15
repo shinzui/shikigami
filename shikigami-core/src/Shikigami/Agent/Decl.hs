@@ -26,6 +26,7 @@ module Shikigami.Agent.Decl
     AmbiguousPolicy (..),
     RouterPolicy (..),
     Behavior (..),
+    codingAgentStepOf,
     Trigger (..),
     StreamMatch (..),
     Sink (..),
@@ -49,6 +50,7 @@ import Shikigami.Agent.ExpertiseKey (ExpertiseKey)
 import Shikigami.Agent.Name (AgentName)
 import Shikigami.Attestation.Profile (ProfileId, ProfileVersion)
 import Shikigami.Capability.Overlay (CapabilityId)
+import Shikigami.CodingAgent.Types (CodingAgentEffort, CodingAgentPrompt, CodingAgentProvider, CodingAgentStep (..), DeadlineMinutes, SkillDirectory, VendorModelId, WorkspaceAccess)
 import Shikigami.Decision.ModelAlias (ModelAlias)
 import Shikigami.Execution.Policy.Types (HarnessOverrides)
 import Shikigami.Execution.Request (ExecutionPolicy)
@@ -249,8 +251,26 @@ data Behavior
   | Skill {path :: !(DeclarationCoordinate "skill-path")}
   | CoordinatingSkill {path :: !(DeclarationCoordinate "skill-path")}
   | Flow {name :: !(DeclarationCoordinate "flow")}
+  | -- | A vendor coding tool (Claude Code or Codex) does the task unattended in
+    -- the run's worktree as a durable child step (EP-2 of MasterPlan 22).
+    CodingAgent
+      { provider :: !CodingAgentProvider,
+        prompt :: !CodingAgentPrompt,
+        access :: !WorkspaceAccess,
+        model :: !(Maybe VendorModelId),
+        effort :: !(Maybe CodingAgentEffort),
+        deadlineMinutes :: !DeadlineMinutes,
+        skills :: ![SkillDirectory]
+      }
   deriving stock (Eq, Show, Generic)
   deriving anyclass (FromDhall, ToJSON, FromJSON)
+
+-- | The step a declaration's @CodingAgent@ arm asks for.
+codingAgentStepOf :: Behavior -> Maybe CodingAgentStep
+codingAgentStepOf = \case
+  CodingAgent {provider, prompt, access, model, effort, deadlineMinutes, skills} ->
+    Just CodingAgentStep {provider, prompt, access, model, effort, deadlineMinutes, skills}
+  _ -> Nothing
 
 data Sink
   = KawaDigest {subjectType :: !(ActivityCoordinate "subject-kind"), verb :: !(ActivityCoordinate "verb")}

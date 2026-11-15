@@ -101,6 +101,9 @@ toAgentAction KikanEnMapping {kawaSource} now = \case
     ("danwa.conversation", thread :| []) -> AttachDanwa <$> kikan (mkDanwaTarget thread)
     ("channel.egress", provider :| [conversation]) -> DispatchChannel <$> kikan (mkChannelTarget provider conversation)
     (other, _) -> Left (NoKikanAction ("output kind " <> other <> " with this target"))
+  -- Kikan-En has no action for a coding-agent launch yet (MasterPlan 22,
+  -- EP-10's improvement request); it is refused, never substituted.
+  LaunchCodingAgent {} -> Left (NoKikanAction "a coding-agent launch")
   where
     kikan = either (Left . InvalidKikanTarget . actionValueErrorText) Right
 

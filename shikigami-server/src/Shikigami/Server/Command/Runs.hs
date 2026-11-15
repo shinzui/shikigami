@@ -94,6 +94,7 @@ import Shikigami.App.Config (AppConfig (..), revealSecretText)
 import Shikigami.App.Config.Load (requireDatabaseUrl)
 import Shikigami.Behavior.Provider (newBehaviorEnvFor)
 import Shikigami.Behavior.Run (BehaviorEnv (..))
+import Shikigami.CodingAgent.Inspect (codingAgentInspection)
 import Shikigami.Decision.ModelCatalog (modelDescriptor, pinnedBinding)
 import Shikigami.Execution.Selection (ExecutionSelection (..), ExecutionSelectionFailure, SelectionSource (..), defaultBinding)
 import Shikigami.Execution.SelectionStore qualified as SelectionStore
@@ -163,13 +164,16 @@ runRunsShow wfName wfId asJson config = do
               Left failure -> die (Status.runStatusFailureText failure)
               Right status -> do
                 execution <- either (const (die "execution inspection store is unavailable")) (executionInspection config store) steps
-                LazyChar8.putStrLn (Aeson.encode (withExecution execution (withLifecycle status (runJson row link))))
+                LazyChar8.putStrLn (Aeson.encode (withCodingAgent (either (const Nothing) codingAgentInspection steps) (withExecution execution (withLifecycle status (runJson row link)))))
         | otherwise -> do
             TextIO.putStr (renderRun row link)
             steps <- runStoreIO store (loadStepIndex (WorkflowName wfName) (WorkflowId wfId) (fromIntegral row.generation))
             execution <- either (const (die "execution inspection store is unavailable")) (executionInspection config store) steps
             TextIO.putStrLn "execution"
             LazyChar8.putStrLn (Aeson.encode execution)
+            case either (const Nothing) codingAgentInspection steps of
+              Nothing -> pure ()
+              Just codingAgent -> TextIO.putStrLn "codingAgent" >> LazyChar8.putStrLn (Aeson.encode codingAgent)
   where
     die message = do
       hPutStrLn stderr ("runs show: " <> Text.unpack message)
@@ -208,6 +212,10 @@ executionInspection config store steps =
                   Right (Right (Just (assignment, calls))) -> object ["attempts" .= assignment.attempts, "active" .= assignment.active, "unknown" .= assignment.unknown, "usage" .= assignment.usage, "facts" .= calls]
               ]
           )
+
+withCodingAgent :: Maybe Value -> Value -> Value
+withCodingAgent (Just codingAgent) (Aeson.Object fields) = Aeson.Object (KeyMap.insert "codingAgent" codingAgent fields)
+withCodingAgent _ value = value
 
 withExecution :: Value -> Value -> Value
 withExecution execution (Aeson.Object fields) = Aeson.Object (KeyMap.insert "execution" execution fields)

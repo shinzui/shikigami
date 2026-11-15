@@ -245,6 +245,7 @@ agentRunDeps env =
       AgentWorkflow.rei = (.rei) env,
       AgentWorkflow.http = (.http) env,
       AgentWorkflow.hooks = AgentWorkflow.defaultAgentRunHooks,
+      AgentWorkflow.codingAgents = AgentWorkflow.noCodingAgents,
       AgentWorkflow.approvalPolicy = envApprovalPolicy env,
       AgentWorkflow.approvalWorkflow = ApprovalWorkflow.ApprovalWorkflowEnv {ApprovalWorkflow.notifier = envApprovalNotifier env},
       AgentWorkflow.runTimeout = envRunTimeout env,

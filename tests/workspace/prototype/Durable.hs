@@ -172,6 +172,7 @@ workflowCase configFile prefix stage = do
               rei = ReiConfig Nothing,
               http,
               hooks = Agent.defaultAgentRunHooks,
+              codingAgents = Agent.noCodingAgents,
               approvalPolicy = autoApprovePolicy (either (error . show) id (parseDuration 900)),
               approvalWorkflow = Approval.defaultApprovalWorkflowEnv,
               runTimeout = either (error . show) id (parseDuration 30),

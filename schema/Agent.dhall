@@ -25,6 +25,15 @@ let Trigger =
       | Event : { eventType : Text }
       >
 
+-- A vendor coding tool for the CodingAgent arm (EP-2 of MasterPlan 22).
+let CodingAgentProvider = < ClaudeCode | Codex >
+
+-- Baikai's capability: Claude's permission mode, Codex's sandbox.
+let WorkspaceAccess = < ReadOnly | EditWorkspace | FullAccess >
+
+let CodingAgentEffort =
+      < EffortLow | EffortMedium | EffortHigh | EffortXHigh | EffortMax >
+
 -- The behavior union covers all three arms the seeds and the spec need.
 let Behavior =
       < Deterministic :
@@ -38,6 +47,15 @@ let Behavior =
       | Skill : { path : Text }
       | CoordinatingSkill : { path : Text }
       | Flow : { name : Text }
+      | CodingAgent :
+          { provider : CodingAgentProvider
+          , prompt : Text
+          , access : WorkspaceAccess
+          , model : Optional Text
+          , effort : Optional CodingAgentEffort
+          , deadlineMinutes : Natural
+          , skills : List Text
+          }
       >
 
 -- The producer sink set. KizashiSignal carries the seeds' rich RaiseSignal fields.
@@ -180,6 +198,9 @@ in  { SignalType
     , StreamMatch
     , Trigger
     , Behavior
+    , CodingAgentProvider
+    , WorkspaceAccess
+    , CodingAgentEffort
     , Sink
     , ProfileRequirement
     , Identity

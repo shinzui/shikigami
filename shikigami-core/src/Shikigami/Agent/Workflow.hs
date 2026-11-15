@@ -20,6 +20,7 @@ module Shikigami.Agent.Workflow
     StepResult (..),
     AgentRunHooks (..),
     defaultAgentRunHooks,
+    noCodingAgents,
     agentRunWorkflowName,
     agentRunWorkflow,
     runAgentRunWorkflow,
@@ -96,7 +97,7 @@ import Shikigami.Agent.Approval
     requiresApprovalFor,
   )
 import Shikigami.Agent.Approval.Workflow qualified as ApprovalWorkflow
-import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), DelegationBudget, IdentityDecl (..), MemoryPolicy (..), ProfileRequirement (..), RecordPolicy (..), Sink, Trigger (..))
+import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), DelegationBudget, IdentityDecl (..), MemoryPolicy (..), ProfileRequirement (..), RecordPolicy (..), Sink, Trigger (..), codingAgentStepOf)
 import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Delegate (awaitAllDelegated, delegate)
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
@@ -128,6 +129,8 @@ import Shikigami.Capability.Provider
     durableAdapterInstalled,
     withCapabilityOverlays,
   )
+import Shikigami.CodingAgent.Types qualified as CodingAgent
+import Shikigami.CodingAgent.Workflow (CodingAgentRunner, codingAgentStepRegistry, refusingCodingAgentRunner, runCodingAgentChild)
 import Shikigami.Coordination.Capability qualified as Adaptive
 import Shikigami.Coordination.DecisionAuthority qualified as AdaptiveAuthority
 import Shikigami.Coordination.Runtime qualified as AdaptiveRuntime
@@ -237,6 +240,9 @@ data AgentRunDeps = AgentRunDeps
     -- or outbox serialization boundary.
     http :: !SinkHttp,
     hooks :: !AgentRunHooks,
+    -- | The tier's coding-agent runner, resolved per run (EP-2). Tiers that
+    -- do not admit coding agents use 'noCodingAgents'.
+    codingAgents :: !CodingAgentRunner,
     -- | Mutable process policy, snapshotted once in each new run.
     approvalPolicy :: !ApprovalPolicySnapshot,
     -- | Process resources for the approval child registered alongside this
@@ -281,6 +287,10 @@ data AgentRunHooks = AgentRunHooks
     afterStepBody :: !(StepName -> IO ())
   }
   deriving stock (Generic)
+
+-- | The runner of compositions that admit no coding agent.
+noCodingAgents :: CodingAgentRunner
+noCodingAgents = refusingCodingAgentRunner "coding agents are admitted only under the local-operator trust tier until the batch qualification of ADR-40 passes"
 
 defaultAgentRunHooks :: AgentRunHooks
 defaultAgentRunHooks =
@@ -377,6 +387,7 @@ agentRunRegistry :: AgentRunDeps -> WorkflowRegistry AppEffects
 agentRunRegistry deps =
   Map.singleton agentRunWorkflowName (WorkflowDef \_wid -> agentRunWorkflow deps Nothing)
     `Map.union` ApprovalWorkflow.approvalRegistry ((.approvalWorkflow) deps)
+    `Map.union` codingAgentStepRegistry deps.codingAgents
 
 ingestJob :: (IOE :> es) => Maybe RunJob -> Eff es RunJob
 ingestJob = \case
@@ -707,6 +718,7 @@ runSessionedAgent deps activeBehaviorEnv durableSelection resolvedProfile resolv
               | Just selection <- durableSelection ->
                   first PermanentAgentRunFailure <$> runDurableSkillStep deps resolvedProfile resolvedOverlays job decl sid prior selection path
             Flow {} -> first PermanentAgentRunFailure <$> runBehaviorStep deps activeBehaviorEnv resolvedProfile approvalPolicyForRun recordedIdentity sid decl job prior
+            CodingAgent {} | Just requested <- codingAgentStepOf decl.behavior -> first PermanentAgentRunFailure <$> runCodingAgentBehavior job decl requested
             _
               | not (null ((.delegates) decl)) ->
                   first PermanentAgentRunFailure <$> runBehaviorStep deps activeBehaviorEnv resolvedProfile approvalPolicyForRun recordedIdentity sid decl job prior
@@ -745,6 +757,17 @@ runSessionedAgent deps activeBehaviorEnv durableSelection resolvedProfile resolv
 -- The new branch journals admission metadata and awaits a registered child.
 -- The terminal body is a protected read; memory and sinks retain their existing
 -- owners and step labels below.
+
+-- | A @CodingAgent@ declaration is one keyed coding-agent child. A
+-- completed run with exit 0 is the behavior's result; every other outcome is
+-- the run's failure, and stays readable from the child either way.
+runCodingAgentBehavior :: RunJob -> AgentDecl -> CodingAgent.CodingAgentStep -> Eff (Workflow : AppEffects) (Either Text Value)
+runCodingAgentBehavior job decl requested = do
+  outcome <- runCodingAgentChild decl.name job.identity (declarationCoordinate "behavior") requested job.triggerPayload
+  pure case outcome of
+    CodingAgent.Completed CodingAgent.CompletedRun {exit = 0, finalMessage} -> Right (Aeson.object ["reply" .= finalMessage, "codingAgent" .= outcome])
+    _ -> Left (CodingAgent.renderOutcome outcome)
+
 runDurableSkillStep :: AgentRunDeps -> Maybe ResolvedProfile -> ResolvedCapabilitySet -> RunJob -> AgentDecl -> SessionId -> [MemoryRecord] -> Selection.ExecutionSelection -> DeclarationCoordinate "skill-path" -> Eff (Workflow : AppEffects) (Either Text Value)
 runDurableSkillStep deps profile overlays job decl sid prior selection path = do
   useObjectives <- Workflow.patch (Workflow.PatchId "shikigami-objective-tracking-v1")

@@ -73,3 +73,4 @@ serialized result change. Login/provider availability remains outside readiness.
 - [ADR 0007](0007-a-resolved-profile-is-a-run-local-policy-snapshot.md)
 - [ADR 0021](0021-operator-verbs-wrap-the-owning-library.md)
 - `mori://shinzui/baikai/packages/baikai-agent`
+- Amended by [ADR 0126](0126-coding-agents-are-durable-workers-and-batch-qualification-is-tier-scoped.md) — the batch qualification gate applies to the `contained` and `multi-tenant` tiers; `local-operator` admits durable coding agents.

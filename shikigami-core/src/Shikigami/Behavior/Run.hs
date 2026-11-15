@@ -172,6 +172,10 @@ runBehavior env decl input
           (completeBehaviorRequest env)
       Flow {} ->
         pure (Left (UnsupportedBehavior "Flow"))
+      -- A coding agent is a durable child step with its own attempt and
+      -- recovery; it has no in-process behavior.
+      CodingAgent {} ->
+        pure (Left (UnsupportedBehavior "CodingAgent runs only as a durable agent run"))
       CoordinatingSkill {} ->
         pure (Left (UnsupportedBehavior "CoordinatingSkill requires an admitted durable coordination scope"))
       Deterministic {} ->

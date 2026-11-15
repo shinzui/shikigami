@@ -75,6 +75,11 @@ decideLocalAction LocalSelection {principals, grant} principal action
           | otherwise -> Approved grant.digest
         Left _ -> Refused (CapabilityNotGranted (capabilityTargetId target))
       EmitOutput {} -> Refused (OutsideGrant (actionTag action))
+      -- The grant's digest covers the whole declaration, CodingAgent arm
+      -- included, so a grant on this repository covers its launch.
+      LaunchCodingAgent CodingAgentTarget {repository}
+        | repository == repositoryIdText grant.repository -> Approved grant.digest
+        | otherwise -> Refused (CapabilityNotGranted ("a coding agent on " <> repository))
   where
     grantedCapabilities :: Set CapabilityId
     grantedCapabilities = grant.capabilities

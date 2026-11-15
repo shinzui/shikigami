@@ -37,6 +37,7 @@ import Shikigami.BehaviorRetrySpec qualified as BehaviorRetrySpec
 import Shikigami.BehaviorToolSpec qualified as BehaviorToolSpec
 import Shikigami.CapabilityOverlaySpec qualified as CapabilityOverlaySpec
 import Shikigami.CapabilityProviderSpec qualified as CapabilityProviderSpec
+import Shikigami.CodingAgentSpec qualified as CodingAgentSpec
 import Shikigami.DecisionContractSpec qualified as DecisionContractSpec
 import Shikigami.DecisionModelCatalogSpec qualified as DecisionModelCatalogSpec
 import Shikigami.DecisionRunnerSpec qualified as DecisionRunnerSpec
@@ -173,6 +174,7 @@ main =
           RecordSpec.tests,
           LocalOperatorSpec.tests,
           LocalHostSpec.tests,
+          CodingAgentSpec.tests,
           PracticeReviewEvidenceSpec.tests,
           PracticeReviewSpec.tests,
           RouterCatalogSpec.tests,

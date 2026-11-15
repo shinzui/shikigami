@@ -96,6 +96,7 @@ agentRunRoleInfo =
               <*> optional (strOption (long "workspace" <> metavar "DIR|mori://…" <> help "Repository for requested capability overlays: a checkout path or a Mori identity"))
               <*> payloadArgument
               <*> switch (long "no-confirm" <> help "Never ask to grant a declaration; use only stored or file grants")
+              <*> optional (strOption (long "resume" <> metavar "WORKFLOW_ID" <> help "Continue an interrupted run of this agent from its journal; an in-flight coding agent is reattached, never relaunched"))
           )
           (pure [])
     }

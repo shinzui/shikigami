@@ -76,7 +76,7 @@ import Shikigami.Agent.Principal (AgentIdentity (VerifiedIdentity), ResolvedAgen
 import Shikigami.Agent.Run (AgentRunResult (..), recallAgentLearnings, recallPriorLearnings)
 import Shikigami.Agent.Run.Key (RunKey, parseRunKey, runKeyText)
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (..), TriggerKind (..), runJobWorkflowId)
-import Shikigami.Agent.Workflow (AgentRunDeps (..), AgentRunFailure (..), AgentRunHooks (..), SinkIntent (..), agentRunFailureDetail, agentRunRegistry, agentRunWorkflow, agentRunWorkflowName, defaultAgentRunHooks, executionRuntime, publishSinkIntent, runAgentRunWorkflow)
+import Shikigami.Agent.Workflow (AgentRunDeps (..), AgentRunFailure (..), AgentRunHooks (..), SinkIntent (..), agentRunFailureDetail, agentRunRegistry, agentRunWorkflow, agentRunWorkflowName, defaultAgentRunHooks, executionRuntime, noCodingAgents, publishSinkIntent, runAgentRunWorkflow)
 import Shikigami.AgentRun.Status qualified as RunStatus
 import Shikigami.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
 import Shikigami.Attestation.Envelope (profileDigest)
@@ -1723,8 +1723,8 @@ tests databaseFixture =
 
                 let registry = Registry.workflowRegistry deps (testConversationEnv appEnv behaviorEnv [conversationDecl])
                 assertEqual
-                  "production registry covers all eight families"
-                  ["shikigami.adaptive-delivery", "shikigami.agent-run", "shikigami.approval", "shikigami.danwa-conversation", "shikigami.execution", "shikigami.recurring-checkpoint-cycle", "shikigami.recurring-objective", "shikigami.worker-session"]
+                  "production registry covers all nine families"
+                  ["shikigami.adaptive-delivery", "shikigami.agent-run", "shikigami.approval", "shikigami.coding-agent-step", "shikigami.danwa-conversation", "shikigami.execution", "shikigami.recurring-checkpoint-cycle", "shikigami.recurring-objective", "shikigami.worker-session"]
                   (map unWorkflowName (Map.keys registry))
                 driveApprovalChildToPark appEnv deps
                 pending <- runAppIO appEnv countPendingAwakeables
@@ -2013,6 +2013,7 @@ testDepsWithAgents appEnv behaviorEnv hooks agentDecls =
       rei = ReiConfig {baseUrl = Nothing},
       http = testSinkHttp,
       hooks,
+      codingAgents = noCodingAgents,
       approvalPolicy = autoApprovePolicy (either (error . show) id (parseDuration 900)),
       approvalWorkflow = ApprovalWorkflow.defaultApprovalWorkflowEnv,
       runTimeout = (either (error . show) id (parseDuration (secondsToNominalDiffTime 300))),
@@ -2052,6 +2053,7 @@ testDepsWithApprovalAndDeadline appEnv behaviorEnv hooks approval deadline =
       rei = ReiConfig {baseUrl = Nothing},
       http = testSinkHttp,
       hooks,
+      codingAgents = noCodingAgents,
       approvalPolicy =
         ApprovalPolicySnapshot
           { requireFor = Set.singleton SKawaDigest,

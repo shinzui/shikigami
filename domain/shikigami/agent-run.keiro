@@ -95,6 +95,7 @@ workflow AgentRun
     step record -> RecordedLearning
     step complete -> CompletedSession
     child delegate id input via delegatedWorkflowIdV2 -> AgentRunResult
+    child coding-agent id input via codingAgentStepWorkflowId -> CodingAgentOutcome
 operation RunAgentRun
   run AgentRun
     input RunJob

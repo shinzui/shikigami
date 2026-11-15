@@ -5,6 +5,7 @@ where
 
 import Baikai.Options qualified as Options
 import Control.Exception (finally)
+import Control.Monad (void)
 import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
@@ -18,13 +19,16 @@ import Data.Text.Encoding qualified as TE
 import Data.Text.IO qualified as TIO
 import Data.Time (UTCTime, addUTCTime, getCurrentTime)
 import Hasql.Pool qualified
-import Keiro.Workflow (WorkflowId (..), WorkflowOutcome (..))
+import Keiro.Workflow (StepName (..), WorkflowId (..), WorkflowOutcome (..), loadStepIndex)
+import Keiro.Workflow.Child (runChildWorkflow)
 import Kioku.Id (idText)
 import Kiroku.Store.Connection (KirokuStore (..), withStore)
+import Kiroku.Store.Effect (runStoreIO)
 import Shikigami.Activity (ActivityEnvelope)
 import Shikigami.Agent.Approval qualified as Approval
 import Shikigami.Agent.Approval.Workflow qualified as ApprovalWorkflow
-import Shikigami.Agent.Decl (AgentDecl (..), Behavior (CoordinatingSkill, Skill))
+import Shikigami.Agent.Decl (AgentDecl (..), Behavior (CoordinatingSkill, Skill), codingAgentStepOf)
+import Shikigami.Agent.DeclarationValue (declarationCoordinate)
 import Shikigami.Agent.Loader (AgentLoadEntry (..), AgentLoadReport (..), loadAgent)
 import Shikigami.Agent.Name (agentNameText)
 import Shikigami.Agent.Payload (readPayloadArgument)
@@ -34,12 +38,15 @@ import Shikigami.Agent.Run.Key (newCliRunKey)
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (AgentWorkflowRoute), TriggerKind (TriggeredByEvent), runJobWorkflowId)
 import Shikigami.Agent.Trust (WorkspaceArgument, compatibilityPrincipal, lightComposition, parseWorkspaceArgument, terminalInteraction, workspaceSelector)
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
+import Shikigami.Agent.Workflow.Name (agentRunWorkflowName, ingestJobStepName)
 import Shikigami.App (AppEnv (..), noopTracer, runAppIO)
 import Shikigami.App.Config (AppConfig)
 import Shikigami.App.Config qualified as Config
 import Shikigami.App.Config.Load (requireDatabaseUrl)
 import Shikigami.Attestation.Resolve qualified as Profile
 import Shikigami.Behavior.Provider (newBehaviorEnvFor)
+import Shikigami.CodingAgent.Types (renderOutcome)
+import Shikigami.CodingAgent.Workflow (codingAgentChildId, codingAgentStepWorkflow, codingAgentStepWorkflowName)
 import Shikigami.Directory (disabledDirectoryHandle)
 import Shikigami.Execution.Admission (enrollRootRun)
 import Shikigami.Execution.Driver (ExecutionStart (..))
@@ -64,6 +71,7 @@ import Shikigami.Trigger.Enqueue (ensureRunQueue)
 import Shikigami.Trust.LocalOperator.Approvals (Budget (..))
 import Shikigami.Trust.LocalOperator.Grant (Interaction)
 import Shikigami.Trust.Runtime (RunSubject (..), TierComposition (..), TierRuntime (..), renderTierRefusal)
+import Shikigami.Workflow.Versioning (shikigamiWorkflowRunOptions)
 import System.Exit (exitFailure)
 import System.IO (hPutStrLn, stderr)
 
@@ -73,8 +81,8 @@ import System.IO (hPutStrLn, stderr)
 -- @--from-activity@ — map an @activity.v1@ envelope into a memory under the agent
 -- scope. The connection string comes from @database.connection_string@, which the
 -- development shell still supplies as @PG_CONNECTION_STRING@.
-runAgentRun :: String -> Maybe FilePath -> Maybe String -> Maybe String -> Bool -> AppConfig -> IO ()
-runAgentRun agentArg mActivity workspace payloadArgument noConfirm config = do
+runAgentRun :: String -> Maybe FilePath -> Maybe String -> Maybe String -> Bool -> Maybe Text -> AppConfig -> IO ()
+runAgentRun agentArg mActivity workspace payloadArgument noConfirm resume config = do
   logger <- Log.newStderrLogger Log.Info
   let path = resolvePath agentArg
   declE <- loadAgent path
@@ -108,13 +116,17 @@ runAgentRun agentArg mActivity workspace payloadArgument noConfirm config = do
               Nothing -> pure Aeson.Null
               Just raw -> maybe (dieAgentRun "payload input is not valid JSON") pure (Aeson.decodeStrict (TE.encodeUtf8 (Text.pack raw)))
             interaction <- terminalInteraction noConfirm
-            runDurableAgent logger store appEnv (parseWorkspaceArgument <$> workspace) triggerPayload interaction config decl
+            runDurableAgent logger store appEnv (parseWorkspaceArgument <$> workspace) triggerPayload interaction config decl resume
 
-runDurableAgent :: Log.Logger -> KirokuStore -> AppEnv -> Maybe WorkspaceArgument -> Aeson.Value -> Interaction -> AppConfig -> AgentDecl -> IO ()
-runDurableAgent logger KirokuStore {pool} appEnv workspace triggerPayload interaction config decl = do
+runDurableAgent :: Log.Logger -> KirokuStore -> AppEnv -> Maybe WorkspaceArgument -> Aeson.Value -> Interaction -> AppConfig -> AgentDecl -> Maybe Text -> IO ()
+runDurableAgent logger store@KirokuStore {pool} appEnv workspace triggerPayload interaction config decl resume = do
   occurredAt <- getCurrentTime
   freshKey <- newCliRunKey ((.name) decl)
-  let unrooted =
+  -- With --resume, the run is the journaled job of an earlier invocation: the
+  -- same workflow id replays its journal, so completed steps are read back and
+  -- an interrupted coding-agent attempt is reattached, never relaunched.
+  journaled <- traverse (journaledJob store decl) resume
+  let fresh =
         RunJob
           { agentName = ((.name) decl),
             identity = compatibilityIdentity ((.name) decl),
@@ -133,6 +145,7 @@ runDurableAgent logger KirokuStore {pool} appEnv workspace triggerPayload intera
             objective = Nothing,
             routeKind = AgentWorkflowRoute
           }
+      unrooted = maybe fresh id journaled
       record = observedRecord logger Nothing (postgresRecord pool)
       subject =
         RunSubject
@@ -146,8 +159,9 @@ runDurableAgent logger KirokuStore {pool} appEnv workspace triggerPayload intera
   tierRuntime <- (lightComposition config interaction record).resolve subject >>= either (dieAgentRun . renderTierRefusal) pure
   -- A run that may mutate the repository spends under a resource root sized by
   -- its grant's budget (K5).
-  job <- case (tierRuntime.workspace, tierRuntime.grant) of
-    (Just _, Just grant) -> do
+  job <- case (journaled, tierRuntime.workspace, tierRuntime.grant) of
+    (Just resumed, _, _) -> pure resumed
+    (Nothing, Just _, Just grant) -> do
       now <- getCurrentTime
       enrolled <- runAppIO appEnv (enrollRootRun (grantEnvelope now (boundsTokens config) grant.budget) unrooted)
       case enrolled of
@@ -202,6 +216,7 @@ runDurableAgent logger KirokuStore {pool} appEnv workspace triggerPayload intera
             AgentWorkflow.rei = ReiConfig {baseUrl = (.reiBaseUrl) config},
             AgentWorkflow.http = sinkHttp,
             AgentWorkflow.hooks = AgentWorkflow.defaultAgentRunHooks,
+            AgentWorkflow.codingAgents = tierRuntime.codingAgents,
             AgentWorkflow.approvalPolicy = Approval.autoApprovePolicy ((.approvalDeadline) config),
             AgentWorkflow.approvalWorkflow = ApprovalWorkflow.defaultApprovalWorkflowEnv,
             AgentWorkflow.runTimeout = (.runTimeout) config,
@@ -239,6 +254,16 @@ runDurableAgent logger KirokuStore {pool} appEnv workspace triggerPayload intera
   (`finally` tierRuntime.release) do
     initial <- runParent
     case initial of
+      -- A coding-agent behavior awaits its keyed child; this command drives
+      -- the child in the foreground (one-off runs never continue as new, so
+      -- the parent generation is 0) and then resumes the parent.
+      Right Suspended | isJust (codingAgentStepOf decl.behavior) -> do
+        let childId = codingAgentChildId (runJobWorkflowId job).unWorkflowId 0 (declarationCoordinate "behavior")
+        driven <- runAppIO appEnv (runChildWorkflow (shikigamiWorkflowRunOptions appEnv) codingAgentStepWorkflowName childId (codingAgentStepWorkflow tierRuntime.codingAgents Nothing))
+        case driven of
+          Right (Completed outcome) -> TIO.putStrLn ("coding-agent: " <> renderOutcome outcome) >> runParent >>= finish
+          Right other -> dieAgentRun ("the coding-agent step did not finish: " <> Text.pack (show (void other)))
+          Left problem -> dieAgentRun ("the coding-agent step failed: " <> Text.pack (show problem))
       Right Suspended | eligible -> do
         -- The parent has released its workflow lease. Only its accepted child
         -- can perform local work, through the same fenced executor as a worker.
@@ -248,6 +273,24 @@ runDurableAgent logger KirokuStore {pool} appEnv workspace triggerPayload intera
           Right Nothing -> finish initial
           Left err -> dieAgentRun ("accepted execution requires recovery: " <> Text.pack (show err))
       _ -> finish initial
+
+-- | The job journaled by an earlier invocation of this one-off run. One-off
+-- runs never continue as new, so the job is in generation 0.
+journaledJob :: KirokuStore -> AgentDecl -> Text -> IO RunJob
+journaledJob store decl workflowId = do
+  steps <- runStoreIO store (loadStepIndex agentRunWorkflowName (WorkflowId workflowId) 0)
+  case steps of
+    Left problem -> dieAgentRun ("cannot read run " <> workflowId <> ": " <> Text.pack (show problem))
+    Right journal -> case Map.lookup ingestJob journal of
+      Nothing -> dieAgentRun ("no agent run " <> workflowId <> " has been journaled")
+      Just value -> case Aeson.fromJSON value of
+        Aeson.Error problem -> dieAgentRun ("run " <> workflowId <> " has an unreadable job: " <> Text.pack problem)
+        Aeson.Success job
+          | job.agentName /= decl.name -> dieAgentRun ("run " <> workflowId <> " belongs to agent " <> agentNameText job.agentName <> ", not " <> agentNameText decl.name)
+          | (runJobWorkflowId job).unWorkflowId /= workflowId -> dieAgentRun ("run " <> workflowId <> " journals another run's job")
+          | otherwise -> pure job
+  where
+    StepName ingestJob = ingestJobStepName
 
 -- | The resource envelope of a local run: the grant's attempts, one active
 -- unit of work, no descendants, cost unbounded (no provider reports it), and

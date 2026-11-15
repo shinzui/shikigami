@@ -379,7 +379,7 @@ rule.
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
 | EP-1 | Run declared agents on the operator's own machine through a local-operator trust tier | [docs/plans/126-run-declared-agents-on-the-operator-s-own-machine-through-a-local-operator-trust-tier.md](../plans/126-run-declared-agents-on-the-operator-s-own-machine-through-a-local-operator-trust-tier.md) | EP-8 M1 | None | Complete |
-| EP-2 | Run Claude Code and Codex as durable harness workers inside agent runs | [docs/plans/127-run-claude-code-and-codex-as-durable-harness-workers-inside-agent-runs.md](../plans/127-run-claude-code-and-codex-as-durable-harness-workers-inside-agent-runs.md) | EP-1 | None | Not Started |
+| EP-2 | Run Claude Code and Codex as durable harness workers inside agent runs | [docs/plans/127-run-claude-code-and-codex-as-durable-harness-workers-inside-agent-runs.md](../plans/127-run-claude-code-and-codex-as-durable-harness-workers-inside-agent-runs.md) | EP-1 | None | In Progress |
 | EP-3 | Let agents declare CLI tools and MCP servers with authority attached to the declaration | [docs/plans/128-let-agents-declare-cli-tools-and-mcp-servers-with-authority-attached-to-the-declaration.md](../plans/128-let-agents-declare-cli-tools-and-mcp-servers-with-authority-attached-to-the-declaration.md) | EP-1; EP-2 M1 (for M3); EP-2 M2 (for M4) | None | Not Started |
 | EP-4 | Execute Dhall-declared playbooks with fan-out, approval gates, and learning capture | [docs/plans/129-execute-dhall-declared-playbooks-with-fan-out-approval-gates-and-learning-capture.md](../plans/129-execute-dhall-declared-playbooks-with-fan-out-approval-gates-and-learning-capture.md) | EP-2; EP-8 M2 (for M2); EP-3 M4 (for M4) | EP-3 | Not Started |
 | EP-5 | Move the extension boundary out of shikigami-core with flow packs and an architecture fitness check | [docs/plans/130-move-the-extension-boundary-out-of-shikigami-core-with-flow-packs-and-an-architecture-fitness-check.md](../plans/130-move-the-extension-boundary-out-of-shikigami-core-with-flow-packs-and-an-architecture-fitness-check.md) | None | None | Not Started |
@@ -896,9 +896,11 @@ implemented.
 Eleven child plans exist. On 2026-11-15 EP-8 M1 (the kernel action vocabulary, authority port
 and action record) was accepted and EP-1 (the local-operator trust tier) completed: an operator
 runs a declared agent against their own repository with one command and one confirmation, and
-it reads, edits, runs approved rules and commits on a run branch or in place. Next in the
-recommended order are EP-2 (coding agents as durable workers) and EP-8 M2 and M3, now unblocked;
-EP-5 and EP-11 M1 can still start in parallel. Stage 1 (the pilot) ends at
+it reads, edits, runs approved rules and commits on a run branch or in place. EP-2 M1 is
+accepted: a declared `CodingAgent` runs Claude Code on a real repository as a durable child
+workflow and commits on the run branch (ADR 0126 scopes ADR 0040's batch gate to tiers). EP-2
+continues with restart recovery (M2), the worker (M2b) and Codex (M3); EP-5 and EP-11 M1 can
+still start in parallel. Stage 1 (the pilot) ends at
 the declaration baseline, and stage 2 at the kernel baseline.
 
 - [ ] Architectural acceptance: the keiro modernization campaign runs for real on at least

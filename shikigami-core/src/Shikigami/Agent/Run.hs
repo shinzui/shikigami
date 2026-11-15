@@ -100,6 +100,7 @@ behaviorKindText b = case b of
   CoordinatingSkill {} -> "CoordinatingSkill"
   Deterministic {} -> "Deterministic"
   Flow {} -> "Flow"
+  CodingAgent {} -> "CodingAgent"
 
 -- | Turn the behavior's output JSON into a memory's @content@: prefer a @summary@ or
 -- @reply@ string field, falling back to the compact JSON encoding.

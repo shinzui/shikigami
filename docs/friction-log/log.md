@@ -2,6 +2,9 @@
 
 ## 2026-11-15
 
+* **Addition**: FRIC-75 records slowdown tooling friction with mori://shinzui/shikigami: shikigami-agent launch tests hang under parallel tasty threads
+
+
 * **Update**: FRIC-74 accepted: EP-1 complete: the workaround is permanent in the checkout resolver
 
 

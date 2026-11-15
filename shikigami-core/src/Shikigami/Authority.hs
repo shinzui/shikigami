@@ -37,6 +37,8 @@ module Shikigami.Authority
     OutputTarget,
     mkOutputTarget,
     outputTargetSegments,
+    CodingAgentTarget (..),
+    mkCodingAgentTarget,
     actionTag,
     actionResource,
     connectProviderAction,
@@ -104,7 +106,23 @@ data Action
     UseCapability !CapabilityOperation !CapabilityTarget
   | -- | Deliver a run's result through an output of the given kind.
     EmitOutput !OutputKind !OutputTarget
+  | -- | Launch a vendor coding tool unattended in a repository (EP-2).
+    LaunchCodingAgent !CodingAgentTarget
   deriving stock (Eq, Ord, Show)
+
+-- | What a coding-agent launch is decided against: the vendor tool, the
+-- workspace access it asks for, and the repository.
+data CodingAgentTarget = CodingAgentTarget
+  { provider :: !Text,
+    access :: !Text,
+    repository :: !Text
+  }
+  deriving stock (Eq, Ord, Show)
+
+-- | Each field is opaque, 1 to 128 characters, without whitespace.
+mkCodingAgentTarget :: Text -> Text -> Text -> Either Text CodingAgentTarget
+mkCodingAgentTarget provider access repository =
+  CodingAgentTarget <$> validOpaque "coding-agent provider" "#" provider <*> validOpaque "coding-agent access" "#" access <*> validOpaque "repository" "#" repository
 
 data CapabilityOperation
   = ConnectProvider
@@ -177,6 +195,7 @@ actionTag :: Action -> Text
 actionTag = \case
   UseCapability {} -> "use_capability"
   EmitOutput {} -> "emit_output"
+  LaunchCodingAgent {} -> "launch_coding_agent"
 
 -- | A canonical, bounded rendering of what the action touches. It never
 -- contains tool input or content.
@@ -185,6 +204,7 @@ actionResource = \case
   UseCapability ConnectProvider target -> "capability_provider:" <> providerText target
   UseCapability (InvokeTool tool) target -> "capability_tool:" <> providerText target <> "/" <> toolNameText tool
   EmitOutput kind target -> outputKindText kind <> ":" <> Text.intercalate "/" (NonEmpty.toList (outputTargetSegments target))
+  LaunchCodingAgent CodingAgentTarget {provider, access, repository} -> "coding_agent:" <> provider <> "/" <> access <> "@" <> repository
   where
     providerText target = capabilityTargetId target <> "@" <> capabilityTargetRevision target
 
@@ -193,6 +213,7 @@ operationLabel = \case
   UseCapability ConnectProvider _ -> Just "connect"
   UseCapability InvokeTool {} _ -> Just "invoke"
   EmitOutput {} -> Nothing
+  LaunchCodingAgent {} -> Nothing
 
 data AuthorityFailure
   = PolicyDenied !Text
