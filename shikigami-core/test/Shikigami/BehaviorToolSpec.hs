@@ -35,13 +35,12 @@ import Effectful.Dispatch.Static (unsafeEff_)
 import Effectful.Error.Static (throwError)
 import GHC.Generics (Generic)
 import Keiro.Workflow.Types (WorkflowId (..))
-import Kikan.En.Action (AgentAction (InvokeCapabilityTool))
-import Shikigami.Action.Authorization (ActionAuthorizationFailure (ActionPolicyDenied), ActionAuthorizer (..), allowAllActionAuthorizerForTests)
 import Shikigami.Activity.Coordinate
 import Shikigami.Activity.Coordinate (activityCoordinate)
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Trigger (Event), defaultMemoryPolicy)
 import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Name (AgentName, mkAgentName)
+import Shikigami.Authority (Action (UseCapability), AuthorityFailure (PolicyDenied), CapabilityOperation (InvokeTool), DecisionSource (DecidedByFixture), allowAllForTests, authority)
 import Shikigami.Behavior.Error (FailureClass (..), RunError (..), classifyRunError)
 import Shikigami.Behavior.Input (triggerOnly)
 import Shikigami.Behavior.Run (BehaviorEnv (..), completeBehaviorRequest, defaultToolTurnLimit, newBehaviorEnv, runBehavior, withCapabilityTools)
@@ -417,7 +416,7 @@ bracketedTraceTest =
     result <-
       withCapabilityOverlays
         Log.silentLogger
-        allowAllActionAuthorizerForTests
+        allowAllForTests
         providers
         CapabilityScope {runId = WorkflowRun (WorkflowId "run-e2e"), principal = declarationCoordinate "principal-e2e", mode = Durable}
         resolvedRead
@@ -444,18 +443,14 @@ toolInvocationAuthorizationCase dynamic =
   testCase (if dynamic then "dynamic callback is denied" else "typed callback is denied") do
     root <- repositoryRoot
     invocations <- newIORef (0 :: Int)
-    authorizations <- newIORef ([] :: [AgentAction])
+    authorizations <- newIORef ([] :: [Action])
     turns <- newIORef (0 :: Int)
-    let ActionAuthorizer {authorize = allowFixture} = allowAllActionAuthorizerForTests
-        authorizer =
-          ActionAuthorizer
-            { authorize = \principal action -> do
-                modifyIORef' authorizations (<> [action])
-                case action of
-                  InvokeCapabilityTool {} -> pure (Left (ActionPolicyDenied "tool fixture denial"))
-                  _ -> allowFixture principal action,
-              kawaSource = (activityCoordinate "fixture")
-            }
+    let authorizer =
+          authority DecidedByFixture \principal action -> do
+            modifyIORef' authorizations (<> [action])
+            case action of
+              UseCapability InvokeTool {} _ -> pure (Left (PolicyDenied "tool fixture denial"))
+              _ -> allowAllForTests.decide principal action
         guardedTool =
           if dynamic
             then
@@ -512,7 +507,7 @@ toolInvocationAuthorizationCase dynamic =
     readIORef invocations >>= (@?= 0)
     observed <- readIORef authorizations
     case observed of
-      [_connect, InvokeCapabilityTool {}] -> pure ()
+      [_connect, UseCapability InvokeTool {} _] -> pure ()
       _ -> assertFailure ("expected connect then invoke authorization, got " <> show observed)
 
 runSkillFixture ::

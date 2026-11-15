@@ -22,6 +22,11 @@ provenance:
       at: 2026-11-15T15:08:44Z
       mode: "update"
       note: "Composition default output: registry default, admission-time resolution pinned in the journal (user decision 2026-11-15)"
+    - model: "claude-opus-5-5"
+      harness: "claude-code"
+      at: 2026-11-15T15:57:53Z
+      mode: "implement"
+      note: "M1 implemented: kernel Action, Authority port, action record, Kikan-En adapter, record list, ADR-123"
 ---
 
 # Give the kernel its own action, record, output, approval and trigger contracts with local adapters
@@ -63,12 +68,20 @@ Its first milestone has no prerequisite and is the first work of that initiative
 
 ## Progress
 
-- [ ] M1: The kernel action type, the authority port and the action record exist. The
+- [x] M1 (2026-11-15): The kernel action type, the authority port and the action record exist. The
   Kikan-En authorizer is an adapter that maps kernel actions to `AgentAction`. Every decision
   is appended to the record before the effect proceeds, and a failed append is a refusal. No
   module outside the adapter imports `Kikan.En.Action`. A real `shikigami-agent-run` on this
   Mac leaves decisions that `shikigami record list` prints, and behavior is otherwise
   unchanged. The new ADR is written.
+  Evidence: `shikigami-agent-run --agent agents/triage-note.dhall` (stub provider, after
+  `shikigami grants grant triage-note KizashiSignal`) printed
+  `… authority.decided emit_output kizashi.signal:person:nadeem refused unavailable: …
+  (source: none)` through `shikigami record list --limit 5`. `AuthoritySpec`, `RecordSpec`,
+  `ActionRecordStoreSpec` (including an unreachable store refusing an allowed action) and the
+  new architecture case pass; `just haskell-conventions` passes;
+  [ADR-123](../adr/0123-the-kernel-owns-its-action-vocabulary-authority-port-and-action-record.md)
+  is written. The full-suite and `just keiro-gate` results are recorded under Outcomes.
 - [ ] M2: Outputs, approval channels and triggers are kernel contracts. `sinks` is replaced
   by `outputs` with an adapter registry validated at load; the five Kikan sinks are
   registered adapters; `local.report` and `local.inbox` exist; `Trigger.Manual` is the
@@ -103,6 +116,17 @@ These came from reading the working tree on 2026-11-15, before implementation.
   Evidence: `AgentDecl` is journaled by the `lookup-agent` step; `SinkIntent` in
   `shikigami-core/src/Shikigami/Sink/Intent.hs` carries `sink :: Sink` into the outbox; and
   `SinkResult {kind :: SinkKind, ...}` in `Sink/Types.hs` is journaled per dispatch.
+- Observation: No Shikigami code builds Kikan-En's `ReadWorkspace`, `WriteWorkspace` or
+  `ExecuteWorkspace`, and none calls `DiscoverCapabilityTools`. Every workspace, worker-session,
+  objective and maintenance effect is an `InvokeCapabilityTool` on a reserved `shikigami.*`
+  capability whose tool name is a digest of the exact effect.
+  Evidence: the M1 conversion touched `Workspace/Provider.hs`, `WorkerSession/Capability.hs`,
+  `Objective/{Capability,Runtime}.hs` and `Workspace/Cleanup.hs`; all used
+  `mkCapabilityToolTarget "shikigami.…"`. This is why the kernel sum has two constructors.
+- Observation: The migration checksum lock was stale again before this plan: it had no line
+  for `0049-recurring-mandates.sql`. See FRIC-71 (a recurrence of FRIC-58).
+- Observation: The dev database did not exist on this Mac; `just create-database` created and
+  migrated it. Nothing was dropped.
 - Observation: Approval channels are chosen in code as well as configuration.
   Evidence: `ViaDanwa` is hard-coded in `shikigami-core/src/Shikigami/Execution/Driver.hs`
   (tool permission asks) and in `Flow/AtRiskCustomer.hs`; `ViaKizashi` in
@@ -145,6 +169,61 @@ These came from reading the working tree on 2026-11-15, before implementation.
   Rationale: Every durable run already needs that database, and the run evidence lives
   there, so one query answers "what did this run do". `shikigami-run-behavior` has no
   database by design ([ADR-3](../adr/0003-a-seventh-package-keeps-one-off-agent-runs-light.md)).
+  Date: 2026-11-15
+- Decision: The M1 `Action` has two constructors, `UseCapability` (with `ConnectProvider` or
+  `InvokeTool`) and `EmitOutput`. `ReadWorkspace`, `WriteWorkspace`, `ExecuteWorkspace`,
+  `DiscoverTools`, `RequestApproval` and `DelegateRun` are not declared.
+  Rationale: ADR-1. None has an executed call site (see Surprises); the kernel's own effects
+  are capability tools of `shikigami.*`. M2 adds `RequestApproval` with the approval-channel
+  port that asks it, and the plan that first executes a delegation authorization adds
+  `DelegateRun`.
+  Date: 2026-11-15
+- Decision: `Authority` is an abstract record read with `authority.decide` and
+  `authority.source` (`HasField` instances), built with `authority source decide`. It carries
+  a hidden run context: `scopeToRun (Maybe WorkflowId) AgentName` sets it, and `recorded`
+  writes it into each event. `Decision` is `{action, reference, expiresAt}`; who decided is
+  the authority's `source`, recorded as `decidedBy`.
+  Rationale: The worker builds one authority per process, but each record event must carry
+  its run. A sealed constructor makes scoping and recording composable without threading a
+  run argument through about twenty call sites. `observeDecisions` replaces the one fixture
+  that wrapped `authorize` by hand.
+  Date: 2026-11-15
+- Decision: The kernel target of a `kawa.digest` output is the sink's subject kind and verb;
+  the Kikan-En adapter maps every `kawa.digest` to `DispatchKawa` on its configured Kawa source
+  (`KikanEnMapping.kawaSource`). The other outputs' targets are the resolved recipient,
+  intention, Danwa thread or channel provider and conversation. The autonomy context for
+  `ActOnIntention` is built by the adapter from its own clock.
+  Rationale: The Kawa source is a deployment fact of the Kikan composition, not something the
+  kernel names. The other Kikan targets were already the resolved sink coordinates.
+  Date: 2026-11-15
+- Decision: `App.Config` reads Kikan-En schema hashes through
+  `Shikigami.Authority.KikanEn.Settings`, a re-export, so that the architecture rule "only the
+  adapter imports Kikan-En" holds without moving configuration in M1.
+  Rationale: Moving the setting decoders is EP-10's work; a re-export keeps the rule checkable
+  now.
+  Date: 2026-11-15
+- Decision: `shikigami-run-behavior` refuses every action when its record file cannot be
+  opened, rather than refusing to start.
+  Rationale: An agent that needs no external action still runs; an action that cannot be
+  recorded never proceeds (K3).
+  Date: 2026-11-15
+- Decision: The counter is the OpenTelemetry instrument `shikigami.record.events` with
+  attributes `record.kind` and `decision` (`append_failed` for a refused append), exported as
+  `shikigami_record_events_total`.
+  Rationale: The existing instruments use dotted OpenTelemetry names; the Prometheus spelling
+  in the plan is the exporter's rendering of the same instrument.
+  Date: 2026-11-15
+- Decision: Server HTTP objective handlers, `shikigami objective-trackers`, the workspace
+  maintenance command and the conversation tool wiring in `Agent/Conversation.hs` keep
+  composing `denyAll` without a record in M1.
+  Rationale: Their decisions are refusals that reach no effect, and they have no store pool in
+  scope. ADR-123 records the gap; recording them belongs to the composition that owns them.
+  Date: 2026-11-15
+- Decision: Pre-release recheck for M1, 2026-11-15: `git tag --list` is empty; no deployment
+  or user exists (MasterPlan 22, `docs/workflow-versioning.md` 2026-10-30 confirmation); no
+  stored payload carries an authorization decision; no external wire consumer exists. M1
+  changes no journaled value.
+  Rationale: Required before every milestone by Concrete Steps.
   Date: 2026-11-15
 - Decision: The C11 sink-grant table stays, as an optional requirement an output adapter
   declares. The Kikan adapters require it; `local.report` does not.

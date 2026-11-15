@@ -26,6 +26,11 @@ provenance:
       at: 2026-11-15T15:09:01Z
       mode: "discuss"
       note: "User decisions: adaptive coordinator stays kernel, stage 3 waits for Kikan-En actions, composition default output, two-step baseline"
+    - model: "claude-opus-5-5"
+      harness: "claude-code"
+      at: 2026-11-15T15:57:53Z
+      mode: "implement"
+      note: "EP-8 M1 accepted; registry, Action sketch and cross-plan discoveries updated"
 ---
 
 # Rebuild Shikigami as a kernel where use cases are declared, not coded
@@ -380,7 +385,7 @@ rule.
 | EP-5 | Move the extension boundary out of shikigami-core with flow packs and an architecture fitness check | [docs/plans/130-move-the-extension-boundary-out-of-shikigami-core-with-flow-packs-and-an-architecture-fitness-check.md](../plans/130-move-the-extension-boundary-out-of-shikigami-core-with-flow-packs-and-an-architecture-fitness-check.md) | None | None | Not Started |
 | EP-6 | Shrink shikigami-core to the kernel by moving or retiring use-case subsystems | [docs/plans/131-shrink-shikigami-core-to-the-kernel-by-moving-or-retiring-use-case-subsystems.md](../plans/131-shrink-shikigami-core-to-the-kernel-by-moving-or-retiring-use-case-subsystems.md) | EP-5 | None | Not Started |
 | EP-7 | Modernize the keiro services with a declared campaign playbook | [docs/plans/132-modernize-the-keiro-services-with-a-declared-campaign-playbook.md](../plans/132-modernize-the-keiro-services-with-a-declared-campaign-playbook.md) | EP-3, EP-4 | EP-5 | Not Started |
-| EP-8 | Give the kernel its own action, record, output, approval and trigger contracts with local adapters | [docs/plans/133-give-the-kernel-its-own-action-record-output-approval-and-trigger-contracts-with-local-adapters.md](../plans/133-give-the-kernel-its-own-action-record-output-approval-and-trigger-contracts-with-local-adapters.md) | EP-1 (for M2 and M3) | None | Not Started |
+| EP-8 | Give the kernel its own action, record, output, approval and trigger contracts with local adapters | [docs/plans/133-give-the-kernel-its-own-action-record-output-approval-and-trigger-contracts-with-local-adapters.md](../plans/133-give-the-kernel-its-own-action-record-output-approval-and-trigger-contracts-with-local-adapters.md) | EP-1 (for M2 and M3) | None | In Progress |
 | EP-9 | Declare and run a routine agent with one file and one command | [docs/plans/134-declare-and-run-a-routine-agent-with-one-file-and-one-command.md](../plans/134-declare-and-run-a-routine-agent-with-one-file-and-one-command.md) | EP-1; EP-8 M2; EP-2 M2b (for the scheduled milestone) | EP-3 | Not Started |
 | EP-10 | Move the Kikan service bindings out of shikigami-core and compose a Kikan distribution | [docs/plans/135-move-the-kikan-service-bindings-out-of-shikigami-core-and-compose-a-kikan-distribution.md](../plans/135-move-the-kikan-service-bindings-out-of-shikigami-core-and-compose-a-kikan-distribution.md) | EP-5, EP-8 | EP-6 | Not Started |
 | EP-11 | Freeze the v1 API baseline with a surface inventory and compatibility checks | [docs/plans/136-freeze-the-v1-api-baseline-with-a-surface-inventory-and-compatibility-checks.md](../plans/136-freeze-the-v1-api-baseline-with-a-surface-inventory-and-compatibility-checks.md) | EP-1 to EP-4, EP-8, EP-9; EP-6 M1; EP-7 M3 (for M2); EP-5, EP-6, EP-10 (for M3 and M4) | None | Not Started |
@@ -500,21 +505,27 @@ EP-8 owns them; EP-1, EP-2, EP-3 and EP-10 consume them. Today
 M1 introduces the kernel's own type and port in `Shikigami.Authority`:
 
 ```haskell
+-- As landed by EP-8 M1 (ADR-123):
 data Action
-  = UseCapability !CapabilityOperation !CapabilityTarget  -- connect, discover or invoke
-  | ReadWorkspace !WorkspaceTarget
-  | WriteWorkspace !WorkspaceTarget
-  | ExecuteWorkspace !WorkspaceCommandTarget -- an approved rule
-  | EmitOutput !OutputKind !OutputTarget     -- open by kind; adapters own their kinds
-  | RequestApproval !ApprovalChannelKind
-  | DelegateRun !AgentName
+  = UseCapability !CapabilityOperation !CapabilityTarget  -- ConnectProvider | InvokeTool name
+  | EmitOutput !OutputKind !OutputTarget                   -- open by kind; adapters own their kinds
   -- added by the plan that executes it (ADR-1):
+  | RequestApproval !ApprovalChannelKind     -- EP-8 M2
   | LaunchCodingAgent !CodingAgentTarget     -- EP-2
   | RunDeclaredTool !DeclaredToolTarget      -- EP-3
+  | DelegateRun !AgentName                   -- the plan that first authorizes a delegation
 
-newtype Authority = Authority
-  { decide :: Principal -> Action -> IO (Either AuthorityFailure Decision) }
+-- Abstract: read with authority.decide and authority.source; build with
+-- `authority source decide`; install with `recorded` (or `recordedIn` over PostgreSQL);
+-- scope each run with `scopeToRun`.
+data Authority
 ```
+
+The kernel's own workspace, worker-session, objective and maintenance effects are
+`UseCapability (InvokeTool <digest>)` on the reserved `shikigami.workspace`,
+`shikigami.worker-sessions` and `shikigami.objectives` capabilities, exactly as they were under
+ADR-36. EP-8 M1 found no executed `ReadWorkspace`, `WriteWorkspace`, `ExecuteWorkspace` or tool
+discovery, so they are not declared.
 
 The sum is closed over what the kernel itself executes and open by `OutputKind` and
 `ApprovalChannelKind` where adapters extend it. A plan that adds a kernel effect adds its
@@ -882,9 +893,9 @@ implemented.
 
 ## Progress
 
-Eleven child plans exist and none has started. Seven were created on 2026-11-15; EP-8 to
-EP-11 were added the same day by the review recorded in the Decision Log. The first work is
-EP-8 M1, with EP-5 and EP-11 M1 able to start in parallel. Stage 1 (the pilot) ends at
+Eleven child plans exist. EP-8 M1 (the kernel action vocabulary, authority port and action
+record) was accepted on 2026-11-15, which unblocks EP-1. EP-8 stays In Progress until its M2 and
+M3, which need EP-1. EP-5 and EP-11 M1 can still start in parallel. Stage 1 (the pilot) ends at
 the declaration baseline, and stage 2 at the kernel baseline.
 
 - [ ] Architectural acceptance: the keiro modernization campaign runs for real on at least
@@ -901,6 +912,17 @@ the declaration baseline, and stage 2 at the kernel baseline.
 
 
 ## Surprises & Discoveries
+
+- Observation: Every kernel-owned effect is already a capability-tool invocation, so EP-1's
+  `LocalOperator` authority decides `UseCapability (InvokeTool …)` on `shikigami.workspace`
+  for workspace reads, edits, execution and Git, not separate workspace actions. A tool name
+  is a digest of the exact effect, so an operator grant must match on the capability and the
+  tool-name prefix (`exec-`, `commit-`, `replace-`, …), never on the whole name.
+  Evidence: EP-8 M1's conversion of `Workspace/Provider.hs`, `WorkerSession/Capability.hs` and
+  `Objective/{Capability,Runtime}.hs`.
+- Observation: Default parallel test execution still exhausts PostgreSQL clients and races the
+  Git fixtures; suites must run one at a time at two threads.
+  Evidence: EP-8 M1's first full run; FRIC-51 and FRIC-59 already record the workaround.
 
 - Observation: Shikigami is still pre-release, so ADR-27's baseline exception lets this
   initiative replace unreleased declaration and workflow shapes directly.
@@ -982,6 +1004,13 @@ the declaration baseline, and stage 2 at the kernel baseline.
 
 
 ## Decision Log
+
+- Decision: EP-8 M1 declares only the two executed actions (`UseCapability`, `EmitOutput`);
+  the Integration Points sketch now shows each later constructor with the plan that adds it.
+  `Authority` is an abstract record with a hidden run context rather than a newtype.
+  Rationale: ADR-1, and the run must be recorded on every event while the worker builds one
+  authority per process. See the EP-8 Decision Log.
+  Date: 2026-11-15
 
 - Decision: Extract the kernel in place rather than rewrite, and order the work so real use
   begins early.

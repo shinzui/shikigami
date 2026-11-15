@@ -24,9 +24,9 @@ import Hasql.Transaction qualified as Tx
 import Keiro.Workflow.Awakeable (AwakeableId (..))
 import Keiro.Workflow.Types (WorkflowId (..))
 import Kiroku.Store.Transaction (runTransaction)
-import Shikigami.Action.Authorization
 import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.App (AppEffects, AppEnv, runAppIO)
+import Shikigami.Authority
 import Shikigami.Capability.Provider (DurableAdapter (..))
 import Shikigami.Execution.AssignmentKey (AssignmentKey, parseAssignmentKey)
 import Shikigami.Execution.Attempt qualified as Attempt
@@ -128,7 +128,7 @@ tests fixture =
         let forged = head artifacts & #revision .~ workspaceCoordinate (Text.replicate 40 "0")
         withIntegrationTool env admission runtime backend (Aeson.toJSON (Integration.RequestInput target.base (forged : tail artifacts))) assertRefused,
       testCase "denied integration authority refuses without changing HEAD" $ withIntegration fixture False \env target admission runtime backend artifacts -> do
-        withIntegrationTool env admission (runtime & #authorizer .~ denyAllActionAuthorizer) backend (Aeson.toJSON (Integration.RequestInput target.base artifacts)) assertRefused
+        withIntegrationTool env admission (runtime & #authorizer .~ denyAll) backend (Aeson.toJSON (Integration.RequestInput target.base artifacts)) assertRefused
         Objects.readHead (workspaceMetadata (workspaceLocatorPath target.storageRoot) target) >>= (@?= Right target.base),
       testCase "dirty integration target refuses rather than overwriting prior work" $ withIntegration fixture False \env target admission runtime backend artifacts -> do
         writeFile (workspaceFiles (workspaceLocatorPath target.storageRoot) target </> "src/dependency.txt") "uncommitted integrator change\n"
@@ -236,7 +236,7 @@ tests fixture =
       testCase "fresh denial before publication leaves HEAD unchanged and retains a proven refusal" $ withGit fixture "commit" \env binding snapshot _ reference runtime profile backend -> do
         profileReady env binding profile
         Bytes.writeFile (workspaceFiles (workspaceLocatorPath binding.storageRoot) binding </> "src/dependency.txt") "new dependency\n"
-        let denied = runtime & #authorizer .~ denyAllActionAuthorizer
+        let denied = runtime & #authorizer .~ denyAll
         execute (Fixture.executorForAdapter (workspaceGitAdapterWithBackend backend) denied) snapshot reference
         Objects.readHead (workspaceMetadata (workspaceLocatorPath binding.storageRoot) binding) >>= (@?= Right binding.base)
         Just record <- right =<< run env (runTransaction (Git.inspectGitTx reference.operationId))

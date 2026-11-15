@@ -13,10 +13,10 @@ import Relay.Pagination.Hasql.KeyCodec (textKey)
 import Relay.Pagination.Hasql.SortSpec
 import Relay.Pagination.Servant qualified as Relay
 import Servant.Server.Generic (AsServerT)
-import Shikigami.Action.Authorization (denyAllActionAuthorizer)
 import Shikigami.Api.Problem
 import Shikigami.App (AppEffects, AppEnv (..), runAppIO)
 import Shikigami.App.Config (AppConfig (..), HttpAuthSettings (..))
+import Shikigami.Authority (denyAll)
 import Shikigami.Caller.Api (ApiCaller (..))
 import Shikigami.Execution.Identity (operationIdText, parseOperationId)
 import Shikigami.Objective.Capability qualified as Objective
@@ -33,7 +33,7 @@ import Shikigami.Server.Seam
 trackerServer :: ServerEnv -> ApiCaller -> Text -> TrackerApi (AsServerT ServerM)
 trackerServer env caller raw = TrackerApi {list, inspect, observations = history Observations, proposals = history Proposals, deliveries = history Publications, command, operation}
   where
-    host = Store.TrackerHost (Objective.ObjectiveHost env.appConfig.objectiveSettings authenticate denyAllActionAuthorizer (\_ _ -> pure (Left O.ObjectiveDenied)) (\_ _ -> pure (Left O.ObjectiveDenied)) (\_ -> pure (Left O.ObjectiveUnavailable))) env.appConfig.trackerSettings env.trackerProvider
+    host = Store.TrackerHost (Objective.ObjectiveHost env.appConfig.objectiveSettings authenticate denyAll (\_ _ -> pure (Left O.ObjectiveDenied)) (\_ _ -> pure (Left O.ObjectiveDenied)) (\_ -> pure (Left O.ObjectiveUnavailable))) env.appConfig.trackerSettings env.trackerProvider
     authenticate = pure case env.appConfig.httpAuth of
       AuthDisabled -> Left O.ObjectiveDenied
       AuthBearer {} -> either (const (Left O.ObjectiveDenied)) (Right . O.VerifiedCaller) (O.parseCallerId caller.callerId)

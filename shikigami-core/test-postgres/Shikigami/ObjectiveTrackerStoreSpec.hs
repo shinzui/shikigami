@@ -21,10 +21,10 @@ import Hasql.Statement (preparable)
 import Hasql.Transaction qualified as Tx
 import Kiroku.Store.Connection (defaultConnectionSettings)
 import Kiroku.Store.Transaction (runTransaction)
-import Shikigami.Action.Authorization (allowAllActionAuthorizerForTests)
 import Shikigami.Agent.Name (mkAgentName)
 import Shikigami.Agent.Principal (compatibilityIdentity)
 import Shikigami.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
+import Shikigami.Authority (allowAllForTests)
 import Shikigami.Execution.Identity (OperationId)
 import Shikigami.Fixture.ExecutionIdentity (fixtureOperationId, fixtureRootId)
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
@@ -676,7 +676,7 @@ actor :: OT.AccessPrincipal
 actor = OT.VerifiedCaller (checked (OT.parseCallerId "owner"))
 
 objectiveHost :: OT.AccessPrincipal -> O.ObjectiveHost
-objectiveHost principal = O.ObjectiveHost (OT.defaultObjectiveSettings & #enabled .~ OT.ObjectivesEnabled) (pure (Right principal)) allowAllActionAuthorizerForTests (\_ _ -> pure (Right ())) (\_ _ -> pure (Right ())) (\_ -> pure (Left OT.ObjectiveInvalidEvidence))
+objectiveHost principal = O.ObjectiveHost (OT.defaultObjectiveSettings & #enabled .~ OT.ObjectivesEnabled) (pure (Right principal)) allowAllForTests (\_ _ -> pure (Right ())) (\_ _ -> pure (Right ())) (\_ -> pure (Left OT.ObjectiveInvalidEvidence))
 
 ownerHost :: O.ObjectiveHost
 ownerHost = objectiveHost actor

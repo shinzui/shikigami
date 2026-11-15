@@ -64,7 +64,8 @@ tests =
                 "objectives",
                 "mandates",
                 "watchdog",
-                "proposals"
+                "proposals",
+                "record"
               ],
       testCase "watchdog verbs parse bounded inspection and pagination" do
         episode <- Text.unpack . episodeIdText <$> newEpisodeId

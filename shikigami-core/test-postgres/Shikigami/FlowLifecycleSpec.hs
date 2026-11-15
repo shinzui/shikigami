@@ -29,7 +29,6 @@ import Kiroku.Store.Effect (Store, runStoreResource)
 import Kiroku.Store.Effect.Resource (withKirokuStore)
 import Kiroku.Store.Error (StoreError)
 import Shibuya.Telemetry.Effect (runTracingNoop)
-import Shikigami.Action.Authorization (denyAllActionAuthorizer)
 import Shikigami.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
 import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Approval qualified as Approval
@@ -41,6 +40,7 @@ import Shikigami.Agent.Loader (AgentLoadEntry (AgentLoaded), AgentLoadReport (..
 import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (ResolvedAgentIdentity (CompatibilityAgent), compatibilityIdentity)
 import Shikigami.App (AppEnv (..), noopTracer, runAppIO)
+import Shikigami.Authority (denyAll)
 import Shikigami.Behavior.Run (newBehaviorEnv)
 import Shikigami.Coordination.Capability qualified as Adaptive
 import Shikigami.Directory (disabledDirectoryHandle)
@@ -574,7 +574,7 @@ runFlowBodyUsing decision onAppend appEnv runtime flowAgent FlowDef {run} workfl
             . FlowObjectives.runObjectives Nothing (Right Nothing)
             . FlowObserve.unavailableObserve
             . FlowInitiative.unavailableInitiative
-            . FlowWorkers.runWorkers Nothing denyAllActionAuthorizer (CoordinatorRun (WorkflowId "disabled-flow-fixture") (compatibilityIdentity (fixtureAgentName flowAgent)) runtime.approval.currentSession Nothing Nothing) (Right Nothing)
+            . FlowWorkers.runWorkers Nothing denyAll (CoordinatorRun (WorkflowId "disabled-flow-fixture") (compatibilityIdentity (fixtureAgentName flowAgent)) runtime.approval.currentSession Nothing Nothing) (Right Nothing)
             . Routing.runRouting
               Routing.RoutingEnv
                 { Routing.agent = flowDecl,

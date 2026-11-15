@@ -29,6 +29,7 @@ import Shikigami.AgentValueSpec qualified as AgentValueSpec
 import Shikigami.AppConfigSpec qualified as AppConfigSpec
 import Shikigami.ApprovalNotificationSpec qualified as ApprovalNotificationSpec
 import Shikigami.AttestationContractsSpec qualified as AttestationContractsSpec
+import Shikigami.AuthoritySpec qualified as AuthoritySpec
 import Shikigami.BaikaiStructuredContentSpec qualified as BaikaiStructuredContentSpec
 import Shikigami.BehaviorInputSpec qualified as BehaviorInputSpec
 import Shikigami.BehaviorProviderSpec qualified as BehaviorProviderSpec
@@ -69,6 +70,7 @@ import Shikigami.PackageArchitectureSpec qualified as PackageArchitectureSpec
 import Shikigami.PayloadValueSpec qualified as PayloadValueSpec
 import Shikigami.PracticeReviewEvidenceSpec qualified as PracticeReviewEvidenceSpec
 import Shikigami.PracticeReviewSpec qualified as PracticeReviewSpec
+import Shikigami.RecordSpec qualified as RecordSpec
 import Shikigami.RouterCatalogSpec qualified as RouterCatalogSpec
 import Shikigami.RouterDecisionSpec qualified as RouterDecisionSpec
 import Shikigami.RouterDeclarationSpec qualified as RouterDeclarationSpec
@@ -165,6 +167,8 @@ main =
           KanmonClientSpec.tests,
           LogSpec.tests,
           PackageArchitectureSpec.tests,
+          AuthoritySpec.tests,
+          RecordSpec.tests,
           PracticeReviewEvidenceSpec.tests,
           PracticeReviewSpec.tests,
           RouterCatalogSpec.tests,

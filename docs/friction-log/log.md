@@ -1,5 +1,14 @@
 # Bundle Update Log
 
+## 2026-11-15
+
+* **Addition**: FRIC-73 records slowdown tooling friction with mori://shinzui/shikigami: keiro-gate refuses any uncommitted change under shikigami-core/src
+
+
+* **Addition**: FRIC-72 records nuisance tooling friction with mori://shinzui/shikigami: A 100 ms judgment deadline test fails under full-suite load
+
+* **Addition**: FRIC-71 records slowdown tooling friction with mori://shinzui/shikigami: Migration checksum lock was stale again at the baseline
+
 ## 2026-11-13
 
 * **Update**: FRIC-70 accepted: Accept the configured-builder fallback after successful native lifecycle qualification; preserve both failed Apple startup attempts and credential cleanup evidence.

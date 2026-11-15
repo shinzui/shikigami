@@ -38,10 +38,10 @@ import Data.Time (addUTCTime)
 import Effectful (Eff)
 import Hasql.Transaction (Transaction)
 import Kiroku.Store.Transaction (runTransaction)
-import Shikigami.Action.Authorization (ActionAuthorizer (..))
 import Shikigami.Agent.DeclarationValue (declarationCoordinate)
 import Shikigami.Agent.Principal (AgentIdentity, identityText)
 import Shikigami.App (AppEffects, AppEnv, runAppIO)
+import Shikigami.Authority (Authority)
 import Shikigami.Capability.Overlay
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Attempt qualified as Attempt
@@ -87,7 +87,7 @@ import System.FilePath ((</>))
 -- profile. It must not reinterpret an old revision through current defaults.
 data SupervisorRuntime = SupervisorRuntime
   { appEnv :: !AppEnv,
-    authorizer :: !ActionAuthorizer,
+    authorizer :: !Authority,
     replayAuthority :: !(AgentIdentity -> IO (Either Text ())),
     lifecycle :: !(ExecutionSnapshot -> IO (Either Text ())),
     selectRule :: !(WorkspaceBinding -> WorkspaceAdmission -> WorkspaceCoordinate "process-rule" -> IO (Either Text (ProcessCommand, Systemd.SystemdProfile))),
@@ -291,7 +291,7 @@ authorize :: SupervisorRuntime -> AcceptedProcess -> ProcessRecord -> WorkspaceC
 authorize runtime accepted record boot target = do
   principal <- either (const (abort SupervisorRefused)) pure (identityText accepted.admission.owner)
   action <- either (const (abort SupervisorRefused)) pure ((if accepted.admission.filePolicy == Just transferableFilePolicy then workspaceTransferredProcessAction else workspaceProcessAction) accepted.binding accepted.admission accepted.dispatch record boot (workspaceCoordinate target))
-  runtime.authorizer.authorize (declarationCoordinate principal) action >>= either (const (abort SupervisorRefused)) (const (pure ()))
+  runtime.authorizer.decide (declarationCoordinate principal) action >>= either (const (abort SupervisorRefused)) (const (pure ()))
   current runtime accepted (Just record)
 
 observe :: SupervisorRuntime -> WorkspaceBinding -> ProcessRecord -> IO ProcessRecord

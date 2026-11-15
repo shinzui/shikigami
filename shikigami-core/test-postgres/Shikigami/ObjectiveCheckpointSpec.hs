@@ -21,7 +21,6 @@ import Keiro.Workflow qualified as Native
 import Keiro.Workflow.Gc (WorkflowGcPolicy (..), gcWorkflowsOnce)
 import Keiro.Workflow.Types (WorkflowId (..))
 import Kiroku.Store.Transaction (runTransaction)
-import Shikigami.Action.Authorization (allowAllActionAuthorizerForTests, denyAllActionAuthorizer)
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (CoordinatingSkill), defaultDelegationBudget)
 import Shikigami.Agent.DeclarationValue (declarationCoordinate)
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
@@ -31,6 +30,7 @@ import Shikigami.Agent.Run.Key (parseRunKey)
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (AgentWorkflowRoute), TriggerKind (TriggeredByEvent), runJobWorkflowId)
 import Shikigami.Agent.Workflow.Name (agentRunWorkflowName)
 import Shikigami.App (AppEffects, AppEnv, runAppIO)
+import Shikigami.Authority (allowAllForTests, denyAll)
 import Shikigami.Delegation.BudgetStore qualified as Budgets
 import Shikigami.Directory (disabledDirectoryHandle)
 import Shikigami.Execution.Resources qualified as Resources
@@ -252,7 +252,7 @@ tests fixture =
           version <- right =<< provider.current a.objective
           root <- right =<< run env (Roots.inspectRoot version.rootId)
           version.cutoff @?= root.envelope.cutoff
-          denied <- (checkpointProvider env actor (agentHost & #actions .~ denyAllActionAuthorizer)).current a.objective
+          denied <- (checkpointProvider env actor (agentHost & #actions .~ denyAll)).current a.objective
           assertBool "exact action denial" (isLeft denied)
           substituted <- (checkpointProvider env actor ownerHost).current a.objective
           assertBool "another authenticated actor cannot borrow a callback" (isLeft substituted)
@@ -335,14 +335,14 @@ tests fixture =
           (coordinator, sourceAgent) <- retainCoordinatorSource env objective actor a
           let settings = defaultObjectiveSettings & #enabled .~ ObjectivesEnabled
               workers = map RouterFixture.successSpecialist ["worker-a", "worker-b"]
-              authority = coordinationAuthority env settings disabledDirectoryHandle allowAllActionAuthorizerForTests workers defaultDelegationBudget
+              authority = coordinationAuthority env settings disabledDirectoryHandle allowAllForTests workers defaultDelegationBudget
           initial <- right =<< authority.admit coordinator
           scope <- maybe (fail "objective coordinator scope absent") pure initial
-          let configured = ObjectiveRuntime.coordinationHost env settings disabledDirectoryHandle allowAllActionAuthorizerForTests workers defaultDelegationBudget Nothing
-          grant <- right =<< run env (Worker.resolveGrant configured allowAllActionAuthorizerForTests coordinator (Just (Worker.scopeFingerprint scope)))
+          let configured = ObjectiveRuntime.coordinationHost env settings disabledDirectoryHandle allowAllForTests workers defaultDelegationBudget Nothing
+          grant <- right =<< run env (Worker.resolveGrant configured allowAllForTests coordinator (Just (Worker.scopeFingerprint scope)))
           permit <- maybe (fail "configured coordinator grant missing") pure grant
           found <- forM (zip scope.workers ["find-a", "find-b"]) \(slot, key) -> do
-            reply <- right =<< run env (Worker.executeCommand configured allowAllActionAuthorizerForTests permit (fixtureOperationId key) (Worker.FindWorker slot.workerKey))
+            reply <- right =<< run env (Worker.executeCommand configured allowAllForTests permit (fixtureOperationId key) (Worker.FindWorker slot.workerKey))
             case reply of Worker.WorkerFound state -> pure state; _ -> fail "configured worker was not found"
           assertBool "configured workers have distinct private session scopes" (length (nub (map (.sessionId) found)) == 2)
           map (.owner) found @?= map (.identity) scope.workers
@@ -364,12 +364,12 @@ tests fixture =
           assertBool "assignment cutoffs stay within the resource envelope" (all (maybe False (<= root.envelope.cutoff) . (.definition.cutoff)) goal.assignments)
           now <- getCurrentTime
           _ <- run env (gcWorkflowsOnce (addUTCTime 1 now) (WorkflowGcPolicy 0 10))
-          let changed = coordinationAuthority env settings disabledDirectoryHandle allowAllActionAuthorizerForTests [] defaultDelegationBudget
+          let changed = coordinationAuthority env settings disabledDirectoryHandle allowAllForTests [] defaultDelegationBudget
           changed.reacquire coordinator (Worker.scopeFingerprint scope) >>= (@?= Right scope)
           changed.admit coordinator >>= (@?= Right (Just scope))
           _ <- right =<< run env (Budgets.reserveEnrolledDelegationSlots rootId budget Nothing (child :| []) now)
           run env (Roots.inspectRoot rootId) >>= (@?= Right beforeReacquire)
-          let retired = coordinationAuthority env (settings & #enabled .~ ObjectivesDisabled) disabledDirectoryHandle allowAllActionAuthorizerForTests [] defaultDelegationBudget
+          let retired = coordinationAuthority env (settings & #enabled .~ ObjectivesDisabled) disabledDirectoryHandle allowAllForTests [] defaultDelegationBudget
           retired.reacquire coordinator (Worker.scopeFingerprint scope) >>= (@?= Right scope)
           retired.admit coordinator >>= (@?= Right Nothing)
           changed.reacquire (coordinator & #permittedAliases .~ Nothing) (Worker.scopeFingerprint scope) >>= assertScopeLeft
@@ -379,7 +379,7 @@ tests fixture =
         withPair fixture \env objective actor a _ -> do
           (coordinator, _) <- retainCoordinatorSource env objective actor a
           let settings = defaultObjectiveSettings & #enabled .~ ObjectivesEnabled
-              authority = coordinationAuthority env settings disabledDirectoryHandle allowAllActionAuthorizerForTests (map RouterFixture.successSpecialist ["worker-a", "worker-b"]) defaultDelegationBudget
+              authority = coordinationAuthority env settings disabledDirectoryHandle allowAllForTests (map RouterFixture.successSpecialist ["worker-a", "worker-b"]) defaultDelegationBudget
           authority.admit (coordinator & #identity .~ compatibilityIdentity (checked mkAgentName "worker-a")) >>= assertScopeLeft
           authority.admit (coordinator & #rootId .~ Nothing) >>= assertScopeLeft
           authority.admit (coordinator & #permittedAliases .~ Nothing) >>= assertScopeLeft
@@ -455,7 +455,7 @@ ownerHost :: O.ObjectiveHost
 ownerHost = host (VerifiedCaller (checked parseCallerId "owner"))
 
 host :: AccessPrincipal -> O.ObjectiveHost
-host actor = O.ObjectiveHost (defaultObjectiveSettings & #enabled .~ ObjectivesEnabled) (pure (Right actor)) allowAllActionAuthorizerForTests (\_ _ -> pure (Left ObjectiveDenied)) (\_ _ -> pure (Left ObjectiveDenied)) (\_ -> pure (Left ObjectiveInvalidEvidence))
+host actor = O.ObjectiveHost (defaultObjectiveSettings & #enabled .~ ObjectivesEnabled) (pure (Right actor)) allowAllForTests (\_ _ -> pure (Left ObjectiveDenied)) (\_ _ -> pure (Left ObjectiveDenied)) (\_ -> pure (Left ObjectiveInvalidEvidence))
 
 sql :: AppEnv -> ByteString -> IO ()
 sql env query = run env (runTransaction (Tx.sql query))

@@ -13,7 +13,6 @@ import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Unique (hashUnique, newUnique)
 import GHC.Generics (Generic)
-import Shikigami.Action.Authorization (ActionAuthorizer)
 import Shikigami.Agent.Capability.Workspace
   ( WorkspaceError,
     renderWorkspaceError,
@@ -25,6 +24,7 @@ import Shikigami.Agent.Capability.Workspace
 import Shikigami.Agent.Decl (AgentDecl (..), IdentityDecl (..))
 import Shikigami.Agent.Decl qualified as Agent
 import Shikigami.Agent.DeclarationValue
+import Shikigami.Authority (Authority)
 import Shikigami.Behavior.Run (BehaviorEnv)
 import Shikigami.Behavior.Run qualified as Behavior
 import Shikigami.Capability.Catalog
@@ -100,13 +100,13 @@ oneOffCapabilityRuntime workspaceArgument AgentDecl {capabilityOverlays}
 -- empty branch deliberately avoids catalog construction and all workspace IO.
 withOneOffCapabilityOverlays ::
   Log.Logger ->
-  ActionAuthorizer ->
+  Authority ->
   Maybe FilePath ->
   AgentDecl ->
   BehaviorEnv ->
   (BehaviorEnv -> IO value) ->
   IO (Either OneOffCapabilityError value)
-withOneOffCapabilityOverlays logger actionAuthorizer workspaceArgument decl@AgentDecl {capabilityOverlays} baseEnv callback
+withOneOffCapabilityOverlays logger actionAuthority workspaceArgument decl@AgentDecl {capabilityOverlays} baseEnv callback
   | null capabilityOverlays = Right <$> callback baseEnv
   | otherwise =
       case mkCapabilityCatalog [workspaceReadDescriptor] of
@@ -132,7 +132,7 @@ withOneOffCapabilityOverlays logger actionAuthorizer workspaceArgument decl@Agen
                       runtimeResult <-
                         withCapabilityOverlays
                           logger
-                          actionAuthorizer
+                          actionAuthority
                           providers
                           runtimeScope
                           resolved

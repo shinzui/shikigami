@@ -17,10 +17,10 @@ import Keiro.Workflow.Resume (resumeWorkflowsOnce)
 import Kiroku.Store.Connection (defaultConnectionSettings)
 import Kiroku.Store.Connection qualified as Connection
 import Kiroku.Store.Transaction (runTransaction)
-import Shikigami.Action.Authorization (allowAllActionAuthorizerForTests)
 import Shikigami.Agent.Name (mkAgentName)
 import Shikigami.Agent.Principal (compatibilityIdentity)
 import Shikigami.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
+import Shikigami.Authority (allowAllForTests)
 import Shikigami.Directory (disabledDirectoryHandle)
 import Shikigami.Execution.Coordinate (executionCoordinate)
 import Shikigami.Execution.Quantity (ResourceAmount, parseResourceAmount)
@@ -56,7 +56,7 @@ tests fixture =
     [ testCase "shared serving pass recovers a crashed claim; event and timer wake coalesce" $ withMandateFixture fixture \env request now ->
         Connection.withStore env.connectionSettings \store -> do
           _ <- admit env request
-          let runtime = Objectives.ObjectiveRuntime env operatorHost.settings disabledDirectoryHandle allowAllActionAuthorizerForTests Nothing
+          let runtime = Objectives.ObjectiveRuntime env operatorHost.settings disabledDirectoryHandle allowAllForTests Nothing
               drive = run env (runWorkflowWith (shikigamiWorkflowRunOptions env) Native.workflowName (M.mandateWorkflowId request.mandateId) (Workflow.workflow (Just runtime) Nothing))
               scheduler = SchedulerEnv store.pool Map.empty [] Nothing Map.empty disabledDirectoryHandle SkipMissed Log.silentLogger
           drive >>= (@?= Suspended)
@@ -77,7 +77,7 @@ tests fixture =
           assertBool "generation-owned wake replaced" (before.wake /= current.wake),
       testCase "cancellation disables the owned timer and late claimed rows cannot revive work" $ withMandateFixture fixture \env request now -> do
         _ <- admit env request
-        let runtime = Objectives.ObjectiveRuntime env operatorHost.settings disabledDirectoryHandle allowAllActionAuthorizerForTests Nothing
+        let runtime = Objectives.ObjectiveRuntime env operatorHost.settings disabledDirectoryHandle allowAllForTests Nothing
             drive = run env (runWorkflowWith (shikigamiWorkflowRunOptions env) Native.workflowName (M.mandateWorkflowId request.mandateId) (Workflow.workflow (Just runtime) Nothing))
         drive >>= (@?= Suspended)
         original <- right =<< run env (Mandates.inspectMandate operatorHost request.mandateId)
@@ -112,7 +112,7 @@ operatorHost :: Owner.ObjectiveHost
 operatorHost = actorHost (LocalOperator (checked (parseOperatorId "recurrence-operator")))
 
 actorHost :: AccessPrincipal -> Owner.ObjectiveHost
-actorHost actor = Owner.ObjectiveHost (defaultObjectiveSettings & #enabled .~ ObjectivesEnabled & #operator .~ Just (checked (parseOperatorId "recurrence-operator")) & #administration .~ AdministerAll) (pure (Right actor)) allowAllActionAuthorizerForTests (\_ _ -> pure (Right ())) (\_ _ -> pure (Right ())) (\_ -> pure (Left ObjectiveInvalidEvidence))
+actorHost actor = Owner.ObjectiveHost (defaultObjectiveSettings & #enabled .~ ObjectivesEnabled & #operator .~ Just (checked (parseOperatorId "recurrence-operator")) & #administration .~ AdministerAll) (pure (Right actor)) allowAllForTests (\_ _ -> pure (Right ())) (\_ _ -> pure (Right ())) (\_ -> pure (Left ObjectiveInvalidEvidence))
 
 runCycle :: AppEnv -> M.CreateRequest -> UTCTime -> IO M.Mandate
 runCycle env request now = right =<< run env (Cycles.reconcileCycle operatorHost actorHost request.mandateId now)

@@ -20,12 +20,12 @@ import Keiro.Timer qualified as Timer
 import Keiro.Workflow qualified as Workflow
 import Keiro.Workflow.Awakeable (awakeableNamed)
 import Kiroku.Store.Transaction (runTransaction)
-import Shikigami.Action.Authorization (allowAllActionAuthorizerForTests)
 import Shikigami.Agent.Decl (AgentDecl (..))
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
 import Shikigami.Agent.Name (mkAgentName)
 import Shikigami.Agent.Principal qualified
 import Shikigami.App (AppEffects, AppEnv, runAppIO)
+import Shikigami.Authority (allowAllForTests)
 import Shikigami.Coordination.Checkpoint qualified as CP
 import Shikigami.Coordination.Proposal qualified as P
 import Shikigami.Coordination.Validate (validateProposal)
@@ -227,7 +227,7 @@ withCheckpoint fixture callback = Fixture.withFixture fixture \env admission _ -
   callback env host provider policy objective.objectiveId proposal admission
 
 ownerHost :: O.ObjectiveHost
-ownerHost = O.ObjectiveHost (defaultObjectiveSettings & #enabled .~ ObjectivesEnabled) (pure (Right (VerifiedCaller (checked (parseCallerId "owner"))))) allowAllActionAuthorizerForTests (\_ _ -> pure (Right ())) (\_ _ -> pure (Left ObjectiveDenied)) (\_ -> pure (Left ObjectiveInvalidEvidence))
+ownerHost = O.ObjectiveHost (defaultObjectiveSettings & #enabled .~ ObjectivesEnabled) (pure (Right (VerifiedCaller (checked (parseCallerId "owner"))))) allowAllForTests (\_ _ -> pure (Right ())) (\_ _ -> pure (Left ObjectiveDenied)) (\_ -> pure (Left ObjectiveInvalidEvidence))
 
 run :: AppEnv -> Eff AppEffects a -> IO a
 run env action = runAppIO env action >>= right

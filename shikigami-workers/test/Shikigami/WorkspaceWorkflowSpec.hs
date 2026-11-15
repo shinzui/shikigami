@@ -26,7 +26,6 @@ import Keiro.Workflow (WorkflowId (..), WorkflowOutcome (..), loadStepIndex)
 import Keiro.Workflow.Types (WorkflowId (..))
 import Kiroku.Store.Connection (KirokuStore (..), withStore)
 import Kiroku.Store.Transaction (runTransaction)
-import Shikigami.Action.Authorization
 import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Approval (autoApprovePolicy)
 import Shikigami.Agent.Approval.Workflow qualified as Approval
@@ -43,6 +42,7 @@ import Shikigami.Agent.Workflow qualified as Agent
 import Shikigami.App (AppEffects, AppEnv (..), runAppIO)
 import Shikigami.App.Config (AppConfig (..), defaultAppConfig)
 import Shikigami.Attestation.Resolve (ProfileResolutionError (UnknownProfile))
+import Shikigami.Authority
 import Shikigami.Behavior.Run (newBehaviorEnv)
 import Shikigami.Behavior.StubProvider (stubApiProvider)
 import Shikigami.Capability.Overlay (CapabilityDescriptor (..))
@@ -175,7 +175,7 @@ tests fixture =
           cleanupWorkspace (maintenance env root) job.identity binding.workspace >>= (@?= Left CleanupRefused)
           run env (runTransaction (inspectCleanupTx binding)) >>= (@?= Right Nothing)
           _ <- finishWorkspace env job deps
-          let denied = (maintenance env root) & #authorizer .~ denyAllActionAuthorizer
+          let denied = (maintenance env root) & #authorizer .~ denyAll
           cleanupWorkspace denied job.identity binding.workspace >>= (@?= Left CleanupRefused)
           readFile (workspaceFiles root binding </> "dependency.txt") >>= (@?= "workflow replacement\n"),
       testCase "terminal cleanup refuses unsettled effects and a live idle session" $
@@ -271,7 +271,7 @@ tests fixture =
               policy = ((either (error . show) id . mkProcessPolicy) (ProcessPolicyInput ProcessPolicyV1 (((either (error . show) id . mkProcessImage) (ProcessImageInput (workspaceLocator "/qualified/root") digest (workspaceLocator "/bin/env") (workspaceLocator "/bin/deadline") (workspaceLocator "/qualified/collector")))) digest [((either (error . show) id . mkCommandRule) (CommandRuleInput (workspaceCoordinate "validate") (workspaceCoordinate "/bin/validate") [] (workspaceCoordinate "") Map.empty ((either (error . show) id . parseProcessSeconds) 30) ((either (error . show) id . parseProcessOutputBytes) 1024)))] [(workspaceCoordinate "")] [(workspaceCoordinate "dependency.txt")]))
               process = WorkspaceProcessSettings (workspaceLocator "/run/shikigami/supervisor.sock") ((either (error . show) id . parseRpcPeerUserId) 0) ((either (error . show) id . parseRpcRequestSeconds) 5) ((either (error . show) id . parseRpcWaitSeconds) 60) (((either (error . show) id . mkIdentityRange) (IdentityRangeInput ((either (error . show) id . parseWorkspaceIdentity) 64000) ((either (error . show) id . parseWorkspaceIdentity) 64031)))) (Map.singleton binding.repository policy)
               settings = WorkspaceSettings (workspaceLocator root) [WorkspaceRepository binding.repository binding.source [WorkspaceRevision binding.base (bundleDigest admission.instructions)] binding.base (workspaceCoordinate "policy-1") [(workspaceCoordinate "")] [(workspaceCoordinate "dependency.txt")]] [WorkspaceGrant ((either (error . show) id . mkAgentName) "workspace-worker") (declarationCoordinate principal) binding.repository Nothing] (Just process)
-          host <- right (configuredWorkspaceHostWithTransfers env store.pool disabledDirectoryHandle allowAllActionAuthorizerForTests settings)
+          host <- right (configuredWorkspaceHostWithTransfers env store.pool disabledDirectoryHandle allowAllForTests settings)
           let resumed = (deps & #capabilities .~ (host.capabilities) & #workspace .~ (Just ((host & #load .~ (\_ -> assertFailure "old file assignment attempted process provisioning" >> fail "unreachable")))))
           _ <- right =<< driveExecutionForeground (Agent.executionRuntime resumed) (ExecutionStart execution) 30
           Agent.runAgentRunWorkflow resumed job >>= assertCompleted
@@ -289,7 +289,7 @@ tests fixture =
           run env (Execution.inspectExecution execution) >>= (@?= Right Nothing)
           readIORef observed >>= (@?= []),
       testCase "allocation requires fresh external authority before reading the source" $
-        withWorkflowAuthority denyAllActionAuthorizer id fixture \_ root job _ deps observed -> do
+        withWorkflowAuthority denyAll id fixture \_ root job _ deps observed -> do
           Agent.runAgentRunWorkflow deps job >>= assertRefused
           doesPathExist root >>= (@?= False)
           readIORef observed >>= (@?= []),
@@ -327,9 +327,9 @@ withWorkflow :: DatabaseFixture -> (AppEnv -> FilePath -> RunJob -> WorkspaceHos
 withWorkflow = withWorkflowConfig id
 
 withWorkflowConfig :: (WorkspaceSettings -> WorkspaceSettings) -> DatabaseFixture -> (AppEnv -> FilePath -> RunJob -> WorkspaceHost -> Agent.AgentRunDeps -> IORef [Context.Context] -> IO a) -> IO a
-withWorkflowConfig = withWorkflowAuthority allowAllActionAuthorizerForTests
+withWorkflowConfig = withWorkflowAuthority allowAllForTests
 
-withWorkflowAuthority :: ActionAuthorizer -> (WorkspaceSettings -> WorkspaceSettings) -> DatabaseFixture -> (AppEnv -> FilePath -> RunJob -> WorkspaceHost -> Agent.AgentRunDeps -> IORef [Context.Context] -> IO a) -> IO a
+withWorkflowAuthority :: Authority -> (WorkspaceSettings -> WorkspaceSettings) -> DatabaseFixture -> (AppEnv -> FilePath -> RunJob -> WorkspaceHost -> Agent.AgentRunDeps -> IORef [Context.Context] -> IO a) -> IO a
 withWorkflowAuthority authorizer configure fixture use = Fixture.withFixture fixture \env source root _ -> withStore env.connectionSettings \store -> do
   writeFile (source </> "AGENTS.md") "PRIVATE_WORKFLOW_POLICY: validate changes"
   repository <- Fixture.commitRepository source
@@ -358,7 +358,7 @@ withWorkflowAuthority authorizer configure fixture use = Fixture.withFixture fix
           { appEnv = env,
             behaviorEnv = base & #providerRegistry .~ Just providers,
             decisions = Decision.emptyDecisionServices,
-            actionAuthorizer = authorizer,
+            actionAuthority = authorizer,
             capabilities = host.capabilities,
             workspace = Just host,
             coordination = Nothing,
@@ -410,7 +410,7 @@ right :: (Show e) => Either e a -> IO a
 right = either (\err -> assertFailure (show err) >> fail "unreachable") pure
 
 maintenance :: AppEnv -> FilePath -> MaintenanceRuntime
-maintenance env root = MaintenanceRuntime env (workspaceLocator root) allowAllActionAuthorizerForTests (\_ -> pure (Right ())) (pure ())
+maintenance env root = MaintenanceRuntime env (workspaceLocator root) allowAllForTests (\_ -> pure (Right ())) (pure ())
 
 admittedBinding :: AppEnv -> RunJob -> IO WorkspaceBinding
 admittedBinding env job = do

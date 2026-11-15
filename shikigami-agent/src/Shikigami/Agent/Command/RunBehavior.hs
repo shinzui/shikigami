@@ -7,11 +7,11 @@ where
 import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Text (encodeToLazyText)
+import Data.Functor ((<&>))
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as TE
 import Data.Text.Lazy.IO qualified as TLIO
-import Shikigami.Action.Authorization (denyAllActionAuthorizer)
 import Shikigami.Agent.Capability.OneOff (renderOneOffCapabilityError, withOneOffCapabilityOverlays)
 import Shikigami.Agent.Decl (AgentDecl (..), ProfileRequirement (..))
 import Shikigami.Agent.Loader (loadAgent)
@@ -19,12 +19,16 @@ import Shikigami.Agent.Payload (readPayloadArgument)
 import Shikigami.App.Config (AppConfig)
 import Shikigami.App.Config qualified as Config
 import Shikigami.Attestation.Profile (ProfileId (..))
+import Shikigami.Authority (Authority, denyAll, recorded, scopeToRun)
 import Shikigami.Behavior.Provider (newBehaviorEnvFor)
 import Shikigami.Behavior.Run (triggerOnly)
 import Shikigami.Duration
 import Shikigami.Execution.Ephemeral (EphemeralResult (..), runEphemeralBehavior)
 import Shikigami.Log qualified as Log
+import Shikigami.Record (ActionRecord (..), fileRecord, observedRecord, unspecifiedTier)
+import System.Directory (XdgDirectory (XdgState), getXdgDirectory)
 import System.Exit (exitFailure)
+import System.FilePath ((</>))
 import System.IO (hPutStrLn, stderr)
 
 -- | @run-behavior --agent <file> [--payload <json>]@: load a manifest, run its
@@ -63,8 +67,9 @@ runRunBehavior path mpayload workspace config = do
           -- No recalled memories: recall needs a database and this command opens
           -- none, so the behavior runs on the trigger payload alone.
           Log.logInfo logger "execution.mode" ["mode" .= ("ephemeral" :: Text), "resumable" .= False]
+          authority <- oneOffAuthority logger decl
           resultE <-
-            withOneOffCapabilityOverlays logger denyAllActionAuthorizer workspace decl env \derivedEnv ->
+            withOneOffCapabilityOverlays logger authority workspace decl env \derivedEnv ->
               runEphemeralBehavior (durationTime config.runTimeout) config.harness derivedEnv decl (triggerOnly payload)
           case resultE of
             Left overlayErr -> do
@@ -76,6 +81,19 @@ runRunBehavior path mpayload workspace config = do
             Right (Right result) -> do
               Log.logInfo logger "execution.ephemeral.completed" ["modelCalls" .= result.modelCalls, "toolCalls" .= result.toolCalls]
               TLIO.putStrLn (encodeToLazyText result.output)
+
+-- | The database-free command records its decisions as JSON Lines under the
+-- operator's state directory, outside every workspace. If that file cannot be
+-- opened every action is refused, because an unrecorded action never
+-- proceeds.
+oneOffAuthority :: Log.Logger -> AgentDecl -> IO Authority
+oneOffAuthority logger AgentDecl {name} = do
+  stateDirectory <- getXdgDirectory XdgState "shikigami"
+  record <-
+    fileRecord (stateDirectory </> "record.jsonl") <&> \case
+      Right opened -> opened
+      Left failure -> ActionRecord {append = \_ -> pure (Left failure)}
+  pure (scopeToRun Nothing name (recorded (observedRecord logger Nothing record) unspecifiedTier denyAll))
 
 -- | This command deliberately opens no database, so it cannot honestly run an
 -- agent whose policy must first be resolved. Refuse before constructing the

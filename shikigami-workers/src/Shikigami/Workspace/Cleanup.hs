@@ -17,12 +17,11 @@ import Data.Aeson qualified as Aeson
 import Data.Maybe (listToMaybe)
 import Data.Text qualified as Text
 import Hasql.Transaction (Transaction)
-import Kikan.En.Action (AgentAction (InvokeCapabilityTool), mkCapabilityToolTarget)
 import Kiroku.Store.Transaction (runTransaction)
-import Shikigami.Action.Authorization (ActionAuthorizer (..))
 import Shikigami.Agent.DeclarationValue (declarationCoordinate)
 import Shikigami.Agent.Principal (AgentIdentity, identityText)
 import Shikigami.App (AppEnv, runAppIO)
+import Shikigami.Authority (Action, Authority, invokeToolAction)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.Workspace.Allocation
@@ -41,7 +40,7 @@ import System.Posix.User (getEffectiveUserID)
 data MaintenanceRuntime = MaintenanceRuntime
   { appEnv :: !AppEnv,
     storageRoot :: !(WorkspaceLocator "storage-root"),
-    authorizer :: !ActionAuthorizer,
+    authorizer :: !Authority,
     current :: !(AgentIdentity -> IO (Either Text ())),
     afterFiles :: !(IO ())
   }
@@ -109,8 +108,8 @@ grant runtime actor kind value = do
   runtime.current actor >>= either (const (abort CleanupRefused)) pure
   principal <- either (const (abort CleanupRefused)) pure (identityText actor)
   let digest = Text.replace ":" "-" (versionedDigest "shikigami.workspace-maintenance/1" value)
-  target <- either (const (abort CleanupRefused)) pure (mkCapabilityToolTarget "shikigami.workspace" "maintenance-1" (kind <> "-" <> digest))
-  runtime.authorizer.authorize (declarationCoordinate principal) (InvokeCapabilityTool target) >>= either (const (abort CleanupRefused)) (const (pure ()))
+  target <- either (const (abort CleanupRefused)) pure (invokeToolAction "shikigami.workspace" "maintenance-1" (kind <> "-" <> digest))
+  runtime.authorizer.decide (declarationCoordinate principal) target >>= either (const (abort CleanupRefused)) (const (pure ()))
   runtime.current actor >>= either (const (abort CleanupRefused)) pure
 
 validResource :: Text -> Bool

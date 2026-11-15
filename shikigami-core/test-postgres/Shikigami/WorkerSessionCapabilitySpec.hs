@@ -29,7 +29,6 @@ import Keiro.Workflow.Types (WorkflowId (..))
 import Kioku.Id (genSessionId)
 import Kiroku.Store.Connection (KirokuStore (..), withStore)
 import Kiroku.Store.Transaction (runTransaction)
-import Shikigami.Action.Authorization (ActionAuthorizationFailure (..), ActionAuthorizer (..), allowAllActionAuthorizerForTests)
 import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (CoordinatingSkill, Flow))
 import Shikigami.Agent.DeclarationValue
@@ -38,6 +37,8 @@ import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.RunJob (RunJob (..), runJobWorkflowId)
 import Shikigami.Agent.Workflow qualified as Agent
 import Shikigami.App (AppEffects, AppEnv (..), runAppIO)
+import Shikigami.Authority (Authority, AuthorityFailure (..), DecisionSource (DecidedByFixture), allowAllForTests)
+import Shikigami.Authority qualified as Authority
 import Shikigami.Behavior.Provider.Coordinate qualified as Coordinate
 import Shikigami.Behavior.Run (newBehaviorEnv)
 import Shikigami.Behavior.StubProvider (stubModel)
@@ -243,7 +244,7 @@ tests fixture =
                 Fixture.routerDeps env behavior (Routing.RoutingRuntime (\_ -> fail "unexpected routing") (\_ _ _ -> fail "unexpected routing")) [declaration]
                   & #coordination
                   .~ Just selected
-                  & #actionAuthorizer
+                  & #actionAuthority
                   .~ authorizer
               job key =
                 Fixture.routerJob key
@@ -444,15 +445,15 @@ flowName = WorkflowName "fixture.worker-events"
 draft :: Text -> WorkerInstruction
 draft text = WorkerInstruction (fixtureInstruction text) (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) Nothing
 
-permit :: AppEnv -> CoordinationHost -> CoordinationScope -> ActionAuthorizer -> IO CoordinationGrant
+permit :: AppEnv -> CoordinationHost -> CoordinationScope -> Authority -> IO CoordinationGrant
 permit env host scope authorizer = do
   Just grant <- expectRight =<< run env (resolveGrant host authorizer scope.run (Just (scopeFingerprint scope)))
   pure grant
 
-withCapabilityFixture :: DatabaseFixture -> (AppEnv -> Session.SessionAdmission -> CoordinationHost -> CoordinationScope -> ActionAuthorizer -> IORef Bool -> IORef (Maybe CoordinationScope) -> IO a) -> IO a
+withCapabilityFixture :: DatabaseFixture -> (AppEnv -> Session.SessionAdmission -> CoordinationHost -> CoordinationScope -> Authority -> IORef Bool -> IORef (Maybe CoordinationScope) -> IO a) -> IO a
 withCapabilityFixture fixture = withConfiguredCapabilityFixture fixture id
 
-withConfiguredCapabilityFixture :: DatabaseFixture -> (Session.SessionAdmission -> Session.SessionAdmission) -> (AppEnv -> Session.SessionAdmission -> CoordinationHost -> CoordinationScope -> ActionAuthorizer -> IORef Bool -> IORef (Maybe CoordinationScope) -> IO a) -> IO a
+withConfiguredCapabilityFixture :: DatabaseFixture -> (Session.SessionAdmission -> Session.SessionAdmission) -> (AppEnv -> Session.SessionAdmission -> CoordinationHost -> CoordinationScope -> Authority -> IORef Bool -> IORef (Maybe CoordinationScope) -> IO a) -> IO a
 withConfiguredCapabilityFixture fixture configure callback = withConfiguredFixture fixture configure \env admission _ -> do
   memory <- maybe (assertFailure "missing parent session" >> fail "missing parent session") pure admission.context.sessionId
   version <- checkpointVersion admission
@@ -464,7 +465,7 @@ withConfiguredCapabilityFixture fixture configure callback = withConfiguredFixtu
   revoked <- newIORef False
   let authority = CoordinationAuthority (\requested -> readIORef current <&> \value -> if requested == run then Right value else Left "foreign run") (\requested pinned -> pure (if requested == run && pinned == scopeFingerprint scope then Right scope else Left "retained scope unavailable"))
       host = CoordinationHost (TransferServices sessions Nothing Nothing) authority
-      authorizer = ActionAuthorizer (\principal action -> do denied <- readIORef revoked; if denied then pure (Left (ActionPolicyDenied "revoked")) else allowAllActionAuthorizerForTests.authorize principal action) (activityCoordinate "fixture")
+      authorizer = Authority.authority DecidedByFixture (\principal action -> do denied <- readIORef revoked; if denied then pure (Left (PolicyDenied "revoked")) else allowAllForTests.decide principal action)
   callback env admission host scope authorizer revoked current
 
 listenerToken :: AppEnv -> CoordinationScope -> IO AwakeableId

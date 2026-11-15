@@ -51,6 +51,7 @@ library
     Shikigami.Server.Command.Ops
     Shikigami.Server.Command.Proposals
     Shikigami.Server.Command.PublishFixture
+    Shikigami.Server.Command.Record
     Shikigami.Server.Command.RenderLifecycle
     Shikigami.Server.Command.ResolveApproval
     Shikigami.Server.Command.Resources

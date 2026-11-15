@@ -9,7 +9,6 @@ import Data.Maybe (catMaybes)
 import Effectful (Eff)
 import Keiro.Workflow.Types (WorkflowId (..))
 import Kiroku.Store.Transaction (runTransaction)
-import Shikigami.Action.Authorization (ActionAuthorizer)
 import Shikigami.Agent.CoordinationSource (AcceptedCoordinator (..), acceptsCoordination, loadAcceptedCoordinator)
 import Shikigami.Agent.Decl (AgentDecl (..), DelegationBudget, IdentityDecl (..), delegationBudgetNatural)
 import Shikigami.Agent.DeclarationValue (agentEnabled)
@@ -18,6 +17,7 @@ import Shikigami.Agent.Delegate.Depth (initialDepth)
 import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.Agent.RunJob (RunJob (..))
 import Shikigami.App (AppEffects, AppEnv, runAppIO)
+import Shikigami.Authority (Authority)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Directory qualified as Directory
 import Shikigami.Execution.Identity (operationIdWithPrefix)
@@ -33,12 +33,12 @@ import Shikigami.WorkerSession.Capability qualified as Worker
 import Shikigami.WorkerSession.Input qualified as Input
 import Shikigami.WorkerSession.Store qualified as Sessions
 
-objectiveHost :: ObjectiveSettings -> Directory.DirectoryHandle -> ActionAuthorizer -> AgentIdentity -> Capability.ObjectiveHost
+objectiveHost :: ObjectiveSettings -> Directory.DirectoryHandle -> Authority -> AgentIdentity -> Capability.ObjectiveHost
 objectiveHost settings directory actions identity = Capability.ObjectiveHost settings authenticate actions (\_ _ -> pure (Left ObjectiveDenied)) (\_ _ -> pure (Left ObjectiveDenied)) (\_ -> pure (Left ObjectiveInvalidEvidence))
   where
     authenticate = Directory.identityLifecycleAdmission directory identity <&> either (const (Left ObjectiveDenied)) (const (Right (RecordedAgent identity)))
 
-coordinationAuthority :: AppEnv -> ObjectiveSettings -> Directory.DirectoryHandle -> ActionAuthorizer -> [AgentDecl] -> DelegationBudget -> Worker.CoordinationAuthority
+coordinationAuthority :: AppEnv -> ObjectiveSettings -> Directory.DirectoryHandle -> Authority -> [AgentDecl] -> DelegationBudget -> Worker.CoordinationAuthority
 coordinationAuthority env settings directory actions declarations budget = Worker.CoordinationAuthority admit reacquire
   where
     host run = objectiveHost settings directory actions run.identity

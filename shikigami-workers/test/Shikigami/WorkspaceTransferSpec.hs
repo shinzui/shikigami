@@ -23,7 +23,6 @@ import Hasql.Transaction qualified as Tx
 import Keiro.Workflow.Types (WorkflowId (..))
 import Kioku.Id (genSessionId)
 import Kiroku.Store.Transaction (runTransaction)
-import Shikigami.Action.Authorization
 import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Decl (defaultDelegationBudget)
 import Shikigami.Agent.DeclarationValue
@@ -33,6 +32,7 @@ import Shikigami.Agent.Loader (loadAgent)
 import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (compatibilityIdentity)
 import Shikigami.App (AppEffects, AppEnv, runAppIO)
+import Shikigami.Authority
 import Shikigami.Behavior.Skill (SkillDir (..))
 import Shikigami.Behavior.StubProvider (stubModel)
 import Shikigami.Capability.Overlay (emptyResolvedCapabilitySet)
@@ -108,7 +108,7 @@ tests fixture =
           original <- (\admission -> admission & #filePolicy .~ Just transferableFilePolicy) <$> (right =<< loadWorkspaceAdmission binding (Selection.assignmentIdFor binding.request.runId.unWorkflowId) 65536)
           (profile, _) <- right =<< run env (runTransaction (reserveProcessProfileTx binding (bundleDigest original.instructions) policy (((either (error . show) id . mkIdentityRange) (IdentityRangeInput ((either (error . show) id . parseWorkspaceIdentity) 62000) ((either (error . show) id . parseWorkspaceIdentity) 62001))))))
           run env (runTransaction (readyProcessProfileTx binding profile)) >>= (@?= Right ())
-          let runtime = FileRuntime env allowAllActionAuthorizerForTests (const (pure (Right ()))) (const (pure (Right ()))) (\_ _ _ _ _ -> pure (Right ()))
+          let runtime = FileRuntime env allowAllForTests (const (pure (Right ()))) (const (pure (Right ()))) (\_ _ _ _ _ -> pure (Right ()))
               input = Aeson.object ["path" .= ("dependency.txt" :: Text)]
           token <- UUID4.nextRandom
           execution <- FileFixture.withAcceptedWorkspaceTool 1 transferredWorkspaceEditAdapter (fixtureAgentName "worker") "overlay__workspace-edit__read" token env original runtime input \snapshot access reference -> do
@@ -203,12 +203,12 @@ tests fixture =
           session <- genSessionId
           now <- getCurrentTime
           selection <- right (resolveExecutionSelection (Selection.assignmentIdFor childRun) (either (error . show) id (modelCatalog [])) (defaultBinding stubModel emptyOptions) Nothing Nothing Nothing Nothing (Just intent.rootId) now)
-          let fileRuntime = FileRuntime env allowAllActionAuthorizerForTests (const (pure (Right ()))) (const (pure (Right ()))) (\_ admission _ kind _ -> pure (if kind == (workspaceCoordinate ("admit")) && map (.text) (bundleFiles admission.instructions) /= ["PINNED_ROOT_POLICY: validate before committing"] then Left "changed instruction identity" else Right ()))
+          let fileRuntime = FileRuntime env allowAllForTests (const (pure (Right ()))) (const (pure (Right ()))) (\_ admission _ kind _ -> pure (if kind == (workspaceCoordinate ("admit")) && map (.text) (bundleFiles admission.instructions) /= ["PINNED_ROOT_POLICY: validate before committing"] then Left "changed instruction identity" else Right ()))
               assignment = SkillAssignment (WorkflowId childRun) intent.newWorker intent.newOwner session selection Nothing emptyResolvedCapabilitySet (Right defaultHarnessPolicy) (SkillDir "fixture") (fail "host loading cannot call a model")
           catalog <- right (mkWorkspaceCatalog [RepositoryPolicy binding.repository binding.source [binding.base] binding.base binding.policyRevision])
           repository <- right (resolveRepository catalog binding.repository Nothing)
           let hostFor runtime = right (governedWorkspaceHostWithTransfers runtime [transferredWorkspaceEditAdapter runtime] [workspaceEditAdapter runtime, supervisedWorkspaceEditAdapter runtime] (\_ _ admission -> pure (Right admission)) (workspaceLocatorPath binding.storageRoot) (const (pure (Right repository))) (const (pure (Right ()))))
-          denied <- hostFor (fileRuntime & #authorizer .~ denyAllActionAuthorizer)
+          denied <- hostFor (fileRuntime & #authorizer .~ denyAll)
           denied.load assignment >>= \case Left _ -> pure (); Right _ -> assertFailure "denied successor admitted"
           run env (runTransaction (Workspaces.checkWorkspaceOwnerTx binding intent.newOwner (fixtureRevision 1))) >>= (@?= Left WorkspaceBindingConflict)
           host <- hostFor fileRuntime
@@ -268,7 +268,7 @@ tests fixture =
             FencedAndSettled value -> pure value
             _ -> assertFailure (show outcome) >> fail "missing fence"
         assertBool "full retained coordinates match" (matchesFence intent proof)
-        withAsync (serve (runtime & #authorizer .~ denyAllActionAuthorizer & #replayAuthority .~ const (pure (Left "revoked")))) \_ -> do
+        withAsync (serve (runtime & #authorizer .~ denyAll & #replayAuthority .~ const (pure (Left "revoked")))) \_ -> do
           client.reconcile intent >>= (@?= FencedAndSettled proof)
           client.admitWrite binding.workspace intent.sessionId intent.oldOwner (fixtureRevision 0) (fixtureOperationId "late-old") >>= assertRefused
           client.admitWrite binding.workspace intent.sessionId intent.newOwner (fixtureRevision 1) (fixtureOperationId "premature-successor") >>= assertRefused
@@ -284,7 +284,7 @@ tests fixture =
         let empty = CapturedOutput (workspaceCoordinate "stdout") (workspaceCoordinate ("sha256:" <> Text.replicate 64 "b")) ((either (error . show) id . parseCapturedBytes) 0) (outputTruncation False)
             receipt = ProcessReceipt record.operationId record.attemptId record.generation record.fingerprint record.bindingDigest record.unit boot invocation (Just ((either (error . show) id . parseProcessExitStatus) 143)) ProcessCancelled empty (empty & #artifact .~ (workspaceCoordinate ("stderr"))) (descendantSettlement True) (outputCompleteness True)
         run env (runTransaction (Processes.recordProcessReceiptTx receipt)) >>= (@?= Right ())
-        outcome <- (workspaceTransferProvider (runtime & #authorizer .~ denyAllActionAuthorizer)).reconcile intent
+        outcome <- (workspaceTransferProvider (runtime & #authorizer .~ denyAll)).reconcile intent
         assertBool "only retained full settlement produces a fence" (case outcome of FencedAndSettled proof -> matchesFence intent proof; _ -> False)
         provider.admitWrite binding.workspace intent.sessionId intent.oldOwner (fixtureRevision 0) (fixtureOperationId "late-old") >>= assertRefused,
       testCase "a reserved process is refused without launch while unknown launch evidence remains pending" $ withTransfer fixture \env binding intent runtime _ -> do
@@ -293,7 +293,7 @@ tests fixture =
         Just retained <- right =<< run env (runTransaction (Processes.inspectProcessTx record.operationId))
         retained.phase @?= ProcessRefused,
       testCase "denied fresh authority never freezes or stops an unadmitted workspace" $ withTransferProcess fixture \env binding intent runtime _ stopped -> do
-        (workspaceTransferProvider (runtime & #authorizer .~ denyAllActionAuthorizer)).reconcile intent >>= (@?= FenceUnavailable)
+        (workspaceTransferProvider (runtime & #authorizer .~ denyAll)).reconcile intent >>= (@?= FenceUnavailable)
         readIORef stopped >>= (@?= 0)
         run env (runTransaction (Workspaces.checkWorkspaceOwnerTx binding intent.oldOwner (fixtureRevision 0))) >>= (@?= Right ()),
       testCase "an independently held writer lock cannot be mistaken for successful write or fence admission" $ withTransfer fixture \_ binding intent runtime _ -> do
@@ -354,7 +354,7 @@ withWorkspacePolicy transferring policy fixture callback = Fixture.withFixture f
       else pure (TransferIntent V1 (sessionIdFor session) session.objective actor (fixtureOperationId "not-requested") version old successor (fixtureAgentName "successor") (fixtureRevision 0) (fixtureRevision 1) root binding.workspace)
   stopped <- newIORef 0
   let backend = SupervisorBackend (pure (Right boot)) (\_ _ _ -> fail "transfer cannot capture") (\_ _ _ _ _ -> fail "transfer cannot launch") (const (pure (Right True))) (\_ -> modifyIORef' stopped (+ 1) >> pure (Right ()))
-      runtime = SupervisorRuntime env allowAllActionAuthorizerForTests (const (pure (Right ()))) (const (pure (Right ()))) (\_ _ _ -> fail "transfer cannot select new commands") backend
+      runtime = SupervisorRuntime env allowAllForTests (const (pure (Right ()))) (const (pure (Right ()))) (\_ _ _ -> fail "transfer cannot select new commands") backend
   callback env binding intent runtime stopped
 
 reserveProcess :: AppEnv -> WorkspaceBinding -> IO ProcessRecord

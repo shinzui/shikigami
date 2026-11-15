@@ -28,8 +28,8 @@ module Shikigami.Sink.GrantStore
   ( -- * The gate
     GrantSource (..),
     checkGrant,
-    withActionAuthorizer,
-    actionAuthorizerFor,
+    withAuthority,
+    authorityFor,
 
     -- * Rows
     GrantRow (..),
@@ -73,9 +73,9 @@ import Hasql.Session qualified as Session
 import Hasql.Statement (Statement, preparable)
 import Hasql.Transaction qualified as Transaction
 import Hasql.Transaction.Sessions qualified as Transaction.Sessions
-import Shikigami.Action.Authorization (ActionAuthorizer, allowAllActionAuthorizerForTests, denyAllActionAuthorizer)
 import Shikigami.Agent.Name (AgentName, agentNameText, mkAgentName)
 import Shikigami.Agent.Principal (AgentIdentity (..), AgentPrincipal, mkAgentPrincipal, principalText)
+import Shikigami.Authority (Authority, allowAllForTests, denyAll)
 import Shikigami.Prelude
 import Shikigami.Sink.Permission
   ( Denied (..),
@@ -99,19 +99,19 @@ data GrantSource
     DbGrants !Pool
   | -- | C11 plus the process-local C13 interpreter. This wrapper is live
     -- dependency wiring and is never serialized.
-    ActionGatedGrants !ActionAuthorizer !GrantSource
+    ActionGatedGrants !Authority !GrantSource
 
-withActionAuthorizer :: ActionAuthorizer -> GrantSource -> GrantSource
-withActionAuthorizer authorizer source = ActionGatedGrants authorizer source
+withAuthority :: Authority -> GrantSource -> GrantSource
+withAuthority authorizer source = ActionGatedGrants authorizer source
 
 -- | Focused static fixtures predate C13 and remain isolated from network IO.
 -- A bare production database source is fail-closed; production composition
 -- must wrap it explicitly.
-actionAuthorizerFor :: GrantSource -> ActionAuthorizer
-actionAuthorizerFor = \case
+authorityFor :: GrantSource -> Authority
+authorityFor = \case
   ActionGatedGrants authorizer _ -> authorizer
-  StaticGrants {} -> allowAllActionAuthorizerForTests
-  DbGrants {} -> denyAllActionAuthorizer
+  StaticGrants {} -> allowAllForTests
+  DbGrants {} -> denyAll
 
 -- | Is this agent permitted this sink kind? @Right ()@ if granted, else
 -- @Left (Denied reason)@.

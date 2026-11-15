@@ -38,12 +38,11 @@ import Data.Text.Encoding qualified as Encoding
 import Effectful (Eff)
 import Effectful.Dispatch.Static (unsafeEff_)
 import Hasql.Transaction (Transaction)
-import Kikan.En.Action (AgentAction)
 import Kiroku.Store.Transaction (runTransaction)
-import Shikigami.Action.Authorization (ActionAuthorizer (..))
 import Shikigami.Agent.DeclarationValue (declarationCoordinate)
 import Shikigami.Agent.Principal (identityText)
 import Shikigami.App (AppEffects, AppEnv, runAppIO)
+import Shikigami.Authority (Action, Authority)
 import Shikigami.Capability.Overlay
 import Shikigami.Capability.Provider (DurableAdapter (..), DurableToolContract (..))
 import Shikigami.Decision.Contract (versionedDigest)
@@ -243,11 +242,11 @@ capture backend runtime accepted profile target = do
   let allowed path = (protect (admitPath runtime accepted profile "read" path)) <&> either (const (Left WorkspaceAllocationRefused)) Right
   backend.capture accepted.binding profile target allowed >>= either (const (abort FileEffectRefused)) pure
 
-grant :: FileRuntime -> AcceptedGit -> Either FileEffectError AgentAction -> IO ()
+grant :: FileRuntime -> AcceptedGit -> Either FileEffectError Action -> IO ()
 grant runtime accepted action = do
   principal <- either (const (abort FileEffectRefused)) pure (identityText accepted.admission.owner)
   selected <- either abort pure action
-  runtime.authorizer.authorize (declarationCoordinate principal) selected >>= either (const (abort FileEffectRefused)) (const (current runtime accepted))
+  runtime.authorizer.decide (declarationCoordinate principal) selected >>= either (const (abort FileEffectRefused)) (const (current runtime accepted))
 
 observe :: GitBackend -> FileRuntime -> AcceptedGit -> ProcessProfile -> WorkspaceCoordinate "file-target" -> Text -> IO Aeson.Value
 observe backend runtime accepted profile target name = do

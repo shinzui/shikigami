@@ -24,7 +24,6 @@ import Kiroku.Store.Error (StoreError)
 import OpenTelemetry.Attributes (Attribute (..), PrimitiveAttribute (..), getAttributeMap)
 import OpenTelemetry.Exporter.InMemory.Span (inMemoryListExporter)
 import OpenTelemetry.Trace.Core qualified as Otel
-import Shikigami.Action.Authorization (allowAllActionAuthorizerForTests)
 import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Approval (autoApprovePolicy)
 import Shikigami.Agent.Approval.Workflow qualified as ApprovalWorkflow
@@ -53,6 +52,7 @@ import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (AgentWorkflowRoute), T
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
 import Shikigami.App (AppEnv (..), noopTracer, runAppIO)
 import Shikigami.Attestation.Resolve (ProfileResolutionError (UnknownProfile))
+import Shikigami.Authority (allowAllForTests)
 import Shikigami.Behavior.Run (BehaviorEnv, newBehaviorEnv)
 import Shikigami.Capability.Provider qualified as CapabilityProvider
 import Shikigami.Directory (DirectorySnapshotVersion, DirectorySourceKind (DirectoryDisabledSource), disabledDirectoryHandle, parseDirectorySnapshotVersion)
@@ -345,7 +345,7 @@ routerDeps appEnv behaviorEnv routing agents =
     { AgentWorkflow.appEnv,
       AgentWorkflow.behaviorEnv,
       AgentWorkflow.decisions = FlowDecision.emptyDecisionServices,
-      AgentWorkflow.actionAuthorizer = allowAllActionAuthorizerForTests,
+      AgentWorkflow.actionAuthority = allowAllForTests,
       AgentWorkflow.capabilities = CapabilityProvider.emptyCapabilityRuntime,
       AgentWorkflow.coordination = Nothing,
       AgentWorkflow.objectives = Nothing,

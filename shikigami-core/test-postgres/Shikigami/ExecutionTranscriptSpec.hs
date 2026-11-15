@@ -65,7 +65,6 @@ import Kiroku.Store.Types (CategoryName (..), GlobalPosition (..), StreamInfo (v
 import Pgmq (QueueMetrics (queueLength))
 import Pgmq.Hasql.Statements.Message qualified as PgmqMessage
 import Pgmq.Hasql.Statements.QueueObservability qualified as PgmqQueue
-import Shikigami.Action.Authorization (allowAllActionAuthorizerForTests, denyAllActionAuthorizer)
 import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Approval (ApprovalChannel (..), ApprovalDecision (..), ApprovalRequest (..), approvalWorkflowId, resolveApproval)
 import Shikigami.Agent.Approval.Workflow qualified as Approval
@@ -76,6 +75,7 @@ import Shikigami.Agent.Principal (AgentIdentity (VerifiedIdentity), compatibilit
 import Shikigami.Agent.Run.Key (RunKey, parseRunKey)
 import Shikigami.Agent.RunJob (RunRouteKind (..))
 import Shikigami.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
+import Shikigami.Authority (allowAllForTests, denyAll)
 import Shikigami.Behavior.Input (triggerOnly)
 import Shikigami.Behavior.Provider.Coordinate qualified as ProviderValue
 import Shikigami.Behavior.Run (BehaviorEnv (..), newBehaviorEnv)
@@ -168,7 +168,7 @@ tests fixture =
                   { Tools.describe = \_ -> modifyIORef' described (+ 1) >> pure (Right [Executor.BoundTool observationBinding tool]),
                     Tools.prepare = \_ _ _ -> assertFailure "menu description manufactured operation coordinates" >> pure (Right [])
                   }
-              describe = Tools.describeExecutionTools Log.silentLogger denyAllActionAuthorizer emptyCapabilityProviderRegistry factory
+              describe = Tools.describeExecutionTools Log.silentLogger denyAll emptyCapabilityProviderRegistry factory
           accepted <- expectRight =<< Start.admitSkillExecution executor describe assignment
           accepted.executionId @?= snapshot.executionId
           readIORef described >>= (@?= 1)
@@ -245,8 +245,8 @@ tests fixture =
               native = Tools.NativeToolFactory (\_ -> pure (Right [])) (\_ _ _ -> pure (Right []))
               logical = Runner.OperationContext snapshot.executionId (fixtureOperationId "fixture-operation") (fixtureOperationId "fixture-operation") (ExecutionValue.executionDigest "fingerprint") (ExecutionValue.executionDigest "scope")
               dispatch = Runner.DispatchContext logical (fixtureAttemptId "fixture-attempt") (fixtureOwner "owner") (fixtureGeneration 1)
-              describe registry accepted = Tools.describeExecutionTools Log.silentLogger denyAllActionAuthorizer registry native accepted
-              prepare registry context accepted = Tools.withExecutionTools Log.silentLogger denyAllActionAuthorizer registry native accepted context (Just (executionCoordinate (overlayToolName capability "edit"))) (pure . map (.binding))
+              describe registry accepted = Tools.describeExecutionTools Log.silentLogger denyAll registry native accepted
+              prepare registry context accepted = Tools.withExecutionTools Log.silentLogger denyAll registry native accepted context (Just (executionCoordinate (overlayToolName capability "edit"))) (pure . map (.binding))
           registry <- expectRight (Capability.installDurableAdapters [adapter] emptyCapabilityProviderRegistry)
           menu <- expectRight =<< describe registry snapshot
           readIORef prepared >>= (@?= 0)
@@ -268,7 +268,7 @@ tests fixture =
           let collision = mkDynTool (overlayToolName capability "edit") "native collision" (object []) (\_ -> pure (Right (ToolOutput.textToolOutput "unused")))
               collisionBinding = ToolBinding (executionCoordinate (overlayToolName capability "edit")) (executionCoordinate "native/1") (ExecutionValue.executionDigestFor "shikigami.tool-schema/1" (object [])) UncertainEffect NoInvoiceCost
               collidingNative = Tools.NativeToolFactory (\_ -> pure (Right [Executor.BoundTool collisionBinding collision])) (\_ _ _ -> pure (Right []))
-          _ <- Tools.describeExecutionTools Log.silentLogger denyAllActionAuthorizer registry collidingNative snapshot >>= \case Left _ -> pure (); Right _ -> assertFailure "native tool replaced the overlay"
+          _ <- Tools.describeExecutionTools Log.silentLogger denyAll registry collidingNative snapshot >>= \case Left _ -> pure (); Right _ -> assertFailure "native tool replaced the overlay"
           readIORef prepared >>= (@?= 1)
           pure (),
       testCase "driver generations repair lost queue delivery without another actual attempt" $
@@ -1757,7 +1757,7 @@ objectiveOriginCase fixture = withConfiguredFixture fixture objectiveSourceConfi
   run env (Objective.createObjective (host & #settings . #agentCreation .~ [] & #verifyOrigin .~ (\_ _ -> assertFailure "accepted creation rechecked retired policy")) key (Just origin) request) >>= (@?= Right receipt)
   run env (Objective.lookupCreatedObjective (baseHost & #settings . #agentCreation .~ []) key origin) >>= (@?= Right (Just receipt))
   run env (Objective.lookupCreatedObjective baseHost key changed) >>= (@?= Left Objective.ObjectiveDenied)
-  run env (Objective.lookupCreatedObjective (baseHost & #actions .~ denyAllActionAuthorizer) key origin) >>= (@?= Left Objective.ObjectiveDenied)
+  run env (Objective.lookupCreatedObjective (baseHost & #actions .~ denyAll) key origin) >>= (@?= Left Objective.ObjectiveDenied)
   run env (Store.recordOutcomeAndAdvance access (fixtureRevision 3) key (ToolReturned [] ExecutionValue.ToolSucceeded) (NeedTool response (fixtureToolPosition 1)) Nothing) >>= (@?= Right R.Accepted)
   run env (Origin.verifyCreationOrigin authority (Objective.RecordedAgent snapshot.identity) origin) >>= (@?= Left Objective.ObjectiveDenied)
   run env (Objective.lookupCreatedObjective baseHost key origin) >>= (@?= Right (Just receipt))
@@ -1787,7 +1787,7 @@ objectiveSourceRequest :: Objective.CreateRequest
 objectiveSourceRequest = Objective.CreateRequest (mustRight (Objective.parseTitle "created by a tool")) (mustRight (Objective.parseGoal "qualify source attribution")) (mustRight (Objective.parseInstructions "work")) [Objective.Criterion (mustRight (Objective.parseCriterionKey "review")) (mustRight (Objective.parseCriterionDescription "review integrated result")) Objective.HumanVerifiable Objective.JourneyOptional] []
 
 objectiveSourceHost :: AgentIdentity -> Objective.ObjectiveHost
-objectiveSourceHost identity = Objective.ObjectiveHost settings (pure (Right (Objective.RecordedAgent identity))) allowAllActionAuthorizerForTests (\_ _ -> pure (Left Objective.ObjectiveDenied)) (\_ _ -> pure (Left Objective.ObjectiveDenied)) (\_ -> pure (Left Objective.ObjectiveInvalidEvidence))
+objectiveSourceHost identity = Objective.ObjectiveHost settings (pure (Right (Objective.RecordedAgent identity))) allowAllForTests (\_ _ -> pure (Left Objective.ObjectiveDenied)) (\_ _ -> pure (Left Objective.ObjectiveDenied)) (\_ -> pure (Left Objective.ObjectiveInvalidEvidence))
   where
     settings = Objective.defaultObjectiveSettings & #enabled .~ Objective.ObjectivesEnabled & #agentCreation .~ (case identity of VerifiedIdentity principal -> [principal]; _ -> [])
 

@@ -13,7 +13,6 @@ import Data.Time (getCurrentTime)
 import Keiro.Workflow (WorkflowId (..), WorkflowOutcome (..))
 import Kioku.Id (idText)
 import Kiroku.Store.Connection (KirokuStore (..), withStore)
-import Shikigami.Action.Authorization (denyAllActionAuthorizer)
 import Shikigami.Activity (ActivityEnvelope)
 import Shikigami.Agent.Approval qualified as Approval
 import Shikigami.Agent.Approval.Workflow qualified as ApprovalWorkflow
@@ -31,6 +30,7 @@ import Shikigami.App.Config (AppConfig)
 import Shikigami.App.Config qualified as Config
 import Shikigami.App.Config.Load (requireDatabaseUrl)
 import Shikigami.Attestation.Resolve qualified as Profile
+import Shikigami.Authority (denyAll, recordedIn)
 import Shikigami.Behavior.Provider (newBehaviorEnvFor)
 import Shikigami.Directory (disabledDirectoryHandle)
 import Shikigami.Execution.Driver (ExecutionStart (..))
@@ -146,7 +146,7 @@ runDurableAgent logger KirokuStore {pool} appEnv workspace config decl = do
           { AgentWorkflow.appEnv = appEnv,
             AgentWorkflow.behaviorEnv = behEnv,
             AgentWorkflow.decisions = FlowDecision.defaultDecisionServices (either (error . show) id config.decisionModelCatalog),
-            AgentWorkflow.actionAuthorizer = denyAllActionAuthorizer,
+            AgentWorkflow.actionAuthority = recordedIn logger Nothing pool denyAll,
             AgentWorkflow.capabilities = capabilities,
             AgentWorkflow.coordination = Nothing,
             AgentWorkflow.objectives = Nothing,

@@ -238,10 +238,14 @@ traversal, symlinks, Git internals, noisy build directories, binary files, and e
 input or output are refused. Agents without the request receive no workspace tools, and the
 command performs no Git discovery for them.
 
-**Current limitation:** both one-off commands install `denyAllActionAuthorizer`.
+**Current limitation:** both one-off commands install the deny-all authority.
 A workspace request therefore fails before acquiring its provider; neither
 `--workspace` nor Kikan authorization settings override that wiring. These commands
-do not currently provide a working workspace-read run.
+do not currently provide a working workspace-read run. Each refusal is still
+recorded: `shikigami-agent-run` appends to the action record in the database, and
+`shikigami-run-behavior` appends JSON Lines to
+`$XDG_STATE_HOME/shikigami/record.jsonl` (normally
+`~/.local/state/shikigami/record.jsonl`, mode 0600).
 
 `shikigami-run-behavior` rejects sanctioned-profile requirements before dispatch;
 use `shikigami-agent-run` to resolve those from the database. It also rejects
@@ -409,6 +413,24 @@ pages most-significant first (1–200 rows, default 50); `--by` is recorded in t
 no cache to invalidate. **Needs the DB** (`database.connection_string`).
 
 → See [Sinks](./sinks.md).
+
+## `shikigami record`
+
+```bash
+$ shikigami record list [--run <WORKFLOW-ID>] [--refusals | --kind <PREFIX>] [--limit <N>] [--json]
+```
+
+Print the action record: one event per authority decision and per external effect, the most
+recent `N` (1–1000, default 50) printed oldest first. Each line shows the time, run, agent,
+principal, tier and kind, then the action tag, resource, decision and who decided, for example:
+
+```text
+2026-11-15T15:44:28Z 0c28b4fb-… triage-note shikigami.agent.v2.… unspecified authority.decided emit_output kizashi.signal:person:nadeem refused unavailable: … (source: none)
+```
+
+`--refusals` keeps only decisions that did not allow; `--kind authority.` keeps kinds with that
+prefix; `--json` prints JSON Lines. A decision whose record append fails is refused, so every
+action that ran has a row. **Needs the DB** (`database.connection_string`).
 
 ## `shikigami danwa-spike`
 

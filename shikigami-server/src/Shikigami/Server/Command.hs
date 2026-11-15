@@ -70,6 +70,7 @@ import Shikigami.Server.Command.Objectives
 import Shikigami.Server.Command.Ops (opsConfigSources, opsInvocationParser, runOps)
 import Shikigami.Server.Command.Proposals
 import Shikigami.Server.Command.PublishFixture (runPublishFixture)
+import Shikigami.Server.Command.Record (RecordListOptions (..), runRecordList)
 import Shikigami.Server.Command.RenderLifecycle (runRenderLifecycle)
 import Shikigami.Server.Command.ResolveApproval (resolveApprovalOptionsParser, runResolveApproval)
 import Shikigami.Server.Command.Resources (runResourcesInspect)
@@ -180,8 +181,25 @@ adminSubcommands =
     ("objectives", command "objectives" objectivesInfo),
     ("mandates", command "mandates" mandatesInfo),
     ("watchdog", command "watchdog" watchdogInfo),
-    ("proposals", command "proposals" proposalsInfo)
+    ("proposals", command "proposals" proposalsInfo),
+    ("record", command "record" recordInfo)
   ]
+
+-- | Read the kernel action record: every authority decision and every
+-- external effect, oldest first.
+recordInfo :: ParserInfo AdminAction
+recordInfo = info (subparser (command "list" listInfo) <**> helper) (progDesc "Read the action record of authority decisions and effects")
+  where
+    listInfo = info (listing <**> helper) (progDesc "Print the most recent matching record events, oldest first")
+    listing =
+      (\options -> (runRecordList options, []))
+        <$> ( RecordListOptions
+                <$> optional (Text.pack <$> strOption (long "run" <> metavar "WORKFLOW-ID" <> help "only events of this run"))
+                <*> switch (long "refusals" <> help "only authority decisions that did not allow")
+                <*> optional (Text.pack <$> strOption (long "kind" <> metavar "PREFIX" <> help "only kinds starting with PREFIX, e.g. authority."))
+                <*> optional (option auto (long "limit" <> metavar "N" <> help "most recent N events (1-1000, default 50)"))
+                <*> switch (long "json" <> help "print JSON Lines")
+            )
 
 -- | Read and govern unrequested work. A standing policy is the one way past a
 -- person, so its verbs are here rather than anywhere an agent could reach.

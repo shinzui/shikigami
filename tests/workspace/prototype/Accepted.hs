@@ -24,12 +24,12 @@ import Keiro.Workflow.Awakeable.Schema (registerAwakeableTx)
 import Keiro.Workflow.Types (WorkflowId (..))
 import Kioku.Id (genSessionId)
 import Kiroku.Store.Transaction (runTransaction)
-import Shikigami.Action.Authorization (ActionAuthorizer)
 import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Decl (Behavior (Skill))
 import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Name (AgentName, agentNameText, mkAgentName)
 import Shikigami.App (AppEffects, AppEnv, runAppIO)
+import Shikigami.Authority (Authority)
 import Shikigami.Behavior.Provider.Coordinate qualified as ProviderValue
 import Shikigami.Behavior.StubProvider (stubModel)
 import Shikigami.Capability.Catalog
@@ -70,13 +70,13 @@ data Prepared = Prepared {snapshot :: !ExecutionSnapshot, reference :: !Attempt.
   deriving stock (Generic)
   deriving anyclass (Aeson.ToJSON, Aeson.FromJSON)
 
-prepareAccepted :: AppEnv -> ActionAuthorizer -> (ExecutionSnapshot -> IO (Either Text.Text ())) -> ProcessClient -> WorkspaceBinding -> WorkspaceAdmission -> Text.Text -> IO Prepared
+prepareAccepted :: AppEnv -> Authority -> (ExecutionSnapshot -> IO (Either Text.Text ())) -> ProcessClient -> WorkspaceBinding -> WorkspaceAdmission -> Text.Text -> IO Prepared
 prepareAccepted = preparePlan False
 
-prepareUpgrade :: AppEnv -> ActionAuthorizer -> (ExecutionSnapshot -> IO (Either Text.Text ())) -> ProcessClient -> WorkspaceBinding -> WorkspaceAdmission -> IO Prepared
+prepareUpgrade :: AppEnv -> Authority -> (ExecutionSnapshot -> IO (Either Text.Text ())) -> ProcessClient -> WorkspaceBinding -> WorkspaceAdmission -> IO Prepared
 prepareUpgrade env authorizer current client binding admission = preparePlan True env authorizer current client binding admission "complete"
 
-preparePlan :: Bool -> AppEnv -> ActionAuthorizer -> (ExecutionSnapshot -> IO (Either Text.Text ())) -> ProcessClient -> WorkspaceBinding -> WorkspaceAdmission -> Text.Text -> IO Prepared
+preparePlan :: Bool -> AppEnv -> Authority -> (ExecutionSnapshot -> IO (Either Text.Text ())) -> ProcessClient -> WorkspaceBinding -> WorkspaceAdmission -> Text.Text -> IO Prepared
 preparePlan upgrade env authorizer current client binding admission mode = do
   now <- getCurrentTime
   session <- genSessionId
@@ -153,11 +153,11 @@ submit env snapshot access input = do
   void (right =<< run env (Execution.submitExecutionAttemptWith access accepted.revision submission (\_ -> pure ())))
   pure (Prepared snapshot reference)
 
-executePrepared :: AppEnv -> ActionAuthorizer -> (ExecutionSnapshot -> IO (Either Text.Text ())) -> ProcessClient -> Prepared -> IO ()
+executePrepared :: AppEnv -> Authority -> (ExecutionSnapshot -> IO (Either Text.Text ())) -> ProcessClient -> Prepared -> IO ()
 executePrepared env authorizer current client prepared = do
   executeGitWithBackend nativeGitBackend env authorizer current client prepared
 
-executeGitWithBackend :: GitBackend -> AppEnv -> ActionAuthorizer -> (ExecutionSnapshot -> IO (Either Text.Text ())) -> ProcessClient -> Prepared -> IO ()
+executeGitWithBackend :: GitBackend -> AppEnv -> Authority -> (ExecutionSnapshot -> IO (Either Text.Text ())) -> ProcessClient -> Prepared -> IO ()
 executeGitWithBackend backend env authorizer current client prepared = do
   let file = fileRuntime env authorizer current
       providers = must (installDurableAdapters [supervisedWorkspaceEditAdapter file, workspaceExecAdapter client, workspaceGitAdapterWithBackend backend file, transferredWorkspaceEditAdapter file, transferredWorkspaceExecAdapter client, transferredWorkspaceGitAdapterWithBackend backend file, workspaceIntegrationAdapterWithBackend backend file] emptyCapabilityProviderRegistry)
@@ -165,7 +165,7 @@ executeGitWithBackend backend env authorizer current client prepared = do
   result <- Executor.executeAcceptedAttempt runtime prepared.snapshot.identity prepared.reference
   unless (result == Right Executor.ExecutorDone) (fail "fixture execution did not finish its delivery")
 
-fileRuntime :: AppEnv -> ActionAuthorizer -> (ExecutionSnapshot -> IO (Either Text.Text ())) -> FileRuntime
+fileRuntime :: AppEnv -> Authority -> (ExecutionSnapshot -> IO (Either Text.Text ())) -> FileRuntime
 fileRuntime env authorizer current = FileRuntime env authorizer current current (\_ _ _ _ _ -> pure (Right ()))
 
 registry :: FileRuntime -> ProcessClient -> CapabilityProviderRegistry
@@ -188,10 +188,10 @@ must = either (const (error "fixture definition refused")) id
 
 -- Transfer-aware qualification uses real protected model/tool inputs and actual
 -- claims. This helper never invents session/objective ownership authority.
-prepareTools :: AppEnv -> ActionAuthorizer -> (ExecutionSnapshot -> IO (Either Text.Text ())) -> ProcessClient -> WorkspaceAdmission -> [(Text.Text, Aeson.Value)] -> IO Prepared
+prepareTools :: AppEnv -> Authority -> (ExecutionSnapshot -> IO (Either Text.Text ())) -> ProcessClient -> WorkspaceAdmission -> [(Text.Text, Aeson.Value)] -> IO Prepared
 prepareTools = prepareToolsFor (fixtureAgentName "fixture")
 
-prepareToolsFor :: AgentName -> AppEnv -> ActionAuthorizer -> (ExecutionSnapshot -> IO (Either Text.Text ())) -> ProcessClient -> WorkspaceAdmission -> [(Text.Text, Aeson.Value)] -> IO Prepared
+prepareToolsFor :: AgentName -> AppEnv -> Authority -> (ExecutionSnapshot -> IO (Either Text.Text ())) -> ProcessClient -> WorkspaceAdmission -> [(Text.Text, Aeson.Value)] -> IO Prepared
 prepareToolsFor agent env authorizer current client admission calls = do
   now <- getCurrentTime
   session <- genSessionId
@@ -253,7 +253,7 @@ nextTool env access snapshot response position invocation = case filter ((== inv
   [binding] -> submit env snapshot access (ToolOperationInput response position invocation binding)
   _ -> fail "exact retained fixture tool missing"
 
-executeWithProviders :: CapabilityProviderRegistry -> AppEnv -> ActionAuthorizer -> (ExecutionSnapshot -> IO (Either Text.Text ())) -> Prepared -> IO ()
+executeWithProviders :: CapabilityProviderRegistry -> AppEnv -> Authority -> (ExecutionSnapshot -> IO (Either Text.Text ())) -> Prepared -> IO ()
 executeWithProviders providers env authorizer current prepared = do
   let runtime = Executor.ExecutionRuntime env (\_ -> current prepared.snapshot) current (\_ -> error "fixture does not dispatch a model") (Tools.withExecutionTools Log.silentLogger authorizer providers native) (either (error . show) id (parseDuration 5))
   result <- Executor.executeAcceptedAttempt runtime prepared.snapshot.identity prepared.reference

@@ -23,7 +23,6 @@ import Keiro.Outbox qualified as Outbox
 import Keiro.Workflow
 import Keiro.Workflow.Child (runChildWorkflow)
 import Kioku.Id (genSessionId)
-import Shikigami.Action.Authorization (denyAllActionAuthorizer)
 import Shikigami.Agent.Approval qualified as Approval
 import Shikigami.Agent.Approval.Workflow qualified as Approval
 import Shikigami.Agent.Decl (AgentDecl (..))
@@ -31,6 +30,7 @@ import Shikigami.Agent.DeclarationValue (declarationCoordinate)
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
 import Shikigami.Agent.RunJob (RunJob (..), runJobWorkflowId)
 import Shikigami.Agent.Workflow qualified as Agent
+import Shikigami.Authority (denyAll)
 import Shikigami.Directory.Store qualified as DirectoryStore
 import Shikigami.Duration (parseDuration, remainingDuration)
 import Shikigami.Execution.Claim (parseClaimOwner)
@@ -157,15 +157,15 @@ tests fixture = withResource (newMVar Map.empty) (const (pure ())) $ \resource -
           before <- owned w.base (Sessions.inspectSession (sessionIdFor w.admission))
           let run = Workers.CoordinatorRun (runJobWorkflowId job) job.identity (maybe (error "no session") id w.admission.context.sessionId) job.executionRootId Nothing
               commands = [Workers.CancelWorker (sessionIdFor w.admission) initialRevision initialRevision, Workers.TransferWorker (sessionIdFor w.admission) initialRevision initialRevision (WorkspaceRef (workspaceCoordinate "fixture") (workspaceCoordinate "protected")) w.admission.worker]
-          policy <- FlowWorkers.resolveCoordinationPolicy w.deps.coordination denyAllActionAuthorizer run
+          policy <- FlowWorkers.resolveCoordinationPolicy w.deps.coordination denyAll run
           policy @?= Right Nothing
           mapM_
             ( \command -> do
-                result <- owned w.base (runWorkflow (WorkflowName "watchdog-authority-probe") (WorkflowId (Text.pack (show command))) (FlowWorkers.runWorkers w.deps.coordination denyAllActionAuthorizer run policy (FlowWorkers.command (declarationCoordinate "refused") command)))
+                result <- owned w.base (runWorkflow (WorkflowName "watchdog-authority-probe") (WorkflowId (Text.pack (show command))) (FlowWorkers.runWorkers w.deps.coordination denyAll run policy (FlowWorkers.command (declarationCoordinate "refused") command)))
                 assertBool "command refused" (case result of Completed (Left _) -> True; _ -> False)
             )
             commands
-          let host = ObjectiveRuntime.hostFor w.base.objectiveRuntime job.identity & #actions .~ denyAllActionAuthorizer
+          let host = ObjectiveRuntime.hostFor w.base.objectiveRuntime job.identity & #actions .~ denyAll
           refused <- Objectives.admitObjectiveAction host "cancel" (Aeson.toJSON CancelObjective)
           assertBool "objective cancel refused" (either (const True) (const False) refused)
           owned w.base (Sessions.inspectSession (sessionIdFor w.admission)) >>= (@?= before)

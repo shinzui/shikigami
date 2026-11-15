@@ -29,7 +29,6 @@ import Keiro.Workflow (WorkflowId (..), WorkflowJournalEvent (StepRecorded), Wor
 import Keiro.Workflow.Resume (resumeWorkflowsOnce)
 import Kiroku.Store.Connection (KirokuStore (..), withStore)
 import Kiroku.Store.Transaction (runTransaction)
-import Shikigami.Action.Authorization (allowAllActionAuthorizerForTests)
 import Shikigami.Agent.Conversation qualified as Conversation
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (Flow, Skill), IdentityDecl (..), RecordPolicy (Never), defaultDelegationBudget)
 import Shikigami.Agent.DeclarationValue (declarationCoordinate, declarationCoordinateText)
@@ -41,6 +40,7 @@ import Shikigami.Agent.Workflow qualified as Agent
 import Shikigami.AgentRun.Ledger qualified as Ledger
 import Shikigami.AgentRun.RequestKey (parseRequestKey)
 import Shikigami.App (AppEnv (..))
+import Shikigami.Authority (allowAllForTests)
 import Shikigami.Behavior.Error (TransientBehaviorFailure (..))
 import Shikigami.Behavior.Run (BehaviorEnv (..), newBehaviorEnv)
 import Shikigami.Behavior.StubProvider (stubApiProvider)
@@ -138,7 +138,7 @@ conversationCreation fixture = Fixture.withConfiguredResourceFixture fixture id 
   registry <- Provider.newProviderRegistryFrom [provider]
   directory <- Directory.newDirectoryHandle (Directory.staticDirectorySource [Directory.PrincipalRecord (declarationCoordinate "agent_objectives_conversation") (declarationCoordinate "worker") Directory.Active])
   Directory.refreshDirectory directory >>= (@?= Right ())
-  let runtime = Objectives.ObjectiveRuntime env settings directory allowAllActionAuthorizerForTests Nothing
+  let runtime = Objectives.ObjectiveRuntime env settings directory allowAllForTests Nothing
       configured = base & #providerRegistry .~ Just registry
       dependencies = (RouterFixture.routerDeps env configured (Routing.RoutingRuntime (\_ -> pure RouterFixture.catalog) (\_ _ _ -> error "unused routing")) [declaration]) & #directory .~ directory & #objectives .~ Just runtime & #decisions . #providers .~ [provider] & #deliveryPool .~ Just store.pool
       conversation =
@@ -287,8 +287,8 @@ associatedSkillScenario fixture revoke = Fixture.withFixture fixture \env _ _ ->
       request = case createInput of Aeson.Object fields -> case Aeson.fromJSON (fromMaybe Aeson.Null (KeyMap.lookup "request" fields)) of Aeson.Success value -> value; Aeson.Error err -> error err; _ -> error "invalid fixture"
   directory <- Directory.newDirectoryHandle (Directory.staticDirectorySource [Directory.PrincipalRecord (declarationCoordinate "agent_objective_member") (declarationCoordinate "worker") Directory.Active])
   Directory.refreshDirectory directory >>= (@?= Right ())
-  let coordination = Objectives.coordinationHost env settings directory allowAllActionAuthorizerForTests [declaration] defaultDelegationBudget Nothing
-      runtime = Objectives.ObjectiveRuntime env settings directory allowAllActionAuthorizerForTests (Just coordination)
+  let coordination = Objectives.coordinationHost env settings directory allowAllForTests [declaration] defaultDelegationBudget Nothing
+      runtime = Objectives.ObjectiveRuntime env settings directory allowAllForTests (Just coordination)
       owner = (Objectives.hostFor runtime actor) & #authenticate .~ pure (Right (O.VerifiedCaller caller))
       create key = do
         created <- Objectives.owned runtime (Goal.createObjective owner (checked parseOperationId (key <> "-create")) Nothing request) >>= right
@@ -374,7 +374,7 @@ skillScenario fixture scenario = Fixture.withConfiguredResourceFixture fixture i
   registry <- Provider.newProviderRegistryFrom [provider]
   directory <- Directory.newDirectoryHandle (Directory.staticDirectorySource [Directory.PrincipalRecord (declarationCoordinate "agent_objectives_skill") (declarationCoordinate "worker") Directory.Active])
   Directory.refreshDirectory directory >>= (@?= Right ())
-  let runtime = Objectives.ObjectiveRuntime env settings directory allowAllActionAuthorizerForTests Nothing
+  let runtime = Objectives.ObjectiveRuntime env settings directory allowAllForTests Nothing
       configured = base & #providerRegistry .~ Just registry
       dependencies = (RouterFixture.routerDeps env configured (Routing.RoutingRuntime (\_ -> pure RouterFixture.catalog) (\_ _ _ -> error "unused routing")) [declaration]) & #directory .~ directory & #objectives .~ Just runtime & #decisions . #providers .~ [provider] & #deliveryPool .~ Just store.pool
       execution = Replay.executionIdFor (assignmentIdFor (runJobWorkflowId job).unWorkflowId)
@@ -456,7 +456,7 @@ flowCreation fixture loseAcknowledgement = Fixture.withFixture fixture \env _ _ 
       settings = O.defaultObjectiveSettings & #enabled .~ O.ObjectivesEnabled & #agentCreation .~ [principal]
   directory <- Directory.newDirectoryHandle (Directory.staticDirectorySource [Directory.PrincipalRecord (declarationCoordinate "agent_objectives_flow") (declarationCoordinate "worker") Directory.Active])
   Directory.refreshDirectory directory >>= (@?= Right ())
-  let runtime = Objectives.ObjectiveRuntime env settings directory allowAllActionAuthorizerForTests Nothing
+  let runtime = Objectives.ObjectiveRuntime env settings directory allowAllForTests Nothing
       dependencies = (RouterFixture.routerDeps env base (Routing.RoutingRuntime (\_ -> pure RouterFixture.catalog) (\_ _ _ -> error "unused routing")) [declaration]) & #directory .~ directory & #objectives .~ Just runtime
   when loseAcknowledgement do
     sql env "CREATE FUNCTION shikigami.reject_objective_flow_ack() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.step_name = 'objectives-example-create' THEN RAISE EXCEPTION 'injected objective reply journal failure'; END IF; RETURN NEW; END $$; CREATE TRIGGER reject_objective_flow_ack BEFORE INSERT ON keiro.keiro_workflow_steps FOR EACH ROW EXECUTE FUNCTION shikigami.reject_objective_flow_ack()"
@@ -504,7 +504,7 @@ nativeScenario fixture loseAcknowledgement holdInspection = Fixture.withConfigur
       settings = O.defaultObjectiveSettings & #enabled .~ O.ObjectivesEnabled & #agentCreation .~ [principal]
   directory <- Directory.newDirectoryHandle (Directory.staticDirectorySource [Directory.PrincipalRecord (declarationCoordinate "agent_objectives_native") (declarationCoordinate "worker") Directory.Active])
   Directory.refreshDirectory directory >>= (@?= Right ())
-  let runtime = Objectives.ObjectiveRuntime env settings directory allowAllActionAuthorizerForTests Nothing
+  let runtime = Objectives.ObjectiveRuntime env settings directory allowAllForTests Nothing
   scope <- Objectives.resolveExecutionScope runtime job declaration initial.sessionId selection >>= right >>= maybe (fail "creator scope missing") pure
   scope.rootId @?= selection.rootId
   runtimeRef <- newIORef runtime
@@ -552,7 +552,7 @@ nativeScenario fixture loseAcknowledgement holdInspection = Fixture.withConfigur
                   Left _ -> pure ()
               pure output
           }
-  menu <- Native.describeExecutionTools Log.silentLogger allowAllActionAuthorizerForTests emptyCapabilityProviderRegistry currentFactory (initial & #objectiveScope .~ Just scope) >>= right
+  menu <- Native.describeExecutionTools Log.silentLogger allowAllForTests emptyCapabilityProviderRegistry currentFactory (initial & #objectiveScope .~ Just scope) >>= right
   let snapshot = initial & #objectiveScope .~ Just scope & #offeredTools .~ menu.offeredTools & #toolBindings .~ menu.toolBindings
   _ <- right =<< Fixture.run env (Execution.admitExecution snapshot)
   (base, _, _) <- Fixture.driverRuntime env False
@@ -580,7 +580,7 @@ nativeScenario fixture loseAcknowledgement holdInspection = Fixture.withConfigur
             Executor.authorize = \snapshot' -> Directory.identityLifecycleAdmission directory snapshot'.identity,
             Executor.withTools = \snapshot' context requested use -> do
               atomicModifyIORef' dispatch (const (Just context, ()))
-              Native.withExecutionTools Log.silentLogger allowAllActionAuthorizerForTests emptyCapabilityProviderRegistry currentFactory snapshot' context requested use
+              Native.withExecutionTools Log.silentLogger allowAllForTests emptyCapabilityProviderRegistry currentFactory snapshot' context requested use
           }
   when holdInspection do
     advanceUntilPending env executor snapshot 60

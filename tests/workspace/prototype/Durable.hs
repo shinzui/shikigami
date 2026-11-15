@@ -27,7 +27,6 @@ import GHC.Generics (Generic)
 import Keiro.Workflow (WorkflowId (..), WorkflowOutcome (..), loadStepIndex)
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
 import Kiroku.Store.Transaction (runTransaction)
-import Shikigami.Action.Authorization.Config (buildConfiguredActionAuthorizer)
 import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Approval (autoApprovePolicy)
 import Shikigami.Agent.Approval.Workflow qualified as Approval
@@ -43,6 +42,7 @@ import Shikigami.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
 import Shikigami.App.Config (AppConfig (..), Role (AdminRole), revealSecretText)
 import Shikigami.App.Config.Load (ConfigOptions (..), DiagnosticMode (NoDiagnostic), requireDatabaseUrl, runAppConfig)
 import Shikigami.Attestation.Resolve (ProfileResolutionError (UnknownProfile))
+import Shikigami.Authority.KikanEn.Config (buildConfiguredAuthority)
 import Shikigami.Behavior.Run (newBehaviorEnv)
 import Shikigami.Behavior.StubProvider (stubApiProvider)
 import Shikigami.Capability.Overlay (CapabilityDescriptor (..))
@@ -104,7 +104,7 @@ workflowCase configFile prefix stage = do
   connection <- revealSecretText <$> requireDatabaseUrl "workspace-workflow-fixture" config
   tracer <- noopTracer
   let env = AppEnv {connectionSettings = defaultConnectionSettings connection, tracer, metrics = Nothing, store = Nothing}
-  authorizer <- right =<< buildConfiguredActionAuthorizer Log.silentLogger config
+  authorizer <- right =<< buildConfiguredAuthority Log.silentLogger config
   directory <- right =<< startDirectory Log.silentLogger config.directorySettings
   withStore env.connectionSettings \store -> do
     principal <- right (identityText initial.binding.request.owner)
@@ -157,7 +157,7 @@ workflowCase configFile prefix stage = do
             { appEnv = env,
               behaviorEnv = base & #providerRegistry .~ Just providers,
               decisions = Decision.emptyDecisionServices,
-              actionAuthorizer = authorizer,
+              actionAuthority = authorizer,
               capabilities = host.capabilities,
               workspace = Just host,
               coordination = Nothing,

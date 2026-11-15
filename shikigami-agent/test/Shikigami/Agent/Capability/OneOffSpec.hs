@@ -30,7 +30,6 @@ import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as TE
 import Data.Vector qualified as Vector
-import Shikigami.Action.Authorization (allowAllActionAuthorizerForTests)
 import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Capability.OneOff
 import Shikigami.Agent.Capability.Workspace (workspaceReadId)
@@ -45,6 +44,7 @@ import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Loader (loadAgent)
 import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
+import Shikigami.Authority (allowAllForTests)
 import Shikigami.Behavior.Run (BehaviorEnv (..), newBehaviorEnv, runBehavior, triggerOnly)
 import Shikigami.Capability.Catalog (CapabilityResolutionError (MissingCapabilityIdentity))
 import Shikigami.Capability.Overlay (CapabilityId, capabilityIdText)
@@ -79,7 +79,7 @@ tests =
         result <-
           withOneOffCapabilityOverlays
             Log.silentLogger
-            allowAllActionAuthorizerForTests
+            allowAllForTests
             (Just "/definitely/missing/shikigami-workspace")
             (declFor [])
             base
@@ -108,7 +108,7 @@ tests =
         result <-
           withOneOffCapabilityOverlays
             Log.silentLogger
-            allowAllActionAuthorizerForTests
+            allowAllForTests
             (Just "/definitely/missing/shikigami-workspace")
             (declForIdentity Nothing [workspaceReadId])
             base
@@ -155,12 +155,12 @@ tests =
               optedDecl = (declFor [workspaceReadId]) {behavior = Skill {path = declarationCoordinate (Text.pack (root </> "agents" </> "skills" </> "triage-note"))}}
               emptyDecl = (declFor []) {behavior = Skill {path = declarationCoordinate (Text.pack (root </> "agents" </> "skills" </> "triage-note"))}}
           opted <-
-            withOneOffCapabilityOverlays logger allowAllActionAuthorizerForTests (Just repository) optedDecl optedBase \derived ->
+            withOneOffCapabilityOverlays logger allowAllForTests (Just repository) optedDecl optedBase \derived ->
               runBehavior derived optedDecl (triggerOnly (object ["task" .= ("read the fixture" :: Text)]))
           empty <-
             withOneOffCapabilityOverlays
               logger
-              allowAllActionAuthorizerForTests
+              allowAllForTests
               (Just "/definitely/missing/shikigami-workspace")
               emptyDecl
               emptyBase

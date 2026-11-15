@@ -81,7 +81,6 @@ import Kiroku.Store.Effect.Resource (KirokuStoreResource)
 import Kiroku.Store.Error (StoreError)
 import Kiroku.Store.Transaction (runTransaction)
 import Kiroku.Store.Types (EventId)
-import Shikigami.Action.Authorization (denyAllActionAuthorizer)
 import Shikigami.Agent.Conversation.SessionIndex qualified as SessionIndex
 import Shikigami.Agent.Decl (AgentDecl (..), IdentityDecl (..))
 import Shikigami.Agent.Decl qualified as Agent
@@ -99,6 +98,7 @@ import Shikigami.Agent.Workflow qualified as AgentWorkflow
 import Shikigami.App (AppEffects, AppEnv (..), runAppIO)
 import Shikigami.Attestation.Profile (ProfileId (..), ProfileVersion (..))
 import Shikigami.Attestation.Resolve (ProfileResolutionError, ResolvedProfile, renderProfileResolutionError)
+import Shikigami.Authority (denyAll)
 import Shikigami.Behavior.Error (TransientBehaviorFailure (..), boundedBehaviorDetail)
 import Shikigami.Behavior.Run (BehaviorEnv (..), runBehaviorAttempt, triggerOnly)
 import Shikigami.Behavior.Skill (SkillDir (..))
@@ -971,7 +971,7 @@ runConversationSkillStep env recordedIdentity decl msg sid userTurn profile sele
   (_, workflowId) <- currentWorkflow
   useObjectives <- Workflow.patch (Workflow.PatchId "shikigami-conversation-objective-tracking-v1")
   let runtime = conversationExecutionRuntime env
-      describe = ExecutionTools.describeExecutionTools Log.silentLogger denyAllActionAuthorizer emptyCapabilityProviderRegistry (conversationTools env)
+      describe = ExecutionTools.describeExecutionTools Log.silentLogger denyAll emptyCapabilityProviderRegistry (conversationTools env)
       loadObjectives = case env.objectives of
         Nothing -> pure (Right Nothing)
         Just host -> case Objective.parseConversationRef (declarationCoordinateText msg.conversationId) of
@@ -1043,7 +1043,7 @@ conversationExecutionRuntime env =
             authorize = authority snapshot,
             transact = SelectionRuntime.selectionTransaction env.appEnv env.deliveryPool
           },
-      withTools = ExecutionTools.withExecutionTools Log.silentLogger denyAllActionAuthorizer emptyCapabilityProviderRegistry (conversationTools env),
+      withTools = ExecutionTools.withExecutionTools Log.silentLogger denyAll emptyCapabilityProviderRegistry (conversationTools env),
       timeoutSeconds = env.runTimeout
     }
   where

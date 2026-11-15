@@ -14,8 +14,6 @@ import Data.Text qualified as Text
 import Data.Time (nominalDiffTimeToSeconds)
 import Kiroku.Store.Connection qualified as StoreConnection
 import Kiroku.Store.Transaction (runTransaction)
-import Shikigami.Action.Authorization (ActionAuthorizer)
-import Shikigami.Action.Authorization.Config (buildConfiguredActionAuthorizer)
 import Shikigami.Agent.Approval (ApprovalPolicySnapshot (..), renderApprovalChannel)
 import Shikigami.Agent.Approval.Notification qualified as ApprovalNotification
 import Shikigami.Agent.Decl (AgentDecl (..))
@@ -25,6 +23,8 @@ import Shikigami.App (AppEnv (..), runAppIO)
 import Shikigami.App.Config (AppConfig, Role (WorkerRole))
 import Shikigami.App.Config qualified as Config
 import Shikigami.App.Config.Load (requireDatabaseUrl)
+import Shikigami.Authority (Authority, recordedIn)
+import Shikigami.Authority.KikanEn.Config (buildConfiguredAuthority)
 import Shikigami.Behavior.Provider (newBehaviorEnvFor)
 import Shikigami.Directory (DirectoryRuntime (..))
 import Shikigami.Duration
@@ -131,7 +131,7 @@ runWorkerCmdWith resumeBudget config = do
         newSinkHttp httpLimits (credentialsFromConfig config) danwaConfig >>= \case
           Left failure -> refuseInvalidSinkHttp logger failure
           Right clients -> pure clients
-      actionAuthorizer <- buildActionAuthorizer logger config
+      actionAuthority <- recordedIn logger (Just shikigamiMetrics) storePool <$> buildActionAuthorizer logger config
       let policy =
             ApprovalPolicySnapshot
               { requireFor = (.approvalRequiredSinks) config,
@@ -174,7 +174,7 @@ runWorkerCmdWith resumeBudget config = do
       DirectoryRuntime {handle = directory, refresher = directoryRefresher} <-
         startProcessDirectory logger registry ((.directorySettings) config)
       let appEnv = AppEnv {connectionSettings = settings, tracer = tr, metrics = keiroMetrics, store = Just st}
-      workspace <- case traverse (configuredWorkspaceHostWithTransfers appEnv storePool directory actionAuthorizer) config.workspaceSettings of
+      workspace <- case traverse (configuredWorkspaceHostWithTransfers appEnv storePool directory actionAuthority) config.workspaceSettings of
         Left _ -> do
           Log.logError logger "worker.workspace.invalid" []
           Exit.exitFailure
@@ -185,7 +185,7 @@ runWorkerCmdWith resumeBudget config = do
           if config.trackerSettings.enabled == TrackersDisabled
             then pure Nothing
             else do
-              objective <- either (const (Exit.die "shikigami-worker: objective tracker operator is required")) pure (TrackerRuntime.operatorHost config.objectiveSettings actionAuthorizer)
+              objective <- either (const (Exit.die "shikigami-worker: objective tracker operator is required")) pure (TrackerRuntime.operatorHost config.objectiveSettings actionAuthority)
               pure (Just (Tracker.TrackerHost objective config.trackerSettings (TrackerRuntime.providerFor providers config.trackerSettings)))
         either (Exit.die . Text.unpack) pure (Capacity.validateHeadroom settings.poolSize config.capacity)
         configured <- runAppIO appEnv (runTransaction (Capacity.configureTx config.capacity))
@@ -201,7 +201,7 @@ runWorkerCmdWith resumeBudget config = do
                   agentReport = report,
                   behaviorEnv = behEnv,
                   decisions = FlowDecision.defaultDecisionServices (either (error . show) id config.decisionModelCatalog),
-                  actionAuthorizer,
+                  actionAuthority,
                   workspace,
                   workspaceTransfers = config.workspaceSettings >>= configuredWorkspaceTransfers,
                   runTimeout = (.runTimeout) config,
@@ -267,9 +267,9 @@ refuseInvalidSinkHttp logger failure = do
   Log.logError logger "worker.sink_http.invalid" ["error" .= show failure]
   Exit.die "shikigami-worker: refusing to start; invalid sink HTTP configuration"
 
-buildActionAuthorizer :: Log.Logger -> AppConfig -> IO ActionAuthorizer
+buildActionAuthorizer :: Log.Logger -> AppConfig -> IO Authority
 buildActionAuthorizer logger config =
-  buildConfiguredActionAuthorizer logger config >>= either (Exit.die . Text.unpack) pure
+  buildConfiguredAuthority logger config >>= either (Exit.die . Text.unpack) pure
 
 -- | Refuse to boot when a loaded manifest declares a behavior this build cannot
 -- run, naming every offender.

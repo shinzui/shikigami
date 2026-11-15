@@ -28,14 +28,14 @@ import Keiro.Workflow.Awakeable.Schema (registerAwakeableTx)
 import Keiro.Workflow.Types (WorkflowId (..))
 import Kioku.Id (genSessionId)
 import Kiroku.Store.Transaction (runTransaction)
-import Shikigami.Action.Authorization
-import Shikigami.Action.Authorization qualified as Action
 import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Decl (Behavior (Skill))
 import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Name (AgentName, agentNameText, mkAgentName)
 import Shikigami.Agent.Principal (AgentIdentity (..))
 import Shikigami.App (AppEffects, AppEnv, runAppIO)
+import Shikigami.Authority
+import Shikigami.Authority qualified as Action
 import Shikigami.Behavior.Provider.Coordinate qualified as ProviderValue
 import Shikigami.Behavior.StubProvider (stubModel)
 import Shikigami.Capability.Catalog
@@ -146,11 +146,12 @@ tests fixture =
       testCase "independent recovery preserves uncertainty when prepared bytes were never published" $ withEffect fixture \env binding snapshot _ reference runtime _ -> do
         calls <- newIORef (0 :: Int)
         let interrupted =
-              (runtime.authorizer)
-                { Action.authorize = \principal action -> do
+              Action.authority
+                Action.DecidedByFixture
+                ( \principal action -> do
                     ordinal <- atomicModifyIORef' calls (\n -> (n + 1, n))
-                    if ordinal == 1 then throwIO (userError "interrupted before publication") else allowAllActionAuthorizerForTests.authorize principal action
-                }
+                    if ordinal == 1 then throwIO (userError "interrupted before publication") else allowAllForTests.decide principal action
+                )
         Executor.executeAcceptedAttempt (executorFor (runtime & #authorizer .~ interrupted) (pure ())) snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
         run env (runTransaction (Store.freezeWorkspaceTx binding snapshot.identity (fixtureRevision 0))) >>= (@?= Right ())
         publishFileReceipt env reference.operationId >>= (@?= Right AwaitingFileReceipt)
@@ -170,7 +171,7 @@ tests fixture =
       testCase "revision 2 reads only with a ready retained profile and exact authority" $ withSupervisedEffect fixture id "read" \env binding snapshot reference runtime profile -> do
         run env (runTransaction (readyProcessProfileTx binding profile)) >>= (@?= Right ())
         calls <- newIORef (0 :: Int)
-        let checking = runtime & #authorizer .~ (runtime.authorizer) {Action.authorize = \principal action -> modifyIORef' calls (+ 1) >> allowAllActionAuthorizerForTests.authorize principal action}
+        let checking = runtime & #authorizer .~ Action.authority Action.DecidedByFixture (\principal action -> modifyIORef' calls (+ 1) >> allowAllForTests.decide principal action)
         Executor.executeAcceptedAttempt (executorForAdapter supervisedWorkspaceEditAdapter checking) snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
         readIORef calls >>= (@?= 1)
         Just operation <- right =<< run env (Execution.inspectOperation reference.operationId)
@@ -178,7 +179,7 @@ tests fixture =
         assertBool "retained read contains protected contents" ("old dependency" `Text.isInfixOf` Text.pack (show (Aeson.encode output))),
       testCase "revision 2 refuses reserved profiles before authority or file effects" $ withSupervisedEffect fixture id "read" \env _ snapshot reference runtime _ -> do
         calls <- newIORef (0 :: Int)
-        let checking = runtime & #authorizer .~ (runtime.authorizer) {Action.authorize = \principal action -> modifyIORef' calls (+ 1) >> allowAllActionAuthorizerForTests.authorize principal action}
+        let checking = runtime & #authorizer .~ Action.authority Action.DecidedByFixture (\principal action -> modifyIORef' calls (+ 1) >> allowAllForTests.decide principal action)
         Executor.executeAcceptedAttempt (executorForAdapter supervisedWorkspaceEditAdapter checking) snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
         readIORef calls >>= (@?= 0)
         Just operation <- right =<< run env (Execution.inspectOperation reference.operationId)
@@ -187,7 +188,7 @@ tests fixture =
       testCase "revision 2 enforces retained path restrictions before requesting authority" $ withSupervisedEffect fixture (\policy -> policy & processPolicyFields . #readPaths .~ [(workspaceCoordinate "lib")]) "read" \env binding snapshot reference runtime profile -> do
         run env (runTransaction (readyProcessProfileTx binding profile)) >>= (@?= Right ())
         calls <- newIORef (0 :: Int)
-        let checking = runtime & #authorizer .~ (runtime.authorizer) {Action.authorize = \principal action -> modifyIORef' calls (+ 1) >> allowAllActionAuthorizerForTests.authorize principal action}
+        let checking = runtime & #authorizer .~ Action.authority Action.DecidedByFixture (\principal action -> modifyIORef' calls (+ 1) >> allowAllForTests.decide principal action)
         Executor.executeAcceptedAttempt (executorForAdapter supervisedWorkspaceEditAdapter checking) snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
         readIORef calls >>= (@?= 0),
       testCase "revision 2 refuses reads while a retained process is unresolved" $ withSupervisedEffect fixture id "read" \env binding snapshot reference runtime profile -> do
@@ -205,7 +206,7 @@ tests fixture =
         assertBool "pending process blocks protected reads" (case output of ToolReturned _ ToolFailed -> True; _ -> False),
       testCase "accepted durable edit uses both gates and duplicate delivery preserves one result" $ withEffect fixture \env binding snapshot access reference runtime input -> do
         authorizations <- newIORef (0 :: Int)
-        let checking = (runtime.authorizer) {Action.authorize = \principal action -> modifyIORef' authorizations (+ 1) >> allowAllActionAuthorizerForTests.authorize principal action}
+        let checking = Action.authority Action.DecidedByFixture (\principal action -> modifyIORef' authorizations (+ 1) >> allowAllForTests.decide principal action)
             executor = executorFor (runtime & #authorizer .~ checking) (pure ())
         Executor.executeAcceptedAttempt executor snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
         readFile (workspaceFiles (workspaceLocatorPath binding.storageRoot) binding </> "src/dependency.txt") >>= (@?= "PRIVATE_REPLACEMENT\n")
@@ -260,11 +261,12 @@ tests fixture =
       testCase "a crash after prepared intent never attributes a replacement write to the old actual attempt" $ withEffect fixture \env binding snapshot access reference runtime _ -> do
         calls <- newIORef (0 :: Int)
         let interrupted =
-              (runtime.authorizer)
-                { Action.authorize = \principal action -> do
+              Action.authority
+                Action.DecidedByFixture
+                ( \principal action -> do
                     ordinal <- atomicModifyIORef' calls (\n -> (n + 1, n))
-                    if ordinal == 1 then throwIO (userError "fixture interrupted before publication") else allowAllActionAuthorizerForTests.authorize principal action
-                }
+                    if ordinal == 1 then throwIO (userError "fixture interrupted before publication") else allowAllForTests.decide principal action
+                )
             executor = executorFor (runtime & #authorizer .~ interrupted) (pure ())
         Executor.executeAcceptedAttempt executor snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
         (_, uncertain) <- right =<< run env (Execution.loadExecution access)
@@ -285,15 +287,16 @@ tests fixture =
       testCase "freeze at the write boundary prevents publication and retains a settled refusal" $ withEffect fixture \env binding snapshot _ reference runtime _ -> do
         calls <- newIORef (0 :: Int)
         let revoke =
-              (runtime.authorizer)
-                { Action.authorize = \principal action -> do
+              Action.authority
+                Action.DecidedByFixture
+                ( \principal action -> do
                     ordinal <- atomicModifyIORef' calls (\n -> (n + 1, n))
                     if ordinal == 1
                       then do
                         run env (runTransaction (Store.freezeWorkspaceTx binding snapshot.identity (fixtureRevision 0))) >>= (@?= Right ())
-                        allowAllActionAuthorizerForTests.authorize principal action
-                      else allowAllActionAuthorizerForTests.authorize principal action
-                }
+                        allowAllForTests.decide principal action
+                      else allowAllForTests.decide principal action
+                )
         Executor.executeAcceptedAttempt (executorFor (runtime & #authorizer .~ revoke) (pure ())) snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
         readFile (workspaceFiles (workspaceLocatorPath binding.storageRoot) binding </> "src/dependency.txt") >>= (@?= "old dependency\n")
         -- A proven pre-publication refusal is settled metadata, not an invented
@@ -308,7 +311,7 @@ tests fixture =
               path @?= (workspaceCoordinate ("src/dependency.txt"))
               writeIORef checked (map (.text) entries)
               pure (Left "explicit operator policy conflict")
-            authority = (runtime.authorizer) {Action.authorize = \principal action -> modifyIORef' authorizations (+ 1) >> allowAllActionAuthorizerForTests.authorize principal action}
+            authority = Action.authority Action.DecidedByFixture (\principal action -> modifyIORef' authorizations (+ 1) >> allowAllForTests.decide principal action)
             restricted = runtime & #admitTarget .~ targetPolicy & #authorizer .~ authority
         Executor.executeAcceptedAttempt (executorFor restricted (pure ())) snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
         readIORef checked >>= (@?= ["PRIVATE_ROOT_POLICY: validate before commit", "PRIVATE_NESTED_POLICY: scope source changes"])
@@ -325,7 +328,7 @@ tests fixture =
         assertBool "protected read outcome carries content and exact hash" (all (`Text.isInfixOf` Text.pack (show (Aeson.encode output))) ["old dependency", workspaceCoordinateText (contentDigest "old dependency\n")])
         run env (runTransaction (Store.checkWorkspaceOperationTx binding snapshot.identity (fixtureRevision 0) (fixtureOperationId "later"))) >>= (@?= Right ()),
       testCase "denied exact authority refuses before reserving or changing files" $ withEffect fixture \env binding snapshot _ reference runtime _ -> do
-        Executor.executeAcceptedAttempt (executorFor (runtime & #authorizer .~ denyAllActionAuthorizer) (pure ())) snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
+        Executor.executeAcceptedAttempt (executorFor (runtime & #authorizer .~ denyAll) (pure ())) snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
         readFile (workspaceFiles (workspaceLocatorPath binding.storageRoot) binding </> "src/dependency.txt") >>= (@?= "old dependency\n")
         run env (runTransaction (Store.checkWorkspaceOperationTx binding snapshot.identity (fixtureRevision 0) (fixtureOperationId "later"))) >>= (@?= Right ()),
       testCase "an independently held workspace lock retains uncertainty without publishing" $ withEffect fixture \env binding snapshot access reference runtime _ -> do
@@ -406,7 +409,7 @@ withEffectAdapterPolicyInput processPolicy toolCount qualify install wire logica
   let identity = CompatibilityIdentity (fixtureAgentName "worker")
       rootId = fixtureRootId "file-root"
       request = WorkspaceRequest (WorkflowId "file-run") Nothing rootId identity identity (fixtureRevision 0)
-      runtime = FileRuntime env allowAllActionAuthorizerForTests (const (pure (Right ()))) (const (pure (Right ()))) (\_ _ _ _ _ -> pure (Right ()))
+      runtime = FileRuntime env allowAllForTests (const (pure (Right ()))) (const (pure (Right ()))) (\_ _ _ _ _ -> pure (Right ()))
       assignment = fixtureAssignment "file-execution"
   (binding, _) <- right =<< run env (runTransaction (Store.reserveWorkspaceTx root request repository))
   let input = maybe (if logical == "read" then Aeson.object ["path" .= ("src/dependency.txt" :: Text.Text)] else Aeson.toJSON (Replacement (workspaceCoordinate ("src/dependency.txt")) (Just (contentDigest "old dependency\n")) "PRIVATE_REPLACEMENT\n")) id (supplied binding)
@@ -434,7 +437,7 @@ withAcceptedWorkspaceTool toolCount install agent wire token env admission runti
   capabilities <- right (resolveGovernedCapabilityOverlays (durableAdapterInstalled registry) catalog (\_ _ -> Right ()) (ResolutionSubject (fmap declarationCoordinate ((Just (agentNameText agent)))) Durable (Skill (declarationCoordinate ("fixture"))) Nothing) [adapter.descriptor.capability])
   let initial = ExecutionSnapshot V1 (executionIdFor assignment) admission.runId agent identity session selection Nothing (SkillInstructions (ExecutionValue.executionCoordinate "fixture") "system" "body") (ReplayContext RequestContext (Just (instructionPrompt admission.instructions)) [RequestTurn [TextBlock "edit fixture"] Nothing]) capabilities (Aeson.toJSON ([] :: [Aeson.Value])) defaultHarnessPolicy [] (Just admission) Nothing
       native = Tools.NativeToolFactory (\_ -> pure (Right [])) (\_ _ _ -> pure (Right []))
-  menu <- right =<< Tools.describeExecutionTools Log.silentLogger allowAllActionAuthorizerForTests registry native initial
+  menu <- right =<< Tools.describeExecutionTools Log.silentLogger allowAllForTests registry native initial
   let chosen = filter (\tool -> executionCoordinateText tool.name == wire) menu.toolBindings
       tool = case chosen of [value] -> value; _ -> error "missing fixture file binding"
       snapshot = initial & #offeredTools .~ Aeson.toJSON (filterTools menu.offeredTools) & #toolBindings .~ [tool]

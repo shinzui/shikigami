@@ -86,7 +86,6 @@ import Kiroku.Store.Error (StoreError)
 import Kiroku.Store.Transaction (runTransaction)
 import OpenTelemetry.Trace.Core qualified as Otel
 import Shibuya.Telemetry.Effect (SpanArguments, SpanKind (..), Tracing, addAttribute, withSpan')
-import Shikigami.Action.Authorization (ActionAuthorizer)
 import Shikigami.Activity qualified as Activity
 import Shikigami.Agent.Approval
   ( ApprovalDecision (..),
@@ -113,6 +112,7 @@ import Shikigami.App (AppEffects, AppEnv (..), runAppIO)
 import Shikigami.Attestation.PolicyValue qualified as DecisionLimits
 import Shikigami.Attestation.Profile (ProfileId (..), ProfileVersion (..))
 import Shikigami.Attestation.Resolve (ProfileResolutionError, ResolvedProfile, ResolvedProfileView (..), renderProfileResolutionError, resolvedProfileView)
+import Shikigami.Authority (Authority, scopeToRun)
 import Shikigami.Behavior.Error (RunError, TransientBehaviorFailure (..), boundedBehaviorDetail)
 import Shikigami.Behavior.Provider (ProfileViolation, constrainBehaviorEnv, renderProfileViolation)
 import Shikigami.Behavior.Provider.Coordinate (providerCoordinateText)
@@ -183,7 +183,7 @@ import Shikigami.Program.DecisionRunner qualified as DecisionRunner
 import Shikigami.RuntimePolicy (defaultModelRequired)
 import Shikigami.Sink (DanwaConfig, DeliveryGuard (..), GrantSource, KanmonConfig, KawaConfig, KizashiConfig, ReiConfig, SinkContext (..), SinkOutcome (..), SinkResult (..), dispatch, sinkKindOf)
 import Shikigami.Sink.Delivery qualified as Delivery
-import Shikigami.Sink.GrantStore (withActionAuthorizer)
+import Shikigami.Sink.GrantStore (withAuthority)
 import Shikigami.Sink.Http (SinkHttp)
 import Shikigami.Sink.Intent
   ( PreparedSinkIntent,
@@ -215,7 +215,7 @@ data AgentRunDeps = AgentRunDeps
     decisions :: !FlowDecision.DecisionServices,
     -- | Process-local C13 authorizer. The value never crosses a workflow or
     -- outbox boundary; every protected IO boundary asks it afresh.
-    actionAuthorizer :: !ActionAuthorizer,
+    actionAuthority :: !Authority,
     -- | Operator-owned overlay catalog, policy, and exact-revision provider
     -- factories. Only its pure resolution result crosses the journal boundary.
     capabilities :: !CapabilityRuntime,
@@ -304,7 +304,7 @@ depsLogger AgentRunDeps {logger = l} = l
 -- | Named for the same reason as 'depsLogger': 'SinkContext' and
 -- 'FlowCapability.SinkEnv' also carry a @grants@ field.
 depsGrants :: AgentRunDeps -> GrantSource
-depsGrants AgentRunDeps {grants = g, actionAuthorizer} = withActionAuthorizer actionAuthorizer g
+depsGrants AgentRunDeps {grants = g, actionAuthority} = withAuthority actionAuthority g
 
 depsDirectory :: AgentRunDeps -> DirectoryHandle
 depsDirectory AgentRunDeps {directory = value} = value
@@ -356,7 +356,9 @@ runAdmittedAgent deps job = do
     pure (find ((== agentNameText job.agentName) . agentDeclName) declarations)
   case mDecl of
     Nothing -> pure (Left (PermanentAgentRunFailure ("unknown agent " <> (agentNameText ((.agentName) job)))))
-    Just decl -> runResolvedAgent deps job decl
+    -- Every decision made for this run is recorded against it. The authority
+    -- is process-local wiring and is never journaled.
+    Just decl -> runResolvedAgent (deps & #actionAuthority %~ scopeToRun (Just (runJobWorkflowId job)) job.agentName) job decl
 
 runAgentRunWorkflow ::
   AgentRunDeps ->
@@ -540,7 +542,7 @@ executionRuntime deps =
             authorize = authority snapshot,
             transact = SelectionRuntime.selectionTransaction deps.appEnv deps.deliveryPool
           },
-      withTools = ExecutionTools.withExecutionTools deps.logger deps.actionAuthorizer deps.capabilities.providers (executionTools deps),
+      withTools = ExecutionTools.withExecutionTools deps.logger deps.actionAuthority deps.capabilities.providers (executionTools deps),
       timeoutSeconds = deps.runTimeout
     }
   where
@@ -608,7 +610,7 @@ adaptiveRuntime deps = do
 
 executionTools :: AgentRunDeps -> ExecutionTools.NativeToolFactory
 -- Accepted execution bindings determine which coordination scope is reacquired.
-executionTools deps = WorkerTools.appendNativeFactory (WorkerTools.appendNativeFactory (ExecutionTools.staticNativeTools deps.behaviorEnv.tools) (WorkerTools.coordinationTools deps.coordination deps.actionAuthorizer)) (ObjectiveTools.objectiveTools deps.objectives)
+executionTools deps = WorkerTools.appendNativeFactory (WorkerTools.appendNativeFactory (ExecutionTools.staticNativeTools deps.behaviorEnv.tools) (WorkerTools.coordinationTools deps.coordination deps.actionAuthority)) (ObjectiveTools.objectiveTools deps.objectives)
 
 workerSessionRuntime :: AgentRunDeps -> WorkerSession.SessionRuntime
 workerSessionRuntime deps = case deps.coordination of
@@ -720,7 +722,7 @@ runSessionedAgent deps activeBehaviorEnv durableSelection resolvedProfile resolv
                                 acquired <-
                                   runBehaviorWithCapabilities
                                     (depsLogger deps)
-                                    ((.actionAuthorizer) deps)
+                                    ((.actionAuthority) deps)
                                     ((.capabilities) deps)
                                     (capabilityScopeForRun job)
                                     resolvedOverlays
@@ -756,7 +758,7 @@ runDurableSkillStep deps profile overlays job decl sid prior selection path = do
       describe snapshot
         | coordinating && isNothing deps.coordination = pure (Left (Execution.ExecutionPolicyRefused "coordinating Skill authority is unavailable"))
         | otherwise = do
-            menu <- ExecutionTools.describeExecutionTools deps.logger deps.actionAuthorizer deps.capabilities.providers factory snapshot
+            menu <- ExecutionTools.describeExecutionTools deps.logger deps.actionAuthority deps.capabilities.providers factory snapshot
             pure do
               admitted <- menu
               when (coordinating && not (any (\binding -> binding.name == Execution.executionCoordinate "workers") admitted.toolBindings)) (Left (Execution.ExecutionPolicyRefused "coordinating Skill scope was not admitted"))
@@ -891,7 +893,7 @@ capabilityScopeForRun job =
 -- lease before returning.
 runBehaviorWithCapabilities ::
   Log.Logger ->
-  ActionAuthorizer ->
+  Authority ->
   CapabilityRuntime ->
   CapabilityScope ->
   ResolvedCapabilitySet ->
@@ -899,10 +901,10 @@ runBehaviorWithCapabilities ::
   AgentDecl ->
   BehaviorInput ->
   IO (Either CapabilityRuntimeError (Either RunError Value))
-runBehaviorWithCapabilities logger actionAuthorizer CapabilityRuntime {providers} scope resolvedOverlays baseEnv@BehaviorEnv {tools = baseTools} decl input =
+runBehaviorWithCapabilities logger actionAuthority CapabilityRuntime {providers} scope resolvedOverlays baseEnv@BehaviorEnv {tools = baseTools} decl input =
   withCapabilityOverlays
     logger
-    actionAuthorizer
+    actionAuthority
     providers
     scope
     resolvedOverlays
@@ -1131,7 +1133,7 @@ runFlowBehavior deps activeBehaviorEnv resolvedProfile approvalPolicyForRun reco
     Just flow@Flow.FlowDef {Flow.run} -> do
       (_, childWorkflowId) <- currentWorkflow
       let coordinator = WorkerCapability.CoordinatorRun childWorkflowId job.identity sid job.executionRootId job.executionPermissions
-      coordinationPolicy <- step (StepName "worker-coordination-policy") (liftIO (FlowWorkers.resolveCoordinationPolicy deps.coordination deps.actionAuthorizer coordinator))
+      coordinationPolicy <- step (StepName "worker-coordination-policy") (liftIO (FlowWorkers.resolveCoordinationPolicy deps.coordination deps.actionAuthority coordinator))
       useObjectives <- Workflow.patch (Workflow.PatchId "shikigami-objective-tracking-v1")
       objectivePolicy <-
         if useObjectives
@@ -1199,7 +1201,7 @@ runFlowBehavior deps activeBehaviorEnv resolvedProfile approvalPolicyForRun reco
               . FlowCapability.runMemory memoryEnv
               . FlowCapability.runSink sinkEnv
               . FlowDelegate.runDelegate delegateEnv
-              . FlowWorkers.runWorkers deps.coordination deps.actionAuthorizer coordinator coordinationPolicy
+              . FlowWorkers.runWorkers deps.coordination deps.actionAuthority coordinator coordinationPolicy
               . Adaptive.runAdaptiveDelivery (adaptiveRuntime deps) coordinator resolvedProfile (Harness.narrowHarnessPolicy deps.harness decl.harness)
               . FlowObjectives.runObjectives deps.objectives objectivePolicy
               . observeInterpreter
@@ -1419,7 +1421,7 @@ recordFailureLearningBestEffort deps recordedIdentity decl sid err = do
         ]
 
 publishSinkIntent :: (IOE :> es) => AgentRunDeps -> OutboxRow -> Eff es PublishOutcome
-publishSinkIntent AgentRunDeps {appEnv = depsAppEnv, kizashi = depsKizashi, kawa = depsKawa, kanmon = depsKanmon, danwa = depsDanwa, rei = depsRei, http = sinkHttp, logger = intentLogger, grants = rawIntentGrants, actionAuthorizer, directory = intentDirectory, deliveryPool} row =
+publishSinkIntent AgentRunDeps {appEnv = depsAppEnv, kizashi = depsKizashi, kawa = depsKawa, kanmon = depsKanmon, danwa = depsDanwa, rei = depsRei, http = sinkHttp, logger = intentLogger, grants = rawIntentGrants, actionAuthority, directory = intentDirectory, deliveryPool} row =
   let OutboxRow {event = integrationEvent} = row
    in case decodeSinkIntentEvent integrationEvent of
         Left err -> pure (PublishFailed (Text.pack (show err)))
@@ -1453,7 +1455,7 @@ publishSinkIntent AgentRunDeps {appEnv = depsAppEnv, kizashi = depsKizashi, kawa
                             triggeringActivityId,
                             occurredAt = occurredAt,
                             receipts = (\pool -> deliveryGuard pool messageId kind intent) <$> deliveryPool,
-                            grants = withActionAuthorizer actionAuthorizer rawIntentGrants,
+                            grants = withAuthority actionAuthority rawIntentGrants,
                             logger = intentLogger
                           }
                       send = case admittedIdentity of

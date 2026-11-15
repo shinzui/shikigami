@@ -183,7 +183,6 @@ import Data.Time (NominalDiffTime, nominalDiffTimeToSeconds, secondsToNominalDif
 import Data.Vector qualified as Vector
 import En.Biscuit.Keys (IssuerKeySet, parseIssuerKeySetText)
 import GHC.Generics (Generic)
-import Kikan.En.Action (ActionSchemaHash, actionSchemaHashText, mkActionSchemaHash)
 import Pgmq (QueueName, parseQueueName, queueNameToText)
 import Settei
 import Settei.Env
@@ -202,6 +201,7 @@ import Shikigami.Agent.Decl
     mkDelegationBudget,
   )
 import Shikigami.Agent.DeclarationValue
+import Shikigami.Authority.KikanEn.Settings (ActionSchemaHash, actionSchemaHashText, mkActionSchemaHash)
 import Shikigami.Behavior.StubProvider (stubModel)
 import Shikigami.Decision.Contract (DecisionFailure, ModelAlias, modelAliasText)
 import Shikigami.Decision.ModelCatalog qualified as Decision

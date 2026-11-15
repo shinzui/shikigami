@@ -18,11 +18,11 @@ import Network.HTTP.Client qualified as Http
 import Network.HTTP.Types (statusCode)
 import Network.Wai.Handler.Warp (testWithApplication)
 import Servant.Health (ProbeVerdict (Healthy))
-import Shikigami.Action.Authorization (denyAllActionAuthorizer)
 import Shikigami.Agent.Catalog (AgentCatalog (..))
 import Shikigami.Agent.DeclarationValue (declarationCoordinate)
 import Shikigami.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
 import Shikigami.App.Config (AppConfig (..), HttpAuthSettings (..), defaultAppConfig, opaqueSecretText)
+import Shikigami.Authority (denyAll)
 import Shikigami.Directory (disabledDirectoryHandle)
 import Shikigami.Execution.Identity (OperationId, parseOperationId)
 import Shikigami.Log qualified as Log
@@ -129,7 +129,7 @@ withFixture fixture callback = withShikigamiFreshDatabase fixture \connection ->
                   verifyReceipt = \_ _ _ -> pure Nothing
                 }
           )
-      scheduler = Store.TrackerHost (checked (Runtime.operatorHost objectiveSettings denyAllActionAuthorizer)) settings provider
+      scheduler = Store.TrackerHost (checked (Runtime.operatorHost objectiveSettings denyAll)) settings provider
       run :: Eff AppEffects a -> IO a
       run action = right =<< runAppIO (AppEnv (defaultConnectionSettings connection) tracer Nothing (Just store)) action
       pump = void (right =<< run (Control.runPending scheduler Nothing))

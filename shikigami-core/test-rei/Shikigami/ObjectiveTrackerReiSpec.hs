@@ -22,9 +22,9 @@ import Rei.Api.Problem qualified as Result
 import Rei.Client qualified as Client
 import Rei.Intention.Api qualified as Intention
 import Rei.Intention.Wire qualified as Wire
-import Shikigami.Action.Authorization (allowAllActionAuthorizerForTests)
 import Shikigami.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
 import Shikigami.App.Config (mkByteLimit)
+import Shikigami.Authority (allowAllForTests)
 import Shikigami.Execution.Identity (OperationId, parseOperationId)
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Shikigami.Objective.Capability qualified as O
@@ -249,7 +249,7 @@ actor :: OT.AccessPrincipal
 actor = OT.LocalOperator (checked (OT.parseOperatorId "fixture-operator"))
 
 objectiveHost :: O.ObjectiveHost
-objectiveHost = O.ObjectiveHost (OT.defaultObjectiveSettings & #enabled .~ OT.ObjectivesEnabled & #operator .~ Just (checked (OT.parseOperatorId "fixture-operator"))) (pure (Right actor)) allowAllActionAuthorizerForTests (\_ _ -> pure (Right ())) (\_ _ -> pure (Right ())) (\_ -> pure (Left OT.ObjectiveInvalidEvidence))
+objectiveHost = O.ObjectiveHost (OT.defaultObjectiveSettings & #enabled .~ OT.ObjectivesEnabled & #operator .~ Just (checked (OT.parseOperatorId "fixture-operator"))) (pure (Right actor)) allowAllForTests (\_ _ -> pure (Right ())) (\_ _ -> pure (Right ())) (\_ -> pure (Left OT.ObjectiveInvalidEvidence))
 
 request :: OT.CreateRequest
 request = OT.CreateRequest (checked (OT.parseTitle "local fixture")) (checked (OT.parseGoal "qualify a real Rei action")) (checked (OT.parseInstructions "PRIVATE local instructions")) [OT.Criterion (checked (OT.parseCriterionKey "review")) (checked (OT.parseCriterionDescription "review the result")) OT.HumanVerifiable OT.JourneyOptional] []

@@ -5,10 +5,10 @@ module Shikigami.Workspace.Host (fileWorkspaceHost, governedWorkspaceHost, gover
 import Data.Generics.Labels ()
 import Data.Time (getCurrentTime)
 import Kiroku.Store.Transaction (runTransaction)
-import Shikigami.Action.Authorization (ActionAuthorizer (..))
 import Shikigami.Agent.DeclarationValue (declarationCoordinate)
 import Shikigami.Agent.Principal (identityText)
 import Shikigami.App (runAppIO)
+import Shikigami.Authority (Authority)
 import Shikigami.Capability.Catalog
 import Shikigami.Capability.Overlay (CapabilityDescriptor (..))
 import Shikigami.Capability.Provider
@@ -85,7 +85,7 @@ workspaceHostFor transferable runtime selected historical prepare storageRoot se
       | otherwise = do
           authority <- case workspaceAllocationAction binding assignment.selection.assignmentId of
             Left _ -> pure (Left "workspace admission refused")
-            Right action -> runtime.authorizer.authorize (declarationCoordinate principal) action <&> either (const (Left "workspace admission refused")) (const (Right ()))
+            Right action -> runtime.authorizer.decide (declarationCoordinate principal) action <&> either (const (Left "workspace admission refused")) (const (Right ()))
           fresh <- gate assignment root
           case (authority, fresh) of
             (Right (), Right ()) -> do
@@ -110,7 +110,7 @@ workspaceHostFor transferable runtime selected historical prepare storageRoot se
         Right (Right (binding, state)) -> case workspaceAllocationAction binding assignment.selection.assignmentId of
           Left _ -> pure refused
           Right action -> do
-            authority <- runtime.authorizer.authorize (declarationCoordinate principal) action
+            authority <- runtime.authorizer.decide (declarationCoordinate principal) action
             fresh <- gate assignment root
             case (authority, fresh) of
               (Right _, Right ()) -> do
@@ -166,7 +166,7 @@ workspaceHostFor transferable runtime selected historical prepare storageRoot se
               (Right (), Right retained, Right principal) -> case (if followup then workspaceFollowupAdmissionAction else workspaceSuccessorAdmissionAction) binding admission retained of
                 Left _ -> pure (Right refused)
                 Right action -> do
-                  authority <- runtime.authorizer.authorize (declarationCoordinate principal) action
+                  authority <- runtime.authorizer.decide (declarationCoordinate principal) action
                   fresh <- gate assignment admission.rootId
                   case (authority, fresh) of
                     (Right _, Right ()) -> do

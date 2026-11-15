@@ -25,8 +25,6 @@ import Keiro.Workflow.Types (WorkflowId (..))
 import Kioku.Id (genSessionId)
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
 import Kiroku.Store.Transaction (runTransaction)
-import Shikigami.Action.Authorization (ActionAuthorizer)
-import Shikigami.Action.Authorization.Config (buildConfiguredActionAuthorizer)
 import Shikigami.Activity.Coordinate
 import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Name (AgentName, mkAgentName)
@@ -34,6 +32,8 @@ import Shikigami.Agent.Principal (AgentIdentity, identityText)
 import Shikigami.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
 import Shikigami.App.Config (AppConfig (..), Role (AdminRole), revealSecretText)
 import Shikigami.App.Config.Load (ConfigOptions (..), DiagnosticMode (NoDiagnostic), requireDatabaseUrl, runAppConfig)
+import Shikigami.Authority (Authority)
+import Shikigami.Authority.KikanEn.Config (buildConfiguredAuthority)
 import Shikigami.Behavior.Skill (SkillDir (..))
 import Shikigami.Behavior.StubProvider (stubModel)
 import Shikigami.Capability.Overlay (emptyResolvedCapabilitySet)
@@ -84,7 +84,7 @@ data Ready = Ready {binding :: !WorkspaceBinding, admission :: !WorkspaceAdmissi
 data Qualification = Qualification
   { config :: !AppConfig,
     env :: !AppEnv,
-    authorizer :: !ActionAuthorizer,
+    authorizer :: !Authority,
     current :: !(ExecutionSnapshot -> IO (Either Text.Text ())),
     lifecycle :: !(AgentIdentity -> IO (Either Text.Text ())),
     client :: !ProcessClient,
@@ -102,7 +102,7 @@ withQualification configFile prefix use = do
   connection <- revealSecretText <$> requireDatabaseUrl "workspace-qualification" config
   tracer <- noopTracer
   let env = AppEnv {connectionSettings = defaultConnectionSettings connection, tracer, metrics = Nothing, store = Nothing}
-  authorizer <- right =<< buildConfiguredActionAuthorizer Log.silentLogger config
+  authorizer <- right =<< buildConfiguredAuthority Log.silentLogger config
   directory <- right =<< startDirectory Log.silentLogger config.directorySettings
   socket <- maybe (fail "qualification socket absent") (pure . (.socketPath)) config.workspaceSupervisorSettings
   principal <- right (identityText initial.binding.request.owner)

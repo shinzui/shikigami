@@ -37,10 +37,10 @@ import Effectful.Dispatch.Static (unsafeEff_)
 import Hasql.Transaction (Transaction)
 import Keiro.Workflow.Types (WorkflowId (..))
 import Kiroku.Store.Transaction (runTransaction)
-import Shikigami.Action.Authorization (ActionAuthorizer (..))
 import Shikigami.Agent.DeclarationValue (declarationCoordinate)
 import Shikigami.Agent.Principal (identityText)
 import Shikigami.App (AppEffects, AppEnv, runAppIO)
+import Shikigami.Authority (Authority)
 import Shikigami.Capability.Overlay
 import Shikigami.Capability.Provider (DurableAdapter (..), DurableToolContract (..))
 import Shikigami.Decision.Contract (versionedDigest)
@@ -74,7 +74,7 @@ import Shikumi.Tool.Output (textToolOutput)
 -- They are operator configuration and never supplied through model arguments.
 data FileRuntime = FileRuntime
   { appEnv :: !AppEnv,
-    authorizer :: !ActionAuthorizer,
+    authorizer :: !Authority,
     lifecycle :: !(ExecutionSnapshot -> IO (Either Text ())),
     replayAuthority :: !(ExecutionSnapshot -> IO (Either Text ())),
     -- Resolve the exact retained policy revision and reject explicit conflicts.
@@ -421,7 +421,7 @@ authorize runtime profile binding admission dispatch kind path target input chec
     case policy of
       Left _ -> pure (Left FileEffectRefused)
       Right () -> do
-        granted <- runtime.authorizer.authorize (declarationCoordinate principal) action
+        granted <- runtime.authorizer.decide (declarationCoordinate principal) action
         case granted of Left _ -> pure (Left FileEffectRefused); Right _ -> check
   _ -> pure (Left FileEffectRefused)
 

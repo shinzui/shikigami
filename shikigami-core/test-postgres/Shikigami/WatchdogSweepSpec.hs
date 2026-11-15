@@ -23,7 +23,6 @@ import Hasql.Transaction qualified as Tx
 import Keiro.Outbox qualified as Outbox
 import Keiro.Workflow (StepName (..), WorkflowId (..), WorkflowOutcome (..), WorkflowRunOptions (..), loadStepIndex, runWorkflowWith)
 import Kiroku.Store.Transaction (runTransaction)
-import Shikigami.Action.Authorization (allowAllActionAuthorizerForTests, denyAllActionAuthorizer)
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (Flow))
 import Shikigami.Agent.DeclarationValue (declarationCoordinate)
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
@@ -32,6 +31,7 @@ import Shikigami.Agent.RunJob (RunJob (..), runJobWorkflowId)
 import Shikigami.Agent.Workflow
 import Shikigami.AgentWorkflowSpec qualified as AgentFixture
 import Shikigami.App (AppEffects, AppEnv, runAppIO)
+import Shikigami.Authority (allowAllForTests, denyAll)
 import Shikigami.Behavior.Run (newBehaviorEnv)
 import Shikigami.Directory qualified as Directory
 import Shikigami.Execution.Resources qualified as Resources
@@ -123,14 +123,14 @@ tests fixture =
                 ]
           mapM_
             ( \command -> do
-                result <- run env (Workers.executeCommand host denyAllActionAuthorizer admitted (fixtureOperationId "watchdog-denied-control") command)
+                result <- run env (Workers.executeCommand host denyAll admitted (fixtureOperationId "watchdog-denied-control") command)
                 assertBool "control refused" (either (const True) (const False) result)
             )
             commands
           run env (Sessions.inspectSession session) >>= (@?= before)
         DriftFixture.withHarness fixture \h -> do
           before <- DriftFixture.objectiveState h
-          let host = ObjectiveFixture.ownerHost & #authenticate .~ pure (Right (Objective.RecordedAgent principal)) & #actions .~ denyAllActionAuthorizer
+          let host = ObjectiveFixture.ownerHost & #authenticate .~ pure (Right (Objective.RecordedAgent principal)) & #actions .~ denyAll
           result <- Objectives.admitObjectiveAction host "cancel" (toJSON CancelObjective)
           assertBool "objective cancellation refused" (either (const True) (const False) result)
           DriftFixture.objectiveState h >>= (@?= before),
@@ -154,7 +154,7 @@ tests fixture =
           length (filter ("emit-signals-" `Text.isPrefixOf`) (Map.keys index)) @?= 1,
       testCase "per-intent C13 denial retains no intent or pending receipt" $
         withSweep fixture \env deps job -> do
-          complete =<< runAgentRunWorkflow (deps & #actionAuthorizer .~ denyAllActionAuthorizer) job
+          complete =<< runAgentRunWorkflow (deps & #actionAuthority .~ denyAll) job
           counts env >>= (@?= (2, 1, 0, 0)),
       testCase "paused lifecycle refuses every batch intent at emission" $
         withSweep fixture \env deps job -> do

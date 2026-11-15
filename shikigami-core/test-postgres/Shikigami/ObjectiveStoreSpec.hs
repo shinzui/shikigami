@@ -31,7 +31,6 @@ import Kiroku.Store.Read qualified as StoreRead
 import Kiroku.Store.Transaction (runTransaction)
 import Kiroku.Store.Types qualified as StoreTypes
 import Pgmq qualified
-import Shikigami.Action.Authorization (allowAllActionAuthorizerForTests, denyAllActionAuthorizer)
 import Shikigami.Activity.Coordinate (activityCoordinate)
 import Shikigami.Agent.Conversation.SessionIndex qualified as ConversationIndex
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
@@ -41,6 +40,7 @@ import Shikigami.Agent.RunJob (RunRouteKind (..), runJobWorkflowId)
 import Shikigami.AgentRun.Ledger qualified as Ledger
 import Shikigami.AgentRun.RequestKey (parseRequestKey)
 import Shikigami.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
+import Shikigami.Authority (allowAllForTests, denyAll)
 import Shikigami.Execution.Identity (ExecutionRootId, OperationId, operationIdText)
 import Shikigami.Execution.Payload (payloadIdText)
 import Shikigami.Execution.Transcript (ExecutionId (..), PayloadRef (..), executionIdentity)
@@ -339,7 +339,7 @@ tests fixture =
               granted = (agentHost & #settings .~ ((defaultObjectiveSettings & #enabled .~ ObjectivesEnabled & #agentCreation .~ [either (error . show) id (mkAgentPrincipal "agent_creator")])))
           run env (O.createObjective agentHost (fixtureOperationId "create") Nothing request) >>= (@?= Left ObjectiveDenied)
           run env (O.createObjective ((ownerHost & #settings .~ (defaultObjectiveSettings))) (fixtureOperationId "create") Nothing request) >>= (@?= Left ObjectiveDenied)
-          run env (O.createObjective ((granted & #actions .~ (denyAllActionAuthorizer))) (fixtureOperationId "create") Nothing request) >>= (@?= Left ObjectiveDenied)
+          run env (O.createObjective ((granted & #actions .~ (denyAll))) (fixtureOperationId "create") Nothing request) >>= (@?= Left ObjectiveDenied)
           run env (O.createObjective granted (fixtureOperationId "create") Nothing request) >>= (@?= Left ObjectiveDenied)
           first <- right =<< run env (O.createObjective granted (fixtureOperationId "create") (Just origin) request)
           run env (O.readObjective ownerHost first.objectiveId) >>= (@?= Left ObjectiveDenied),
@@ -524,7 +524,7 @@ ownerHost :: O.ObjectiveHost
 ownerHost = host owner
 
 host :: AccessPrincipal -> O.ObjectiveHost
-host actor = O.ObjectiveHost ((defaultObjectiveSettings & #enabled .~ ObjectivesEnabled)) (pure (Right actor)) allowAllActionAuthorizerForTests (\_ _ -> pure (Right ())) (\_ _ -> pure (Right ())) (\_ -> pure (Left ObjectiveInvalidEvidence))
+host actor = O.ObjectiveHost ((defaultObjectiveSettings & #enabled .~ ObjectivesEnabled)) (pure (Right actor)) allowAllForTests (\_ _ -> pure (Right ())) (\_ _ -> pure (Right ())) (\_ -> pure (Left ObjectiveInvalidEvidence))
 
 request :: CreateRequest
 request = CreateRequest (title "deliver") (goal "integrated goal") (instructions "instructions") [Criterion (criterionKey "human") (description "review integration") HumanVerifiable JourneyOptional] []

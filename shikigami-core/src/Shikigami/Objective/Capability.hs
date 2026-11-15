@@ -35,10 +35,9 @@ import Data.Text qualified as Text
 import Data.Time (addUTCTime)
 import Effectful (Eff)
 import Hasql.Transaction (Transaction)
-import Kikan.En.Action (AgentAction (InvokeCapabilityTool), mkCapabilityToolTarget)
-import Shikigami.Action.Authorization (ActionAuthorizer (..))
 import Shikigami.Agent.DeclarationValue (declarationCoordinate)
 import Shikigami.Agent.Principal (identityText)
+import Shikigami.Authority (Action, Authority, invokeToolAction)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Coordinate (ExecutionDigest)
 import Shikigami.Execution.Identity (OperationId)
@@ -57,7 +56,7 @@ import Shikigami.WorkerSession.Types qualified as WS
 data ObjectiveHost = ObjectiveHost
   { settings :: !ObjectiveSettings,
     authenticate :: !(IO (Either ObjectiveError AccessPrincipal)),
-    actions :: !ActionAuthorizer,
+    actions :: !Authority,
     verifyOrigin :: !(AccessPrincipal -> CreationOrigin -> IO (Either ObjectiveError ())),
     verifyInternal :: !(AccessPrincipal -> InternalCommand -> IO (Either ObjectiveError ())),
     verifyResult :: !(ResultReference -> IO (Either ObjectiveError EvidenceVerification))
@@ -72,8 +71,8 @@ admitObjectiveAction host label semantic = do
       Left err -> pure (Left err)
       Right actor | validPrincipal actor -> do
         exact <- case actor of
-          RecordedAgent identity -> case (identityText identity, mkCapabilityToolTarget "shikigami.objectives" "1" (label <> "-" <> Text.replace ":" "-" (versionedDigest "shikigami.objective-action/1" semantic))) of
-            (Right principal, Right target) -> host.actions.authorize (declarationCoordinate principal) (InvokeCapabilityTool target) <&> either (const (Left ObjectiveDenied)) (const (Right ()))
+          RecordedAgent identity -> case (identityText identity, invokeToolAction "shikigami.objectives" "1" (label <> "-" <> Text.replace ":" "-" (versionedDigest "shikigami.objective-action/1" semantic))) of
+            (Right principal, Right target) -> host.actions.decide (declarationCoordinate principal) target <&> either (const (Left ObjectiveDenied)) (const (Right ()))
             _ -> pure (Left ObjectiveDenied)
           LocalOperator identity -> pure (if host.settings.operator == Just identity then Right () else Left ObjectiveDenied)
           VerifiedCaller _ -> pure (Right ())

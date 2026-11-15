@@ -10,7 +10,6 @@ import Data.Text (Text)
 import Data.Text qualified as Text
 import Effectful (runEff)
 import Effectful.Error.Static (runErrorNoCallStack)
-import Shikigami.Action.Authorization (allowAllActionAuthorizerForTests)
 import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Capability.OneOff (withOneOffCapabilityOverlays)
 import Shikigami.Agent.Capability.Workspace
@@ -23,6 +22,7 @@ import Shikigami.Agent.Decl
   )
 import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Name (AgentName, mkAgentName)
+import Shikigami.Authority (allowAllForTests)
 import Shikigami.Behavior.Run (BehaviorEnv (..), newBehaviorEnv)
 import Shikigami.Capability.Overlay (CapabilityId)
 import Shikigami.Log qualified as Log
@@ -215,7 +215,7 @@ withWorkspaceEnv Fixture {repository} callback = do
   result <-
     withOneOffCapabilityOverlays
       Log.silentLogger
-      allowAllActionAuthorizerForTests
+      allowAllForTests
       (Just repository)
       (testDecl [workspaceReadId])
       base

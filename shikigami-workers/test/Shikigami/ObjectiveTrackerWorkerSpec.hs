@@ -10,9 +10,9 @@ import Keiro.Outbox (PublishOutcome (..), defaultPublishOptions, listOutbox, pub
 import Keiro.Outbox.Types (OutboxRow (..))
 import Kiroku.Store.Connection (defaultConnectionSettings, withStore)
 import Kiroku.Store.Connection qualified as Connection
-import Shikigami.Action.Authorization (allowAllActionAuthorizerForTests)
 import Shikigami.Agent.Name (mkAgentName)
 import Shikigami.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
+import Shikigami.Authority (allowAllForTests)
 import Shikigami.Execution.Identity (OperationId, parseOperationId)
 import Shikigami.Flow.SinkOutbox.Publisher (publishTrackerRow, reconcilePublishedRow)
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
@@ -46,7 +46,7 @@ tests fixture =
               run action = runAppIO env action >>= right
           _ <- run Catalog.registerProjectionCatalog
           let actor = OT.VerifiedCaller (checked (OT.parseCallerId "owner"))
-              objectiveHost = O.ObjectiveHost (OT.defaultObjectiveSettings & #enabled .~ OT.ObjectivesEnabled) (pure (Right actor)) allowAllActionAuthorizerForTests (\_ _ -> pure (Right ())) (\_ _ -> pure (Right ())) (\_ -> pure (Left OT.ObjectiveInvalidEvidence))
+              objectiveHost = O.ObjectiveHost (OT.defaultObjectiveSettings & #enabled .~ OT.ObjectivesEnabled) (pure (Right actor)) allowAllForTests (\_ _ -> pure (Right ())) (\_ _ -> pure (Right ())) (\_ -> pure (Left OT.ObjectiveInvalidEvidence))
               connection = Connection (key "connection") (key "incarnation") (key "weak-v1") "https://example.test" (key "account") Nothing [actor] [actor]
               settings = TrackerSettings TrackersEnabled [connection] 60 20 []
               provider scope =

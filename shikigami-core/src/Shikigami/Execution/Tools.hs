@@ -15,9 +15,9 @@ where
 import Data.Aeson (Value)
 import Data.List (nub)
 import Data.Text qualified as Text
-import Shikigami.Action.Authorization (ActionAuthorizer)
 import Shikigami.Agent.DeclarationValue (declarationCoordinate)
 import Shikigami.Agent.Principal (principalScopeText, resolveAgentIdentity)
+import Shikigami.Authority (Authority)
 import Shikigami.Capability.Catalog (ExecutionMode (Durable))
 import Shikigami.Capability.Overlay
 import Shikigami.Capability.Provider
@@ -57,7 +57,7 @@ staticNativeTools registry =
   where
     tools = [BoundTool (ToolBinding (executionCoordinate (someToolName tool)) (executionCoordinate "native/1") (executionDigestFor "shikigami.tool-schema/1" (someToolSchema tool)) UncertainEffect UnreportedInvoiceCost) tool | tool <- registryTools registry]
 
-describeExecutionTools :: Log.Logger -> ActionAuthorizer -> CapabilityProviderRegistry -> NativeToolFactory -> ExecutionSnapshot -> IO (Either ExecutionError ExecutionToolMenu)
+describeExecutionTools :: Log.Logger -> Authority -> CapabilityProviderRegistry -> NativeToolFactory -> ExecutionSnapshot -> IO (Either ExecutionError ExecutionToolMenu)
 describeExecutionTools logger authorizer providers factory snapshot = do
   described <- factory.describe snapshot
   case described of
@@ -65,14 +65,14 @@ describeExecutionTools logger authorizer providers factory snapshot = do
     Right tools -> withBoundTools logger authorizer providers snapshot Nothing Nothing tools \accepted ->
       pure (ExecutionToolMenu (toJSON (registryBaikai (mkRegistry (map (.tool) accepted)))) (map (.binding) accepted))
 
-withExecutionTools :: Log.Logger -> ActionAuthorizer -> CapabilityProviderRegistry -> NativeToolFactory -> ExecutionSnapshot -> DispatchContext -> Maybe (ExecutionCoordinate "tool-name") -> ([BoundTool] -> IO a) -> IO (Either ExecutionError a)
+withExecutionTools :: Log.Logger -> Authority -> CapabilityProviderRegistry -> NativeToolFactory -> ExecutionSnapshot -> DispatchContext -> Maybe (ExecutionCoordinate "tool-name") -> ([BoundTool] -> IO a) -> IO (Either ExecutionError a)
 withExecutionTools logger authorizer providers factory snapshot context requested use = do
   native <- factory.prepare snapshot context.operation requested
   case native of
     Left err -> pure (Left err)
     Right tools -> withBoundTools logger authorizer providers snapshot (Just context) requested tools use
 
-withBoundTools :: Log.Logger -> ActionAuthorizer -> CapabilityProviderRegistry -> ExecutionSnapshot -> Maybe DispatchContext -> Maybe (ExecutionCoordinate "tool-name") -> [BoundTool] -> ([BoundTool] -> IO a) -> IO (Either ExecutionError a)
+withBoundTools :: Log.Logger -> Authority -> CapabilityProviderRegistry -> ExecutionSnapshot -> Maybe DispatchContext -> Maybe (ExecutionCoordinate "tool-name") -> [BoundTool] -> ([BoundTool] -> IO a) -> IO (Either ExecutionError a)
 withBoundTools logger authorizer providers snapshot context requested tools use = case resolveAgentIdentity snapshot.identity of
   Left _ -> pure (Left ExecutionIdentityConflict)
   Right subject

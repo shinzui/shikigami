@@ -16,8 +16,8 @@ import Data.Map.Strict qualified as Map
 import Data.Text qualified as Text
 import Network.HTTP.Client (Manager, closeManager)
 import Rei.Client qualified as Client
-import Shikigami.Action.Authorization (ActionAuthorizer)
 import Shikigami.App.Config (opaqueSecretText)
+import Shikigami.Authority (Authority)
 import Shikigami.Objective.Capability qualified as Objective
 import Shikigami.Objective.Tracker.Config
 import Shikigami.Objective.Tracker.Provider qualified as Provider
@@ -95,7 +95,7 @@ providerFor (TrackerProviders contexts) settings scope = pure do
 -- The configured local operator is a process identity, never an external Rei
 -- actor or a caller-selected principal. Current objective membership/admin and
 -- connection export grants still gate every accepted send.
-operatorHost :: O.ObjectiveSettings -> ActionAuthorizer -> Either TrackerError Objective.ObjectiveHost
+operatorHost :: O.ObjectiveSettings -> Authority -> Either TrackerError Objective.ObjectiveHost
 operatorHost settings actions = do
   operator <- maybe (Left (TrackerInvalid "objective tracker worker requires a configured local operator")) Right settings.operator
   pure (Objective.ObjectiveHost settings (pure (Right (O.LocalOperator operator))) actions (\_ _ -> pure (Left O.ObjectiveDenied)) (\_ _ -> pure (Left O.ObjectiveDenied)) (\_ -> pure (Left O.ObjectiveInvalidEvidence)))

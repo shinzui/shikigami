@@ -23,16 +23,15 @@ import Data.List (find)
 import Data.Text qualified as Text
 import Effectful (Eff)
 import Keiro.Workflow.Types (WorkflowId (..), WorkflowName)
-import Kikan.En.Action (AgentAction (InvokeCapabilityTool), mkCapabilityToolTarget)
 import Kioku.Id (SessionId)
 import Kioku.Id qualified as KiokuId
 import Kiroku.Store.Transaction (runTransaction)
-import Shikigami.Action.Authorization (ActionAuthorizer (..))
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (CoordinatingSkill), DelegationBudget)
 import Shikigami.Agent.DeclarationValue (declarationCoordinate)
 import Shikigami.Agent.Principal (AgentIdentity, identityText)
 import Shikigami.Agent.RunJob (RunJob (..), runJobWorkflowId)
 import Shikigami.App (AppEffects, AppEnv, runAppIO)
+import Shikigami.Authority (Action, Authority, invokeToolAction)
 import Shikigami.Decision.ModelAlias (ModelAlias)
 import Shikigami.Directory qualified as Directory
 import Shikigami.Execution.AssignmentKey (AssignmentKey)
@@ -61,7 +60,7 @@ import Shikigami.WorkerSession.Transfer qualified as Transfer
 import Shikigami.WorkerSession.Types (MessageReceipt (..), SessionBinding (..), SessionState (..))
 import Shikigami.WorkerSession.Workflow (ChildObjectiveHost (..), SessionRuntime (..))
 
-coordinationHost :: AppEnv -> ObjectiveSettings -> Directory.DirectoryHandle -> ActionAuthorizer -> [AgentDecl] -> DelegationBudget -> Maybe Transfer.WorkspaceProvider -> Worker.CoordinationHost
+coordinationHost :: AppEnv -> ObjectiveSettings -> Directory.DirectoryHandle -> Authority -> [AgentDecl] -> DelegationBudget -> Maybe Transfer.WorkspaceProvider -> Worker.CoordinationHost
 coordinationHost env settings directory actions agents budget workspaces = Worker.CoordinationHost services authority
   where
     host = objectiveHost settings directory actions
@@ -119,7 +118,7 @@ data ObjectiveRuntime = ObjectiveRuntime
   { appEnv :: !AppEnv,
     settings :: !ObjectiveSettings,
     directory :: !Directory.DirectoryHandle,
-    actions :: !ActionAuthorizer,
+    actions :: !Authority,
     coordination :: !(Maybe Worker.CoordinationHost)
   }
   deriving stock (Generic)
@@ -220,9 +219,9 @@ authorizeScope runtime scope label semantic = do
         Right principal ->
           let revision = "scope-1-" <> Text.replace ":" "-" (executionDigestText (Scope.scopeFingerprint scope))
               digest = Text.replace ":" "-" (executionDigestText (executionDigestFor "shikigami.objective-scoped-action/1" semantic))
-           in case mkCapabilityToolTarget "shikigami.objectives" revision (label <> "-" <> digest) of
+           in case invokeToolAction "shikigami.objectives" revision (label <> "-" <> digest) of
                 Left _ -> pure (Left ObjectiveDenied)
-                Right target -> runtime.actions.authorize (declarationCoordinate principal) (InvokeCapabilityTool target) <&> either (const (Left ObjectiveDenied)) (const (Right ()))
+                Right target -> runtime.actions.decide (declarationCoordinate principal) target <&> either (const (Left ObjectiveDenied)) (const (Right ()))
       Left err -> pure (Left err)
       _ -> pure (Left ObjectiveDenied)
   pure (either (const (Left ObjectiveUnavailable)) id attempted)

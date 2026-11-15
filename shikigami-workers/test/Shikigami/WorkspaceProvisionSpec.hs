@@ -10,8 +10,8 @@ import Data.Map.Strict qualified as Map
 import Data.Time (addUTCTime, getCurrentTime)
 import Hasql.Transaction (Transaction)
 import Kiroku.Store.Transaction (runTransaction)
-import Shikigami.Action.Authorization
 import Shikigami.App (AppEnv, runAppIO)
+import Shikigami.Authority
 import Shikigami.Execution.Resources qualified as Resources
 import Shikigami.Execution.ResourcesStore qualified as Roots
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
@@ -45,7 +45,7 @@ tests fixture =
         (binding, admission) <- create "one"
         enroll env binding
         (runtime, _, counts) <- fakeRuntime env
-        provisionWorkspaceProfile (runtime & #authorizer .~ denyAllActionAuthorizer) binding admission policy pool >>= (@?= Left ProvisionRefused)
+        provisionWorkspaceProfile (runtime & #authorizer .~ denyAll) binding admission policy pool >>= (@?= Left ProvisionRefused)
         readIORef counts >>= (@?= (0, 0))
         doesPathExist (workspaceMetadata (workspaceLocatorPath binding.storageRoot) binding </> "profile-provision.json") >>= (@?= False)
         Right (Just (_, state)) <- run env (inspectProcessProfileTx binding.workspace)
@@ -132,7 +132,7 @@ fakeRuntime env = do
         if apply then modifyIORef' counts (\(created, trees) -> (created, trees + 1)) else pure ()
         pure (Right ())
       backend = ProvisionBackend (pure (Right (workspaceCoordinate "11111111-1111-4111-8111-111111111111"))) (const (Right <$> readIORef identity)) create tree (pure ())
-  pure (ProvisionRuntime env allowAllActionAuthorizerForTests (pure (Right ())) backend, identity, counts)
+  pure (ProvisionRuntime env allowAllForTests (pure (Right ())) backend, identity, counts)
 
 enroll :: AppEnv -> WorkspaceBinding -> IO ()
 enroll env binding = do

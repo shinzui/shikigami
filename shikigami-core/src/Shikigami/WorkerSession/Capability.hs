@@ -33,15 +33,14 @@ import Data.Text qualified as Text
 import Effectful (Eff)
 import Effectful.Exception (trySync)
 import Keiro.Workflow.Types (WorkflowId (..))
-import Kikan.En.Action (AgentAction (InvokeCapabilityTool), mkCapabilityToolTarget)
 import Kioku.Id (SessionId)
-import Shikigami.Action.Authorization (ActionAuthorizer (..))
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (CoordinatingSkill), IdentityDecl (..))
 import Shikigami.Agent.DeclarationValue (agentEnabled, declarationCoordinate)
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..), assertMayDelegate)
 import Shikigami.Agent.Name (AgentName)
 import Shikigami.Agent.Principal (AgentIdentity, identityText)
 import Shikigami.App (AppEffects)
+import Shikigami.Authority (Action, Authority, invokeToolAction)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Decision.ModelAlias (ModelAlias)
 import Shikigami.Directory qualified as Directory
@@ -225,7 +224,7 @@ grantSupportsSkill (CoordinationGrant scope) = case scope.agent.behavior of
   CoordinatingSkill {} -> True
   _ -> False
 
-resolveGrant :: CoordinationHost -> ActionAuthorizer -> CoordinatorRun -> Maybe (ExecutionDigest "coordination-scope") -> Eff AppEffects (Either SessionError (Maybe CoordinationGrant))
+resolveGrant :: CoordinationHost -> Authority -> CoordinatorRun -> Maybe (ExecutionDigest "coordination-scope") -> Eff AppEffects (Either SessionError (Maybe CoordinationGrant))
 resolveGrant host authorizer run pinned = do
   supplied <- trySync (liftIO (case pinned of Nothing -> host.authority.admit run; Just ref -> fmap Just <$> host.authority.reacquire run ref))
   case supplied of
@@ -249,7 +248,7 @@ resolveGrant host authorizer run pinned = do
                 _ -> pure (Left SessionOwnerRefused)
     _ -> pure (Left (SessionInputRefused "coordination scope is unavailable"))
 
-executeCommand :: CoordinationHost -> ActionAuthorizer -> CoordinationGrant -> OperationId -> WorkerCommand -> Eff AppEffects (Either SessionError WorkerReply)
+executeCommand :: CoordinationHost -> Authority -> CoordinationGrant -> OperationId -> WorkerCommand -> Eff AppEffects (Either SessionError WorkerReply)
 executeCommand host authorizer grant@(CoordinationGrant scope) operation command = do
   result <- executeAdmittedCommand host authorizer grant operation command
   case result of
@@ -265,7 +264,7 @@ executeCommand host authorizer grant@(CoordinationGrant scope) operation command
       MessageAcceptedReply _ receipt -> Just receipt.sessionId
       _ -> Nothing
 
-executeAdmittedCommand :: CoordinationHost -> ActionAuthorizer -> CoordinationGrant -> OperationId -> WorkerCommand -> Eff AppEffects (Either SessionError WorkerReply)
+executeAdmittedCommand :: CoordinationHost -> Authority -> CoordinationGrant -> OperationId -> WorkerCommand -> Eff AppEffects (Either SessionError WorkerReply)
 executeAdmittedCommand host authorizer (CoordinationGrant scope) operation command = do
   fresh <- liftIO (host.services.sessions.authorize scope.run.identity)
   case fresh of
@@ -361,24 +360,24 @@ sessionAdmission scope slot =
 matchesScope :: CoordinationScope -> WorkerSlot -> SessionBinding -> Bool
 matchesScope scope slot binding = binding.parentIdentity == scope.run.identity && Just binding.rootId == scope.run.rootId && binding.scope == SessionScope scope.parentScope slot.workerKey && binding.objective == slot.objective
 
-authorizeExact :: ActionAuthorizer -> CoordinationScope -> Text -> Aeson.Value -> Eff AppEffects (Either SessionError ())
+authorizeExact :: Authority -> CoordinationScope -> Text -> Aeson.Value -> Eff AppEffects (Either SessionError ())
 authorizeExact authorizer scope label input = case identityText scope.run.identity of
   Left _ -> pure (Left SessionOwnerRefused)
   Right principal -> do
     let digest = Text.replace ":" "-" (versionedDigest "shikigami.worker-command-action/1" input)
         revision = "1-" <> Text.replace ":" "-" (executionDigestText (scopeFingerprint scope))
-    case mkCapabilityToolTarget "shikigami.worker-sessions" revision (label <> "-" <> digest) of
+    case invokeToolAction "shikigami.worker-sessions" revision (label <> "-" <> digest) of
       Left _ -> pure (Left SessionOwnerRefused)
-      Right target -> liftIO (authorizer.authorize (declarationCoordinate principal) (InvokeCapabilityTool target)) <&> either (const (Left SessionOwnerRefused)) (const (Right ()))
+      Right target -> liftIO (authorizer.decide (declarationCoordinate principal) target) <&> either (const (Left SessionOwnerRefused)) (const (Right ()))
 
 -- | Bootstrap an operator's scope from protected accepted admission, using only
 -- public binding coordinates until both lifecycle and exact C13 checks pass.
-authorizeAdmissionRead :: ActionAuthorizer -> (AgentIdentity -> IO (Either Text ())) -> WorkerSessionId -> SessionBinding -> IO (Either Text ())
+authorizeAdmissionRead :: Authority -> (AgentIdentity -> IO (Either Text ())) -> WorkerSessionId -> SessionBinding -> IO (Either Text ())
 authorizeAdmissionRead authorizer lifecycle session binding = do
   current <- lifecycle binding.parentIdentity
-  case (current, identityText binding.parentIdentity, mkCapabilityToolTarget "shikigami.worker-sessions" ("admission-1-" <> Text.replace ":" "-" (payloadDigestText binding.admission.digest)) ("read-admission-" <> session.value)) of
+  case (current, identityText binding.parentIdentity, invokeToolAction "shikigami.worker-sessions" ("admission-1-" <> Text.replace ":" "-" (payloadDigestText binding.admission.digest)) ("read-admission-" <> session.value)) of
     (Right (), Right principal, Right target) ->
-      authorizer.authorize (declarationCoordinate principal) (InvokeCapabilityTool target) >>= \case
+      authorizer.decide (declarationCoordinate principal) target >>= \case
         Right _ -> pure (Right ())
         Left _ -> pure (Left "fresh protected admission read refused")
     _ -> pure (Left "parent admission read refused")
@@ -413,7 +412,7 @@ commandSession = \case
 
 -- | Only the Flow interpreter supplies this listener; it is absent from model
 -- command input and must belong to the admitted parent run.
-subscribeCommand :: CoordinationHost -> ActionAuthorizer -> CoordinationGrant -> OperationId -> WorkerSessionId -> SessionListener -> Eff AppEffects (Either SessionError (StateRevision "worker-event"))
+subscribeCommand :: CoordinationHost -> Authority -> CoordinationGrant -> OperationId -> WorkerSessionId -> SessionListener -> Eff AppEffects (Either SessionError (StateRevision "worker-event"))
 subscribeCommand host authorizer (CoordinationGrant scope) operation session listener
   | listener.ownerId /= scope.run.runId = pure (Left SessionOwnerRefused)
   | otherwise =

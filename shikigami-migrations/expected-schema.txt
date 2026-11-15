@@ -1,3 +1,11 @@
+column	action_record.agent	text
+column	action_record.at	timestamp with time zone not null
+column	action_record.kind	text not null
+column	action_record.payload	jsonb not null
+column	action_record.principal	text not null
+column	action_record.run_id	text
+column	action_record.seq	bigint not null
+column	action_record.tier	text not null
 column	adaptive_checkpoint_listeners.generation	integer not null
 column	adaptive_checkpoint_listeners.listener	jsonb not null
 column	adaptive_checkpoint_listeners.objective_id	text not null
@@ -461,6 +469,13 @@ column	workspace_transfers.intent	jsonb not null
 column	workspace_transfers.old_epoch	bigint not null
 column	workspace_transfers.proof	jsonb
 column	workspace_transfers.resource	text not null
+constraint	action_record.action_record_at_not_null	NOT NULL at
+constraint	action_record.action_record_kind_not_null	NOT NULL kind
+constraint	action_record.action_record_payload_not_null	NOT NULL payload
+constraint	action_record.action_record_pkey	PRIMARY KEY (seq)
+constraint	action_record.action_record_principal_not_null	NOT NULL principal
+constraint	action_record.action_record_seq_not_null	NOT NULL seq
+constraint	action_record.action_record_tier_not_null	NOT NULL tier
 constraint	adaptive_checkpoint_listeners.adaptive_checkpoint_listeners_generation_check	CHECK ((generation >= 0))
 constraint	adaptive_checkpoint_listeners.adaptive_checkpoint_listeners_generation_not_null	NOT NULL generation
 constraint	adaptive_checkpoint_listeners.adaptive_checkpoint_listeners_listener_not_null	NOT NULL listener
@@ -1117,6 +1132,9 @@ constraint	workspace_transfers.workspace_transfers_old_epoch_not_null	NOT NULL o
 constraint	workspace_transfers.workspace_transfers_pkey	PRIMARY KEY (resource, old_epoch)
 constraint	workspace_transfers.workspace_transfers_resource_fkey	FOREIGN KEY (resource) REFERENCES shikigami.workspace_bindings(resource)
 constraint	workspace_transfers.workspace_transfers_resource_not_null	NOT NULL resource
+index	action_record_kind	CREATE INDEX action_record_kind ON shikigami.action_record USING btree (kind, seq)
+index	action_record_pkey	CREATE UNIQUE INDEX action_record_pkey ON shikigami.action_record USING btree (seq)
+index	action_record_run	CREATE INDEX action_record_run ON shikigami.action_record USING btree (run_id, seq)
 index	adaptive_checkpoint_listeners_pkey	CREATE UNIQUE INDEX adaptive_checkpoint_listeners_pkey ON shikigami.adaptive_checkpoint_listeners USING btree (objective_id, owner_name, owner_id)
 index	adaptive_decisions_objective_id_revision_key	CREATE UNIQUE INDEX adaptive_decisions_objective_id_revision_key ON shikigami.adaptive_decisions USING btree (objective_id, revision)
 index	adaptive_decisions_pkey	CREATE UNIQUE INDEX adaptive_decisions_pkey ON shikigami.adaptive_decisions USING btree (objective_id, operation_id)
@@ -1279,6 +1297,7 @@ index	workspace_successor_admissions_pkey	CREATE UNIQUE INDEX workspace_successo
 index	workspace_transfers_pkey	CREATE UNIQUE INDEX workspace_transfers_pkey ON shikigami.workspace_transfers USING btree (resource, old_epoch)
 index	workspace_unsettled_effects	CREATE INDEX workspace_unsettled_effects ON shikigami.workspace_effects USING btree (resource) WHERE (NOT settled)
 index	workspace_unsettled_processes	CREATE INDEX workspace_unsettled_processes ON shikigami.workspace_processes USING btree (resource) WHERE (NOT settled)
+table	action_record	kind=r
 table	adaptive_checkpoint_listeners	kind=r
 table	adaptive_decisions	kind=r
 table	adaptive_observations	kind=r

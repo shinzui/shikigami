@@ -12,11 +12,10 @@ import Data.Set qualified as Set
 import Data.Text (Text)
 import GHC.Generics (Generic)
 import Keiro.Workflow.Types (WorkflowId (..))
-import Kikan.En.Action (AgentAction (ConnectCapability), actionResource, canonicalResourceText)
-import Shikigami.Action.Authorization (ActionAuthorizationFailure (ActionPolicyDenied), ActionAuthorizer (..), allowAllActionAuthorizerForTests)
 import Shikigami.Activity.Coordinate
 import Shikigami.Activity.Coordinate (activityCoordinate)
 import Shikigami.Agent.DeclarationValue
+import Shikigami.Authority (Action (UseCapability), AuthorityFailure (PolicyDenied), CapabilityOperation (ConnectProvider), DecisionSource (DecidedByFixture), actionResource, allowAllForTests, authority)
 import Shikigami.Capability.Catalog (ExecutionMode (Durable))
 import Shikigami.Capability.Overlay
 import Shikigami.Capability.Provider
@@ -111,12 +110,9 @@ authorizationTests =
         events <- newIORef []
         requests <- newIORef []
         let authorizer =
-              ActionAuthorizer
-                { authorize = \principal action -> do
-                    modifyIORef' requests (<> [(principal, action)])
-                    pure (Left (ActionPolicyDenied "fixture denial")),
-                  kawaSource = (activityCoordinate "fixture")
-                }
+              authority DecidedByFixture \principal action -> do
+                modifyIORef' requests (<> [(principal, action)])
+                pure (Left (PolicyDenied "fixture denial"))
             registry = expectRegistry [successfulProvider events "A" alphaDescriptor (Right ())]
         result <-
           withCapabilityOverlays
@@ -131,14 +127,14 @@ authorizationTests =
           @?= Left
             CapabilityAuthorizationFailed
               { descriptor = alphaDescriptor,
-                authorizationError = ActionPolicyDenied "fixture denial"
+                authorizationError = PolicyDenied "fixture denial"
               }
         readIORef events >>= (@?= [])
         observed <- readIORef requests
         case observed of
-          [(principal, action@ConnectCapability {})] -> do
+          [(principal, action@(UseCapability ConnectProvider _))] -> do
             principal @?= (declarationCoordinate ("principal-test"))
-            canonicalResourceText (actionResource action) @?= "capability_provider:alpha@v1"
+            actionResource action @?= "capability_provider:alpha@v1"
           _ -> assertFailure ("expected one exact connect authorization, got " <> show observed)
     ]
 
@@ -257,7 +253,7 @@ runOverlays ::
   (ToolRegistry -> Set.Set CapabilityId -> IO value) ->
   IO (Either CapabilityRuntimeError value)
 runOverlays registry resolved base =
-  withCapabilityOverlays Log.silentLogger allowAllActionAuthorizerForTests registry testScope resolved base
+  withCapabilityOverlays Log.silentLogger allowAllForTests registry testScope resolved base
 
 testScope :: CapabilityScope
 testScope = CapabilityScope {runId = WorkflowRun (WorkflowId "run-test"), principal = declarationCoordinate "principal-test", mode = Durable}

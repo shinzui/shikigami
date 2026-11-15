@@ -10,10 +10,10 @@ import Data.ByteString.Lazy.Char8 qualified as Char8
 import Data.Text qualified as Text
 import Effectful (Eff)
 import Kiroku.Store.Connection (withStore)
-import Shikigami.Action.Authorization (denyAllActionAuthorizer)
 import Shikigami.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
 import Shikigami.App.Config (AppConfig (..), revealSecretText)
 import Shikigami.App.Config.Load (requireDatabaseUrl)
+import Shikigami.Authority (denyAll)
 import Shikigami.Execution.Identity (parseOperationId)
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations (verifyShikigamiMigrations)
@@ -80,7 +80,7 @@ runTrackerOperation raw key _json config = do
 withTrackers :: AppConfig -> (Store.TrackerHost -> Eff AppEffects (Either TrackerError Aeson.Value)) -> IO ()
 withTrackers config action = do
   unless (config.objectiveSettings.enabled == O.ObjectivesEnabled) (die "objective tracking is disabled")
-  objective <- either (const (die "tracker commands require a configured local operator")) pure (Runtime.operatorHost config.objectiveSettings denyAllActionAuthorizer)
+  objective <- either (const (die "tracker commands require a configured local operator")) pure (Runtime.operatorHost config.objectiveSettings denyAll)
   connection <- revealSecretText <$> requireDatabaseUrl "objective trackers" config
   verifyShikigamiMigrations connection
   tracer <- noopTracer

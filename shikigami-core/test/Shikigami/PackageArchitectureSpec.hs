@@ -22,15 +22,16 @@
 module Shikigami.PackageArchitectureSpec (tests) where
 
 import Control.Lens ((&), (.~))
+import Control.Monad (filterM)
 import Data.Generics.Labels ()
-import Data.List (sort)
+import Data.List (isInfixOf, isSuffixOf, sort)
 import Data.Maybe (mapMaybe)
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.IO qualified as TIO
 import GHC.Generics (Generic)
-import System.Directory (doesFileExist)
-import System.FilePath ((</>))
+import System.Directory (doesDirectoryExist, doesFileExist, listDirectory)
+import System.FilePath (takeExtension, (</>))
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
 
@@ -215,8 +216,43 @@ tests =
                 any (\s -> (.kind) s == "library" && Text.null ((.name) s)) packageStanzas,
                 not (any (\s -> (.kind) s == "test-suite") packageStanzas)
               ]
-        assertBool ("packages with a library but no test suite: " <> show untested) (null untested)
+        assertBool ("packages with a library but no test suite: " <> show untested) (null untested),
+      -- ADR-123: the kernel speaks its own action vocabulary. Kikan-En is one
+      -- adapter of the authority port, and only the adapter modules import its
+      -- contract or client. EP-10 of MasterPlan 22 moves them out of core.
+      testCase "only the Kikan-En adapter imports the Kikan-En contract or client" do
+        root <- repositoryRoot
+        sources <- concat <$> mapM (\package -> concat <$> mapM (haskellSources . ((root </> Text.unpack package) </>)) ["src", "app"]) expectedPackages
+        offenders <-
+          filterM
+            ( \path -> do
+                contents <- TIO.readFile path
+                pure (any (\line -> any (`Text.isPrefixOf` Text.strip line) ["import Kikan.En.Action", "import Kikan.En.Client"]) (Text.lines contents))
+            )
+            (filter (not . isKikanEnAdapter) sources)
+        assertBool ("modules outside Shikigami.Authority.KikanEn import Kikan-En: " <> show offenders) (null offenders)
     ]
+
+-- | Every @.hs@ file below a directory, or nothing when it does not exist.
+haskellSources :: FilePath -> IO [FilePath]
+haskellSources directory = do
+  exists <- doesDirectoryExist directory
+  if not exists
+    then pure []
+    else do
+      entries <- listDirectory directory
+      concat
+        <$> mapM
+          ( \entry -> do
+              let path = directory </> entry
+              isDirectory <- doesDirectoryExist path
+              if isDirectory then haskellSources path else pure [path | takeExtension path == ".hs"]
+          )
+          entries
+
+isKikanEnAdapter :: FilePath -> Bool
+isKikanEnAdapter path =
+  "Shikigami/Authority/KikanEn.hs" `isSuffixOf` path || "Shikigami/Authority/KikanEn/" `isInfixOf` path
 
 -- | Read the indented entries following a Cabal field. The package files are
 -- treefmt-owned, so a field ends at the next line indented no deeper than the

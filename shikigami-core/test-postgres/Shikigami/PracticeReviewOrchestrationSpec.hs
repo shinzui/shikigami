@@ -38,7 +38,6 @@ import Kiroku.Store.Effect (runStoreResource)
 import Kiroku.Store.Effect.Resource (withKirokuStore)
 import Kiroku.Store.Error (StoreError)
 import Pgmq qualified
-import Shikigami.Action.Authorization (allowAllActionAuthorizerForTests)
 import Shikigami.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
 import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Approval (autoApprovePolicy)
@@ -54,6 +53,7 @@ import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (AgentWorkflowRoute), T
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
 import Shikigami.App (AppEnv (..), noopTracer, runAppIO)
 import Shikigami.Attestation.Resolve (ProfileResolutionError (UnknownProfile))
+import Shikigami.Authority (allowAllForTests)
 import Shikigami.Behavior.Run (BehaviorEnv, newBehaviorEnv)
 import Shikigami.Capability.Provider qualified as CapabilityProvider
 import Shikigami.Directory (disabledDirectoryHandle)
@@ -700,7 +700,7 @@ specialistAgentRunDeps appEnv behaviorEnv practiceReview =
     { AgentWorkflow.appEnv,
       AgentWorkflow.behaviorEnv,
       AgentWorkflow.decisions = FlowDecision.emptyDecisionServices,
-      AgentWorkflow.actionAuthorizer = allowAllActionAuthorizerForTests,
+      AgentWorkflow.actionAuthority = allowAllForTests,
       AgentWorkflow.capabilities = CapabilityProvider.emptyCapabilityRuntime,
       AgentWorkflow.coordination = Nothing,
       AgentWorkflow.objectives = Nothing,

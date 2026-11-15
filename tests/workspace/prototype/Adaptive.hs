@@ -54,8 +54,6 @@ import Kioku.Id (genSessionId)
 import Kiroku.Store.Connection (KirokuStore (..), withStore)
 import Kiroku.Store.Transaction (runTransaction)
 import Qualification (Qualification (..), Ready (..), right, run, runTools, successful, withQualification)
-import Shikigami.Action.Authorization (ActionAuthorizationDecision (..), ActionAuthorizer (..))
-import Shikigami.Action.Authorization.Config (buildConfiguredActionAuthorizer)
 import Shikigami.Activity.Coordinate
 import Shikigami.AdaptiveDelivery.Generated.WorkflowRuntime qualified as Generated
 import Shikigami.Agent.Approval (autoApprovePolicy)
@@ -72,6 +70,8 @@ import Shikigami.App (AppEnv (..))
 import Shikigami.App.Config
 import Shikigami.App.Config.Load (ConfigOptions (..), DiagnosticMode (NoDiagnostic), runAppConfig)
 import Shikigami.Attestation.Resolve (ProfileResolutionError (UnknownProfile))
+import Shikigami.Authority (Authority, Decision (..), actionResource, observeDecisions)
+import Shikigami.Authority.KikanEn.Config (buildConfiguredAuthority)
 import Shikigami.Behavior.Provider (newBehaviorEnvFor, providerCallFor, validateProviderSelection)
 import Shikigami.Behavior.Provider.Coordinate (providerCoordinateText)
 import Shikigami.Behavior.Run (BehaviorEnv (..), newBehaviorEnv)
@@ -695,21 +695,17 @@ liveProviders prefix = map wrap . filter (\p -> p.apiTag `elem` [AnthropicMessag
           Lazy.appendFile (prefix </> "adaptive-provider-calls") (Aeson.encode (Aeson.object ["tuple" .= providerCallFor model options, "evidenceRequest" .= Options.evidence options, "providerCallId" .= fmap (.callId) response.evidence, "maxTokens" .= Options.maxTokens options, "timeoutMs" .= Options.timeoutMs options]) <> "\n")
           pure response
 
-recordAuthority :: FilePath -> ActionAuthorizer -> ActionAuthorizer
-recordAuthority prefix original =
-  original
-    { authorize = \principal action -> do
-        result <- original.authorize principal action
-        forM_ result \decision -> Lazy.appendFile (prefix </> "adaptive-live-authority.jsonl") (Aeson.encode (Aeson.object ["principal" .= principal, "resource" .= decision.authorizedResource, "requestId" .= decision.authorizationRequestId, "checkedAt" .= decision.checkedAt, "schemaHash" .= decision.schemaHash, "expiresAt" .= decision.expiresAt]) <> "\n")
-        pure result
-    }
+recordAuthority :: FilePath -> Authority -> Authority
+recordAuthority prefix =
+  observeDecisions \principal action result ->
+    forM_ result \decision -> Lazy.appendFile (prefix </> "adaptive-live-authority.jsonl") (Aeson.encode (Aeson.object ["principal" .= principal, "resource" .= actionResource action, "requestId" .= decision.reference, "expiresAt" .= decision.expiresAt]) <> "\n")
 
 livePreflight :: FilePath -> FilePath -> IO ()
 livePreflight configPath limitsPath = do
   settings <- readLiveSettings limitsPath
   config <- runAppConfig AdminRole (ConfigOptions [configPath] [] [] NoDiagnostic)
   void (validateLiveConfig config settings ["adaptive", "producer", "producer-review", "consumer", "consumer-review"])
-  built <- buildConfiguredActionAuthorizer Log.silentLogger config
+  built <- buildConfiguredAuthority Log.silentLogger config
   either (const (fail "live authorizer configuration refused")) (const (putStrLn "PASS live configuration preflight; no model dispatch")) built
 
 -- Exercise the actual CLI, including environment isolation and secret redaction.

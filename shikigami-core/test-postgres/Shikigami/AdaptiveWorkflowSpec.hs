@@ -41,7 +41,6 @@ import Keiro.Workflow.Child.Schema qualified as Child
 import Keiro.Workflow.Resume (resumeWorkflowsOnce)
 import Kiroku.Store.Connection (KirokuStore (..), withStore)
 import Kiroku.Store.Transaction (runTransaction)
-import Shikigami.Action.Authorization (allowAllActionAuthorizerForTests)
 import Shikigami.AdaptiveDelivery.Generated.WorkflowRuntime qualified as Generated
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (CoordinatingSkill, Flow, Skill), IdentityDecl (..), RecordPolicy (Never), defaultDelegationBudget)
 import Shikigami.Agent.DeclarationValue (declarationCoordinate)
@@ -52,6 +51,7 @@ import Shikigami.Agent.Workflow qualified as Agent
 import Shikigami.AgentRun.Ledger qualified as Ledger
 import Shikigami.AgentRun.RequestKey (parseRequestKey)
 import Shikigami.App (AppEffects, AppEnv (..))
+import Shikigami.Authority (allowAllForTests)
 import Shikigami.Behavior.Error (TransientBehaviorFailure (..))
 import Shikigami.Behavior.Run (newBehaviorEnv)
 import Shikigami.Behavior.StubProvider (stubApiProvider, stubModel)
@@ -148,7 +148,7 @@ scenario fixture loseAck hierarchical directWork handoff = Fixture.withConfigure
       catalog = checked (modelCatalog [binding, checked (modelBinding workerAlias "1" "worker-fixture" "1" stubModel emptyOptions Nothing), checked (modelBinding localAlias "1" "local-fixture" "1" (stubModel & #modelId .~ "stub-local") emptyOptions Nothing), checked (modelBinding specialistAlias "1" "specialist-fixture" "1" (stubModel & #modelId .~ "stub-specialist") emptyOptions Nothing)])
       settings = defaultObjectiveSettings & #enabled .~ ObjectivesEnabled
       ownerCaller = checked (parseCallerId "adaptive-owner")
-      owner = O.ObjectiveHost settings (pure (Right (VerifiedCaller ownerCaller))) allowAllActionAuthorizerForTests (\_ _ -> pure (Right ())) (\_ _ -> pure (Left ObjectiveDenied)) (\_ -> pure (Left ObjectiveInvalidEvidence))
+      owner = O.ObjectiveHost settings (pure (Right (VerifiedCaller ownerCaller))) allowAllForTests (\_ _ -> pure (Right ())) (\_ _ -> pure (Left ObjectiveDenied)) (\_ -> pure (Left ObjectiveInvalidEvidence))
       own = checked (parseObjectiveAssignmentId "delivery")
       work = checked (parseObjectiveAssignmentId "implementation")
       descendants = map (checked . parseObjectiveAssignmentId) ["descendant-a", "descendant-b"]
@@ -164,8 +164,8 @@ scenario fixture loseAck hierarchical directWork handoff = Fixture.withConfigure
               pure (if ordinal == 0 then Transfer.FenceUnresolved else Transfer.FencedAndSettled (Transfer.FenceProof V1 intent.workspace intent.operationId (Transfer.transferFingerprint intent) intent.oldEpoch intent.newEpoch (Input.providerReceiptFor "fixture-fence/1" (toJSON intent))))
           )
           (\_ _ _ _ _ -> pure (Right ()))
-      workers = Objectives.coordinationHost env settings directory allowAllActionAuthorizerForTests declarations defaultDelegationBudget (if handoff then Just fencing else Nothing)
-      objectives = Objectives.ObjectiveRuntime env settings directory allowAllActionAuthorizerForTests (Just workers)
+      workers = Objectives.coordinationHost env settings directory allowAllForTests declarations defaultDelegationBudget (if handoff then Just fencing else Nothing)
+      objectives = Objectives.ObjectiveRuntime env settings directory allowAllForTests (Just workers)
       owned :: Eff AppEffects (Either ObjectiveError a) -> IO (Either ObjectiveError a)
       owned = Objectives.owned objectives
   created <- owned (O.createObjective owner (fixtureOperationId "native-adaptive-create") Nothing (CreateRequest (checked (parseTitle "finite adaptive fixture")) (checked (parseGoal "deliver a checked combined artifact")) (checked (parseInstructions "Adapt after an early finding, then wait for the actual integration check")) [Criterion criterion (checked (parseCriterionDescription "combined user journey")) HumanVerifiable JourneyRequired] [])) >>= right
@@ -265,7 +265,7 @@ scenario fixture loseAck hierarchical directWork handoff = Fixture.withConfigure
       services = Decision.defaultDecisionServices catalog & #providers .~ [provider]
       dependencies = (Router.routerDeps env behavior routing declarations) & #directory .~ directory & #objectives .~ Just objectives & #coordination .~ Just workers & #decisions .~ services & #deliveryPool .~ Just store.pool & #harness . #maxModelTurns .~ checked (parsePolicyNumber (if hierarchical then 64 else 8)) & #hooks . #afterStepBody .~ (\name -> when (loseAck && name == W.StepName "adaptive-validation") do first <- atomicModifyIORef' lost (\old -> (True, not old)); when first (throwIO (TransientBehaviorFailure "lost adaptive decision acknowledgement")))
       liveDeclarations = [rootRole, leaf, local & #delegates .~ [leaf.name, forbidden.name], forbidden]
-      liveHost = Objectives.coordinationHost env settings directory allowAllActionAuthorizerForTests liveDeclarations defaultDelegationBudget Nothing
+      liveHost = Objectives.coordinationHost env settings directory allowAllForTests liveDeclarations defaultDelegationBudget Nothing
       active = if hierarchical then dependencies & #agents .~ liveDeclarations & #coordination .~ Just liveHost & #harness . #maxModelTurns .~ checked (parsePolicyNumber 64) else dependencies
       workflows = Agent.agentRunRegistry active `Map.union` Driver.executionRegistry (Agent.executionRuntime active) `Map.union` Adaptive.registry (Agent.adaptiveRuntime active) `Map.union` Sessions.sessionRegistry (Agent.workerSessionRuntime active)
       pump 0 = do

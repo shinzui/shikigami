@@ -22,9 +22,9 @@ import Effectful.Exception (throwIO)
 import Keiro.Workflow (StepName (..), Workflow, WorkflowId (..), WorkflowName (..), currentRunGeneration, currentWorkflow, step)
 import Keiro.Workflow.Awakeable (awakeableNamed)
 import Kiroku.Store.Effect (Store)
-import Shikigami.Action.Authorization (ActionAuthorizer)
 import Shikigami.Agent.DeclarationValue
 import Shikigami.App (AppEffects, runAppIO)
+import Shikigami.Authority (Authority)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Coordinate (ExecutionDigest)
 import Shikigami.Execution.Identity (OperationId, operationIdWithPrefix)
@@ -54,11 +54,11 @@ commandWithKey label key input = send (WorkerCommand label (Just key) input)
 awaitEvents :: (Workers :> es) => DeclarationCoordinate "worker-label" -> WorkerSessionId -> StateRevision "worker-event" -> EventPageSize -> Eff es (Either SessionError [EventReceipt])
 awaitEvents label session after limit = send (AwaitEvents label session after limit)
 
-resolveCoordinationPolicy :: Maybe CoordinationHost -> ActionAuthorizer -> CoordinatorRun -> IO (Either SessionError (Maybe (ExecutionDigest "coordination-scope")))
+resolveCoordinationPolicy :: Maybe CoordinationHost -> Authority -> CoordinatorRun -> IO (Either SessionError (Maybe (ExecutionDigest "coordination-scope")))
 resolveCoordinationPolicy Nothing _ _ = pure (Right Nothing)
 resolveCoordinationPolicy (Just host) authorizer run = owned host (fmap (fmap grantFingerprint) <$> resolveGrant host authorizer run Nothing)
 
-runWorkers :: (Workflow :> es, Store :> es, IOE :> es) => Maybe CoordinationHost -> ActionAuthorizer -> CoordinatorRun -> Either SessionError (Maybe (ExecutionDigest "coordination-scope")) -> Eff (Workers : es) a -> Eff es a
+runWorkers :: (Workflow :> es, Store :> es, IOE :> es) => Maybe CoordinationHost -> Authority -> CoordinatorRun -> Either SessionError (Maybe (ExecutionDigest "coordination-scope")) -> Eff (Workers : es) a -> Eff es a
 runWorkers configured authorizer run policy = interpret \_ -> \case
   WorkerCommand label key input -> invoke label key input
   AwaitEvents label session after limit -> do

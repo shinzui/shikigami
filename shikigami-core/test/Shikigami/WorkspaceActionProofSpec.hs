@@ -13,7 +13,7 @@ import Data.Text qualified as AssignmentText
 import Data.Text qualified as ClaimText
 import Data.Text qualified as Text
 import Data.Text.Encoding (decodeUtf8)
-import Data.Time (addUTCTime)
+import Data.Time (UTCTime (..), addUTCTime, fromGregorian)
 import Data.UUID.V4 qualified as UUID
 import En.Biscuit.Grant qualified as Grant
 import En.Biscuit.Keys (parseSigningKeyText, singleKey)
@@ -25,8 +25,11 @@ import En.Tuple (ObjectRef (..), Subject (SubjectId))
 import Keiro.Workflow.Types (WorkflowId (..))
 import Kikan.En.Action qualified as Kikan
 import Kikan.En.Client (newActionProofVerifier, verifyIssuedAction)
+import Shikigami.Activity.Coordinate (activityCoordinate)
 import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (AgentIdentity (..), mkAgentPrincipal)
+import Shikigami.Authority (Action)
+import Shikigami.Authority.KikanEn (KikanEnMapping (..), toAgentAction)
 import Shikigami.Execution.AssignmentKey (AssignmentKey, parseAssignmentKey)
 import Shikigami.Execution.Claim qualified as Claim
 import Shikigami.Execution.Coordinate qualified as ExecutionValue
@@ -94,8 +97,8 @@ tests =
         workspaceFileAction binding (admission & #filePolicy .~ Nothing) dispatch "replace" (workspaceCoordinate "src/file") (workspaceCoordinate "device:parent") (workspaceCoordinate "input-hash") @?= Left FileEffectRefused
         workspaceFileAction binding (admission & #filePolicy .~ Just TransferFilesV1) dispatch "replace" (workspaceCoordinate "src/file") (workspaceCoordinate "device:parent") (workspaceCoordinate "input-hash") @?= Left FileEffectRefused
         exact <- right (workspaceFileAction binding admission dispatch "replace" (workspaceCoordinate "src/file") (workspaceCoordinate "device:parent") (workspaceCoordinate "input-hash"))
-        let actionRequest = Kikan.AuthorizeActionRequest principal exact requestId
-            grant = Grant.EnGrant (SubjectId (ObjectRef (ObjectType "agent") (Kikan.agentPrincipalText principal))) (RelationName (Kikan.actionOperation exact)) (ObjectRef (ObjectType (Kikan.actionObjectType exact)) (Kikan.actionObjectId exact)) (En.ConsistencyToken "snapshot-1") (En.SchemaHash "schema-workspace-fixture") expiry (Grant.Audience "shikigami") (Just (Grant.RequestId "workspace-proof")) Nothing
+        let actionRequest = Kikan.AuthorizeActionRequest principal (kikanAction exact) requestId
+            grant = Grant.EnGrant (SubjectId (ObjectRef (ObjectType "agent") (Kikan.agentPrincipalText principal))) (RelationName (Kikan.actionOperation (kikanAction exact))) (ObjectRef (ObjectType (Kikan.actionObjectType (kikanAction exact))) (Kikan.actionObjectId (kikanAction exact))) (En.ConsistencyToken "snapshot-1") (En.SchemaHash "schema-workspace-fixture") expiry (Grant.Audience "shikigami") (Just (Grant.RequestId "workspace-proof")) Nothing
         minted <- right =<< mintObjectGrantWithExpiry (MintConfig secret keyId 30 (pure now)) expiry Allowed grant
         proof <- right (Kikan.mkDecisionProof (decodeUtf8 minted.token))
         checkedAt <- right (Kikan.mkConsistencyToken "snapshot-1")
@@ -122,7 +125,7 @@ tests =
             ]
         mapM_
           ( \action -> do
-              result <- verifyIssuedAction verifier now (actionRequest & #action .~ action) issued
+              result <- verifyIssuedAction verifier now (actionRequest & #action .~ kikanAction action) issued
               assertBool "changed coordinate cannot reuse proof" (case result of Left Kikan.ProofWrongResource -> True; _ -> False)
           )
           (bindingActions <> coordinateActions)
@@ -139,8 +142,8 @@ tests =
         workspaceProcessAction binding admission dispatch record boot (workspaceCoordinate "device:parent") @?= Left FileEffectRefused
         workspaceFileAction binding processAdmission dispatch "replace" (workspaceCoordinate "src/file") (workspaceCoordinate "device:parent") (workspaceCoordinate "input-hash") @?= Left FileEffectRefused
         processAction <- right (workspaceProcessAction binding processAdmission dispatch record boot (workspaceCoordinate "device:parent"))
-        let processRequest = Kikan.AuthorizeActionRequest principal processAction requestId
-            processGrant = Grant.EnGrant (SubjectId (ObjectRef (ObjectType "agent") (Kikan.agentPrincipalText principal))) (RelationName (Kikan.actionOperation processAction)) (ObjectRef (ObjectType (Kikan.actionObjectType processAction)) (Kikan.actionObjectId processAction)) (En.ConsistencyToken "snapshot-1") (En.SchemaHash "schema-workspace-fixture") expiry (Grant.Audience "shikigami") (Just (Grant.RequestId "workspace-proof")) Nothing
+        let processRequest = Kikan.AuthorizeActionRequest principal (kikanAction processAction) requestId
+            processGrant = Grant.EnGrant (SubjectId (ObjectRef (ObjectType "agent") (Kikan.agentPrincipalText principal))) (RelationName (Kikan.actionOperation (kikanAction processAction))) (ObjectRef (ObjectType (Kikan.actionObjectType (kikanAction processAction))) (Kikan.actionObjectId (kikanAction processAction))) (En.ConsistencyToken "snapshot-1") (En.SchemaHash "schema-workspace-fixture") expiry (Grant.Audience "shikigami") (Just (Grant.RequestId "workspace-proof")) Nothing
         processMinted <- right =<< mintObjectGrantWithExpiry (MintConfig secret keyId 30 (pure now)) expiry Allowed processGrant
         processProof <- right (Kikan.mkDecisionProof (decodeUtf8 processMinted.token))
         let processIssued = Kikan.IssuedActionProof processProof processMinted.expiresAt [] checkedAt
@@ -186,7 +189,7 @@ tests =
             changedBindings
         mapM_
           ( \action -> do
-              rejected <- verifyIssuedAction verifier now (processRequest & #action .~ action) processIssued
+              rejected <- verifyIssuedAction verifier now (processRequest & #action .~ kikanAction action) processIssued
               assertBool "process proof binds command, profile, original attempt, boot, cwd and deadline" (case rejected of Left Kikan.ProofWrongResource -> True; _ -> False)
           )
           (processBindingActions <> processActions)
@@ -206,8 +209,8 @@ tests =
         let profileFor b a selected uid = ((either (error . show) id . mkProcessProfile) (ProcessProfileInput (workspaceBindingDigest b) (bundleDigest a.instructions) selected uid uid))
             profile = profileFor provisionBinding provisionAdmission policy ((either (error . show) id . parseWorkspaceIdentity) (62001))
         fileAction <- right (workspaceSupervisedFileAction profile provisionBinding provisionAdmission dispatch "replace" (workspaceCoordinate "src/file") (workspaceCoordinate "device:parent") (workspaceCoordinate "input-hash"))
-        let fileRequest = Kikan.AuthorizeActionRequest principal fileAction requestId
-            fileGrant = Grant.EnGrant (SubjectId (ObjectRef (ObjectType "agent") (Kikan.agentPrincipalText principal))) (RelationName (Kikan.actionOperation fileAction)) (ObjectRef (ObjectType (Kikan.actionObjectType fileAction)) (Kikan.actionObjectId fileAction)) (En.ConsistencyToken "snapshot-1") (En.SchemaHash "schema-workspace-fixture") expiry (Grant.Audience "shikigami") (Just (Grant.RequestId "workspace-proof")) Nothing
+        let fileRequest = Kikan.AuthorizeActionRequest principal (kikanAction fileAction) requestId
+            fileGrant = Grant.EnGrant (SubjectId (ObjectRef (ObjectType "agent") (Kikan.agentPrincipalText principal))) (RelationName (Kikan.actionOperation (kikanAction fileAction))) (ObjectRef (ObjectType (Kikan.actionObjectType (kikanAction fileAction))) (Kikan.actionObjectId (kikanAction fileAction))) (En.ConsistencyToken "snapshot-1") (En.SchemaHash "schema-workspace-fixture") expiry (Grant.Audience "shikigami") (Just (Grant.RequestId "workspace-proof")) Nothing
         fileMinted <- right =<< mintObjectGrantWithExpiry (MintConfig secret keyId 30 (pure now)) expiry Allowed fileGrant
         fileProof <- right (Kikan.mkDecisionProof (decodeUtf8 fileMinted.token))
         let fileIssued = Kikan.IssuedActionProof fileProof fileMinted.expiresAt [] checkedAt
@@ -219,13 +222,13 @@ tests =
               workspaceSupervisedFileAction profile provisionBinding provisionAdmission (dispatch & #attemptId .~ fixtureAttemptId "other-attempt") "replace" (workspaceCoordinate "src/file") (workspaceCoordinate "device:parent") (workspaceCoordinate "input-hash"),
               workspaceSupervisedFileAction profile provisionBinding provisionAdmission dispatch "replace" (workspaceCoordinate "src/file") (workspaceCoordinate "device:other-parent") (workspaceCoordinate "input-hash")
             ]
-        mapM_ (\action -> verifyIssuedAction verifier now (fileRequest & #action .~ action) fileIssued >>= \answer -> assertBool "supervised file authority binds reserved identity and actual effect" (case answer of Left Kikan.ProofWrongResource -> True; _ -> False)) changedFileActions
+        mapM_ (\action -> verifyIssuedAction verifier now (fileRequest & #action .~ kikanAction action) fileIssued >>= \answer -> assertBool "supervised file authority binds reserved identity and actual effect" (case answer of Left Kikan.ProofWrongResource -> True; _ -> False)) changedFileActions
         workspaceSupervisedFileAction profile provisionBinding provisionAdmission dispatch "replace" (workspaceCoordinate ("src-other/file")) (workspaceCoordinate "device:parent") (workspaceCoordinate "input-hash") @?= Left FileEffectRefused
         workspaceSupervisedFileAction profile provisionBinding (provisionAdmission & #filePolicy .~ Just nativeFilePolicy) dispatch "replace" (workspaceCoordinate "src/file") (workspaceCoordinate "device:parent") (workspaceCoordinate "input-hash") @?= Left FileEffectRefused
         workspaceSupervisedFileAction (profile & processProfileFields . #instructionDigest .~ workspaceCoordinate (workspaceCoordinateText command.profile)) provisionBinding provisionAdmission dispatch "replace" (workspaceCoordinate "src/file") (workspaceCoordinate "device:parent") (workspaceCoordinate "input-hash") @?= Left FileEffectRefused
         provisionAction <- right (workspaceProvisionAction provisionBinding provisionAdmission profile boot (workspaceCoordinate "device:files") (workspaceCoordinate "device:scratch"))
-        let provisionRequest = Kikan.AuthorizeActionRequest principal provisionAction requestId
-            provisionGrant = Grant.EnGrant (SubjectId (ObjectRef (ObjectType "agent") (Kikan.agentPrincipalText principal))) (RelationName (Kikan.actionOperation provisionAction)) (ObjectRef (ObjectType (Kikan.actionObjectType provisionAction)) (Kikan.actionObjectId provisionAction)) (En.ConsistencyToken "snapshot-1") (En.SchemaHash "schema-workspace-fixture") expiry (Grant.Audience "shikigami") (Just (Grant.RequestId "workspace-proof")) Nothing
+        let provisionRequest = Kikan.AuthorizeActionRequest principal (kikanAction provisionAction) requestId
+            provisionGrant = Grant.EnGrant (SubjectId (ObjectRef (ObjectType "agent") (Kikan.agentPrincipalText principal))) (RelationName (Kikan.actionOperation (kikanAction provisionAction))) (ObjectRef (ObjectType (Kikan.actionObjectType (kikanAction provisionAction))) (Kikan.actionObjectId (kikanAction provisionAction))) (En.ConsistencyToken "snapshot-1") (En.SchemaHash "schema-workspace-fixture") expiry (Grant.Audience "shikigami") (Just (Grant.RequestId "workspace-proof")) Nothing
         provisionMinted <- right =<< mintObjectGrantWithExpiry (MintConfig secret keyId 30 (pure now)) expiry Allowed provisionGrant
         provisionProof <- right (Kikan.mkDecisionProof (decodeUtf8 provisionMinted.token))
         let provisionIssued = Kikan.IssuedActionProof provisionProof provisionMinted.expiresAt [] checkedAt
@@ -244,7 +247,7 @@ tests =
         changedProvisionAdmission <- (\a -> a & #filePolicy .~ Just supervisedFilePolicy) <$> admissionFor changedProvisionBinding
         changedPolicyAction <- right (workspaceProvisionAction changedProvisionBinding changedProvisionAdmission (profileFor changedProvisionBinding changedProvisionAdmission changedProcessPolicy ((either (error . show) id . parseWorkspaceIdentity) (62001))) boot (workspaceCoordinate "device:files") (workspaceCoordinate "device:scratch"))
         mapM_
-          (\action -> verifyIssuedAction verifier now (provisionRequest & #action .~ action) provisionIssued >>= \answer -> assertBool "provisioning proof binds identity, policy, assignment, host and anchored roots" (case answer of Left Kikan.ProofWrongResource -> True; _ -> False))
+          (\action -> verifyIssuedAction verifier now (provisionRequest & #action .~ kikanAction action) provisionIssued >>= \answer -> assertBool "provisioning proof binds identity, policy, assignment, host and anchored roots" (case answer of Left Kikan.ProofWrongResource -> True; _ -> False))
           (changedPolicyAction : changedProvision)
         workspaceProvisionAction provisionBinding (provisionAdmission & #filePolicy .~ Just nativeFilePolicy) profile boot (workspaceCoordinate "device:files") (workspaceCoordinate "device:scratch") @?= Left FileEffectRefused
         workspaceProvisionAction provisionBinding provisionAdmission (profile & processProfileFields . #instructionDigest .~ workspaceCoordinate (workspaceCoordinateText command.profile)) boot (workspaceCoordinate "device:files") (workspaceCoordinate "device:scratch") @?= Left FileEffectRefused
@@ -257,8 +260,8 @@ tests =
             gitAction a d p value = workspaceGitAction provisionBinding a d p (seal value)
         commitAction <- right (gitAction provisionAdmission gitDispatch profile gitRecord)
         workspaceGitAction provisionBinding provisionAdmission gitDispatch profile (gitRecord & #phase .~ Git.GitPublishRequested) @?= Right commitAction
-        let commitRequest = Kikan.AuthorizeActionRequest principal commitAction requestId
-            commitGrant = Grant.EnGrant (SubjectId (ObjectRef (ObjectType "agent") (Kikan.agentPrincipalText principal))) (RelationName (Kikan.actionOperation commitAction)) (ObjectRef (ObjectType (Kikan.actionObjectType commitAction)) (Kikan.actionObjectId commitAction)) (En.ConsistencyToken "snapshot-1") (En.SchemaHash "schema-workspace-fixture") expiry (Grant.Audience "shikigami") (Just (Grant.RequestId "workspace-proof")) Nothing
+        let commitRequest = Kikan.AuthorizeActionRequest principal (kikanAction commitAction) requestId
+            commitGrant = Grant.EnGrant (SubjectId (ObjectRef (ObjectType "agent") (Kikan.agentPrincipalText principal))) (RelationName (Kikan.actionOperation (kikanAction commitAction))) (ObjectRef (ObjectType (Kikan.actionObjectType (kikanAction commitAction))) (Kikan.actionObjectId (kikanAction commitAction))) (En.ConsistencyToken "snapshot-1") (En.SchemaHash "schema-workspace-fixture") expiry (Grant.Audience "shikigami") (Just (Grant.RequestId "workspace-proof")) Nothing
         commitMinted <- right =<< mintObjectGrantWithExpiry (MintConfig secret keyId 30 (pure now)) expiry Allowed commitGrant
         commitProof <- right (Kikan.mkDecisionProof (decodeUtf8 commitMinted.token))
         let commitIssued = Kikan.IssuedActionProof commitProof commitMinted.expiresAt [] checkedAt
@@ -281,15 +284,15 @@ tests =
               gitAction provisionAdmission gitDispatch changedProfile (gitRecord & #profileDigest .~ Git.gitProfileDigest changedProfile),
               gitAction provisionAdmission gitDispatch profile (gitRecord & #phase .~ Git.GitReserved & #candidate .~ Nothing)
             ]
-        mapM_ (\action -> verifyIssuedAction verifier now (commitRequest & #action .~ action) commitIssued >>= \answer -> assertBool "Git proof binds exact plan, profile, input, anchor and actual claim" (case answer of Left Kikan.ProofWrongResource -> True; _ -> False)) changedGitActions
+        mapM_ (\action -> verifyIssuedAction verifier now (commitRequest & #action .~ kikanAction action) commitIssued >>= \answer -> assertBool "Git proof binds exact plan, profile, input, anchor and actual claim" (case answer of Left Kikan.ProofWrongResource -> True; _ -> False)) changedGitActions
         workspaceGitAction provisionBinding (provisionAdmission & #filePolicy .~ Just nativeFilePolicy) gitDispatch profile gitRecord @?= Left FileEffectRefused
         workspaceGitAction provisionBinding provisionAdmission gitDispatch profile (gitRecord & #phase .~ Git.GitUnresolved) @?= Left FileEffectRefused
         workspaceGitAction provisionBinding provisionAdmission gitDispatch profile (gitRecord & #attemptId .~ fixtureAttemptId "unmatched") @?= Left FileEffectRefused
         gitAction provisionAdmission gitDispatch profile (gitRecord & #candidate .~ Just (candidate & #paths .~ [(workspaceCoordinate "outside-policy")])) @?= Left FileEffectRefused
         let observation a d p kind input target = workspaceGitObservationAction provisionBinding a d p kind input target
         statusAction <- right (observation provisionAdmission gitDispatch profile "status" (fixturePayloadDigest (workspaceCoordinateText command.profile)) (workspaceCoordinate "device:files"))
-        let statusRequest = commitRequest & #action .~ statusAction
-            statusGrant = commitGrant & #object .~ ObjectRef (ObjectType (Kikan.actionObjectType statusAction)) (Kikan.actionObjectId statusAction)
+        let statusRequest = commitRequest & #action .~ kikanAction statusAction
+            statusGrant = commitGrant & #object .~ ObjectRef (ObjectType (Kikan.actionObjectType (kikanAction statusAction))) (Kikan.actionObjectId (kikanAction statusAction))
         statusMinted <- right =<< mintObjectGrantWithExpiry (MintConfig secret keyId 30 (pure now)) expiry Allowed statusGrant
         statusProof <- right (Kikan.mkDecisionProof (decodeUtf8 statusMinted.token))
         let statusIssued = Kikan.IssuedActionProof statusProof statusMinted.expiresAt [] checkedAt
@@ -304,14 +307,14 @@ tests =
               observation provisionAdmission (gitDispatch & #generation .~ (fixtureGeneration 2)) profile "status" (fixturePayloadDigest (workspaceCoordinateText command.profile)) (workspaceCoordinate "device:files"),
               observation provisionAdmission gitDispatch changedProfile "status" (fixturePayloadDigest (workspaceCoordinateText command.profile)) (workspaceCoordinate "device:files")
             ]
-        mapM_ (\action -> verifyIssuedAction verifier now (statusRequest & #action .~ action) statusIssued >>= \answer -> assertBool "Git observation proof binds kind, input, anchor, assignment, actual claim and profile" (case answer of Left Kikan.ProofWrongResource -> True; _ -> False)) changedObservations
+        mapM_ (\action -> verifyIssuedAction verifier now (statusRequest & #action .~ kikanAction action) statusIssued >>= \answer -> assertBool "Git observation proof binds kind, input, anchor, assignment, actual claim and profile" (case answer of Left Kikan.ProofWrongResource -> True; _ -> False)) changedObservations
         observation provisionAdmission gitDispatch profile "commit" (fixturePayloadDigest (workspaceCoordinateText command.profile)) (workspaceCoordinate "device:files") @?= Left FileEffectRefused
         let workerSession = workerSessionId "retained-session"
             transferBinding = provisionBinding & #request . #assignment .~ Just (workerSession, fixtureAssignmentId "retained-assignment")
             intent = TransferIntent V1 workerSession (ObjectiveRef (WorkerInput.workerCoordinate "checkpoints") (WorkerInput.workerCoordinate "objective")) owner (fixtureOperationId "handoff") (ObjectiveVersion (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 1) (fixtureRevision 0) owner WorkerInput.ObjectiveActive transferBinding.request.rootId expiry) owner (CompatibilityIdentity (fixtureAgentName "successor")) (fixtureAgentName "successor") (fixtureRevision 0) (fixtureRevision 1) transferBinding.request.rootId transferBinding.workspace
         fenceAction <- right (workspaceTransferAction transferBinding intent)
-        let fenceRequest = commitRequest & #action .~ fenceAction
-            fenceGrant = commitGrant & #object .~ ObjectRef (ObjectType (Kikan.actionObjectType fenceAction)) (Kikan.actionObjectId fenceAction)
+        let fenceRequest = commitRequest & #action .~ kikanAction fenceAction
+            fenceGrant = commitGrant & #object .~ ObjectRef (ObjectType (Kikan.actionObjectType (kikanAction fenceAction))) (Kikan.actionObjectId (kikanAction fenceAction))
         fenceMinted <- right =<< mintObjectGrantWithExpiry (MintConfig secret keyId 30 (pure now)) expiry Allowed fenceGrant
         fenceProof <- right (Kikan.mkDecisionProof (decodeUtf8 fenceMinted.token))
         let fenceIssued = Kikan.IssuedActionProof fenceProof fenceMinted.expiresAt [] checkedAt
@@ -329,7 +332,7 @@ tests =
               intent & #oldEpoch .~ (fixtureRevision 1) & #newEpoch .~ (fixtureRevision 2)
             ]
         writeAdmission <- right (workspaceWriteAdmissionAction transferBinding transferBinding.workspace workerSession intent.newOwner (fixtureRevision 1) (fixtureOperationId "write"))
-        mapM_ (\action -> verifyIssuedAction verifier now (fenceRequest & #action .~ action) fenceIssued >>= \answer -> assertBool "fence proof binds complete transfer and cannot authorize writes" (case answer of Left Kikan.ProofWrongResource -> True; _ -> False)) (writeAdmission : changedFences)
+        mapM_ (\action -> verifyIssuedAction verifier now (fenceRequest & #action .~ kikanAction action) fenceIssued >>= \answer -> assertBool "fence proof binds complete transfer and cannot authorize writes" (case answer of Left Kikan.ProofWrongResource -> True; _ -> False)) (writeAdmission : changedFences)
         workspaceTransferAction provisionBinding intent @?= Left FileEffectRefused
         let successorAdmission = provisionAdmission & #bindingDigest .~ workspaceBindingDigest transferBinding & #runId .~ WorkflowId "successor-run" & #assignmentId .~ (fixtureAssignment "successor-assignment") & #owner .~ intent.newOwner & #epoch .~ (fixtureRevision 1) & #filePolicy .~ Just transferableFilePolicy
             retainedProfile = profile & processProfileFields . #bindingDigest .~ workspaceBindingDigest transferBinding
@@ -337,13 +340,13 @@ tests =
             successorGit raw = let changed = raw & #bindingDigest .~ workspaceBindingDigest transferBinding & #profileDigest .~ Git.gitProfileDigest retainedProfile & #routing . #identity .~ intent.newOwner in changed & #fingerprint .~ Git.gitFingerprint transferBinding changed
             proposedGit = successorGit gitRecord
             verifyTargets exact changed = do
-              let request = commitRequest & #action .~ exact
-                  grant = commitGrant & #object .~ ObjectRef (ObjectType (Kikan.actionObjectType exact)) (Kikan.actionObjectId exact)
+              let request = commitRequest & #action .~ kikanAction exact
+                  grant = commitGrant & #object .~ ObjectRef (ObjectType (Kikan.actionObjectType (kikanAction exact))) (Kikan.actionObjectId (kikanAction exact))
               minted <- right =<< mintObjectGrantWithExpiry (MintConfig secret keyId 30 (pure now)) expiry Allowed grant
               proof <- right (Kikan.mkDecisionProof (decodeUtf8 minted.token))
               let issued = Kikan.IssuedActionProof proof minted.expiresAt [] checkedAt
               _ <- right =<< verifyIssuedAction verifier now request issued
-              mapM_ (\action -> verifyIssuedAction verifier now (request & #action .~ action) issued >>= \answer -> assertBool ("transfer-aware proof binds successor and exact effect: " <> case answer of Left err -> show err; Right _ -> "unexpected acceptance") (case answer of Left Kikan.ProofWrongResource -> True; _ -> False)) changed
+              mapM_ (\action -> verifyIssuedAction verifier now (request & #action .~ kikanAction action) issued >>= \answer -> assertBool ("transfer-aware proof binds successor and exact effect: " <> case answer of Left err -> show err; Right _ -> "unexpected acceptance") (case answer of Left Kikan.ProofWrongResource -> True; _ -> False)) changed
         successorFile <- right (workspaceTransferredFileAction retainedProfile transferBinding successorAdmission dispatch "replace" (workspaceCoordinate "src/file") (workspaceCoordinate "device:parent") (workspaceCoordinate "input-hash"))
         changedSuccessorFiles <-
           mapM
@@ -432,3 +435,9 @@ processImageFields = lens processImageInput (\_ input -> either (error . show) i
 
 processProfileFields :: Lens' ProcessProfile ProcessProfileInput
 processProfileFields = lens processProfileInput (\_ input -> either (error . show) id (mkProcessProfile input))
+
+-- | The Kikan-En action the adapter sends for a kernel workspace action. Every
+-- workspace effect is a capability tool, so the mapping needs no clock.
+kikanAction :: Action -> Kikan.AgentAction
+kikanAction action =
+  either (error . show) id (toAgentAction KikanEnMapping {kawaSource = activityCoordinate "fixture"} (UTCTime (fromGregorian 2026 1 1) 0) action)

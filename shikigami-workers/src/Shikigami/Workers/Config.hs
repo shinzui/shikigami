@@ -46,7 +46,6 @@ import Data.Map.Strict qualified as Map
 import Data.Time (NominalDiffTime)
 import Hasql.Pool (Pool)
 import Keiro.Telemetry (KeiroMetrics)
-import Shikigami.Action.Authorization (ActionAuthorizer)
 import Shikigami.Agent.Approval qualified as Approval
 import Shikigami.Agent.Approval.Workflow qualified as ApprovalWorkflow
 import Shikigami.Agent.Conversation qualified as Conversation
@@ -57,6 +56,7 @@ import Shikigami.Agent.Name (AgentName)
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
 import Shikigami.App (AppEnv (..))
 import Shikigami.Attestation.Resolve qualified as Profile
+import Shikigami.Authority (Authority)
 import Shikigami.Behavior.Run (BehaviorEnv)
 import Shikigami.Capability.Provider (emptyCapabilityRuntime)
 import Shikigami.Directory (DirectoryHandle, DirectoryRuntime (..), DirectorySettings (..), startDirectoryWithHeartbeat)
@@ -78,7 +78,7 @@ import Shikigami.PracticeReview.Capability qualified as PracticeReviewCapability
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.RuntimePolicy
 import Shikigami.Sink (DanwaConfig, GrantSource, KanmonConfig, KawaConfig, KizashiConfig, ReiConfig)
-import Shikigami.Sink.GrantStore (withActionAuthorizer)
+import Shikigami.Sink.GrantStore (withAuthority)
 import Shikigami.Sink.Http (SinkHttp)
 import Shikigami.Telemetry.Metrics (ShikigamiMetrics)
 import Shikigami.Trigger.Schedule (CatchUpPolicy, CronSchedule, cronExpressionText, parseCron)
@@ -116,7 +116,7 @@ data WorkerEnv = WorkerEnv
     agentReport :: !AgentLoadReport,
     behaviorEnv :: !BehaviorEnv,
     decisions :: !FlowDecision.DecisionServices,
-    actionAuthorizer :: !ActionAuthorizer,
+    actionAuthority :: !Authority,
     workspace :: !(Maybe WorkspaceHost),
     workspaceTransfers :: !(Maybe WorkspaceProvider),
     runTimeout :: !(Duration "agent-run"),
@@ -185,7 +185,7 @@ envKeiroMetrics WorkerEnv {appEnv = AppEnv {metrics = value}} = value
 -- | Named for the same reason as 'envLogger': several of the records below also
 -- carry a @grants@ field.
 envGrants :: WorkerEnv -> GrantSource
-envGrants WorkerEnv {grants = g, actionAuthorizer} = withActionAuthorizer actionAuthorizer g
+envGrants WorkerEnv {grants = g, actionAuthority} = withAuthority actionAuthority g
 
 -- | Named for the same reason as 'envLogger': field access through a bare
 -- selector is ambiguous under @DuplicateRecordFields@.
@@ -230,10 +230,10 @@ agentRunDeps env =
     { AgentWorkflow.appEnv = (.appEnv) env,
       AgentWorkflow.behaviorEnv = (.behaviorEnv) env,
       AgentWorkflow.decisions = (.decisions) env,
-      AgentWorkflow.actionAuthorizer = (.actionAuthorizer) env,
+      AgentWorkflow.actionAuthority = (.actionAuthority) env,
       AgentWorkflow.capabilities = maybe emptyCapabilityRuntime (.capabilities) env.workspace,
       AgentWorkflow.workspace = env.workspace,
-      AgentWorkflow.coordination = Just (Objectives.coordinationHost env.appEnv env.objectiveSettings env.directory env.actionAuthorizer env.agents env.delegationBudget env.workspaceTransfers),
+      AgentWorkflow.coordination = Just (Objectives.coordinationHost env.appEnv env.objectiveSettings env.directory env.actionAuthority env.agents env.delegationBudget env.workspaceTransfers),
       AgentWorkflow.objectives = Just (objectiveRuntime env),
       AgentWorkflow.initiatives = env.initiatives,
       AgentWorkflow.observe = env.observe,
@@ -284,7 +284,7 @@ conversationEnv env =
     }
 
 objectiveRuntime :: WorkerEnv -> Objectives.ObjectiveRuntime
-objectiveRuntime env = Objectives.ObjectiveRuntime env.appEnv env.objectiveSettings env.directory env.actionAuthorizer (Just (Objectives.coordinationHost env.appEnv env.objectiveSettings env.directory env.actionAuthorizer env.agents env.delegationBudget env.workspaceTransfers))
+objectiveRuntime env = Objectives.ObjectiveRuntime env.appEnv env.objectiveSettings env.directory env.actionAuthority (Just (Objectives.coordinationHost env.appEnv env.objectiveSettings env.directory env.actionAuthority env.agents env.delegationBudget env.workspaceTransfers))
 
 -- | Resolve every scheduled agent's declared cron, once, at boot.
 --

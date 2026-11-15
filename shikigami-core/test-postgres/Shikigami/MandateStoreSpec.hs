@@ -17,10 +17,10 @@ import Keiro.Workflow (StepName (..), WorkflowOutcome (..), runWorkflowWith)
 import Keiro.Workflow.Resume (resumeWorkflowsOnce)
 import Kiroku.Store.Connection (defaultConnectionSettings)
 import Kiroku.Store.Transaction (runTransaction)
-import Shikigami.Action.Authorization (allowAllActionAuthorizerForTests)
 import Shikigami.Agent.Name (mkAgentName)
 import Shikigami.Agent.Principal (compatibilityIdentity)
 import Shikigami.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
+import Shikigami.Authority (allowAllForTests)
 import Shikigami.Directory (disabledDirectoryHandle)
 import Shikigami.Execution.Coordinate (executionCoordinate)
 import Shikigami.Execution.Quantity (ResourceAmount, parseResourceAmount)
@@ -179,7 +179,7 @@ tests fixture =
       testCase "restart after progress before timer publication repairs the wake without replaying evidence" $ withMandateFixture fixture \env request now -> do
         _ <- admit env request
         done <- runCycle env request now
-        let runtime = Objectives.ObjectiveRuntime env operatorHost.settings disabledDirectoryHandle allowAllActionAuthorizerForTests Nothing
+        let runtime = Objectives.ObjectiveRuntime env operatorHost.settings disabledDirectoryHandle allowAllForTests Nothing
             drive = run env (runWorkflowWith (shikigamiWorkflowRunOptions env) Native.workflowName (M.mandateWorkflowId request.mandateId) (Workflow.workflow (Just runtime) Nothing))
         -- Discard all caller state after a committed runCycle, as a lost process
         -- would. Native input was coupled to admission; no caller seed is needed.
@@ -193,7 +193,7 @@ tests fixture =
         assertBool "desired wake installed after restart" (isJust timer),
       testCase "fresh child discovered before input publication suspends and recovers the same checkpoint" $ withMandateFixture fixture \env request _ -> do
         _ <- admit env request
-        let runtime = Objectives.ObjectiveRuntime env operatorHost.settings disabledDirectoryHandle allowAllActionAuthorizerForTests Nothing
+        let runtime = Objectives.ObjectiveRuntime env operatorHost.settings disabledDirectoryHandle allowAllForTests Nothing
             input = Workflow.CycleStart request.mandateId initialRevision
             child = Workflow.cycleWorkflowId input
             drive = run env (runWorkflowWith (shikigamiWorkflowRunOptions env) Fresh.workflowName child (Workflow.freshWorkflow (Just runtime)))
@@ -208,7 +208,7 @@ tests fixture =
         count env "shikigami.mandate_cycles" >>= (@?= 1),
       testCase "fresh bounded native cycles resume through the registered child and retain their root" $ withMandateFixture fixture \env request now -> do
         let fresh = request & #mode .~ M.FreshCycleRun
-            runtime = Objectives.ObjectiveRuntime env operatorHost.settings disabledDirectoryHandle allowAllActionAuthorizerForTests Nothing
+            runtime = Objectives.ObjectiveRuntime env operatorHost.settings disabledDirectoryHandle allowAllForTests Nothing
         _ <- admit env fresh
         forM_ [1 .. 8 :: Int] \_ -> void $ run env (resumeWorkflowsOnce (shikigamiWorkflowResumeOptions env 30) (Workflow.registry (Just runtime)))
         state <- right =<< run env (Mandates.inspectMandate operatorHost request.mandateId)
@@ -237,7 +237,7 @@ operatorHost :: Owner.ObjectiveHost
 operatorHost = actorHost (LocalOperator (checked (parseOperatorId "recurrence-operator")))
 
 actorHost :: AccessPrincipal -> Owner.ObjectiveHost
-actorHost actor = Owner.ObjectiveHost (defaultObjectiveSettings & #enabled .~ ObjectivesEnabled & #operator .~ Just (checked (parseOperatorId "recurrence-operator")) & #administration .~ AdministerAll) (pure (Right actor)) allowAllActionAuthorizerForTests (\_ _ -> pure (Right ())) (\_ _ -> pure (Right ())) (\_ -> pure (Left ObjectiveInvalidEvidence))
+actorHost actor = Owner.ObjectiveHost (defaultObjectiveSettings & #enabled .~ ObjectivesEnabled & #operator .~ Just (checked (parseOperatorId "recurrence-operator")) & #administration .~ AdministerAll) (pure (Right actor)) allowAllForTests (\_ _ -> pure (Right ())) (\_ _ -> pure (Right ())) (\_ -> pure (Left ObjectiveInvalidEvidence))
 
 runCycle :: AppEnv -> M.CreateRequest -> UTCTime -> IO M.Mandate
 runCycle env request now = right =<< run env (Cycles.reconcileCycle operatorHost actorHost request.mandateId now)

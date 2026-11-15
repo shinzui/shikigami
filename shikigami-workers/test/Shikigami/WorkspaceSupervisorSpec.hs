@@ -20,10 +20,10 @@ import Effectful.Dispatch.Static (unsafeEff_)
 import Hasql.Transaction (Transaction)
 import Hasql.Transaction qualified as Tx
 import Kiroku.Store.Transaction (runTransaction)
-import Shikigami.Action.Authorization
 import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (AgentIdentity (CompatibilityIdentity))
 import Shikigami.App (AppEffects, runAppIO)
+import Shikigami.Authority
 import Shikigami.Capability.Provider (DurableAdapter (..), DurableToolContract (..))
 import Shikigami.Execution.Attempt qualified as Attempt
 import Shikigami.Execution.Claim qualified as Claim
@@ -96,7 +96,7 @@ tests fixture =
       testCase "a failed cancellation request remains unresolved and never fabricates settlement" $ rootCancellationCase fixture False,
       testCase "independent service recovers facts in the background with no connected worker" $ withProcess fixture id False \file runtime observed calls snapshot reference -> do
         Executor.executeAcceptedAttempt (Fixture.executorForAdapter (adapter runtime observed) file) snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
-        let revoked = runtime & #replayAuthority .~ const (pure (Left "revoked")) & #lifecycle .~ const (pure (Left "revoked")) & #authorizer .~ denyAllActionAuthorizer & #selectRule .~ (\_ _ _ -> pure (Left "revoked"))
+        let revoked = runtime & #replayAuthority .~ const (pure (Left "revoked")) & #lifecycle .~ const (pure (Left "revoked")) & #authorizer .~ denyAll & #selectRule .~ (\_ _ _ -> pure (Left "revoked"))
             waitCommitted = do
               actual <- stored file (Execution.inspectExecutionAttempt reference.attemptId)
               case actual of
@@ -108,7 +108,7 @@ tests fixture =
         readIORef calls >>= (@?= (1, 1)),
       testCase "independent paged scan acknowledges original facts without a worker request or live read authority" $ withProcess fixture id False \file runtime observed calls snapshot reference -> do
         Executor.executeAcceptedAttempt (Fixture.executorForAdapter (adapter runtime observed) file) snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
-        let revoked = runtime & #replayAuthority .~ const (pure (Left "revoked")) & #lifecycle .~ const (pure (Left "revoked")) & #authorizer .~ denyAllActionAuthorizer & #selectRule .~ (\_ _ _ -> pure (Left "revoked"))
+        let revoked = runtime & #replayAuthority .~ const (pure (Left "revoked")) & #lifecycle .~ const (pure (Left "revoked")) & #authorizer .~ denyAll & #selectRule .~ (\_ _ _ -> pure (Left "revoked"))
         page <- right =<< scanProcessReceipts revoked Nothing
         page.inspected @?= 1
         page.acknowledged @?= 1
@@ -147,7 +147,7 @@ tests fixture =
             Executor.executeAcceptedAttempt (Fixture.executorForAdapter (const (workspaceExecAdapter client)) file) snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
           Just actual <- stored file (Execution.inspectExecutionAttempt reference.attemptId)
           actual.phase @?= Attempt.AttemptUncertain
-          let revoked = runtime & #replayAuthority .~ const (pure (Left "revoked")) & #lifecycle .~ const (pure (Left "revoked")) & #authorizer .~ denyAllActionAuthorizer & #selectRule .~ (\_ _ _ -> pure (Left "revoked"))
+          let revoked = runtime & #replayAuthority .~ const (pure (Left "revoked")) & #lifecycle .~ const (pure (Left "revoked")) & #authorizer .~ denyAll & #selectRule .~ (\_ _ _ -> pure (Left "revoked"))
           withAsync (serveRpc (RpcPolicy [(either (error . show) id . parseRpcPeerUserId) uid] ((either (error . show) id . parseRpcConcurrency) 2) ((either (error . show) id . parseRpcRequestSeconds) 3)) listener (dispatchSupervisorRpc revoked)) \_ -> do
             result <- right =<< callRpc (workspaceLocator path) ((either (error . show) id . parseRpcPeerUserId) uid) ((either (error . show) id . parseRpcRequestSeconds) 3) (RpcObserve reference.operationId)
             case result of
@@ -209,7 +209,7 @@ tests fixture =
         readIORef calls >>= (@?= (1, 1)),
       testCase "independent receipt recovery preserves the next accepted tool after replay authority is revoked" $ withProcessForTools 2 fixture id False \file runtime observed calls snapshot reference -> do
         Executor.executeAcceptedAttempt (Fixture.executorForAdapter (adapter runtime observed) file) snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
-        let revoked = runtime & #replayAuthority .~ const (pure (Left "revoked")) & #lifecycle .~ const (pure (Left "revoked")) & #authorizer .~ denyAllActionAuthorizer & #selectRule .~ (\_ _ _ -> pure (Left "revoked"))
+        let revoked = runtime & #replayAuthority .~ const (pure (Left "revoked")) & #lifecycle .~ const (pure (Left "revoked")) & #authorizer .~ denyAll & #selectRule .~ (\_ _ _ -> pure (Left "revoked"))
         publishProcessReceipt revoked reference.operationId >>= (@?= Right ProcessReceiptAcknowledged)
         Just (state, _, _) <- stored file (Execution.inspectExecution snapshot.executionId)
         state.cursor @?= (fixtureRevision 2)
@@ -237,14 +237,14 @@ tests fixture =
         Just completed <- stored file (Execution.inspectExecutionAttempt reference.attemptId)
         completed.phase @?= Attempt.AttemptCommitted
         readIORef calls >>= (@?= (1, 1)),
-      testCase "denied exact authority proves pre-launch refusal and cannot be retried into a launch" $ withProcess fixture (\runtime -> runtime & #authorizer .~ denyAllActionAuthorizer) True \file runtime observed calls snapshot reference -> do
+      testCase "denied exact authority proves pre-launch refusal and cannot be retried into a launch" $ withProcess fixture (\runtime -> runtime & #authorizer .~ denyAll) True \file runtime observed calls snapshot reference -> do
         Executor.executeAcceptedAttempt (Fixture.executorForAdapter (adapter runtime observed) file) snapshot.identity reference >>= (@?= Right Executor.ExecutorDone)
         request <- readIORef observed >>= maybe (fail "missing actual request") pure
         Just retained <- right =<< transaction file (Processes.inspectProcessTx reference.operationId)
         retained.phase @?= ProcessRefused
         retained.receipt @?= Nothing
         readIORef calls >>= (@?= (0, 0))
-        superviseProcess (runtime & #authorizer .~ allowAllActionAuthorizerForTests) request >>= (@?= Right retained)
+        superviseProcess (runtime & #authorizer .~ allowAllForTests) request >>= (@?= Right retained)
         publishProcessReceipt runtime reference.operationId >>= (@?= Right ProcessReceiptAcknowledged)
         readIORef calls >>= (@?= (0, 0)),
       testCase "a refusal after the committed launch transition remains uncertain rather than a known no-op" $ do
@@ -417,7 +417,7 @@ rootCancellationCase fixture stopAcknowledged = do
     Just admission <- pure snapshot.workspace
     root <- stored file (Roots.inspectRoot admission.rootId)
     stored file (Roots.setRootControl admission.rootId root.revision StopWork Nothing)
-    let revoked = runtime & #authorizer .~ denyAllActionAuthorizer & #replayAuthority .~ const (pure (Left "revoked")) & #lifecycle .~ const (pure (Left "revoked")) & #selectRule .~ (\_ _ _ -> pure (Left "revoked"))
+    let revoked = runtime & #authorizer .~ denyAll & #replayAuthority .~ const (pure (Left "revoked")) & #lifecycle .~ const (pure (Left "revoked")) & #selectRule .~ (\_ _ _ -> pure (Left "revoked"))
     page <- right =<< scanProcessReceipts revoked Nothing
     page.acknowledged @?= 0
     page.pending @?= 1

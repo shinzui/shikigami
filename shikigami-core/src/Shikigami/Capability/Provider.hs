@@ -50,13 +50,14 @@ import Effectful.Dispatch.Static (unsafeEff_)
 import Effectful.Error.Static (throwError)
 import GHC.Generics (Generic)
 import Keiro.Workflow.Types (WorkflowId (..))
-import Kikan.En.Action (AgentAction (..), actionValueErrorText, mkCapabilityTarget, mkCapabilityToolTarget)
-import Shikigami.Action.Authorization
-  ( ActionAuthorizationFailure (..),
-    ActionAuthorizer (..),
-    authorizationFailureDetail,
-  )
 import Shikigami.Agent.DeclarationValue (DeclarationCoordinate, declarationCoordinateText)
+import Shikigami.Authority
+  ( Authority,
+    AuthorityFailure (..),
+    authorityFailureDetail,
+    connectProviderAction,
+    invokeToolAction,
+  )
 import Shikigami.Behavior.Error (boundedBehaviorDetail)
 import Shikigami.Capability.Catalog
   ( CapabilityCatalog,
@@ -183,7 +184,7 @@ data CapabilityRuntimeError
       }
   | CapabilityAuthorizationFailed
       { descriptor :: !CapabilityDescriptor,
-        authorizationError :: !ActionAuthorizationFailure
+        authorizationError :: !AuthorityFailure
       }
   | CapabilityLeaseDescriptorMismatch
       { expected :: !CapabilityDescriptor,
@@ -233,14 +234,14 @@ resolveProvider (CapabilityProviderRegistry registry _) expected@CapabilityDescr
 -- propagate after cleanup; asynchronous acquisition exceptions do likewise.
 withCapabilityOverlays ::
   Log.Logger ->
-  ActionAuthorizer ->
+  Authority ->
   CapabilityProviderRegistry ->
   CapabilityScope ->
   ResolvedCapabilitySet ->
   ToolRegistry ->
   (ToolRegistry -> Set CapabilityId -> IO value) ->
   IO (Either CapabilityRuntimeError value)
-withCapabilityOverlays logger actionAuthorizer registry scope resolved base callback =
+withCapabilityOverlays logger actionAuthority registry scope resolved base callback =
   mask \restore ->
     acquireAll
       (\provider -> restore ((.acquire) provider scope))
@@ -273,7 +274,7 @@ withCapabilityOverlays logger actionAuthorizer registry scope resolved base call
             rethrowCleanupAsync cleanup
             pure (Left runtimeError)
           Right provider -> do
-            authorized <- authorizeProvider actionAuthorizer scope expected
+            authorized <- authorizeProvider actionAuthority scope expected
             case authorized of
               Left authorizationError -> do
                 cleanup <- releaseAll logger scope leases
@@ -309,7 +310,7 @@ withCapabilityOverlays logger actionAuthorizer registry scope resolved base call
               pure (Left runtimeError)
             Right logicalNames -> do
               logAcquired logger scope expected logicalNames
-              let guardedTools = guardCapabilityTool actionAuthorizer scope expected <$> toolsOf lease
+              let guardedTools = guardCapabilityTool actionAuthority scope expected <$> toolsOf lease
               acquireAll
                 restoreAcquire
                 restoreCallback
@@ -373,14 +374,14 @@ descriptorToolNames CapabilityDescriptor {tools} = logicalName <$> tools
   where
     logicalName CapabilityToolDescriptor {name} = executionCoordinateText name
 
-authorizeProvider :: ActionAuthorizer -> CapabilityScope -> CapabilityDescriptor -> IO (Either ActionAuthorizationFailure ())
-authorizeProvider ActionAuthorizer {authorize} CapabilityScope {principal} CapabilityDescriptor {capability, revision} =
-  case mkCapabilityTarget (capabilityIdText capability) (capabilityRevisionText revision) of
-    Left problem -> pure (Left (ActionCoordinatesInvalid (actionValueErrorText problem)))
-    Right target -> fmap (const ()) <$> authorize principal (ConnectCapability target)
+authorizeProvider :: Authority -> CapabilityScope -> CapabilityDescriptor -> IO (Either AuthorityFailure ())
+authorizeProvider authorizer CapabilityScope {principal} CapabilityDescriptor {capability, revision} =
+  case connectProviderAction (capabilityIdText capability) (capabilityRevisionText revision) of
+    Left problem -> pure (Left (InvalidCoordinates problem))
+    Right action -> fmap (const ()) <$> authorizer.decide principal action
 
-guardCapabilityTool :: ActionAuthorizer -> CapabilityScope -> CapabilityDescriptor -> SomeTool -> SomeTool
-guardCapabilityTool ActionAuthorizer {authorize} CapabilityScope {principal} CapabilityDescriptor {capability, revision} (SomeTool Tool {name, description, run}) =
+guardCapabilityTool :: Authority -> CapabilityScope -> CapabilityDescriptor -> SomeTool -> SomeTool
+guardCapabilityTool authorizer CapabilityScope {principal} CapabilityDescriptor {capability, revision} (SomeTool Tool {name, description, run}) =
   SomeTool
     Tool
       { name,
@@ -388,25 +389,25 @@ guardCapabilityTool ActionAuthorizer {authorize} CapabilityScope {principal} Cap
         run = \input -> do
           authorization <-
             unsafeEff_
-              case mkCapabilityToolTarget (capabilityIdText capability) (capabilityRevisionText revision) name of
-                Left problem -> pure (Left (ActionCoordinatesInvalid (actionValueErrorText problem)))
-                Right target -> authorize principal (InvokeCapabilityTool target)
+              case invokeToolAction (capabilityIdText capability) (capabilityRevisionText revision) name of
+                Left problem -> pure (Left (InvalidCoordinates problem))
+                Right action -> authorizer.decide principal action
           case authorization of
             Right _ -> run input
-            Left failure@ActionPolicyDenied {} -> throwError (ValidationFailure (authorizationFailureDetail failure))
-            Left failure -> throwError (ProviderFailure (authorizationFailureDetail failure))
+            Left failure@PolicyDenied {} -> throwError (ValidationFailure (authorityFailureDetail failure))
+            Left failure -> throwError (ProviderFailure (authorityFailureDetail failure))
       }
-guardCapabilityTool ActionAuthorizer {authorize} CapabilityScope {principal} CapabilityDescriptor {capability, revision} (DynTool name description schema run) =
+guardCapabilityTool authorizer CapabilityScope {principal} CapabilityDescriptor {capability, revision} (DynTool name description schema run) =
   DynTool name description schema \input -> do
     authorization <-
       unsafeEff_
-        case mkCapabilityToolTarget (capabilityIdText capability) (capabilityRevisionText revision) name of
-          Left problem -> pure (Left (ActionCoordinatesInvalid (actionValueErrorText problem)))
-          Right target -> authorize principal (InvokeCapabilityTool target)
+        case invokeToolAction (capabilityIdText capability) (capabilityRevisionText revision) name of
+          Left problem -> pure (Left (InvalidCoordinates problem))
+          Right action -> authorizer.decide principal action
     case authorization of
       Right _ -> run input
-      Left failure@ActionPolicyDenied {} -> throwError (ValidationFailure (authorizationFailureDetail failure))
-      Left failure -> throwError (ProviderFailure (authorizationFailureDetail failure))
+      Left failure@PolicyDenied {} -> throwError (ValidationFailure (authorityFailureDetail failure))
+      Left failure -> throwError (ProviderFailure (authorityFailureDetail failure))
 
 acquireErrorDetail :: CapabilityAcquireError -> Text
 acquireErrorDetail (CapabilityAcquireError detail) = boundedBehaviorDetail detail

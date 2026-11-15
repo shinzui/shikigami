@@ -23,6 +23,7 @@ module Shikigami.Telemetry.Metrics
     recordWatchdogFinding,
     recordWatchdogRefusal,
     recordWatchdogAge,
+    recordActionRecordEvent,
   )
 where
 
@@ -66,7 +67,8 @@ data ShikigamiMetrics = ShikigamiMetrics
     watchdogFindings :: !(Counter Int64),
     watchdogRefusals :: !(Counter Int64),
     watchdogSweepAge :: !(Gauge Int64),
-    initiativeRefusals :: !(Counter Int64)
+    initiativeRefusals :: !(Counter Int64),
+    recordEvents :: !(Counter Int64)
   }
 
 -- | Instrumentation scope shared by every process. Process identity belongs in
@@ -97,8 +99,9 @@ newShikigamiMetrics meter = liftIO do
   watchdogSweeps <- counter "shikigami.watchdog.sweeps" "Watchdog attempts by outcome; runtime callbacks are at least once."
   watchdogFindings <- counter "shikigami.watchdog.findings" "Watchdog notices by detection kind."
   watchdogRefusals <- counter "shikigami.watchdog.refusals" "Watchdog observation and delivery refusals."
+  recordEvents <- meterCreateCounterInt64 meter "shikigami.record.events" (Just "{event}") (Just "Action record events by kind and decision; append_failed counts refused unrecorded actions.") defaultAdvisoryParameters
   watchdogSweepAge <- meterCreateGaugeInt64 meter "shikigami.watchdog.sweep.age" (Just "s") (Just "Database-clock age of the last completed scoped sweep; absent before completion.") defaultAdvisoryParameters
-  pure ShikigamiMetrics {watchdogSweeps, watchdogFindings, watchdogRefusals, watchdogSweepAge, runsStarted, runsCompleted, runsFailed, runsRetried, runsDeadLettered, queueDepth, consumerRecords, initiativeCandidates, initiativeProposals, initiativeAdmissions, initiativeRefusals}
+  pure ShikigamiMetrics {watchdogSweeps, watchdogFindings, watchdogRefusals, watchdogSweepAge, runsStarted, runsCompleted, runsFailed, runsRetried, runsDeadLettered, queueDepth, consumerRecords, initiativeCandidates, initiativeProposals, initiativeAdmissions, initiativeRefusals, recordEvents}
   where
     counter name description =
       meterCreateCounterInt64 meter name (Just "{run}") (Just description) defaultAdvisoryParameters
@@ -176,3 +179,9 @@ recordWatchdogRefusal metrics kind count = liftIO (counterAdd metrics.watchdogRe
 
 recordWatchdogAge :: (MonadIO m) => ShikigamiMetrics -> Int64 -> m ()
 recordWatchdogAge metrics age = liftIO (gaugeRecord metrics.watchdogSweepAge age emptyAttributes)
+
+-- | Closed tags only: the record kind and the decision label (or @none@ for
+-- an effect entry, @append_failed@ when the store refused the event).
+recordActionRecordEvent :: (MonadIO m) => ShikigamiMetrics -> Text -> Text -> m ()
+recordActionRecordEvent metrics kind decision =
+  liftIO (counterAdd metrics.recordEvents 1 (attributes (attr "record.kind" kind <> attr "decision" decision)))

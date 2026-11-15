@@ -6,11 +6,12 @@ import Control.Concurrent.Async (race)
 import Control.Exception (bracket)
 import Kiroku.Store.Connection qualified as StoreConnection
 import Network.Socket qualified as Socket
-import Shikigami.Action.Authorization.Config (buildConfiguredActionAuthorizer)
 import Shikigami.App (AppEnv (..))
 import Shikigami.App.Config (AppConfig (..), revealSecretText)
 import Shikigami.App.Config.Load (requireDatabaseUrl)
 import Shikigami.Attestation.Resolve qualified as Profile
+import Shikigami.Authority (recordedIn)
+import Shikigami.Authority.KikanEn.Config (buildConfiguredAuthority)
 import Shikigami.Directory (DirectoryRuntime (..), identityLifecycleAdmission, startDirectory)
 import Shikigami.Execution.SelectionRuntime (currentExecutionAuthority)
 import Shikigami.Execution.Transcript (ExecutionSnapshot (..))
@@ -45,12 +46,12 @@ runWorkspaceSupervisor config = do
         refuse event = Log.logError logger event [] >> exitFailure
     connection <- revealSecretText <$> requireDatabaseUrl "shikigami-workspace-supervisor" config
     verifyShikigamiMigrations connection
-    withRunTelemetry "shikigami.workspace-supervisor" \tracer metrics _ -> do
+    withRunTelemetry "shikigami.workspace-supervisor" \tracer metrics shikigamiMetrics -> do
       let connections = runtimeConnectionSettings logger metrics connection
       withObservedStore tracer connections \store storeMetrics -> do
         registerRuntimeCatalog store
         withInspectionRuntime config.inspection logger connections store storeMetrics [] \_ -> do
-          authorizer <- buildConfiguredActionAuthorizer logger config >>= either (const (refuse "workspace.supervisor.authorization_invalid")) pure
+          authorizer <- recordedIn logger (Just shikigamiMetrics) (StoreConnection.pool store) <$> (buildConfiguredAuthority logger config >>= either (const (refuse "workspace.supervisor.authorization_invalid")) pure)
           directory <- startDirectory logger config.directorySettings >>= either (const (refuse "workspace.supervisor.directory_invalid")) pure
           let appEnv = AppEnv {connectionSettings = connections, tracer, metrics, store = Just store}
               resolveProfile profile version = do

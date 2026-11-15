@@ -59,7 +59,6 @@ import Kiroku.Store.Error (StoreError)
 import Network.HTTP.Types (hContentType, status200, status204, status400, status404)
 import Network.Wai (Application, pathInfo, requestMethod, responseLBS, strictRequestBody)
 import Network.Wai.Handler.Warp (testWithApplication)
-import Shikigami.Action.Authorization (allowAllActionAuthorizerForTests)
 import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Approval (ApprovalChannel (..), ApprovalDecision (..), ApprovalEnv (..), ApprovalPolicySnapshot (..), ApprovalRequest (..), ApprovalRequirement (..), approvalTimeoutFireAction, autoApprovePolicy, defaultApprovalEnv, resolveApproval)
 import Shikigami.Agent.Approval.Notification qualified as ApprovalNotification
@@ -100,6 +99,7 @@ import Shikigami.Attestation.Profile
     unlimitedProfileLimits,
   )
 import Shikigami.Attestation.Resolve (ProfileResolutionError (..), ResolvedProfile, parseResolvedProfile, postgresProfileStore, resolveProfile)
+import Shikigami.Authority (allowAllForTests)
 import Shikigami.Behavior.Error (TransientBehaviorFailure (..))
 import Shikigami.Behavior.Provider.Coordinate qualified as Coordinate
 import Shikigami.Behavior.Run (BehaviorEnv, newBehaviorEnv, newBehaviorEnvWithTraceSink)
@@ -1998,7 +1998,7 @@ testDepsWithAgents appEnv behaviorEnv hooks agentDecls =
     { appEnv,
       behaviorEnv,
       decisions = FlowDecision.emptyDecisionServices,
-      actionAuthorizer = allowAllActionAuthorizerForTests,
+      actionAuthority = allowAllForTests,
       capabilities = CapabilityProvider.emptyCapabilityRuntime,
       coordination = Nothing,
       objectives = Nothing,
@@ -2037,7 +2037,7 @@ testDepsWithApprovalAndDeadline appEnv behaviorEnv hooks approval deadline =
     { appEnv,
       behaviorEnv,
       decisions = FlowDecision.emptyDecisionServices,
-      actionAuthorizer = allowAllActionAuthorizerForTests,
+      actionAuthority = allowAllForTests,
       capabilities = CapabilityProvider.emptyCapabilityRuntime,
       coordination = Nothing,
       objectives = Nothing,

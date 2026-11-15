@@ -10,11 +10,11 @@ import Data.Maybe (listToMaybe)
 import Effectful (Eff)
 import Kiroku.Store.Connection (defaultConnectionSettings)
 import Servant.Server.Generic (AsServerT)
-import Shikigami.Action.Authorization (denyAllActionAuthorizer)
 import Shikigami.Agent.Principal (identityText)
 import Shikigami.Api.Problem
 import Shikigami.App (AppEffects, AppEnv (..), runAppIO)
 import Shikigami.App.Config (AppConfig (..), HttpAuthSettings (..))
+import Shikigami.Authority (denyAll)
 import Shikigami.Caller.Api (ApiCaller (..))
 import Shikigami.Execution.Identity (operationIdText)
 import Shikigami.Objective.Api
@@ -26,7 +26,7 @@ import Shikigami.Prelude
 import Shikigami.Server.Seam
 
 objectiveHost :: O.ObjectiveSettings -> IO (Either O.ObjectiveError O.AccessPrincipal) -> Owner.ObjectiveHost
-objectiveHost settings authenticate = Owner.ObjectiveHost settings authenticate denyAllActionAuthorizer (\_ _ -> pure (Left O.ObjectiveDenied)) (\_ _ -> pure (Left O.ObjectiveDenied)) (\_ -> pure (Left O.ObjectiveUnavailable))
+objectiveHost settings authenticate = Owner.ObjectiveHost settings authenticate denyAll (\_ _ -> pure (Left O.ObjectiveDenied)) (\_ _ -> pure (Left O.ObjectiveDenied)) (\_ -> pure (Left O.ObjectiveUnavailable))
 
 objectiveServer :: ServerEnv -> ApiCaller -> ObjectiveApi (AsServerT ServerM)
 objectiveServer env caller = ObjectiveApi {create, list, inspect, history, command, trackers = trackerServer env caller}

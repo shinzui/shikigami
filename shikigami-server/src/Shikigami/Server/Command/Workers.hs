@@ -11,13 +11,13 @@ import Data.Text (Text)
 import Data.Text qualified as Text
 import Keiro.Workflow.Types (WorkflowId (..))
 import Kiroku.Store.Connection (defaultConnectionSettings)
-import Shikigami.Action.Authorization (ActionAuthorizer (..))
-import Shikigami.Action.Authorization.Config (buildConfiguredActionAuthorizer)
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
 import Shikigami.Agent.Loader (loadAgentsReport, loadedAgents)
 import Shikigami.App (AppEnv (..), noopTracer, runAppIO)
 import Shikigami.App.Config (AppConfig (..), revealSecretText)
 import Shikigami.App.Config.Load (requireDatabaseUrl)
+import Shikigami.Authority (Authority)
+import Shikigami.Authority.KikanEn.Config (buildConfiguredAuthority)
 import Shikigami.Directory (DirectoryRuntime (..))
 import Shikigami.Directory qualified as Directory
 import Shikigami.Execution.Identity (OperationId)
@@ -60,7 +60,7 @@ runWorkersControl :: OperationId -> WorkerCommand -> AppConfig -> IO ()
 runWorkersControl key command config = do
   env <- environment "workers control" config
   directory <- Directory.startDirectory Log.silentLogger config.directorySettings >>= either (const (die "worker control directory unavailable")) pure
-  authorizer <- buildConfiguredActionAuthorizer Log.silentLogger config >>= either (die . Text.unpack) pure
+  authorizer <- buildConfiguredAuthority Log.silentLogger config >>= either (die . Text.unpack) pure
   -- A recorded session is an authoritative scope source for control of that
   -- session. This cannot create another task or mint another root.
   let session = sessionOf command
@@ -87,7 +87,7 @@ runWorkersControl key command config = do
 
 -- | Qualified hosts use the exact same owner as Flow and Skill calls. The
 -- CLI composition uses real objective and configured process-fencing providers.
-executeWorkerControl :: CoordinationHost -> ActionAuthorizer -> CoordinationScope -> OperationId -> WorkerCommand -> IO (Either SessionError WorkerReply)
+executeWorkerControl :: CoordinationHost -> Authority -> CoordinationScope -> OperationId -> WorkerCommand -> IO (Either SessionError WorkerReply)
 executeWorkerControl host authorizer scope key command = do
   result <- runAppIO host.services.sessions.appEnv do
     resolveGrant host authorizer scope.run (Just (scopeFingerprint scope)) >>= \case

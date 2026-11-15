@@ -26,7 +26,6 @@ import Hasql.Transaction.Sessions qualified as Transactions
 import Keiro.Integration.Event qualified as Integration
 import Keiro.Outbox qualified as Outbox
 import Keiro.Workflow (WorkflowId (..), WorkflowOutcome (..), loadStepIndex)
-import Kikan.En.Action (AgentAction, actionResource, canonicalResourceText)
 import Kioku.Id qualified as SinkSession
 import Kioku.Session (SessionRow (..))
 import Kioku.Session qualified as Session
@@ -40,7 +39,6 @@ import OpenTelemetry.Propagator.W3CTraceContext (decodeSpanContext)
 import OpenTelemetry.Trace.Core qualified as Otel
 import Settei (answer, defaultResolveOptions, resolve)
 import Settei.Env (envSnapshot, environmentSource)
-import Shikigami.Action.Authorization (ActionAuthorizationFailure (..), ActionAuthorizer (..), allowAllActionAuthorizerForTests)
 import Shikigami.Activity qualified as Activity
 import Shikigami.Activity.Coordinate
 import Shikigami.Activity.Coordinate (activityCoordinate)
@@ -67,6 +65,7 @@ import Shikigami.Agent.Workflow qualified as AgentWorkflow
 import Shikigami.App (AppEnv (..), noopTracer, runAppIO)
 import Shikigami.App.Config (AppConfig (..), appConfig, environmentBindings)
 import Shikigami.Attestation.Resolve (ProfileResolutionError (UnknownProfile))
+import Shikigami.Authority (Action, Authority, AuthorityFailure (..), DecisionSource (DecidedByFixture), actionResource, allowAllForTests, authority)
 import Shikigami.Behavior.Run (newBehaviorEnv)
 import Shikigami.Capability.Provider (emptyCapabilityRuntime)
 import Shikigami.Directory (DirectoryHandle, Lifecycle (..), PrincipalRecord (..), disabledDirectoryHandle, newDirectoryHandle, refreshDirectory, staticDirectorySource)
@@ -371,11 +370,11 @@ egressDenied databaseFixture = do
 
 actionDeniedAtEnqueue :: DatabaseFixture -> IO ()
 actionDeniedAtEnqueue databaseFixture = do
-  requests <- newIORef ([] :: [(Text, AgentAction)])
+  requests <- newIORef ([] :: [(Text, Action)])
   (withFixture databaseFixture) "action-denied-enqueue" [signalSink "denied"] unreachableKizashi unreachableDanwa \deps appEnv pool runJob -> do
     _ <- expectRight "reconcile verified action grant" =<< GrantStore.reconcileGrantPrincipal pool "heartbeat" "agent_heartbeat"
     directory <- directoryWith Active
-    let gatedDeps = (deps & #actionAuthorizer .~ (rejectingAuthorizer requests (ActionPolicyDenied "exact recipient denied")) & #directory .~ (directory))
+    let gatedDeps = (deps & #actionAuthority .~ (rejectingAuthorizer requests (PolicyDenied "exact recipient denied")) & #directory .~ (directory))
     rows <- runWorkflowAndRows gatedDeps appEnv ((runJob & #identity .~ (verifiedHeartbeatAgentIdentity)))
     assertEqual "C13 denial creates no outbox" [] rows
     index <- expectRight "loadStepIndex" =<< runAppIO appEnv (loadStepIndex AgentWorkflow.agentRunWorkflowName (runJobWorkflowId runJob) 0)
@@ -387,16 +386,16 @@ actionDeniedAtEnqueue databaseFixture = do
     case observed of
       [(principal, action)] -> do
         assertEqual "authorization uses admitted Meibo principal" "agent_heartbeat" principal
-        assertEqual "authorization uses exact recipient" "kizashi_recipient:recipient" (canonicalResourceText (actionResource action))
+        assertEqual "authorization uses exact recipient" "kizashi.signal:recipient" (actionResource action)
       other -> assertFailure ("expected one exact sink authorization, got " <> show other)
 
 actionUnavailableAtEnqueue :: DatabaseFixture -> IO ()
 actionUnavailableAtEnqueue databaseFixture = do
-  requests <- newIORef ([] :: [(Text, AgentAction)])
+  requests <- newIORef ([] :: [(Text, Action)])
   (withFixture databaseFixture) "action-unavailable-enqueue" [signalSink "unavailable"] unreachableKizashi unreachableDanwa \deps appEnv pool runJob -> do
     _ <- expectRight "reconcile verified action grant" =<< GrantStore.reconcileGrantPrincipal pool "heartbeat" "agent_heartbeat"
     directory <- directoryWith Active
-    let gatedDeps = (deps & #actionAuthorizer .~ (rejectingAuthorizer requests (ActionServiceUnavailable "Kikan fixture outage")) & #directory .~ (directory))
+    let gatedDeps = (deps & #actionAuthority .~ (rejectingAuthorizer requests (AuthorityUnavailable "Kikan fixture outage")) & #directory .~ (directory))
     rows <- runWorkflowAndRows gatedDeps appEnv ((runJob & #identity .~ (verifiedHeartbeatAgentIdentity)))
     assertEqual "authorization outage creates no outbox" [] rows
     index <- expectRight "loadStepIndex" =<< runAppIO appEnv (loadStepIndex AgentWorkflow.agentRunWorkflowName (runJobWorkflowId runJob) 0)
@@ -410,23 +409,19 @@ actionRevokedBeforePublish :: DatabaseFixture -> IO ()
 actionRevokedBeforePublish databaseFixture = do
   downstream <- newIORef []
   deny <- newIORef False
-  decisions <- newIORef ([] :: [(Text, AgentAction)])
+  decisions <- newIORef ([] :: [(Text, Action)])
   testWithApplication (pure (kizashiApp downstream)) \port ->
     (withFixture databaseFixture) "action-revoked-publish" [signalSink "revoked"] (kizashiAt port) unreachableDanwa \deps appEnv pool runJob -> do
       _ <- expectRight "reconcile verified action grant" =<< GrantStore.reconcileGrantPrincipal pool "heartbeat" "agent_heartbeat"
       directory <- directoryWith Active
-      let ActionAuthorizer {authorize = allowFixture} = allowAllActionAuthorizerForTests
-          authorizer =
-            ActionAuthorizer
-              { authorize = \principal action -> do
-                  modifyIORef' decisions (<> [(declarationCoordinateText principal, action)])
-                  denied <- readIORef deny
-                  if denied
-                    then pure (Left (ActionPolicyDenied "relationship revoked"))
-                    else allowFixture principal action,
-                kawaSource = (activityCoordinate "fixture")
-              }
-          gatedDeps = (deps & #actionAuthorizer .~ (authorizer) & #directory .~ (directory))
+      let authorizer =
+            authority DecidedByFixture \principal action -> do
+              modifyIORef' decisions (<> [(declarationCoordinateText principal, action)])
+              denied <- readIORef deny
+              if denied
+                then pure (Left (PolicyDenied "relationship revoked"))
+                else allowAllForTests.decide principal action
+          gatedDeps = (deps & #actionAuthority .~ (authorizer) & #directory .~ (directory))
       [row] <- runWorkflowAndRows gatedDeps appEnv ((runJob & #identity .~ (verifiedHeartbeatAgentIdentity)))
       writeIORef deny True
       result <- runEff (AgentWorkflow.publishSinkIntent gatedDeps row)
@@ -436,14 +431,11 @@ actionRevokedBeforePublish databaseFixture = do
       receipt <- lookupReceipt pool row
       assertEqual "publish-time denial closes the pending receipt" Delivery.Dead ((.status) receipt)
 
-rejectingAuthorizer :: IORef [(Text, AgentAction)] -> ActionAuthorizationFailure -> ActionAuthorizer
+rejectingAuthorizer :: IORef [(Text, Action)] -> AuthorityFailure -> Authority
 rejectingAuthorizer requests failure =
-  ActionAuthorizer
-    { authorize = \principal action -> do
-        modifyIORef' requests (<> [(declarationCoordinateText principal, action)])
-        pure (Left failure),
-      kawaSource = (activityCoordinate "fixture")
-    }
+  authority DecidedByFixture \principal action -> do
+    modifyIORef' requests (<> [(declarationCoordinateText principal, action)])
+    pure (Left failure)
 
 receiptRecording :: DatabaseFixture -> IO ()
 receiptRecording databaseFixture = do
@@ -563,7 +555,7 @@ withFixtureUsingTracer databaseFixture tracer label sinks kizashi danwa use =
               { AgentWorkflow.appEnv = appEnv,
                 AgentWorkflow.behaviorEnv = behaviorEnv,
                 AgentWorkflow.decisions = FlowDecision.emptyDecisionServices,
-                AgentWorkflow.actionAuthorizer = allowAllActionAuthorizerForTests,
+                AgentWorkflow.actionAuthority = allowAllForTests,
                 AgentWorkflow.capabilities = emptyCapabilityRuntime,
                 AgentWorkflow.coordination = Nothing,
                 AgentWorkflow.objectives = Nothing,

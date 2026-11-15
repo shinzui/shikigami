@@ -1,5 +1,6 @@
 module Main (main) where
 
+import Shikigami.ActionRecordStoreSpec qualified as ActionRecordStoreSpec
 import Shikigami.AdaptiveDeliverySpec qualified as AdaptiveDeliverySpec
 import Shikigami.AdaptiveWorkflowSpec qualified as AdaptiveWorkflowSpec
 import Shikigami.AgentRun.LedgerSpec qualified as LedgerSpec
@@ -100,6 +101,7 @@ suite = withShikigamiMigratedSuite \databaseFixture ->
           DirectoryStoreSpec.tests databaseFixture,
           FlowLifecycleSpec.tests databaseFixture,
           GrantStoreSpec.tests databaseFixture,
+          ActionRecordStoreSpec.tests databaseFixture,
           PracticeReviewMemorySpec.tests databaseFixture,
           PracticeReviewOrchestrationSpec.tests databaseFixture,
           ProfileResolutionSpec.tests databaseFixture,

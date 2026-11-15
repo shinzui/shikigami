@@ -6,11 +6,11 @@ import Data.Generics.Labels ()
 import Data.Map.Strict qualified as Map
 import Data.Time (getCurrentTime)
 import Hasql.Pool (Pool)
-import Shikigami.Action.Authorization (ActionAuthorizer)
 import Shikigami.Agent.DeclarationValue (declarationCoordinate)
 import Shikigami.Agent.Principal (identityText)
 import Shikigami.App (AppEnv)
 import Shikigami.Attestation.Resolve qualified as Profile
+import Shikigami.Authority (Authority)
 import Shikigami.Directory (DirectoryHandle, identityLifecycleAdmission)
 import Shikigami.Execution.SelectionRuntime (currentExecutionAuthority)
 import Shikigami.Execution.Start (SkillAssignment (..))
@@ -31,15 +31,15 @@ import Shikigami.Workspace.TransferClient (configuredWorkspaceTransfers)
 import Shikigami.Workspace.Types
 import Shikigami.Workspace.Value
 
-configuredWorkspaceHost :: AppEnv -> Pool -> DirectoryHandle -> ActionAuthorizer -> WorkspaceSettings -> Either Text WorkspaceHost
+configuredWorkspaceHost :: AppEnv -> Pool -> DirectoryHandle -> Authority -> WorkspaceSettings -> Either Text WorkspaceHost
 configuredWorkspaceHost = configuredWorkspaceHostFor False
 
 -- Transfer-aware composition retains the exact historical adapters for
 -- previously accepted snapshots alongside fresh successor-aware revisions.
-configuredWorkspaceHostWithTransfers :: AppEnv -> Pool -> DirectoryHandle -> ActionAuthorizer -> WorkspaceSettings -> Either Text WorkspaceHost
+configuredWorkspaceHostWithTransfers :: AppEnv -> Pool -> DirectoryHandle -> Authority -> WorkspaceSettings -> Either Text WorkspaceHost
 configuredWorkspaceHostWithTransfers = configuredWorkspaceHostFor True
 
-configuredWorkspaceHostFor :: Bool -> AppEnv -> Pool -> DirectoryHandle -> ActionAuthorizer -> WorkspaceSettings -> Either Text WorkspaceHost
+configuredWorkspaceHostFor :: Bool -> AppEnv -> Pool -> DirectoryHandle -> Authority -> WorkspaceSettings -> Either Text WorkspaceHost
 configuredWorkspaceHostFor transferable appEnv pool directory authorizer settings = do
   catalog <- validateWorkspaceSettings settings
   let resolve agent identity = do

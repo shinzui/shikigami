@@ -77,7 +77,6 @@ import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, wit
 import Kiroku.Store.Error (StoreError)
 import Kiroku.Store.Transaction (runTransaction)
 import Pgmq (Message (..), MessageBody (..), ReadMessage (..), readMessage)
-import Shikigami.Action.Authorization (allowAllActionAuthorizerForTests)
 import Shikigami.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
 import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Approval (ApprovalChannel, ApprovalDecision (..), ApprovalRequest (..), approvalTimeoutFireAction, autoApprovePolicy, resolveApproval)
@@ -94,6 +93,7 @@ import Shikigami.Agent.Workflow qualified as Agent
 import Shikigami.App (AppEnv (..), noopTracer, runAppIO)
 import Shikigami.App.Config (AppConfig (..), defaultAppConfig)
 import Shikigami.Attestation.Resolve (ProfileResolutionError (UnknownProfile))
+import Shikigami.Authority (allowAllForTests)
 import Shikigami.Behavior.Run (BehaviorEnv, newBehaviorEnv)
 import Shikigami.Behavior.StubProvider (stubModel)
 import Shikigami.Capability.Provider qualified as CapabilityProvider
@@ -256,7 +256,7 @@ withProposing fixture options use = withShikigamiFreshDatabase fixture \connecti
           Objective.defaultObjectiveSettings
             & #enabled .~ Objective.ObjectivesEnabled
             & #agentCreation .~ [agentPrincipal | options.creationGranted]
-        objectiveRuntime = Objectives.ObjectiveRuntime env objectiveSettings directory allowAllActionAuthorizerForTests Nothing
+        objectiveRuntime = Objectives.ObjectiveRuntime env objectiveSettings directory allowAllForTests Nothing
         coordinator = coordinatorDeclaration & #identity .~ Just (IdentityDecl (declarationCoordinate "agent_shikigami_coordinator"))
         deps = proposingDeps env behavior provider binding objectiveRuntime settings repositoryOptions [declaration, coordinator] http directory store.pool recorded (\event -> modifyIORef' seen (event :))
         repositoryOptions = [FlowInitiative.RepositoryOption identifier "fixture repository" | identifier <- repositoryIds]
@@ -301,7 +301,7 @@ proposingDeps env behavior provider binding objectiveRuntime settings repository
     { appEnv = env,
       behaviorEnv = behavior,
       decisions = Decision.defaultDecisionServices (either (error . show) id (modelCatalog [binding])) & #providers .~ [provider],
-      actionAuthorizer = allowAllActionAuthorizerForTests,
+      actionAuthority = allowAllForTests,
       capabilities = CapabilityProvider.emptyCapabilityRuntime,
       workspace = Nothing,
       coordination = Nothing,
