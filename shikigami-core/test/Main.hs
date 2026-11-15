@@ -70,6 +70,7 @@ import Shikigami.MandateSpec qualified as MandateSpec
 import Shikigami.ObjectiveSpec qualified as ObjectiveSpec
 import Shikigami.ObjectiveToolsSpec qualified as ObjectiveToolsSpec
 import Shikigami.ObjectiveTrackerSpec qualified as ObjectiveTrackerSpec
+import Shikigami.OutputsSpec qualified as OutputsSpec
 import Shikigami.PackageArchitectureSpec qualified as PackageArchitectureSpec
 import Shikigami.PayloadValueSpec qualified as PayloadValueSpec
 import Shikigami.PracticeReviewEvidenceSpec qualified as PracticeReviewEvidenceSpec
@@ -177,6 +178,7 @@ main =
           LocalOperatorSpec.tests,
           LocalHostSpec.tests,
           DeclaredToolsSpec.tests,
+          OutputsSpec.tests,
           ProcessLocalSpec.tests,
           CodingAgentSpec.tests,
           PracticeReviewEvidenceSpec.tests,

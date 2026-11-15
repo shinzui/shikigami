@@ -385,6 +385,7 @@ scheduledAgent agentName cron =
       sanctionedProfile = Nothing,
       capabilityOverlays = [],
       tools = [],
+      outputs = [],
       identity = Nothing,
       memory = defaultMemoryPolicy,
       enabled = agentEnablement (True),

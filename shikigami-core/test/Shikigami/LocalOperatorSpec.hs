@@ -202,6 +202,7 @@ decl capabilities =
       sanctionedProfile = Nothing,
       capabilityOverlays = capability <$> capabilities,
       tools = [],
+      outputs = [],
       identity = Just IdentityDecl {principal},
       memory = defaultMemoryPolicy,
       enabled = agentEnablement True,

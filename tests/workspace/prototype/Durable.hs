@@ -63,6 +63,7 @@ import Shikigami.Flow.Initiative qualified as Initiative
 import Shikigami.Flow.Observe qualified as Observe
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Log qualified as Log
+import Shikigami.Output (emptyOutputRegistry)
 import Shikigami.PracticeReview.Capability qualified as Practice
 import Shikigami.Prelude ((&), (.~))
 import Shikigami.RunEvidence.Catalog qualified as Catalog
@@ -173,6 +174,7 @@ workflowCase configFile prefix stage = do
               http,
               hooks = Agent.defaultAgentRunHooks,
               codingAgents = Agent.noCodingAgents,
+              outputs = emptyOutputRegistry,
               approvalPolicy = autoApprovePolicy (either (error . show) id (parseDuration 900)),
               approvalWorkflow = Approval.defaultApprovalWorkflowEnv,
               runTimeout = either (error . show) id (parseDuration 30),

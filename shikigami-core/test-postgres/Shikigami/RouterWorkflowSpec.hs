@@ -66,6 +66,7 @@ import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
+import Shikigami.Output (emptyOutputRegistry)
 import Shikigami.PracticeReview.Capability qualified as PracticeReviewCapability
 import Shikigami.Router.Catalog
   ( CandidateAvailability (..),
@@ -361,6 +362,7 @@ routerDeps appEnv behaviorEnv routing agents =
       AgentWorkflow.http = testSinkHttp,
       AgentWorkflow.hooks = AgentWorkflow.defaultAgentRunHooks,
       AgentWorkflow.codingAgents = AgentWorkflow.noCodingAgents,
+      AgentWorkflow.outputs = emptyOutputRegistry,
       AgentWorkflow.approvalPolicy = autoApprovePolicy (((either (error . show) id . parseDuration) (secondsToNominalDiffTime 900))),
       AgentWorkflow.approvalWorkflow = ApprovalWorkflow.defaultApprovalWorkflowEnv,
       AgentWorkflow.runTimeout = (either (error . show) id (parseDuration (secondsToNominalDiffTime 300))),
@@ -417,6 +419,7 @@ routerDecl =
       sanctionedProfile = Nothing,
       capabilityOverlays = [],
       tools = [],
+      outputs = [],
       identity = Nothing,
       memory = defaultMemoryPolicy,
       enabled = agentEnablement (True),
@@ -462,6 +465,7 @@ specialist specialistName specialistBehavior =
       sanctionedProfile = Nothing,
       capabilityOverlays = [],
       tools = [],
+      outputs = [],
       identity = Nothing,
       memory = defaultMemoryPolicy,
       enabled = agentEnablement (True),

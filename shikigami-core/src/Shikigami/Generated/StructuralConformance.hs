@@ -49,7 +49,7 @@ runTriggerKindBindingAssertions :: [(String, Bool)]
 runTriggerKindBindingAssertions =
   ("fixture labels: shikigami.TriggerKind.v1", validFixtureLabels cases) :
   ("canonical identity: shikigami.TriggerKind.v1", canonicalTypeName (Proxy @TriggerKind) == "shikigami.TriggerKind.v1") :
-  [("exhaustive enum shape round-trip: shikigami.TriggerKind.v1", all (bindingShapeRoundTrip Bindings.triggerKindBinding) [RunTriggerKind.TriggeredBySchedule, RunTriggerKind.TriggeredByStream, RunTriggerKind.TriggeredByEvent, RunTriggerKind.TriggeredByDelegation])] <> concat
+  [("exhaustive enum shape round-trip: shikigami.TriggerKind.v1", all (bindingShapeRoundTrip Bindings.triggerKindBinding) [RunTriggerKind.TriggeredBySchedule, RunTriggerKind.TriggeredByStream, RunTriggerKind.TriggeredByEvent, RunTriggerKind.TriggeredByDelegation, RunTriggerKind.TriggeredByOperator])] <> concat
     [ [ ("binding domain round-trip: shikigami.TriggerKind.v1/" <> T.unpack label, bindingDomainRoundTrip Bindings.triggerKindBinding value)
       , ("binding shape round-trip: shikigami.TriggerKind.v1/" <> T.unpack label, bindingShapeRoundTrip Bindings.triggerKindBinding (bindingToShape Bindings.triggerKindBinding value))
       ]
@@ -64,7 +64,7 @@ coverageRunRouteKind = any (\case ShapeRunRouteKind.AgentWorkflowRoute -> True; 
     shapes = map (bindingToShape Bindings.routeKindBinding . snd) (NonEmpty.toList (fixtureCases Bindings.routeKindCases))
 
 coverageRunTriggerKind :: Bool
-coverageRunTriggerKind = any (\case RunTriggerKind.TriggeredBySchedule -> True; _ -> False) shapes && any (\case RunTriggerKind.TriggeredByStream -> True; _ -> False) shapes && any (\case RunTriggerKind.TriggeredByEvent -> True; _ -> False) shapes && any (\case RunTriggerKind.TriggeredByDelegation -> True; _ -> False) shapes
+coverageRunTriggerKind = any (\case RunTriggerKind.TriggeredBySchedule -> True; _ -> False) shapes && any (\case RunTriggerKind.TriggeredByStream -> True; _ -> False) shapes && any (\case RunTriggerKind.TriggeredByEvent -> True; _ -> False) shapes && any (\case RunTriggerKind.TriggeredByDelegation -> True; _ -> False) shapes && any (\case RunTriggerKind.TriggeredByOperator -> True; _ -> False) shapes
   where
     shapes = map (bindingToShape Bindings.triggerKindBinding . snd) (NonEmpty.toList (fixtureCases Bindings.triggerKindCases))
 
@@ -73,5 +73,5 @@ structuralProjectionAssertions =
   [ ("projection owner law: shikigami.RunRouteKind.v1", all (\(_, owner) -> either (const False) (const True) (checkFieldProjectionOwner StructuralProjections.runRouteKindWitness owner)) (NonEmpty.toList (fixtureCases Bindings.routeKindCases))),
   ("projection key law: shikigami.RunRouteKind.v1", all (either (const False) (const True) . checkFieldProjectionKey StructuralProjections.runRouteKindWitness) ["AgentWorkflowRoute", "ConversationWorkflowRoute", "ExecutionOperationRoute"])
   , ("projection owner law: shikigami.TriggerKind.v1", all (\(_, owner) -> either (const False) (const True) (checkFieldProjectionOwner StructuralProjections.runTriggerKindWitness owner)) (NonEmpty.toList (fixtureCases Bindings.triggerKindCases))),
-  ("projection key law: shikigami.TriggerKind.v1", all (either (const False) (const True) . checkFieldProjectionKey StructuralProjections.runTriggerKindWitness) ["TriggeredBySchedule", "TriggeredByStream", "TriggeredByEvent", "TriggeredByDelegation"])
+  ("projection key law: shikigami.TriggerKind.v1", all (either (const False) (const True) . checkFieldProjectionKey StructuralProjections.runTriggerKindWitness) ["TriggeredBySchedule", "TriggeredByStream", "TriggeredByEvent", "TriggeredByDelegation", "TriggeredByOperator"])
   ]

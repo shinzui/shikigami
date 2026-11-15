@@ -91,6 +91,8 @@ workflow AgentRun
     step practice-review-evaluate -> PracticeReviewEvaluation
     step practice-review-attention -> AttentionReservationResult
     step dispatch-sinks -> SinkResults
+    step resolve-outputs -> ResolvedOutputs
+    step deliver-outputs -> OutputReceipts
     step fail-session -> FailedSession
     step record -> RecordedLearning
     step complete -> CompletedSession

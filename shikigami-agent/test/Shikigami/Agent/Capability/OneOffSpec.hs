@@ -207,6 +207,7 @@ declForIdentity identity capabilityOverlays =
       sanctionedProfile = Nothing,
       capabilityOverlays,
       tools = [],
+      outputs = [],
       identity,
       memory = defaultMemoryPolicy,
       enabled = agentEnablement (True),

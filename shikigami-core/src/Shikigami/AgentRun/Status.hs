@@ -188,4 +188,4 @@ failureKindText :: RunFailureKind -> Text
 failureKindText = \case Refused -> "refused"; DeadLettered -> "dead_lettered"; BehaviorFailed -> "behavior_failed"; WorkflowFailed -> "workflow_failed"
 
 triggerText :: TriggerKind -> Text
-triggerText = \case TriggeredByEvent -> "event"; TriggeredByStream -> "stream"; TriggeredBySchedule -> "schedule"; TriggeredByDelegation -> "delegation"
+triggerText = \case TriggeredByEvent -> "event"; TriggeredByStream -> "stream"; TriggeredBySchedule -> "schedule"; TriggeredByDelegation -> "delegation"; TriggeredByOperator -> "operator"

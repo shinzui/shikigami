@@ -95,6 +95,7 @@ import Shikigami.Agent.Approval
     approvalPolicyChannel,
     approvalPolicyDeadline,
     requiresApprovalFor,
+    requiresApprovalForOutput,
   )
 import Shikigami.Agent.Approval.Workflow qualified as ApprovalWorkflow
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), DelegationBudget, IdentityDecl (..), MemoryPolicy (..), ProfileRequirement (..), RecordPolicy (..), Sink, Trigger (..), codingAgentStepOf, requestedOverlays)
@@ -113,7 +114,7 @@ import Shikigami.App (AppEffects, AppEnv (..), runAppIO)
 import Shikigami.Attestation.PolicyValue qualified as DecisionLimits
 import Shikigami.Attestation.Profile (ProfileId (..), ProfileVersion (..))
 import Shikigami.Attestation.Resolve (ProfileResolutionError, ResolvedProfile, ResolvedProfileView (..), renderProfileResolutionError, resolvedProfileView)
-import Shikigami.Authority (Authority, scopeToRun)
+import Shikigami.Authority (Action (EmitOutput), Authority (..), AuthorityFailure (InvalidCoordinates), mkOutputTarget, outputKindText, scopeToRun)
 import Shikigami.Behavior.Error (RunError, TransientBehaviorFailure (..), boundedBehaviorDetail)
 import Shikigami.Behavior.Provider (ProfileViolation, constrainBehaviorEnv, renderProfileViolation)
 import Shikigami.Behavior.Provider.Coordinate (providerCoordinateText)
@@ -178,6 +179,8 @@ import Shikigami.Objective.Runtime qualified as Objectives
 import Shikigami.Objective.Store qualified as ObjectiveStore
 import Shikigami.Objective.Tools qualified as ObjectiveTools
 import Shikigami.Objective.Types qualified as Objective
+import Shikigami.Output (OutputDelivery (..), OutputRegistry, lookupAdapter, resolveOutputs, resolvedOutputList)
+import Shikigami.Output qualified as Output
 import Shikigami.PracticeReview.Attention qualified as PracticeReviewAttention
 import Shikigami.PracticeReview.Capability qualified as PracticeReview
 import Shikigami.PracticeReview.Memory qualified as PracticeReviewMemory
@@ -244,6 +247,8 @@ data AgentRunDeps = AgentRunDeps
     -- | The tier's coding-agent runner, resolved per run (EP-2). Tiers that
     -- do not admit coding agents use 'noCodingAgents'.
     codingAgents :: !CodingAgentRunners,
+    -- | Output adapters and the composition's default output (EP-8 M2).
+    outputs :: !OutputRegistry,
     -- | Mutable process policy, snapshotted once in each new run.
     approvalPolicy :: !ApprovalPolicySnapshot,
     -- | Process resources for the approval child registered alongside this
@@ -866,21 +871,94 @@ finishSuccessfulRun deps selectedModelId approvalPolicyForRun recordedIdentity j
             sid
             output
       liftIO (traverse_ (logSinkResult (depsLogger deps) job) sinkResults)
-      recorded <- runStep deps (StepName "record") (requireStore (recordLearning deps recordedIdentity decl sid output))
-      case recorded of
-        StepRefused detail -> pure (Left (PermanentAgentRunFailure detail))
-        StepProduced mem -> do
-          completed <- runStep deps (StepName "complete") (requireStore (completeSession deps selectedModelId recordedIdentity sid))
-          pure case completed of
-            StepRefused detail -> Left (PermanentAgentRunFailure detail)
-            StepProduced () ->
-              Right
-                AgentRunResult
-                  { sessionId = sid,
-                    recalledPrior = prior,
-                    behaviorOutput = output,
-                    recordedMemId = mem
-                  }
+      delivered <- deliverOutputs deps approvalPolicyForRun sid job decl output
+      case delivered of
+        Left err -> finishRunFailure deps recordedIdentity decl sid err
+        Right () -> recordAndComplete deps selectedModelId recordedIdentity decl sid prior output
+
+-- | Learn from the run and complete its session.
+recordAndComplete ::
+  AgentRunDeps ->
+  Text ->
+  ResolvedAgentIdentity ->
+  AgentDecl ->
+  SessionId ->
+  [MemoryRecord] ->
+  Value ->
+  Eff (Workflow : AppEffects) (Either AgentRunFailure AgentRunResult)
+recordAndComplete deps selectedModelId recordedIdentity decl sid prior output = do
+  recorded <- runStep deps (StepName "record") (requireStore (recordLearning deps recordedIdentity decl sid output))
+  case recorded of
+    StepRefused detail -> pure (Left (PermanentAgentRunFailure detail))
+    StepProduced mem -> do
+      completed <- runStep deps (StepName "complete") (requireStore (completeSession deps selectedModelId recordedIdentity sid))
+      pure case completed of
+        StepRefused detail -> Left (PermanentAgentRunFailure detail)
+        StepProduced () ->
+          Right
+            AgentRunResult
+              { sessionId = sid,
+                recalledPrior = prior,
+                behaviorOutput = output,
+                recordedMemId = mem
+              }
+
+-- | The run's outputs (EP-8 M2): resolved once and journaled (the
+-- declaration's own list, else the composition's default), each approved
+-- when the run's policy asks for it, then authorized as 'EmitOutput' and
+-- delivered by its adapter in one journaled step.
+deliverOutputs ::
+  AgentRunDeps ->
+  ApprovalPolicySnapshot ->
+  SessionId ->
+  RunJob ->
+  AgentDecl ->
+  Value ->
+  Eff (Workflow : AppEffects) (Either AgentRunFailure ())
+deliverOutputs deps policy sid job decl output = do
+  resolved <- runStep deps (StepName "resolve-outputs") (pure (resolveOutputs deps.outputs decl.outputs))
+  let listed = zip [0 :: Int ..] (resolvedOutputList resolved)
+  if null listed
+    then pure (Right ())
+    else do
+      approvals <- traverse approve listed
+      case sequence approvals of
+        Left err -> pure (Left err)
+        Right approved -> do
+          receipts <- runStep deps (StepName "deliver-outputs") (liftIO (traverse deliver [entry | (entry, True) <- zip listed approved]))
+          pure case [problem | Left problem <- receipts] of
+            [] -> Right ()
+            problem : _ -> Left (PermanentAgentRunFailure ("output delivery failed: " <> problem))
+  where
+    kindOf decl' = outputKindText decl'.kind
+    approve (ordinal, decl')
+      | not (requiresApprovalForOutput policy (kindOf decl')) = pure (Right True)
+      | otherwise = do
+          requested <-
+            ApprovalWorkflow.requestApproval
+              ("output-" <> kindOf decl' <> "-" <> Text.pack (show ordinal))
+              sid
+              ApprovalRequest
+                { prompt = "Deliver the " <> kindOf decl' <> " output of agent " <> agentNameText ((.agentName) job) <> "?",
+                  context = output,
+                  channel = approvalPolicyChannel policy
+                }
+              (approvalPolicyDeadline policy)
+          pure case requested of
+            ApprovalWorkflow.ApprovalNotificationFailed detail -> Left (PermanentAgentRunFailure ("approval notification failed: " <> detail))
+            ApprovalWorkflow.ApprovalResolved (Approved _) -> Right True
+            ApprovalWorkflow.ApprovalResolved _ -> Right False
+    deliver (ordinal, decl') = case lookupAdapter deps.outputs decl'.kind of
+      Nothing -> pure (Left ("output kind " <> kindOf decl' <> " is not registered"))
+      Just adapter -> do
+        let runId = runJobWorkflowId job
+        decided <- case (identityText ((.identity) job), mkOutputTarget (runId.unWorkflowId :| [Text.pack (show ordinal)])) of
+          (Right principal, Right target) -> deps.actionAuthority.decide (declarationCoordinate principal) (EmitOutput decl'.kind target)
+          (Left problem, _) -> pure (Left (InvalidCoordinates problem))
+          (_, Left problem) -> pure (Left (InvalidCoordinates problem))
+        case decided of
+          Left refusal -> pure (Left (kindOf decl' <> " was refused: " <> Text.pack (show refusal)))
+          Right _ -> adapter.deliver OutputDelivery {run = runId, agent = decl.name, ordinal, output = decl', result = output}
 
 finishRunFailure ::
   AgentRunDeps ->
@@ -1812,6 +1890,7 @@ triggerKindText = \case
   Schedule {} -> "schedule"
   Stream {} -> "stream"
   Event {} -> "event"
+  Manual -> "manual"
 
 spanArgs :: SpanKind -> SpanArguments
 spanArgs spanKind =

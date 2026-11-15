@@ -23,6 +23,7 @@ let Trigger =
       < Schedule : { cron : Text }
       | Stream : { match : StreamMatch }
       | Event : { eventType : Text }
+      | Manual
       >
 
 -- A vendor coding tool for the CodingAgent arm (EP-2 of MasterPlan 22).
@@ -194,6 +195,11 @@ let McpTools = { server : Text, tools : List Text }
 
 let Tool = < CliTool : CliTool.Type | McpTools : McpTools >
 
+-- Where the result goes (EP-8 M2): a registered output kind and its JSON
+-- configuration. Helpers: schema/outputs/Local.dhall. Empty takes the
+-- composition's default.
+let Output = { kind : Text, config : Text }
+
 let Agent =
       { Type =
           { name : Text
@@ -209,6 +215,7 @@ let Agent =
           , sanctionedProfile : Optional ProfileRequirement.Type
           , capabilityOverlays : List Text
           , tools : List Tool
+          , outputs : List Output
           , identity : Optional Identity
           , memory : MemoryPolicy
           , enabled : Bool
@@ -217,6 +224,7 @@ let Agent =
           }
       , default =
           { description = ""
+          , trigger = Trigger.Manual
           , sinks = [] : List Sink
           , delegates = [] : List Text
           , execution = None Execution
@@ -226,6 +234,7 @@ let Agent =
           , sanctionedProfile = None ProfileRequirement.Type
           , capabilityOverlays = [] : List Text
           , tools = [] : List Tool
+          , outputs = [] : List Output
           , identity = None Identity
           , memory = defaultMemoryPolicy
           , enabled = True
@@ -267,5 +276,6 @@ in  { SignalType
     , CliTool
     , McpTools
     , Tool
+    , Output
     , Agent
     }

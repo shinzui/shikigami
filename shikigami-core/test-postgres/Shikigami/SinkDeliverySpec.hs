@@ -81,6 +81,7 @@ import Shikigami.Log qualified as Log
 import Shikigami.Memory.Access (shikigamiMemorySpace)
 import Shikigami.Memory.Scope (agentScope)
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
+import Shikigami.Output (emptyOutputRegistry)
 import Shikigami.PracticeReview.Capability qualified as PracticeReviewCapability
 import Shikigami.Sink (GrantSource (DbGrants), SinkKind (SChannelEgress), SinkOutcome (AuthorizationFailed, DeniedOutcome, Enqueued, SkippedLifecycle), SinkResult (..))
 import Shikigami.Sink.Config (DanwaConfig (..), KanmonConfig (..), KawaConfig (..), KizashiConfig (..), ReiConfig (..))
@@ -571,6 +572,7 @@ withFixtureUsingTracer databaseFixture tracer label sinks kizashi danwa use =
                 AgentWorkflow.http = sinkHttp,
                 AgentWorkflow.hooks = AgentWorkflow.defaultAgentRunHooks,
                 AgentWorkflow.codingAgents = AgentWorkflow.noCodingAgents,
+                AgentWorkflow.outputs = emptyOutputRegistry,
                 AgentWorkflow.approvalPolicy = autoApprovePolicy (((either (error . show) id . parseDuration) (secondsToNominalDiffTime 900))),
                 AgentWorkflow.approvalWorkflow = ApprovalWorkflow.defaultApprovalWorkflowEnv,
                 AgentWorkflow.runTimeout = (either (error . show) id (parseDuration (secondsToNominalDiffTime 300))),
@@ -649,6 +651,7 @@ agentDeclaration sinks =
       sanctionedProfile = Nothing,
       capabilityOverlays = [],
       tools = [],
+      outputs = [],
       identity = Nothing,
       memory = defaultMemoryPolicy,
       enabled = agentEnablement (True),

@@ -146,6 +146,7 @@ runWorkerCmdWith resumeBudget config = do
       let policy =
             ApprovalPolicySnapshot
               { requireFor = (.approvalRequiredSinks) config,
+                requireOutputs = Set.fromList config.approvalRequiredOutputs,
                 channel = (.approvalChannel) config,
                 deadline = (.approvalDeadline) config
               }

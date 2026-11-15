@@ -70,6 +70,7 @@ approvalNotifier logger SinkHttp {danwa = danwaClient, kizashi = kizashiHttp} da
                     importance = 100,
                     contextTags = [reviewRequestIdText reviewId]
                   }
+          ViaLocalInbox -> pure (Left (PermanentNotification "this notifier cannot write the local inbox; the local-operator composition installs its own"))
         pure result
     }
 
@@ -100,6 +101,7 @@ renderChannel :: ApprovalChannel -> Text
 renderChannel = \case
   ViaDanwa -> "danwa"
   ViaKizashi -> "kizashi"
+  ViaLocalInbox -> "local-inbox"
 
 classifyDanwa :: DanwaError -> ApprovalNotificationError
 classifyDanwa failure = case failure of

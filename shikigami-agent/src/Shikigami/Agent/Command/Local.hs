@@ -19,6 +19,7 @@ import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.ByteString.Lazy.Char8 qualified as LazyChar8
 import Data.List (find)
+import Data.Maybe (isJust)
 import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as Text
@@ -28,9 +29,13 @@ import Data.Time (getCurrentTime)
 import Data.Time.Format.ISO8601 (iso8601Show)
 import Keiro.Workflow (WorkflowId (..))
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
+import Shikigami.Agent.Approval (ApprovalDecision (Rejected), resolveApproval)
+import Shikigami.Agent.Approval qualified as Approval
+import Shikigami.Agent.Approval.LocalInbox (PendingApproval (..), listPendingApprovals, localInboxDirectory, pendingToken, readPendingApproval, removePendingApproval)
 import Shikigami.Agent.Decl (AgentDecl (..))
 import Shikigami.Agent.Loader (loadAgent)
 import Shikigami.Agent.Name (agentNameText)
+import Shikigami.App (AppEnv (..), noopTracer)
 import Shikigami.App.Config (AppConfig (..), revealSecretText)
 import Shikigami.App.Config.Load (requireDatabaseUrl)
 import Shikigami.Capability.Declared (CliToolDecl (..), cliCapabilityName, cliTools, renderCliToolDecl, toolNameText)
@@ -58,6 +63,10 @@ data LocalCommand
     CheckTools !FilePath !(Maybe FilePath)
   | -- | Connect to a bound MCP server and list its tools against the binding.
     DiscoverMcp !Text !(Maybe FilePath)
+  | -- | Open asks in the local approval inbox (EP-8 M2).
+    PendingApprovals
+  | -- | Resolve one ask: approve, or reject with a reason.
+    ResolveApproval !Text !(Maybe Text)
   | -- | Claude Code's PreToolUse hook: decide one call against the run's
     -- declared tools (@tools.json@) and record the decision beside it.
     Gate !FilePath
@@ -143,6 +152,28 @@ runLocal command config = case command of
           Left (NoStoredGrant _) -> exitWith (ExitFailure 3)
           Left _ -> exitWith (ExitFailure 1)
   Gate toolsFile -> runGate toolsFile
+  PendingApprovals -> do
+    inbox <- localInboxDirectory <$> maybe defaultStateDirectory pure config.localOperatorStateDirectory
+    asks <- listPendingApprovals inbox
+    if null asks then putStrLn "no pending approvals" else pure ()
+    mapM_ (\pendingAsk -> TextIO.putStrLn (pendingAsk.reviewId <> "  until " <> Text.pack (iso8601Show pendingAsk.deadline) <> "  " <> pendingAsk.prompt)) asks
+  ResolveApproval reviewId rejection -> do
+    inbox <- localInboxDirectory <$> maybe defaultStateDirectory pure config.localOperatorStateDirectory
+    pendingAsk <- readPendingApproval inbox reviewId >>= maybe (die ("no pending approval " <> reviewId <> " in " <> Text.pack inbox)) pure
+    token <- maybe (die "the approval file holds no valid token") pure (pendingToken pendingAsk)
+    connection <- revealSecretText <$> requireDatabaseUrl "shikigami-local approvals resolve" config
+    verifyShikigamiMigrations connection
+    tracer <- noopTracer
+    let settings = defaultConnectionSettings connection
+    withStore settings \store -> do
+      let appEnv = AppEnv {connectionSettings = settings, tracer, metrics = Nothing, store = Just store}
+          decision = maybe (Approval.Approved (Aeson.object ["source" .= ("shikigami-local" :: Text)])) Rejected rejection
+      resolved <- resolveApproval appEnv token decision
+      if resolved
+        then do
+          removePendingApproval inbox reviewId
+          TextIO.putStrLn ((if isJust rejection then "rejected " else "approved ") <> reviewId <> "; continue the run with shikigami-agent-run --resume")
+        else die ("approval " <> reviewId <> " was already resolved or has expired")
   DiscoverMcp serverName workspace -> do
     catalogPath <- defaultToolCatalogPath
     catalog <- loadToolCatalog catalogPath >>= either die pure

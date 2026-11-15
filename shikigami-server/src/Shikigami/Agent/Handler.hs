@@ -71,7 +71,8 @@ agentView env decl = do
         trigger = case decl.trigger of
           Decl.Schedule {} -> "schedule"
           Decl.Stream {} -> "stream"
-          Decl.Event {} -> "event",
+          Decl.Event {} -> "event"
+          Decl.Manual -> "manual",
         behavior = case decl.behavior of
           Decl.Deterministic {} -> "deterministic"
           Decl.ShikumiProgram {} -> "shikumi_program"

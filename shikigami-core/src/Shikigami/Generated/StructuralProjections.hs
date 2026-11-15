@@ -46,7 +46,7 @@ runRouteKindWitness = exactFieldWitness @RunRouteKindProjection
 data RunTriggerKindProjection
 
 runTriggerKindGet :: TriggerKind -> Text
-runTriggerKindGet owner = case bindingToShape Bindings.triggerKindBinding owner of RunTriggerKind.TriggeredBySchedule -> "TriggeredBySchedule"; RunTriggerKind.TriggeredByStream -> "TriggeredByStream"; RunTriggerKind.TriggeredByEvent -> "TriggeredByEvent"; RunTriggerKind.TriggeredByDelegation -> "TriggeredByDelegation"
+runTriggerKindGet owner = case bindingToShape Bindings.triggerKindBinding owner of RunTriggerKind.TriggeredBySchedule -> "TriggeredBySchedule"; RunTriggerKind.TriggeredByStream -> "TriggeredByStream"; RunTriggerKind.TriggeredByEvent -> "TriggeredByEvent"; RunTriggerKind.TriggeredByDelegation -> "TriggeredByDelegation"; RunTriggerKind.TriggeredByOperator -> "TriggeredByOperator"
 
 instance FieldProjection RunTriggerKindProjection where
   type FieldName RunTriggerKindProjection = ""
@@ -56,12 +56,13 @@ instance FieldProjection RunTriggerKindProjection where
   projectFieldValue _ = runTriggerKindGet
 
 instance ExactFieldProjection RunTriggerKindProjection where
-  fieldProjectionDomain _ = finiteProjectionDomain ("TriggeredBySchedule" :| ["TriggeredByStream", "TriggeredByEvent", "TriggeredByDelegation"])
+  fieldProjectionDomain _ = finiteProjectionDomain ("TriggeredBySchedule" :| ["TriggeredByStream", "TriggeredByEvent", "TriggeredByDelegation", "TriggeredByOperator"])
   reconstructFieldOwner _ value = case value of
     "TriggeredBySchedule" -> Just (bindingFromShape Bindings.triggerKindBinding RunTriggerKind.TriggeredBySchedule)
     "TriggeredByStream" -> Just (bindingFromShape Bindings.triggerKindBinding RunTriggerKind.TriggeredByStream)
     "TriggeredByEvent" -> Just (bindingFromShape Bindings.triggerKindBinding RunTriggerKind.TriggeredByEvent)
     "TriggeredByDelegation" -> Just (bindingFromShape Bindings.triggerKindBinding RunTriggerKind.TriggeredByDelegation)
+    "TriggeredByOperator" -> Just (bindingFromShape Bindings.triggerKindBinding RunTriggerKind.TriggeredByOperator)
     _ -> Nothing
 
 runTriggerKindWitness :: FieldWitness RunTriggerKindProjection

@@ -133,6 +133,7 @@ import Shikigami.Memory.Access (agentActor, shikigamiMemorySpace)
 import Shikigami.Memory.AliasStore qualified as AliasStore
 import Shikigami.Memory.Scope (agentScope, legacyAgentScope)
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
+import Shikigami.Output (emptyOutputRegistry)
 import Shikigami.PracticeReview.Capability qualified as PracticeReviewCapability
 import Shikigami.RunEvidence.Catalog qualified as ExecutionCatalog
 import Shikigami.RunEvidenceSpec (completeScenarioEvidence)
@@ -1636,6 +1637,7 @@ tests databaseFixture =
                           { approvalPolicy =
                               ApprovalPolicySnapshot
                                 { requireFor = Set.singleton SKawaDigest,
+                                  requireOutputs = Set.empty,
                                   channel = ViaDanwa,
                                   deadline = either (error . show) id (parseDuration 60)
                                 },
@@ -2014,6 +2016,7 @@ testDepsWithAgents appEnv behaviorEnv hooks agentDecls =
       http = testSinkHttp,
       hooks,
       codingAgents = noCodingAgents,
+      outputs = emptyOutputRegistry,
       approvalPolicy = autoApprovePolicy (either (error . show) id (parseDuration 900)),
       approvalWorkflow = ApprovalWorkflow.defaultApprovalWorkflowEnv,
       runTimeout = (either (error . show) id (parseDuration (secondsToNominalDiffTime 300))),
@@ -2054,9 +2057,11 @@ testDepsWithApprovalAndDeadline appEnv behaviorEnv hooks approval deadline =
       http = testSinkHttp,
       hooks,
       codingAgents = noCodingAgents,
+      outputs = emptyOutputRegistry,
       approvalPolicy =
         ApprovalPolicySnapshot
           { requireFor = Set.singleton SKawaDigest,
+            requireOutputs = Set.empty,
             channel = ViaDanwa,
             deadline = either (error . show) id (parseDuration (fromMaybe (secondsToNominalDiffTime 900) deadline))
           },
@@ -2571,6 +2576,7 @@ capabilityDecl agentName agentBehavior overlays agentIdentity agentSinks =
       sanctionedProfile = Nothing,
       capabilityOverlays = overlays,
       tools = [],
+      outputs = [],
       identity = agentIdentity,
       memory = defaultMemoryPolicy,
       enabled = agentEnablement (True),
@@ -2621,6 +2627,7 @@ expectedLifecycleSteps =
       "resolve-capability-overlays",
       "resolve-execution-selection",
       "resolve-approval-policy",
+      "resolve-outputs",
       "open-session",
       "recall",
       "patch:shikigami-objective-tracking-v1",
@@ -2656,6 +2663,7 @@ decl =
       sanctionedProfile = Nothing,
       capabilityOverlays = [],
       tools = [],
+      outputs = [],
       identity = Nothing,
       memory = defaultMemoryPolicy,
       enabled = agentEnablement (True),
@@ -2685,6 +2693,7 @@ missingTaskDecl =
       sanctionedProfile = Nothing,
       capabilityOverlays = [],
       tools = [],
+      outputs = [],
       identity = Nothing,
       memory = defaultMemoryPolicy,
       enabled = agentEnablement (True),
@@ -2719,6 +2728,7 @@ profiledDecl =
             },
       capabilityOverlays = [],
       tools = [],
+      outputs = [],
       identity = Nothing,
       memory = defaultMemoryPolicy,
       enabled = agentEnablement (True),
@@ -2747,6 +2757,7 @@ profiledSkillDecl =
             },
       capabilityOverlays = [],
       tools = [],
+      outputs = [],
       identity = Nothing,
       memory = defaultMemoryPolicy,
       enabled = agentEnablement (True),
@@ -2770,6 +2781,7 @@ flowDecl =
       sanctionedProfile = Nothing,
       capabilityOverlays = [],
       tools = [],
+      outputs = [],
       identity = Nothing,
       memory = defaultMemoryPolicy,
       enabled = agentEnablement (True),
@@ -2804,6 +2816,7 @@ flowDelegationDecl =
       sanctionedProfile = Nothing,
       capabilityOverlays = [],
       tools = [],
+      outputs = [],
       identity = Nothing,
       memory = defaultMemoryPolicy,
       enabled = agentEnablement (True),

@@ -66,6 +66,7 @@ packageBoundaryTests =
                   harness = Nothing,
                   capabilityOverlays = [],
                   tools = [],
+                  outputs = [],
                   identity = Nothing,
                   memory = defaultMemoryPolicy,
                   enabled = AgentEnabled,

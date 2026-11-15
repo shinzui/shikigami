@@ -253,6 +253,7 @@ testDecl capabilityOverlays =
       sanctionedProfile = Nothing,
       capabilityOverlays,
       tools = [],
+      outputs = [],
       identity = Just IdentityDecl {principal = declarationCoordinate ("principal_workspace_test")},
       memory = defaultMemoryPolicy,
       enabled = agentEnablement (True),

@@ -12,6 +12,7 @@ module Shikigami.Agent.Approval
     reviewRequestIdFor,
     approvalWorkflowId,
     requiresApprovalFor,
+    requiresApprovalForOutput,
     withApprovalChannel,
     approvalPolicyChannel,
     approvalPolicyDeadline,
@@ -82,6 +83,9 @@ data ApprovalRequest = ApprovalRequest
 data ApprovalChannel
   = ViaKizashi
   | ViaDanwa
+  | -- | A file the local operator resolves with @shikigami-local approvals@
+    -- (EP-8 M2).
+    ViaLocalInbox
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
@@ -124,6 +128,8 @@ instance FromJSON ReviewRequestId where
 -- active when the run resumes.
 data ApprovalPolicySnapshot = ApprovalPolicySnapshot
   { requireFor :: !(Set SinkKind),
+    -- | Output kinds whose delivery waits for approval (EP-8 M2).
+    requireOutputs :: !(Set Text),
     channel :: !ApprovalChannel,
     deadline :: !(Duration "approval")
   }
@@ -163,6 +169,9 @@ approvalWorkflowId = WorkflowId . reviewRequestIdText
 requiresApprovalFor :: ApprovalPolicySnapshot -> SinkKind -> Bool
 requiresApprovalFor ApprovalPolicySnapshot {requireFor} = (`Set.member` requireFor)
 
+requiresApprovalForOutput :: ApprovalPolicySnapshot -> Text -> Bool
+requiresApprovalForOutput ApprovalPolicySnapshot {requireOutputs} = (`Set.member` requireOutputs)
+
 withApprovalChannel :: ApprovalChannel -> ApprovalRequest -> ApprovalRequest
 withApprovalChannel selected ApprovalRequest {prompt, context} =
   ApprovalRequest {prompt, context, channel = selected}
@@ -177,6 +186,7 @@ autoApprovePolicy :: Duration "approval" -> ApprovalPolicySnapshot
 autoApprovePolicy deadline =
   ApprovalPolicySnapshot
     { requireFor = Set.empty,
+      requireOutputs = Set.empty,
       channel = ViaDanwa,
       deadline
     }
@@ -212,6 +222,7 @@ renderApprovalChannel :: ApprovalChannel -> Text
 renderApprovalChannel = \case
   ViaDanwa -> "danwa"
   ViaKizashi -> "kizashi"
+  ViaLocalInbox -> "local-inbox"
 
 sinkKindChoices :: [(Text, SinkKind)]
 sinkKindChoices =

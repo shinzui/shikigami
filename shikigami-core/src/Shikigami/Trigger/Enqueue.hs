@@ -175,7 +175,7 @@ enqueueAddressedRunIn :: Pool -> AgentIdentity -> AgentName -> RunRouteKind -> V
 enqueueAddressedRunIn pool identity agent route payload repository = do
   now <- getCurrentTime
   let key = addressedRunKeyIn agent route payload repository
-  enqueueRunJob pool (addressedRunJob now identity agent route payload key) {repository}
+  enqueueRunJob pool (addressedRunJob now identity agent route payload key) {repository, triggerKind = TriggeredByOperator}
 
 -- | The caller key stays distinct from the full scoped run coordinate.
 enqueueAddressedRunWithKey :: Pool -> AgentIdentity -> AgentName -> RunRouteKind -> Value -> Addressed.RequestKey -> IO (Either UsageError MessageId)
@@ -184,7 +184,7 @@ enqueueAddressedRunWithKey pool identity agent route payload key = enqueueAddres
 enqueueAddressedRunWithKeyIn :: Pool -> AgentIdentity -> AgentName -> RunRouteKind -> Value -> Addressed.RequestKey -> Maybe Text -> IO (Either UsageError MessageId)
 enqueueAddressedRunWithKeyIn pool identity agent route payload key repository = do
   now <- getCurrentTime
-  enqueueRunJob pool (addressedRunJob now identity agent route payload (addressedRunKeyWithKey agent route key)) {repository}
+  enqueueRunJob pool (addressedRunJob now identity agent route payload (addressedRunKeyWithKey agent route key)) {repository, triggerKind = TriggeredByOperator}
 
 -- | The CLI and HTTP producers share this exact queue payload constructor.
 addressedRunJob :: UTCTime -> AgentIdentity -> AgentName -> RunRouteKind -> Value -> RunKey -> RunJob

@@ -493,6 +493,7 @@ triggerKindText = \case
   TriggeredByStream -> "stream"
   TriggeredByEvent -> "event"
   TriggeredByDelegation -> "delegation"
+  TriggeredByOperator -> "operator"
 
 runMetric :: (Metrics.ShikigamiMetrics -> Text -> Text -> IO ()) -> WorkerEnv -> RunJob -> IO ()
 runMetric record env job =

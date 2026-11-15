@@ -75,9 +75,10 @@ tests =
               delegates,
               delegationBudget,
               capabilityOverlays,
-              tools = [],
+              tools,
               enabled
             } -> do
+              tools @?= []
               identity @?= Nothing
               scope @?= AgentScope
               recallLimitNatural recallLimit @?= 10

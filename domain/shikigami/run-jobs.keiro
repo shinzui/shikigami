@@ -13,6 +13,7 @@ mapped structural enum RunTriggerKind {
     TriggeredByStream as "TriggeredByStream"
     TriggeredByEvent as "TriggeredByEvent"
     TriggeredByDelegation as "TriggeredByDelegation"
+    TriggeredByOperator as "TriggeredByOperator"
   }
 }
 

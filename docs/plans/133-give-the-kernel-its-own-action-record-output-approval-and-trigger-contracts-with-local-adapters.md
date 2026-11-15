@@ -27,6 +27,11 @@ provenance:
       at: 2026-11-15T15:57:53Z
       mode: "implement"
       note: "M1 implemented: kernel Action, Authority port, action record, Kikan-En adapter, record list, ADR-123"
+    - model: "claude-opus-5-5"
+      harness: "claude-code"
+      at: 2026-11-15T21:48:46Z
+      mode: "implement"
+      note: "M2 accepted: outputs beside sinks, local.report default, local inbox approvals, Trigger.Manual"
 ---
 
 # Give the kernel its own action, record, output, approval and trigger contracts with local adapters
@@ -82,13 +87,24 @@ Its first milestone has no prerequisite and is the first work of that initiative
   new architecture case pass; `just haskell-conventions` passes;
   [ADR-123](../adr/0123-the-kernel-owns-its-action-vocabulary-authority-port-and-action-record.md)
   is written. The full-suite and `just keiro-gate` results are recorded under Outcomes.
-- [ ] M2: Outputs, approval channels and triggers are kernel contracts. `sinks` is replaced
+- [x] M2 (2026-11-15): Outputs, approval channels and triggers are kernel contracts. `sinks` is replaced
   by `outputs` with an adapter registry validated at load; the five Kikan sinks are
   registered adapters; `local.report` and `local.inbox` exist; `Trigger.Manual` is the
   default; and a declaration with no outputs receives the composition's default output,
   resolved at admission and pinned in the journal. A real `LocalOperator` run of a
   declaration with no trigger line and no `outputs` line pauses at a local-inbox approval,
   resumes, and writes its report through the default. (Needs EP-1.)
+  Evidence: a Skill declaration with only `name` and `behavior` (no trigger, no outputs) ran
+  under `local-operator` with `approval.require_outputs=local.report` and OpenAI
+  `gpt-5.4-mini` (run `41854ae1-8855-52e3-b4c3-284bc01a242e`). The run printed "waits for
+  approval" with `shikigami-local approvals resolve review_9f4f559b-…`; the ask was a 0600
+  file in a 0700 `approvals/` directory. `approvals pending` listed it, `approvals resolve`
+  approved it and removed the file, and `--resume` drove the approval child, resumed the run
+  and wrote `reports/plain-note/41854ae1-…-0.md` (mode 0600) through the composition default.
+  The ledger shows `authority.decided emit_output local.report:41854ae1-…/0 allowed`. Tests:
+  the `outputs` group (resolution precedence, load-time refusal naming registered kinds,
+  private idempotent report files, the local inbox) and the updated conformance pin; the
+  `keiro-diff` finding is recorded in the commit.
 - [ ] M3: The portability check passes. One declaration that uses only kernel vocabulary
   runs under the stock composition and under a composition with the Kikan adapters, and
   `shikigami record check` asserts invariants K1 to K8 from each run's record. (Needs EP-1.)
@@ -231,6 +247,35 @@ These came from reading the working tree on 2026-11-15, before implementation.
   `LocalOperator` the authority port alone decides `EmitOutput`.
   Date: 2026-11-15
 
+
+- Decision (EP-8 M2): `outputs` is added beside `sinks` instead of replacing it. The kernel
+  contract (`Shikigami.Output`: kind, adapter, sealed registry, default, `ResolvedOutputs`)
+  and `local.report` exist; the five Kikan sinks keep their `Sink` path and their approval
+  until EP-10 registers them as output adapters.
+  Rationale: Replacing `Sink` touches 374 constructor uses in 62 files and the sink outbox;
+  doing it now would delay the local path without changing what a local operator can do.
+  EP-10 owns moving the Kikan adapters out of the core, which is the natural point to retire
+  `sinks`.
+  Date: 2026-11-15
+- Decision (EP-8 M2): `resolve-outputs` and `deliver-outputs` are journaled at delivery
+  (after the sinks), not at admission; delivery is one step over all approved outputs, each
+  decided as `EmitOutput kind (run, ordinal)`. The local operator's authorities allow
+  `local.*` outputs, including the authority of a declaration that requests nothing.
+  Rationale: The step is journaled before anything is delivered, so a restart keeps the
+  resolution all the same; admission would add a step to every run, output or not.
+  Date: 2026-11-15
+- Decision (EP-8 M2): Approval channels stay the `ApprovalChannel` sum, gaining
+  `ViaLocalInbox`; the light command installs `localInboxNotifier` and a policy built from
+  `approval.require_outputs`. The foreground command now drives every pending child of the
+  run (coding-agent steps and approvals) and stops with instructions when only an approval
+  remains; `--resume` continues.
+  Rationale: An adapter registry for channels has one local consumer today; the sum keeps
+  the Kikan notifier unchanged.
+  Date: 2026-11-15
+- Decision (EP-8 M2): `Trigger.Manual` is the Dhall default and `TriggeredByOperator` marks
+  runs from `shikigami-agent-run` and `shikigami enqueue-run`; the run-jobs enum is
+  regenerated.
+  Date: 2026-11-15
 
 ## Outcomes & Retrospective
 

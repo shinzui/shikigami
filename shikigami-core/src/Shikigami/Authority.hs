@@ -66,7 +66,7 @@ module Shikigami.Authority
   )
 where
 
-import Data.Aeson ((.=))
+import Data.Aeson (FromJSON (..), ToJSON (..), (.=))
 import Data.Aeson qualified as Aeson
 import Data.Char (isAsciiLower, isControl, isDigit, isSpace)
 import Data.List.NonEmpty qualified as NonEmpty
@@ -166,6 +166,10 @@ mkOutputKind value = OutputKind value <$ mkRecordKind value
 
 outputKindText :: OutputKind -> Text
 outputKindText (OutputKind value) = value
+
+instance ToJSON OutputKind where toJSON = toJSON . outputKindText
+
+instance FromJSON OutputKind where parseJSON = Aeson.withText "OutputKind" (either (fail . Text.unpack) pure . mkOutputKind)
 
 -- | Where an output is delivered, as one to four opaque segments (for
 -- example a recipient, or a channel provider and conversation). Each segment

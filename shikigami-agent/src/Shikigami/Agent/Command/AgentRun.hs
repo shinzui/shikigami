@@ -10,9 +10,11 @@ import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.ByteString.Lazy qualified as LazyByteString
+import Data.Functor ((<&>))
 import Data.List (isInfixOf, isSuffixOf)
 import Data.Map.Strict qualified as Map
 import Data.Maybe (isJust)
+import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as TE
@@ -24,18 +26,20 @@ import Keiro.Workflow.Child (runChildWorkflow)
 import Kioku.Id (idText)
 import Kiroku.Store.Connection (KirokuStore (..), withStore)
 import Kiroku.Store.Effect (runStoreIO)
+import Kiroku.Store.Error (StoreError)
 import Shikigami.Activity (ActivityEnvelope)
 import Shikigami.Agent.Approval qualified as Approval
+import Shikigami.Agent.Approval.LocalInbox (PendingApproval (..), listPendingApprovals, localInboxDirectory, localInboxNotifier)
+import Shikigami.Agent.Approval.Workflow (approvalWorkflow, approvalWorkflowName)
 import Shikigami.Agent.Approval.Workflow qualified as ApprovalWorkflow
-import Shikigami.Agent.Decl (AgentDecl (..), Behavior (CoordinatingSkill, Skill), codingAgentStepOf)
-import Shikigami.Agent.DeclarationValue (declarationCoordinate)
+import Shikigami.Agent.Decl (AgentDecl (..), Behavior (CoordinatingSkill, Skill))
 import Shikigami.Agent.Loader (AgentLoadEntry (..), AgentLoadReport (..), loadAgent)
 import Shikigami.Agent.Name (agentNameText)
 import Shikigami.Agent.Payload (readPayloadArgument)
 import Shikigami.Agent.Principal (compatibilityIdentity)
 import Shikigami.Agent.Run (AgentRunResult (..), recordActivityAsMemory, renderMemoryRecord)
 import Shikigami.Agent.Run.Key (newCliRunKey)
-import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (AgentWorkflowRoute), TriggerKind (TriggeredByEvent), runJobWorkflowId)
+import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (AgentWorkflowRoute), TriggerKind (TriggeredByOperator), runJobWorkflowId)
 import Shikigami.Agent.Trust (WorkspaceArgument (..), compatibilityPrincipal, lightComposition, parseWorkspaceArgument, terminalInteraction, workspaceArgumentText, workspaceSelector)
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
 import Shikigami.Agent.Workflow.Name (agentRunWorkflowName, ingestJobStepName)
@@ -46,7 +50,7 @@ import Shikigami.App.Config.Load (requireDatabaseUrl)
 import Shikigami.Attestation.Resolve qualified as Profile
 import Shikigami.Behavior.Provider (newBehaviorEnvFor)
 import Shikigami.CodingAgent.Types (renderOutcome)
-import Shikigami.CodingAgent.Workflow (codingAgentChildId, codingAgentStepWorkflow, codingAgentStepWorkflowName, fixedCodingAgentRunner)
+import Shikigami.CodingAgent.Workflow (codingAgentStepWorkflow, codingAgentStepWorkflowName, fixedCodingAgentRunner)
 import Shikigami.Directory (disabledDirectoryHandle)
 import Shikigami.Execution.Admission (enrollRootRun)
 import Shikigami.Execution.Driver (ExecutionStart (..))
@@ -69,8 +73,9 @@ import Shikigami.Sink (DanwaConfig (..), GrantSource (DbGrants), KanmonConfig (.
 import Shikigami.Sink.Http (HttpLimits (..), credentialsFromConfig, newSinkHttp)
 import Shikigami.Trigger.Enqueue (ensureRunQueue)
 import Shikigami.Trust.LocalOperator.Approvals (Budget (..))
-import Shikigami.Trust.LocalOperator.Grant (Interaction)
+import Shikigami.Trust.LocalOperator.Grant (Interaction, defaultStateDirectory)
 import Shikigami.Trust.Runtime (RunSubject (..), TierComposition (..), TierRuntime (..), renderTierRefusal)
+import Shikigami.Trust.Tier (TrustTier (LocalOperator))
 import Shikigami.Workflow.Versioning (shikigamiWorkflowRunOptions)
 import System.Directory (makeAbsolute)
 import System.Exit (exitFailure)
@@ -135,7 +140,7 @@ runDurableAgent logger store@KirokuStore {pool} appEnv workspace triggerPayload 
         RunJob
           { agentName = ((.name) decl),
             identity = compatibilityIdentity ((.name) decl),
-            triggerKind = TriggeredByEvent,
+            triggerKind = TriggeredByOperator,
             occurredAt,
             triggerPayload,
             idempotencyKey = freshKey,
@@ -175,6 +180,16 @@ runDurableAgent logger store@KirokuStore {pool} appEnv workspace triggerPayload 
         Right (Left problem) -> dieAgentRun ("the run's resource root was refused: " <> Text.pack (show problem))
         Left problem -> dieAgentRun ("the run's resource root is unavailable: " <> Text.pack (show problem))
     _ -> pure unrooted
+  -- Under the local operator, an output that needs approval asks through the
+  -- local inbox (EP-8 M2).
+  stateDirectory <- maybe defaultStateDirectory pure config.localOperatorStateDirectory
+  let localTier = config.trustTier == LocalOperator
+      approvalPolicy
+        | localTier = Approval.ApprovalPolicySnapshot {requireFor = Set.empty, requireOutputs = Set.fromList config.approvalRequiredOutputs, channel = Approval.ViaLocalInbox, deadline = config.approvalDeadline}
+        | otherwise = Approval.autoApprovePolicy ((.approvalDeadline) config)
+      approvalEnv
+        | localTier = ApprovalWorkflow.ApprovalWorkflowEnv {notifier = localInboxNotifier (localInboxDirectory stateDirectory)}
+        | otherwise = ApprovalWorkflow.defaultApprovalWorkflowEnv
   behEnv <- newBehaviorEnvFor logger ((.behaviorProvider) config) Nothing
   let capabilities = tierRuntime.capabilities
       kizashiConfig =
@@ -223,8 +238,9 @@ runDurableAgent logger store@KirokuStore {pool} appEnv workspace triggerPayload 
             AgentWorkflow.http = sinkHttp,
             AgentWorkflow.hooks = AgentWorkflow.defaultAgentRunHooks,
             AgentWorkflow.codingAgents = fixedCodingAgentRunner tierRuntime.codingAgents,
-            AgentWorkflow.approvalPolicy = Approval.autoApprovePolicy ((.approvalDeadline) config),
-            AgentWorkflow.approvalWorkflow = ApprovalWorkflow.defaultApprovalWorkflowEnv,
+            AgentWorkflow.outputs = tierRuntime.outputs,
+            AgentWorkflow.approvalPolicy = approvalPolicy,
+            AgentWorkflow.approvalWorkflow = approvalEnv,
             AgentWorkflow.runTimeout = (.runTimeout) config,
             AgentWorkflow.harness = (.harness) config,
             AgentWorkflow.delegationBudget = (.delegationBudget) config,
@@ -257,28 +273,82 @@ runDurableAgent logger store@KirokuStore {pool} appEnv workspace triggerPayload 
         Right Cancelled -> dieAgentRun "workflow was cancelled"
         Right Failed -> dieAgentRun "workflow journal carries a terminal failure"
         Right ContinuedAsNew -> dieAgentRun "parent advance requires a worker resume"
+  let drivePending :: Int -> Either StoreError (WorkflowOutcome (Either AgentWorkflow.AgentRunFailure AgentRunResult)) -> IO ()
+      drivePending budget current
+        | budget <= 0 = finish current
+        | otherwise = do
+            progressed <- foregroundChildren appEnv deps job
+            mapM_ (\(_, outcome) -> either (const (pure ())) (mapM_ TIO.putStrLn) outcome) progressed
+            case [problem | (_, Left problem) <- progressed] of
+              problem : _ -> dieAgentRun problem
+              []
+                | any (\(_, outcome) -> outcome /= Right Nothing) progressed ->
+                    runParent >>= \case
+                      next@(Right Suspended) -> drivePending (budget - 1) next
+                      next -> finish next
+                | otherwise -> do
+                    -- Every pending child waits on the operator.
+                    pendingAsks <- listPendingApprovals (localInboxDirectory stateDirectory)
+                    TIO.putStrLn ("Run " <> (runJobWorkflowId job).unWorkflowId <> " waits for approval:")
+                    mapM_ (\pendingAsk -> TIO.putStrLn ("  shikigami-local approvals resolve " <> pendingAsk.reviewId <> "    # " <> pendingAsk.prompt)) pendingAsks
+                    TIO.putStrLn ("then: shikigami-agent-run --agent <the same declaration> --resume " <> (runJobWorkflowId job).unWorkflowId)
   (`finally` tierRuntime.release) do
     initial <- runParent
     case initial of
-      -- A coding-agent behavior awaits its keyed child; this command drives
-      -- the child in the foreground (one-off runs never continue as new, so
-      -- the parent generation is 0) and then resumes the parent.
-      Right Suspended | isJust (codingAgentStepOf decl.behavior) -> do
-        let childId = codingAgentChildId (runJobWorkflowId job).unWorkflowId 0 (declarationCoordinate "behavior")
-        driven <- runAppIO appEnv (runChildWorkflow (shikigamiWorkflowRunOptions appEnv) codingAgentStepWorkflowName childId (codingAgentStepWorkflow (fixedCodingAgentRunner tierRuntime.codingAgents) Nothing))
-        case driven of
-          Right (Completed outcome) -> TIO.putStrLn ("coding-agent: " <> renderOutcome outcome) >> runParent >>= finish
-          Right other -> dieAgentRun ("the coding-agent step did not finish: " <> Text.pack (show (void other)))
-          Left problem -> dieAgentRun ("the coding-agent step failed: " <> Text.pack (show problem))
+      -- The parent awaits a child (a coding-agent step or an approval): this
+      -- command drives each pending child in the foreground and resumes the
+      -- parent while that makes progress. An approval waits for the operator.
+      Right Suspended | not eligible -> drivePending 8 initial
       Right Suspended | eligible -> do
         -- The parent has released its workflow lease. Only its accepted child
         -- can perform local work, through the same fenced executor as a worker.
         result <- driveExecutionForeground (AgentWorkflow.executionRuntime deps) (ExecutionStart execution) 10000
         case result of
-          Right (Just _) -> runParent >>= finish
+          Right (Just _) ->
+            runParent >>= \case
+              -- After the behavior, an output may still wait on an approval.
+              next@(Right Suspended) -> drivePending 8 next
+              next -> finish next
           Right Nothing -> finish initial
           Left err -> dieAgentRun ("accepted execution requires recovery: " <> Text.pack (show err))
       _ -> finish initial
+
+-- | Drive the parent's pending children and resume it until it finishes or
+-- waits on the operator.
+foregroundChildren ::
+  AppEnv ->
+  AgentWorkflow.AgentRunDeps ->
+  RunJob ->
+  IO [(Text, Either Text (Maybe Text))]
+foregroundChildren appEnv deps job = do
+  let parent = runJobWorkflowId job
+  steps <- runAppIO appEnv (loadStepIndex agentRunWorkflowName parent 0)
+  let journal = either (const Map.empty) id steps
+      pending =
+        [ child
+        | key <- Map.keys journal,
+          Just child <- [Text.stripPrefix "child:" key],
+          not (":result" `Text.isSuffixOf` child),
+          not (Map.member ("child:" <> child <> ":result") journal)
+        ]
+      options = shikigamiWorkflowRunOptions appEnv
+  traverse
+    ( \child ->
+        if ":coding-agent:" `Text.isInfixOf` child
+          then
+            runAppIO appEnv (runChildWorkflow options codingAgentStepWorkflowName (WorkflowId child) (codingAgentStepWorkflow deps.codingAgents Nothing)) <&> \case
+              Right (Completed outcome) -> (child, Right (Just ("coding-agent: " <> renderOutcome outcome)))
+              Right Suspended -> (child, Right Nothing)
+              Right other -> (child, Left ("the coding-agent step did not finish: " <> Text.pack (show (void other))))
+              Left problem -> (child, Left (Text.pack (show problem)))
+          else
+            runAppIO appEnv (runChildWorkflow options approvalWorkflowName (WorkflowId child) (approvalWorkflow deps.approvalWorkflow Nothing)) <&> \case
+              Right (Completed _) -> (child, Right (Just ("approval " <> child <> " resolved")))
+              Right Suspended -> (child, Right Nothing)
+              Right other -> (child, Left ("the approval did not finish: " <> Text.pack (show (void other))))
+              Left problem -> (child, Left (Text.pack (show problem)))
+    )
+    pending
 
 absoluteWorkspace :: WorkspaceArgument -> IO WorkspaceArgument
 absoluteWorkspace = \case

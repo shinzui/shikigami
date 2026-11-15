@@ -80,6 +80,7 @@ encodeRunTriggerKindShape = \case
   RunTriggerKind.TriggeredByStream -> String "TriggeredByStream"
   RunTriggerKind.TriggeredByEvent -> String "TriggeredByEvent"
   RunTriggerKind.TriggeredByDelegation -> String "TriggeredByDelegation"
+  RunTriggerKind.TriggeredByOperator -> String "TriggeredByOperator"
 
 parseRunTriggerKindShape :: Value -> Parser RunTriggerKind.RunTriggerKindShape
 parseRunTriggerKindShape = withText "RunTriggerKindShape" $ \tag -> case tag of
@@ -87,7 +88,8 @@ parseRunTriggerKindShape = withText "RunTriggerKindShape" $ \tag -> case tag of
   "TriggeredByStream" -> pure RunTriggerKind.TriggeredByStream
   "TriggeredByEvent" -> pure RunTriggerKind.TriggeredByEvent
   "TriggeredByDelegation" -> pure RunTriggerKind.TriggeredByDelegation
-  unknownTag -> fail ("unknown RunTriggerKind wire value " <> show unknownTag <> "; expected one of: TriggeredBySchedule, TriggeredByStream, TriggeredByEvent, TriggeredByDelegation")
+  "TriggeredByOperator" -> pure RunTriggerKind.TriggeredByOperator
+  unknownTag -> fail ("unknown RunTriggerKind wire value " <> show unknownTag <> "; expected one of: TriggeredBySchedule, TriggeredByStream, TriggeredByEvent, TriggeredByDelegation, TriggeredByOperator")
 
 encodeRunJobMessage :: RunJobMessage -> Value
 encodeRunJobMessage payload =

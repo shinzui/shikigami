@@ -42,6 +42,8 @@ import Shikigami.Capability.Overlay (CapabilityDescriptor (..), capabilityIdText
 import Shikigami.Capability.Provider (CapabilityProvider (..), CapabilityRuntime (..), installDurableAdapters, mkCapabilityProviderRegistry)
 import Shikigami.CodingAgent.Local (LocalCodingAgentConfig (..), localCodingAgentRunner)
 import Shikigami.CodingAgent.Workflow (refusingCodingAgentRunner)
+import Shikigami.Output (DefaultOutput (..), emptyOutputRegistry, mkOutputRegistry, renderOutputLoadError, validateOutputs)
+import Shikigami.Output.Local (defaultLocalReport, localReportAdapter)
 import Shikigami.Record (ActionRecord (..))
 import Shikigami.Trust.LocalOperator.Approvals
 import Shikigami.Trust.LocalOperator.Grant
@@ -53,6 +55,7 @@ import Shikigami.Workspace.Local.Adapters (LocalWorkspace (..), localWorkspaceAd
 import Shikigami.Workspace.Local.Checkout (processCheckoutResolver)
 import Shikigami.Workspace.Local.Launcher (hostProcessLauncher)
 import Shikigami.Workspace.Local.Worktree (RunWorktree (..), releaseRunWorktree)
+import System.FilePath ((</>))
 import System.IO (hFlush, hIsTerminalDevice, stdin, stdout)
 import System.IO.Error (isEOFError)
 
@@ -102,8 +105,17 @@ lightComposition config interaction record =
   TierComposition {tier = config.trustTier, resolve}
   where
     tierLabel = trustTierLabel config.trustTier
+    -- The local operator's reports go under the tier's state directory; a
+    -- declaration with no outputs gets a Markdown report (EP-8 M2).
+    localOutputs stateDirectory = either (error . Text.unpack) id (mkOutputRegistry [localReportAdapter (stateDirectory </> "reports")] (DefaultOutput defaultLocalReport))
     resolve subject@RunSubject {agent = decl, run, repository} = case config.trustTier of
-      LocalOperator -> resolveLocal subject
+      -- A declaration naming an output kind this composition does not
+      -- register is refused before the run (EP-8 M2).
+      LocalOperator
+        | Left problems <- validateOutputs (localOutputs "/") decl.outputs -> pure (Left (CompositionFailed (Text.intercalate "; " (renderOutputLoadError <$> foldr (:) [] problems))))
+        | otherwise -> resolveLocal subject
+      _
+        | Left problems <- validateOutputs emptyOutputRegistry decl.outputs -> pure (Left (CompositionFailed (Text.intercalate "; " (renderOutputLoadError <$> foldr (:) [] problems))))
       _ | not (null decl.tools) -> pure (Left (CompositionFailed (renderToolResolutionError (ToolsUnsupportedForTier (trustTierText config.trustTier)))))
       _ -> do
         workspace <- sequence <$> traverse (selectRepository processCheckoutResolver emptyApprovals) repository
@@ -123,6 +135,7 @@ lightComposition config interaction record =
                           workspace = Nothing,
                           grant = Nothing,
                           codingAgents = refusingCodingAgentRunner containedCodingAgents,
+                          outputs = emptyOutputRegistry,
                           release = pure ()
                         }
                   )
@@ -132,10 +145,12 @@ lightComposition config interaction record =
       | null (requestedOverlays decl) && not (isCodingAgent decl) =
           -- Nothing to grant: no repository is opened and every action is
           -- outside the (empty) grant.
-          oneOffCapabilityRuntime Nothing decl >>= \case
-            Left problem -> pure (Left (CompositionFailed (renderOneOffCapabilityError problem)))
-            Right capabilities ->
-              pure (Right TierRuntime {tier = LocalOperator, authority = scopeToRun run decl.name (recorded record tierLabel nothingGranted), record, capabilities, workspace = Nothing, grant = Nothing, codingAgents = refusingCodingAgentRunner containedCodingAgents, release = pure ()})
+          do
+            stateDirectory <- maybe defaultStateDirectory pure config.localOperatorStateDirectory
+            oneOffCapabilityRuntime Nothing decl >>= \case
+              Left problem -> pure (Left (CompositionFailed (renderOneOffCapabilityError problem)))
+              Right capabilities ->
+                pure (Right TierRuntime {tier = LocalOperator, authority = scopeToRun run decl.name (recorded record tierLabel nothingGranted), record, capabilities, workspace = Nothing, grant = Nothing, codingAgents = refusingCodingAgentRunner containedCodingAgents, outputs = localOutputs stateDirectory, release = pure ()})
       | otherwise =
           prepareDeclaredTools decl >>= \case
             Left problem -> pure (Left (CompositionFailed (renderToolResolutionError problem)))
@@ -158,7 +173,7 @@ lightComposition config interaction record =
                 Left refusal -> pure (Left (NoGrant refusal))
                 Right grant -> do
                   let runAuthority = localRunAuthority record decl run grant
-                      done capabilities workspace runner release = Right TierRuntime {tier = LocalOperator, authority = runAuthority, record, capabilities, workspace, grant = Just grant, codingAgents = runner, release}
+                      done capabilities workspace runner release = Right TierRuntime {tier = LocalOperator, authority = runAuthority, record, capabilities, workspace, grant = Just grant, codingAgents = runner, outputs = localOutputs stateDirectory, release}
                       toolsIn root =
                         (cliToolProvider CliToolHost {record, tier = tierLabel, agent = decl.name, root, launcher = hostProcessLauncher, host = "skill"} <$> located)
                           <> [mcpToolProvider record tierLabel decl.name root binding request.tools | (binding, request) <- servers]

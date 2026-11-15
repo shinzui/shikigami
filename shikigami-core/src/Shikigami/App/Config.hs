@@ -116,6 +116,7 @@ module Shikigami.App.Config
     workerRunTimeoutSecondsKey,
     approvalRequireKey,
     approvalChannelKey,
+    approvalRequireOutputsKey,
     approvalDeadlineSecondsKey,
     conversationIdleTimeoutSecondsKey,
     practiceReviewAttentionRecipientsKey,
@@ -466,6 +467,8 @@ data AppConfig = AppConfig
     runTimeout :: !(Duration "agent-run"),
     -- | Maximum duration an approval or flow acknowledgement may remain open.
     approvalRequiredSinks :: !(Set SinkKind),
+    -- | Output kinds whose delivery waits for an approval (EP-8 M2).
+    approvalRequiredOutputs :: ![Text],
     approvalChannel :: !ApprovalChannel,
     approvalDeadline :: !(Duration "approval"),
     -- | How long a parked conversation waits for its next human message before
@@ -573,6 +576,7 @@ appConfig =
     <*> optional healthPortSetting
     <*> withDefault workerRunTimeoutSecondsSetting (constant "worker-run-timeout" "Bound one synchronous behavior attempt" (knownDuration (secondsToNominalDiffTime 300)))
     <*> withDefault approvalRequireSetting (constant "approval-auto-approve" "Ordinary sinks do not require approval" mempty)
+    <*> withDefault approvalRequireOutputsSetting (constant "approval-outputs-auto-approve" "Outputs do not require approval" [])
     <*> withDefault approvalChannelSetting (constant "approval-danwa" "Send human approval asks through Danwa" ViaDanwa)
     <*> withDefault approvalDeadlineSecondsSetting (constant "approval-deadline" "Bound approval and acknowledgement waits" (knownDuration (secondsToNominalDiffTime 900)))
     <*> withDefault conversationIdleTimeoutSecondsSetting (constant "conversation-idle-timeout" "End a conversation epoch after half an hour of silence" (knownDuration (secondsToNominalDiffTime 1800)))
@@ -1132,6 +1136,18 @@ approvalRequireSetting =
         Left _ -> Left (decodeFailure key approvalRequireExpectation)
         Right value -> first (const (decodeFailure key approvalRequireExpectation)) (parseRequiredSinkKinds value)
 
+approvalRequireOutputsSetting :: Setting [Text]
+approvalRequireOutputsSetting =
+  publicSettingWithRenderer
+    approvalRequireOutputsKey
+    "Comma-separated output kinds whose delivery requires approval, such as local.report"
+    textListDecoder
+    (Text.intercalate ",")
+  where
+    textListDecoder = decoder \key raw -> case runDecoder textDecoder key raw of
+      Left problem -> Left problem
+      Right value -> Right (filter (not . Text.null) (Text.strip <$> Text.splitOn "," value))
+
 approvalChannelSetting :: Setting ApprovalChannel
 approvalChannelSetting =
   publicSettingWithRenderer
@@ -1431,6 +1447,9 @@ workerRunTimeoutSecondsKey = stableKey "worker.run_timeout_seconds"
 approvalRequireKey :: Key
 approvalRequireKey = stableKey "approval.require"
 
+approvalRequireOutputsKey :: Key
+approvalRequireOutputsKey = stableKey "approval.require_outputs"
+
 approvalChannelKey :: Key
 approvalChannelKey = stableKey "approval.channel"
 
@@ -1585,6 +1604,7 @@ environmentBindings =
           binding (EnvName "SHIKIGAMI_WORKER_CAPACITY") (stableKey "worker.capacity"),
           binding (EnvName "SHIKIGAMI_APPROVAL_REQUIRE") approvalRequireKey,
           binding (EnvName "SHIKIGAMI_APPROVAL_CHANNEL") approvalChannelKey,
+          binding (EnvName "SHIKIGAMI_APPROVAL_REQUIRE_OUTPUTS") approvalRequireOutputsKey,
           binding (EnvName "SHIKIGAMI_APPROVAL_DEADLINE_SECONDS") approvalDeadlineSecondsKey,
           binding (EnvName "SHIKIGAMI_CONVERSATION_IDLE_TIMEOUT_SECONDS") conversationIdleTimeoutSecondsKey,
           binding (EnvName "SHIKIGAMI_PRACTICE_REVIEW_ATTENTION_RECIPIENTS") practiceReviewAttentionRecipientsKey,

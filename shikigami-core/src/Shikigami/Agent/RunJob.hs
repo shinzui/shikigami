@@ -28,7 +28,9 @@ import Shikigami.Objective.Reference (ObjectiveAssociation)
 import Shikigami.Prelude hiding ((.=))
 
 -- | Which trigger class produced the job.
-data TriggerKind = TriggeredBySchedule | TriggeredByStream | TriggeredByEvent | TriggeredByDelegation
+-- 'TriggeredByOperator' is a run the operator asked for by hand
+-- (@shikigami-agent-run@, @shikigami enqueue-run@).
+data TriggerKind = TriggeredBySchedule | TriggeredByStream | TriggeredByEvent | TriggeredByDelegation | TriggeredByOperator
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 

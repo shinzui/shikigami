@@ -75,6 +75,7 @@ import Shikigami.Log qualified as Log
 import Shikigami.Objective.Runtime qualified as Objectives
 import Shikigami.Objective.Tracker.Store qualified as Tracker
 import Shikigami.Objective.Types (ObjectiveSettings)
+import Shikigami.Output (emptyOutputRegistry)
 import Shikigami.PracticeReview.Capability qualified as PracticeReviewCapability
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.RuntimePolicy
@@ -250,6 +251,7 @@ agentRunDeps env =
       AgentWorkflow.http = (.http) env,
       AgentWorkflow.hooks = AgentWorkflow.defaultAgentRunHooks,
       AgentWorkflow.codingAgents = env.codingAgents,
+      AgentWorkflow.outputs = emptyOutputRegistry,
       AgentWorkflow.approvalPolicy = envApprovalPolicy env,
       AgentWorkflow.approvalWorkflow = ApprovalWorkflow.ApprovalWorkflowEnv {ApprovalWorkflow.notifier = envApprovalNotifier env},
       AgentWorkflow.runTimeout = envRunTimeout env,

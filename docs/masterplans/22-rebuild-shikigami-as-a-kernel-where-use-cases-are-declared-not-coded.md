@@ -905,7 +905,9 @@ from a flow body under call-site keys. EP-3 M1 to M3 are accepted (ADR 0127): a 
 names CLI tools and MCP server tools, the operator confirms it once, and a `Skill` model, Claude
 Code (through a PreToolUse gate) and Codex (MCP only) use exactly those tools, with every call in
 the action record. Next in the recommended order are EP-8 M2, EP-9 and EP-3 M4; EP-5 and EP-11
-M1 can still start in parallel. Stage 1 (the pilot) ends at
+M1 can still start in parallel. EP-8 M2 is accepted: outputs with a composition default (a
+local report), a local approval inbox, and `Trigger.Manual` as the default; the Kikan sinks
+keep their path until EP-10. Stage 1 (the pilot) ends at
 the declaration baseline, and stage 2 at the kernel baseline.
 
 - [ ] Architectural acceptance: the keiro modernization campaign runs for real on at least

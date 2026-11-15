@@ -68,6 +68,7 @@ import Shikigami.Flow.OpenTelemetryPracticeReview (opentelemetryPracticeReviewFl
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
+import Shikigami.Output (emptyOutputRegistry)
 import Shikigami.PracticeReview
   ( ClaimId,
     ClaimKind (Fact),
@@ -717,6 +718,7 @@ specialistAgentRunDeps appEnv behaviorEnv practiceReview =
       AgentWorkflow.http = testSinkHttp,
       AgentWorkflow.hooks = AgentWorkflow.defaultAgentRunHooks,
       AgentWorkflow.codingAgents = AgentWorkflow.noCodingAgents,
+      AgentWorkflow.outputs = emptyOutputRegistry,
       AgentWorkflow.approvalPolicy = autoApprovePolicy (((either (error . show) id . parseDuration) (secondsToNominalDiffTime 900))),
       AgentWorkflow.approvalWorkflow = ApprovalWorkflow.defaultApprovalWorkflowEnv,
       AgentWorkflow.runTimeout = (either (error . show) id (parseDuration (secondsToNominalDiffTime 300))),
@@ -956,6 +958,7 @@ reviewerDecl =
       sanctionedProfile = Nothing,
       capabilityOverlays = [],
       tools = [],
+      outputs = [],
       identity = Nothing,
       memory = defaultMemoryPolicy & #recordPolicy .~ Never,
       enabled = agentEnablement (True),

@@ -116,6 +116,7 @@ import Shikigami.Objective.Capability qualified as Owner
 import Shikigami.Objective.Command qualified as Command
 import Shikigami.Objective.Runtime qualified as Objectives
 import Shikigami.Objective.Types qualified as Objective
+import Shikigami.Output (emptyOutputRegistry)
 import Shikigami.PracticeReview.Capability qualified as Practice
 import Shikigami.Repository (RepositoryId, repositoryId)
 import Shikigami.RunEvidence.Catalog qualified as Catalog
@@ -328,6 +329,7 @@ proposingDeps env behavior provider binding objectiveRuntime settings repository
       http,
       hooks = Agent.defaultAgentRunHooks,
       codingAgents = Agent.noCodingAgents,
+      outputs = emptyOutputRegistry,
       approvalPolicy = autoApprovePolicy (either (error . show) id (parseDuration 900)),
       approvalWorkflow = Approval.ApprovalWorkflowEnv {notifier = recordingNotifier recorded},
       runTimeout = either (error . show) id (parseDuration 30),

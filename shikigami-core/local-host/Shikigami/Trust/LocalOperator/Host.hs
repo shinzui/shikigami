@@ -38,7 +38,7 @@ import Shikigami.CodingAgent.Workflow (CodingAgentRunners, CodingAgentStepInput 
 import Shikigami.Record (ActionRecord (..), RecordEvent (..), TierLabel, recordErrorText)
 import Shikigami.Repository (repositoryId)
 import Shikigami.Trust.LocalOperator.Approvals
-import Shikigami.Trust.LocalOperator.Authority (LocalSelection (..), localOperatorAuthority)
+import Shikigami.Trust.LocalOperator.Authority (LocalSelection (..), isLocalOutput, localOperatorAuthority)
 import Shikigami.Trust.LocalOperator.Grant
 import Shikigami.Trust.Tier (TrustTier (LocalOperator), trustTierLabel)
 import Shikigami.Workspace.Local.Adapters (LocalWorkspace (..))
@@ -170,8 +170,10 @@ siblingExecutable variable name = do
 
 -- | The authority of a declaration that requests nothing.
 nothingGranted :: Authority
-nothingGranted = authority DecidedByOperator \_ requested ->
-  pure (Left (PolicyDenied (actionTag requested <> " is outside the grant: the declaration requests no capabilities")))
+nothingGranted = authority DecidedByOperator \_ requested -> pure case requested of
+  -- The run's report still reaches the operator's own state directory.
+  EmitOutput kind _ | isLocalOutput kind -> Right Decision {action = requested, reference = "local-output", expiresAt = Nothing}
+  _ -> Left (PolicyDenied (actionTag requested <> " is outside the grant: the declaration requests no capabilities"))
 
 tierLabel :: TierLabel
 tierLabel = trustTierLabel LocalOperator

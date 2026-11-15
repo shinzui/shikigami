@@ -13,6 +13,7 @@ module Shikigami.Trust.LocalOperator.Authority
     renderRefusalReason,
     decideLocalAction,
     localOperatorAuthority,
+    isLocalOutput,
   )
 where
 
@@ -74,7 +75,11 @@ decideLocalAction LocalSelection {principals, grant} principal action
               Refused (RuleNotGranted rule)
           | otherwise -> Approved grant.digest
         Left _ -> Refused (CapabilityNotGranted (capabilityTargetId target))
-      EmitOutput {} -> Refused (OutsideGrant (actionTag action))
+      -- A local output writes into the operator's own state directory
+      -- (EP-8 M2); service outputs stay outside a local grant.
+      EmitOutput kind _
+        | isLocalOutput kind -> Approved grant.digest
+        | otherwise -> Refused (OutsideGrant (actionTag action))
       -- The grant's digest covers the whole declaration, CodingAgent arm
       -- included, so a grant on this repository covers its launch.
       LaunchCodingAgent CodingAgentTarget {repository}
@@ -86,6 +91,10 @@ decideLocalAction LocalSelection {principals, grant} principal action
 
 -- | The port adapter. Allows carry the grant's short digest as their
 -- reference; refusals are policy denials with a readable reason.
+-- | @local.*@ outputs, which write only on the operator's machine.
+isLocalOutput :: OutputKind -> Bool
+isLocalOutput kind = "local." `Text.isPrefixOf` outputKindText kind
+
 localOperatorAuthority :: LocalSelection -> Authority
 localOperatorAuthority selection =
   authority DecidedByOperator \principal action ->

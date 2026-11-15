@@ -3,5 +3,5 @@ module Shikigami.Generated.Structural.Shape.RunTriggerKind (RunTriggerKindShape 
 
 import GHC.Generics (Generic)
 
-data RunTriggerKindShape = TriggeredBySchedule | TriggeredByStream | TriggeredByEvent | TriggeredByDelegation
+data RunTriggerKindShape = TriggeredBySchedule | TriggeredByStream | TriggeredByEvent | TriggeredByDelegation | TriggeredByOperator
   deriving stock (Eq, Generic, Show)

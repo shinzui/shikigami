@@ -137,7 +137,18 @@ localRoleInfo =
             (progDesc "Connect to a bound MCP server and list its tools as approved, approved-schema-changed or not approved")
         )
     gate = command "gate" (info (Gate <$> strArgument (metavar "TOOLS.json" <> help "The run's declared tools, written by the coding-agent runner")) (progDesc "Claude Code's PreToolUse hook: allow or deny one call against a run's declared tools"))
-    approvals = command "approvals" (info (pure ShowApprovals) (progDesc "Validate the approvals file and list every grant"))
+    approvals =
+      command
+        "approvals"
+        ( info
+            ( hsubparser
+                ( command "pending" (info (pure PendingApprovals) (progDesc "List the asks waiting in the local approval inbox"))
+                    <> command "resolve" (info (ResolveApproval . Text.pack <$> strArgument (metavar "REVIEW-ID") <*> optional (Text.pack <$> strOption (long "reject" <> metavar "REASON" <> help "Reject instead of approving"))) (progDesc "Approve (or reject) one ask; then continue the run with --resume"))
+                )
+                <|> pure ShowApprovals
+            )
+            (progDesc "Validate the approvals file and list every grant; or `pending` / `resolve` approval asks")
+        )
     revoke = command "revoke" (info (RevokeGrant . Text.pack <$> strArgument (metavar "DIGEST" <> help "At least eight characters of a stored grant's digest")) (progDesc "Delete a stored confirmation"))
     ledger =
       command

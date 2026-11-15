@@ -20,6 +20,7 @@ okf_version: "0.2"
 - [Run agents on your own machine](local-operator.md) - Run a declared agent against your own repository under the local-operator trust tier, confirm its grant once, and read the action record.
 - [Link objectives to external trackers](objective-trackers.md) - Bind an existing Rei intention, review external proposals, and recover uncertain publication without duplicate actions.
 - [Durable objectives](objectives.md) - Create and continue an objective across runs and conversations, then explicitly accept its integrated result.
+- [Where a run's result goes](outputs.md) - Declare a run's outputs, rely on the composition's default (a local report under the local operator), require an approval before delivery, and resolve it from the local inbox.
 - [Skills — authoring a SKILL.md behavior](skills.md) - Author and validate a skill directory for a Shikigami Skill behavior.
 - [Typed decisions in Flows](typed-decisions.md) - Configure model aliases, run the typed decision example, and preserve governed results and attempt evidence on replay.
 - [Unrequested work](unrequested-work.md) - What a person sees when an agent proposes work nobody asked for, and what answering does.

@@ -106,6 +106,7 @@ testDecl sanctionedProfile =
       sanctionedProfile,
       capabilityOverlays = [],
       tools = [],
+      outputs = [],
       identity = Nothing,
       memory = defaultMemoryPolicy,
       enabled = agentEnablement (True),

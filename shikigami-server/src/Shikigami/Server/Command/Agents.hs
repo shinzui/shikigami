@@ -698,6 +698,7 @@ triggerSummary = \case
   Schedule {cron} -> "schedule " <> cronExpressionText cron
   Event {eventType} -> "event " <> declarationCoordinateText eventType
   Stream {match} -> Text.unwords ("stream" : streamMatchParts match)
+  Manual -> "manual"
 
 streamMatchParts :: StreamMatch -> [Text]
 streamMatchParts StreamMatch {verb, source, subjectType, verbs} =

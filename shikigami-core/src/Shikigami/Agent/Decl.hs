@@ -57,6 +57,7 @@ import Shikigami.CodingAgent.Types (CodingAgentEffort, CodingAgentPrompt, Coding
 import Shikigami.Decision.ModelAlias (ModelAlias)
 import Shikigami.Execution.Policy.Types (HarnessOverrides)
 import Shikigami.Execution.Request (ExecutionPolicy)
+import Shikigami.Output (OutputDecl)
 import Shikigami.Prelude
 import Shikigami.Router.SelectionLimit (SelectionLimit)
 import Shikigami.Trigger.Schedule (CronExpressionClaim)
@@ -240,6 +241,9 @@ data Trigger
   = Schedule {cron :: !CronExpressionClaim}
   | Stream {match :: !StreamMatch}
   | Event {eventType :: !(DeclarationCoordinate "event-type")}
+  | -- | Run only when the operator asks (@shikigami-agent-run@,
+    -- @shikigami enqueue-run@); the default of a declaration (EP-8 M2).
+    Manual
   deriving stock (Eq, Show, Generic)
   deriving anyclass (FromDhall, ToJSON, FromJSON)
 
@@ -323,6 +327,9 @@ data AgentDecl = AgentDecl
     -- | Declared CLI tools (EP-3). Each is offered as the overlay
     -- @cli.<name>@; omitted from the journal when empty.
     tools :: ![ToolDecl],
+    -- | Where the run's result goes (EP-8 M2); empty takes the
+    -- composition's default. Omitted from the journal when empty.
+    outputs :: ![OutputDecl],
     identity :: !(Maybe IdentityDecl),
     memory :: !MemoryPolicy,
     enabled :: !AgentEnablement,
@@ -349,7 +356,8 @@ instance ToJSON AgentDecl where
           execution = if isNothing declaration.execution then KeyMap.delete "execution" decisions else decisions
           harness = if isNothing declaration.harness then KeyMap.delete "harness" execution else execution
           tools = if null declaration.tools then KeyMap.delete "tools" harness else harness
-       in Aeson.Object tools
+          outputs = if null declaration.outputs then KeyMap.delete "outputs" tools else tools
+       in Aeson.Object outputs
     value -> value
 
 instance FromJSON AgentDecl where
@@ -358,4 +366,5 @@ instance FromJSON AgentDecl where
         execution = if KeyMap.member "execution" decisions then decisions else KeyMap.insert "execution" Aeson.Null decisions
         harness = if KeyMap.member "harness" execution then execution else KeyMap.insert "harness" Aeson.Null execution
         tools = if KeyMap.member "tools" harness then harness else KeyMap.insert "tools" (Aeson.toJSON ([] :: [ToolDecl])) harness
-     in Aeson.genericParseJSON Aeson.defaultOptions (Aeson.Object tools)
+        outputs = if KeyMap.member "outputs" tools then tools else KeyMap.insert "outputs" (Aeson.toJSON ([] :: [OutputDecl])) tools
+     in Aeson.genericParseJSON Aeson.defaultOptions (Aeson.Object outputs)

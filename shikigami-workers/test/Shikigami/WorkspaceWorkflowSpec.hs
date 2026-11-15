@@ -65,6 +65,7 @@ import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
+import Shikigami.Output (emptyOutputRegistry)
 import Shikigami.PracticeReview.Capability qualified as Practice
 import Shikigami.Prelude ((&), (.~))
 import Shikigami.Repository (RepositoryId, repositoryId, repositoryIdText)
@@ -374,6 +375,7 @@ withWorkflowAuthority authorizer configure fixture use = Fixture.withFixture fix
             http,
             hooks = Agent.defaultAgentRunHooks,
             codingAgents = Agent.noCodingAgents,
+            outputs = emptyOutputRegistry,
             approvalPolicy = autoApprovePolicy ((either (error . show) id . parseDuration) (900)),
             approvalWorkflow = Approval.defaultApprovalWorkflowEnv,
             runTimeout = (either (error . show) id (parseDuration (30))),

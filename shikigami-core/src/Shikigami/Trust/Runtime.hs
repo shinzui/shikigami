@@ -23,6 +23,7 @@ import Shikigami.Agent.Decl (AgentDecl)
 import Shikigami.Authority (Authority, Principal)
 import Shikigami.Capability.Provider (CapabilityRuntime)
 import Shikigami.CodingAgent.Workflow (CodingAgentRunner)
+import Shikigami.Output (OutputRegistry)
 import Shikigami.Record (ActionRecord)
 import Shikigami.Trust.LocalOperator.Approvals (ApprovalsError, RepositorySelector, renderApprovalsError)
 import Shikigami.Trust.LocalOperator.Grant (GrantRefusal, LocalGrant, renderGrantRefusal)
@@ -54,6 +55,8 @@ data TierRuntime = TierRuntime
     -- | The coding-agent runner of this run (EP-2); tiers that do not admit
     -- coding agents refuse.
     codingAgents :: !CodingAgentRunner,
+    -- | Output adapters and the default output of this run (EP-8 M2).
+    outputs :: !OutputRegistry,
     -- | Release what the composition holds for the run (an in-place lock).
     -- Called when the run ends, whatever its outcome.
     release :: !(IO ())

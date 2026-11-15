@@ -18,7 +18,7 @@ import Shikigami.Generated.Structural.Shape.RunRouteKind qualified as ShapeRunRo
 import Shikigami.Generated.Structural.Shape.RunTriggerKind qualified as RunTriggerKind
 
 triggerKindCases :: FixtureCases TriggerKind
-triggerKindCases = FixtureCases (("schedule", RunJob.TriggeredBySchedule) :| [("stream", RunJob.TriggeredByStream), ("event", RunJob.TriggeredByEvent), ("delegation", RunJob.TriggeredByDelegation)])
+triggerKindCases = FixtureCases (("schedule", RunJob.TriggeredBySchedule) :| [("stream", RunJob.TriggeredByStream), ("event", RunJob.TriggeredByEvent), ("delegation", RunJob.TriggeredByDelegation), ("operator", RunJob.TriggeredByOperator)])
 
 triggerKindBinding :: StructuralBinding TriggerKind RunTriggerKind.RunTriggerKindShape
 triggerKindBinding =
@@ -27,12 +27,14 @@ triggerKindBinding =
         RunJob.TriggeredBySchedule -> RunTriggerKind.TriggeredBySchedule
         RunJob.TriggeredByStream -> RunTriggerKind.TriggeredByStream
         RunJob.TriggeredByEvent -> RunTriggerKind.TriggeredByEvent
-        RunJob.TriggeredByDelegation -> RunTriggerKind.TriggeredByDelegation,
+        RunJob.TriggeredByDelegation -> RunTriggerKind.TriggeredByDelegation
+        RunJob.TriggeredByOperator -> RunTriggerKind.TriggeredByOperator,
       bindingFromShape = \case
         RunTriggerKind.TriggeredBySchedule -> RunJob.TriggeredBySchedule
         RunTriggerKind.TriggeredByStream -> RunJob.TriggeredByStream
         RunTriggerKind.TriggeredByEvent -> RunJob.TriggeredByEvent
         RunTriggerKind.TriggeredByDelegation -> RunJob.TriggeredByDelegation
+        RunTriggerKind.TriggeredByOperator -> RunJob.TriggeredByOperator
     }
 
 routeKindCases :: FixtureCases RunRouteKind
