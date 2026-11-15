@@ -336,8 +336,10 @@ data AgentDecl = AgentDecl
 -- @cli.<name>@ for each declared CLI tool (EP-3). Resolution, the grant and
 -- the behavior environment all read this, never the field alone.
 requestedOverlays :: AgentDecl -> [CapabilityId]
-requestedOverlays AgentDecl {capabilityOverlays, tools} =
-  capabilityOverlays <> [cliCapabilityId tool.name | tool <- cliTools tools] <> [mcpCapabilityId request.server | request <- mcpRequests tools]
+requestedOverlays AgentDecl {capabilityOverlays, tools, behavior} = case behavior of
+  -- A coding agent runs its declared tools itself, through its gate.
+  CodingAgent {} -> capabilityOverlays
+  _ -> capabilityOverlays <> [cliCapabilityId tool.name | tool <- cliTools tools] <> [mcpCapabilityId request.server | request <- mcpRequests tools]
 
 -- Defaulted additions preserve the pre-change journal bytes.
 instance ToJSON AgentDecl where

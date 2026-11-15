@@ -764,7 +764,7 @@ runSessionedAgent deps activeBehaviorEnv durableSelection resolvedProfile resolv
 -- the run's failure, and stays readable from the child either way.
 runCodingAgentBehavior :: RunJob -> AgentDecl -> CodingAgent.CodingAgentStep -> Eff (Workflow : AppEffects) (Either Text Value)
 runCodingAgentBehavior job decl requested = do
-  outcome <- runCodingAgentChild decl.name job.identity (declarationCoordinate "behavior") requested job.triggerPayload job.repository
+  outcome <- runCodingAgentChild decl.name job.identity (declarationCoordinate "behavior") requested job.triggerPayload job.repository decl.tools
   pure case outcome of
     CodingAgent.Completed CodingAgent.CompletedRun {exit = 0, finalMessage} -> Right (Aeson.object ["reply" .= finalMessage, "codingAgent" .= outcome])
     _ -> Left (CodingAgent.renderOutcome outcome)
@@ -1225,7 +1225,7 @@ runFlowBehavior deps activeBehaviorEnv resolvedProfile approvalPolicyForRun reco
               . FlowCapability.runMemory memoryEnv
               . FlowCapability.runSink sinkEnv
               . FlowDelegate.runDelegate delegateEnv
-              . FlowCodingAgent.runCodingAgent FlowCodingAgent.CodingAgentEnv {agent = decl.name, identity = job.identity, repository = job.repository}
+              . FlowCodingAgent.runCodingAgent FlowCodingAgent.CodingAgentEnv {agent = decl.name, identity = job.identity, repository = job.repository, tools = decl.tools}
               . FlowWorkers.runWorkers deps.coordination deps.actionAuthority coordinator coordinationPolicy
               . Adaptive.runAdaptiveDelivery (adaptiveRuntime deps) coordinator resolvedProfile (Harness.narrowHarnessPolicy deps.harness decl.harness)
               . FlowObjectives.runObjectives deps.objectives objectivePolicy

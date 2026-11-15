@@ -17,6 +17,7 @@ import Shikigami.Agent.Name (mkAgentName)
 import Shikigami.Capability.Catalog (ExecutionMode (Durable))
 import Shikigami.Capability.Declared
 import Shikigami.Capability.Declared.Catalog
+import Shikigami.Capability.Declared.Gate
 import Shikigami.Capability.Declared.Local
 import Shikigami.Capability.Mcp
 import Shikigami.Capability.Mcp.Local (mcpBindingRevision)
@@ -122,7 +123,31 @@ tests =
       testCase "the binding's revision changes with an approved schema" do
         let changed = McpBinding {server = mcpServer "git", command = "/bin/false", arguments = [LiteralArgument "--repository", WorkspaceRootArgument], environment = [], tools = [approved "git_status" logSchema, approved "git_log" logSchema]}
         assertBool "schema" (mcpBindingRevision gitBinding /= mcpBindingRevision changed)
-        mcpBindingRevision gitBinding @?= mcpBindingRevision gitBinding
+        mcpBindingRevision gitBinding @?= mcpBindingRevision gitBinding,
+      testCase "the gate parses one plain command and refuses everything a shell would combine or expand" do
+        parseSimpleCommand "mori registry show 'shinzui/keiro'" @?= Right ["mori", "registry", "show", "shinzui/keiro"]
+        parseSimpleCommand "mina docket \"status\"" @?= Right ["mina", "docket", "status"]
+        parseSimpleCommand "mori registry show x | sh" @?= Left CompoundCommand
+        parseSimpleCommand "mori registry show x; gh pr list" @?= Left CompoundCommand
+        parseSimpleCommand "mori path > out" @?= Left Redirection
+        parseSimpleCommand "mori path $(gh auth token)" @?= Left Expansion
+        parseSimpleCommand "mori path `id`" @?= Left Substitution
+        parseSimpleCommand "mori path \"$HOME\"" @?= Left Expansion
+        parseSimpleCommand "mori path 'open" @?= Left UnterminatedQuote
+        parseSimpleCommand "   " @?= Left EmptyCommand,
+      testCase "the gate admits exactly the declared tools" do
+        let gated = GatedTools {cli = [mori], mcp = [McpToolRequest {server = mcpServer "git", tools = mcpName "git_status" :| []}]}
+        decideGatedCall gated (ShellCall "mori registry show shinzui/keiro") @?= Right "cli.mori"
+        decideGatedCall gated (ShellCall "mori registry list") @?= Left (ArgumentsOutsidePatterns "mori")
+        decideGatedCall gated (ShellCall "gh pr list") @?= Left (UndeclaredExecutable "gh")
+        decideGatedCall gated (NamedToolCall "mcp__git__git_status") @?= Right "mcp.git"
+        decideGatedCall gated (NamedToolCall "mcp__git__git_commit") @?= Left (UndeclaredTool "mcp__git__git_commit")
+        decideGatedCall gated (NamedToolCall "Write") @?= Left (UndeclaredTool "Write"),
+      testCase "Claude Code is configured with the gate hook and only the requested servers; Codex with enabled tools" do
+        Aeson.encode (claudeHookSettings "'gate' t.json") @?= "{\"hooks\":{\"PreToolUse\":[{\"hooks\":[{\"command\":\"'gate' t.json\",\"type\":\"command\"}],\"matcher\":\"Bash|mcp__.*\"}]}}"
+        Aeson.encode (claudeMcpConfig "/w" [("SECRET", "x")] [gitBinding]) @?= "{\"mcpServers\":{\"git\":{\"args\":[\"--repository\",\"/w\"],\"command\":\"/bin/false\",\"env\":{}}}}"
+        codexMcpArguments "/w" [(gitBinding, McpToolRequest {server = mcpServer "git", tools = mcpName "git_status" :| []})]
+          @?= ["-c", "mcp_servers.git.command=\"/bin/false\"", "-c", "mcp_servers.git.args=[\"--repository\",\"/w\"]", "-c", "mcp_servers.git.enabled_tools=[\"git_status\"]"]
     ]
   where
     scope = CapabilityScope {runId = OneOffRun "declared-tools-test", principal = declarationCoordinate "principal_test", mode = Durable}

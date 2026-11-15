@@ -14,6 +14,7 @@ module Shikigami.Trust.LocalOperator.Host
     queuedCodingAgents,
     repositorySelectorText,
     codingAgentLauncher,
+    gateExecutable,
     nothingGranted,
     compatibilityPrincipal,
   )
@@ -128,7 +129,8 @@ queuedCodingAgents paths record agents CodingAgentStepInput {agent, parent, repo
                           Left problem -> pure (Left (WorkspaceUnavailable problem))
                           Right (local, _) -> do
                             launcher <- codingAgentLauncher
-                            pure (Right (localCodingAgentRunner LocalCodingAgentConfig {launcher} local))
+                            gate <- gateExecutable
+                            pure (Right (localCodingAgentRunner LocalCodingAgentConfig {launcher, gate} local))
 
 -- | A repository as a run names it: a @mori://@ identity, or a checkout path.
 repositorySelectorText :: Text -> RepositorySelector
@@ -148,6 +150,23 @@ codingAgentLauncher = do
       let sibling = takeDirectory self </> "shikigami-agent-launch"
       exists <- doesFileExist sibling
       if exists then pure sibling else maybe "shikigami-agent-launch" id <$> findExecutable "shikigami-agent-launch"
+
+-- | The @shikigami-local@ whose @gate@ command checks a coding agent's
+-- shell and MCP calls: @SHIKIGAMI_LOCAL@, the executable beside this one,
+-- or @PATH@.
+gateExecutable :: IO FilePath
+gateExecutable = siblingExecutable "SHIKIGAMI_LOCAL" "shikigami-local"
+
+siblingExecutable :: String -> FilePath -> IO FilePath
+siblingExecutable variable name = do
+  configured <- lookupEnv variable
+  case configured of
+    Just path -> pure path
+    Nothing -> do
+      self <- getExecutablePath
+      let sibling = takeDirectory self </> name
+      exists <- doesFileExist sibling
+      if exists then pure sibling else maybe name id <$> findExecutable name
 
 -- | The authority of a declaration that requests nothing.
 nothingGranted :: Authority

@@ -294,6 +294,16 @@ A flow body calls the same step through the `CodingAgent` capability,
 `runCodingAgent (codingAgentKey "first") step payload`; each key is its own keyed child
 workflow, so a flow can run several and replays read their journaled outcomes.
 
+Declared tools reach a coding agent through Baikai's `provider-args`
+([ADR 0127](../adr/0127-declared-tools-carry-their-authority-and-reach-each-host-through-one-decision.md)):
+for Claude Code `--settings <attempt>/settings.json` (a PreToolUse hook running
+`shikigami-local gate <attempt>/tools.json`) and `--strict-mcp-config --mcp-config
+<attempt>/mcp.json`; for Codex `-c mcp_servers.<server>.command/args/enabled_tools`. The
+operator's ceiling must set `policy { allow-provider-args #true }`; without it Baikai refuses
+the step with exit 77. The gate's decisions go to `<attempt>/tool-calls.jsonl` and become
+`tool.called` entries when the step settles. `SHIKIGAMI_LOCAL` names the `shikigami-local`
+executable when it is not beside the running one.
+
 The attempt machinery is command-parameterized (`Shikigami.Process.Local.runAttempt` in
 `shikigami-core:local-host`): any long, mutating external command that writes its result to
 standard output when it exits gets the same collect, reattach or uncertain recovery.

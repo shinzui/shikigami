@@ -64,7 +64,7 @@ tests databaseFixture =
 
 twoSteps :: Eff (Workflow : AppEffects) Value
 twoSteps =
-  runCodingAgent CodingAgentEnv {agent = fixtureAgentName "coding-flow", identity = compatibilityIdentity (fixtureAgentName "coding-flow"), repository = Just "mori://test/repo"} do
+  runCodingAgent CodingAgentEnv {agent = fixtureAgentName "coding-flow", identity = compatibilityIdentity (fixtureAgentName "coding-flow"), repository = Just "mori://test/repo", tools = []} do
     first' <- runCodingAgentStep (codingAgentKey "first") sampleStep Null
     second' <- runCodingAgentStep (codingAgentKey "second") sampleStep Null
     pure (toJSON [outcomeLabel first', outcomeLabel second'])
@@ -87,7 +87,9 @@ countingRunner attempts =
                   base = "0000000",
                   deadline = addUTCTime 60 now,
                   attemptDirectory = "/nonexistent",
-                  skills = []
+                  skills = [],
+                  providerArgs = [],
+                  toolLines = []
                 }
           ),
       attempt = \admission -> do

@@ -13,7 +13,10 @@ module Shikigami.Agent.Command.Local
   )
 where
 
+import Control.Exception (IOException, try)
+import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
+import Data.Aeson.KeyMap qualified as KeyMap
 import Data.ByteString.Lazy.Char8 qualified as LazyChar8
 import Data.List (find)
 import Data.Set qualified as Set
@@ -21,6 +24,7 @@ import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Text.Encoding
 import Data.Text.IO qualified as TextIO
+import Data.Time (getCurrentTime)
 import Data.Time.Format.ISO8601 (iso8601Show)
 import Keiro.Workflow (WorkflowId (..))
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
@@ -31,6 +35,7 @@ import Shikigami.App.Config (AppConfig (..), revealSecretText)
 import Shikigami.App.Config.Load (requireDatabaseUrl)
 import Shikigami.Capability.Declared (CliToolDecl (..), cliCapabilityName, cliTools, renderCliToolDecl, toolNameText)
 import Shikigami.Capability.Declared.Catalog (CliToolCeiling (..), ToolCatalog (..), checkDeclaredTools, defaultToolCatalogPath, loadToolCatalog, renderToolResolutionError)
+import Shikigami.Capability.Declared.Gate (GateRefusal (..), GatedCall (..), decideGatedCall, renderGateRefusal)
 import Shikigami.Capability.Declared.Local (LocatedCliTool (..), locateCliTools)
 import Shikigami.Capability.Mcp (DiscoveredMcpTool (..), DiscoveryStatus (..), McpBinding (..), discoveryStatus, mkMcpServerId)
 import Shikigami.Capability.Mcp.Local (McpSession (..), mcpBindingRevision, openMcpSession)
@@ -42,6 +47,7 @@ import Shikigami.Trust.LocalOperator.Approvals
 import Shikigami.Trust.LocalOperator.Grant
 import Shikigami.Workspace.Local.Checkout (processCheckoutResolver)
 import System.Exit (ExitCode (..), exitFailure, exitWith)
+import System.FilePath (takeDirectory, (</>))
 import System.IO (hPutStrLn, stderr)
 
 data LocalCommand
@@ -52,6 +58,9 @@ data LocalCommand
     CheckTools !FilePath !(Maybe FilePath)
   | -- | Connect to a bound MCP server and list its tools against the binding.
     DiscoverMcp !Text !(Maybe FilePath)
+  | -- | Claude Code's PreToolUse hook: decide one call against the run's
+    -- declared tools (@tools.json@) and record the decision beside it.
+    Gate !FilePath
 
 data LedgerOptions = LedgerOptions
   { run :: !(Maybe Text),
@@ -133,6 +142,7 @@ runLocal command config = case command of
           Right _ -> pure ()
           Left (NoStoredGrant _) -> exitWith (ExitFailure 3)
           Left _ -> exitWith (ExitFailure 1)
+  Gate toolsFile -> runGate toolsFile
   DiscoverMcp serverName workspace -> do
     catalogPath <- defaultToolCatalogPath
     catalog <- loadToolCatalog catalogPath >>= either die pure
@@ -167,6 +177,45 @@ runLocal command config = case command of
     stateStore = do
       directory <- maybe defaultStateDirectory pure config.localOperatorStateDirectory
       openGrantStore directory >>= either (die . Text.pack . show) pure
+
+-- | Read the hook's JSON from standard input and answer allow or deny. Any
+-- failure to read or decide denies: an unattended Claude Code denies a call
+-- nobody allowed, so the gate fails closed.
+runGate :: FilePath -> IO ()
+runGate toolsFile = do
+  input <- LazyChar8.getContents
+  declared <- Aeson.decodeFileStrict' toolsFile
+  let hook = Aeson.decode input
+      call =
+        hook >>= \case
+          Aeson.Object fields -> case (KeyMap.lookup "tool_name" fields, KeyMap.lookup "tool_input" fields) of
+            (Just (Aeson.String "Bash"), Just (Aeson.Object toolInput)) | Just (Aeson.String command) <- KeyMap.lookup "command" toolInput -> Just (ShellCall command, command)
+            (Just (Aeson.String name), _) -> Just (NamedToolCall name, name)
+            _ -> Nothing
+          _ -> Nothing
+      decision = case (declared, call) of
+        (Just tools, Just (gated, _)) -> decideGatedCall tools gated
+        (Nothing, _) -> Left (UndeclaredTool "(the run's tools file is unreadable)")
+        (_, Nothing) -> Left (UndeclaredTool "(the hook input is unreadable)")
+      shown = maybe "?" (Text.take 512 . snd) call
+  at <- getCurrentTime
+  let entry = case decision of
+        Right tool -> Aeson.object ["decision" .= ("admitted" :: Text), "tool" .= tool, "remote" .= shown, "host" .= ("coding-agent" :: Text), "at" .= at]
+        Left refusal -> Aeson.object ["decision" .= ("refused" :: Text), "tool" .= ("-" :: Text), "remote" .= shown, "reason" .= renderGateRefusal refusal, "host" .= ("coding-agent" :: Text), "at" .= at]
+  _ <- try @IOException (LazyChar8.appendFile (takeDirectory toolsFile </> "tool-calls.jsonl") (Aeson.encode entry <> "\n"))
+  LazyChar8.putStrLn
+    ( Aeson.encode
+        ( Aeson.object
+            [ "hookSpecificOutput"
+                .= Aeson.object
+                  ( [ "hookEventName" .= ("PreToolUse" :: Text),
+                      "permissionDecision" .= either (const ("deny" :: Text)) (const "allow") decision
+                    ]
+                      <> either (\refusal -> ["permissionDecisionReason" .= renderGateRefusal refusal]) (const []) decision
+                  )
+            ]
+        )
+    )
 
 renderRepository :: LocalRepository -> Text
 renderRepository repository =

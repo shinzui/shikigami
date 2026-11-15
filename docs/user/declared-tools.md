@@ -15,8 +15,8 @@ A declaration can name the command-line tools its agent may call: the executable
 argument patterns it may be called with, the working directory and an operation class.
 Under the `local-operator` trust tier ([local operator](local-operator.md)) your one-time
 confirmation of the declaration is the grant, and every call, admitted or refused, lands in
-the action record. Declared tools work for `Skill` agents today; a tool can be a CLI command
-or an approved tool of an MCP server bound in your tools file.
+the action record. Declared tools work for `Skill` and `CodingAgent` agents; a tool can be a
+CLI command or an approved tool of an MCP server bound in your tools file.
 
 ## Declaring tools
 
@@ -146,6 +146,29 @@ refuses before any tool is called, and the record says why (`approved tool git_s
 schema changed`). The binding's revision digests the whole binding, so editing it is visible
 in every decision.
 
+## Tools for a coding agent
+
+A `CodingAgent` declaration takes the same `tools`. Claude Code runs its declared commands
+itself, so Shikigami installs a PreToolUse hook, `shikigami-local gate`, that allows a shell
+call only when it is one plain command (no pipes, redirection, substitution or variables)
+matching a declared tool, and an MCP call only for a requested approved tool. Only the
+requested MCP servers are configured (`--strict-mcp-config`), not the servers in your own
+Claude settings. Anything else is denied and recorded, and the agent is told why. Codex gets
+the requested MCP servers with only their requested tools enabled; a Codex step that declares
+CLI tools is refused, because Codex cannot confine shell commands.
+
+These settings reach the vendor CLI through Baikai's provider arguments, which your Baikai
+ceiling must allow:
+
+```kdl
+// ~/.config/baikai/agents.kdl
+policy {
+  allow-provider-args #true
+}
+```
+
+`agents/repo-inventory-coder.dhall` is an example.
+
 ## What the record shows
 
 `shikigami-local ledger --run <WORKFLOW-ID>` shows the authority's decision for each tool
@@ -157,6 +180,8 @@ tool.called admitted cli.mina run ["docket","status"] exit 0
 tool.called refused cli.mori run ["registry","list"] arguments outside declared patterns for mori
 tool.called admitted mcp.git git_status
 tool.called refused mcp.git approved tool git_status schema changed
+tool.called admitted cli.mori mori registry show shinzui/keiro          (a coding agent's call)
+tool.called refused - gh pr list undeclared executable gh
 ```
 
 Under the `contained` and `multi-tenant` tiers a declaration with tools is refused before

@@ -123,10 +123,25 @@ survives a worker kill, and is launched exactly once.
   approved tool git_status schema changed` (run `33871149-5207-5bd0-9594-df477198164d`).
   Tests: 3 more `declared tools` cases (discovery verification including an ignored extra
   tool, catalog checks, revision change with a schema).
-- [ ] M3: The resolved tool set is rendered for coding agents. The representative check
+- [x] M3 (2026-11-15): The resolved tool set is rendered for coding agents. The representative check
   passes: a Claude Code `CodingAgent` on the keiro worktree runs declared `mori registry
   show` and the MCP `git_status`, and its `gh` call is refused and appears in the action record.
   A Codex run uses the rendered MCP configuration. The new ADR is written.
+  Evidence: `agents/repo-inventory-coder.dhall` (Claude Code, `mori` CLI tool and the `git`
+  MCP tools) ran on `mori://shinzui/keiro` (run `91c11cca-d562-5dd5-bdf8-692aa3b7e19f`) with a
+  Baikai ceiling allowing provider arguments. The confirmation listed the coding agent and both
+  tools. The agent's reply quoted the Mori registration and "nothing to commit and the working
+  tree is clean" from `git_status`, and said `gh pr list` "was blocked … with `undeclared
+  executable gh`". The ledger shows `launch_coding_agent` allowed, `coding-agent.launched`,
+  `tool.called admitted cli.mori mori registry show shinzui/keiro`, `tool.called admitted
+  mcp.git mcp__git__git_status`, `tool.called refused - gh pr list undeclared executable gh` and
+  `coding-agent.settled`. A Codex declaration requesting only `git_status` ran on the same
+  checkout (run `577d7180-66b2-5cda-9960-b227cf43a64b`); its event stream holds
+  `mcp_tool_call {"server": "git", "tool": "git_status", "status": "completed"}` through the
+  rendered `-c mcp_servers.git.…` arguments. A Codex declaration with a CLI tool failed before
+  launch: "declared CLI tools cannot be confined for Codex". ADR 0127 is accepted. All probe
+  branches were removed. Tests: 3 more `declared tools` cases (every shell-syntax refusal
+  class, the gate's decisions, and golden Claude and Codex configuration).
 - [ ] M4: Declared tools run as durable steps. The flow capability `runDeclaredTool` runs a
   declared, mutating build command on a real checkout with a deadline of minutes to hours.
   Killing the worker mid-run and restarting reattaches without a second launch, and a lost
@@ -315,6 +330,33 @@ survives a worker kill, and is launched exactly once.
   bounds each request by 60 seconds and discovery by 10 pages.
   Rationale: Enough for `mcp-server-git`; a per-message byte bound and configurable limits
   wait for a server that needs them.
+  Date: 2026-11-15
+
+- Decision: A coding agent's tools are enforced by one layer, the PreToolUse gate
+  (`shikigami-local gate`), with Claude Code's unattended `acceptEdits` mode as the fail-closed
+  default; `--allowedTools` is not rendered.
+  Rationale: Under `acceptEdits` in an unattended run, a shell or MCP call nobody allowed is
+  denied, so a crashed hook denies too. Rendering `--allowedTools` would need the same strings
+  in the Baikai ceiling's `allowed-tools` and adds no record.
+  Date: 2026-11-15
+- Decision: The vendor configuration travels through Baikai's `safety.provider-args`
+  (`--settings`, `--strict-mcp-config`, `--mcp-config` for Claude Code; `-c mcp_servers.…` for
+  Codex), so the operator's Baikai ceiling must set `allow-provider-args #true`.
+  Rationale: Baikai models neither hooks nor MCP configuration; the provider-args channel is
+  the ceiling-gated way to pass them, and the operator opts in.
+  Date: 2026-11-15
+- Decision: The gate writes its decisions to `<attempt>/tool-calls.jsonl`, and the step's
+  settlement copies them into the action record; the gate needs no database.
+  Rationale: The hook runs inside the vendor process tree with whatever environment it gives;
+  a file in the attempt directory is always reachable and is collected with the attempt.
+  Date: 2026-11-15
+- Decision: For a `CodingAgent`, `requestedOverlays` leaves the tools out: they are rendered
+  into the agent, not offered as overlays. The composition still checks ceilings and locates
+  executables before the run. Codex MCP calls are confined by `enabled_tools` but not
+  recorded per call; Codex with CLI tools is refused (`CodexCannotConfineCommands` in the
+  plan's wording).
+  Rationale: The overlay path would need providers the coding agent never uses. Codex has no
+  hook installed per run without editing `~/.codex`.
   Date: 2026-11-15
 
 ## Outcomes & Retrospective

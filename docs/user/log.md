@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-11-15
+* **Addition**: DOC-22 explains declared tools for coding agents: the gate hook, strict MCP configuration, the Codex rule and the Baikai ceiling setting (EP-3 M3).
 * **Addition**: DOC-22 explains MCP server tools: the operator binding, `shikigami-local mcp` discovery and the schema check at acquisition (EP-3 M2). DOC-13 lists `shikigami-local mcp`.
 * **Addition**: DOC-22 explains declared CLI tools: the `tools` field, the one-time grant, `shikigami-local tools`, the optional ceiling file and the `tool.called` record (EP-3 M1). DOC-13 lists `shikigami-local tools`.
 * **Addition**: DOC-21 explains queued coding agents in a `local-operator` worker; DOC-13 documents `shikigami enqueue-run --workspace` (EP-2 M2b).

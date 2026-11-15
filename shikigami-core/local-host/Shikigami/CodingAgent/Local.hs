@@ -16,12 +16,13 @@ module Shikigami.CodingAgent.Local
 where
 
 import Control.Exception (IOException, try)
-import Control.Monad (forM, void)
+import Control.Monad (forM, forM_, void)
 import Data.Aeson (Value (..), object, (.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Key qualified as Key
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.ByteString qualified as ByteString
+import Data.ByteString.Lazy qualified as LazyByteString
 import Data.Char (isAlphaNum)
 import Data.Maybe (fromMaybe, mapMaybe)
 import Data.Scientific (toBoundedInteger)
@@ -33,6 +34,10 @@ import Keiro.Workflow (WorkflowId (..))
 import Shikigami.Agent.DeclarationValue (declarationCoordinateText)
 import Shikigami.Agent.Name (agentNameText)
 import Shikigami.Authority (Action (LaunchCodingAgent), mkCodingAgentTarget)
+import Shikigami.Capability.Declared (ToolDecl, cliTools, mcpRequests, renderCliToolDecl)
+import Shikigami.Capability.Declared.Catalog (checkMcpRequests, defaultToolCatalogPath, loadToolCatalog, renderToolResolutionError)
+import Shikigami.Capability.Declared.Gate (GatedTools (..), claudeHookSettings, claudeMcpConfig, codexMcpArguments)
+import Shikigami.Capability.Mcp (McpToolRequest (..), mcpServerIdText, mcpToolNameText)
 import Shikigami.CodingAgent.Types
 import Shikigami.CodingAgent.Workflow (CodingAgentAdmission (..), CodingAgentRunner (..), CodingAgentStepInput (..), codingAgentStepWorkflowId)
 import Shikigami.Decision.Contract (versionedDigest)
@@ -44,27 +49,31 @@ import Shikigami.Workspace.Launch (worktreeRootPath)
 import Shikigami.Workspace.Local.Adapters (LocalWorkspace (..))
 import Shikigami.Workspace.Local.Worktree (RunWorktree (..), gitIn, openRunWorktree, renderWorktreeError)
 import System.Directory (createDirectoryIfMissing, doesFileExist, makeAbsolute)
+import System.Environment (getEnvironment)
 import System.Exit (ExitCode (..))
 import System.FilePath (takeFileName, (</>))
 import System.Process
 
 data LocalCodingAgentConfig = LocalCodingAgentConfig
   { -- | The @shikigami-agent-launch@ executable that mounts Baikai's CLI.
-    launcher :: !FilePath
+    launcher :: !FilePath,
+    -- | The @shikigami-local@ executable whose @gate@ command Claude Code's
+    -- PreToolUse hook runs for each shell and MCP call (EP-3 M3).
+    gate :: !FilePath
   }
 
 localCodingAgentRunner :: LocalCodingAgentConfig -> LocalWorkspace -> CodingAgentRunner
 localCodingAgentRunner config local =
   CodingAgentRunner
-    { admit = admitStep local,
+    { admit = admitStep config local,
       attempt = attemptStep config local,
       settle = settleStep local
     }
 
 -- | Decide the launch, open the run's worktree, fix the absolute deadline,
 -- and prepare the attempt directory with copies of the attached skills.
-admitStep :: LocalWorkspace -> CodingAgentStepInput -> IO (Either FailureReason CodingAgentAdmission)
-admitStep local input@CodingAgentStepInput {parent, step = requested} =
+admitStep :: LocalCodingAgentConfig -> LocalWorkspace -> CodingAgentStepInput -> IO (Either FailureReason CodingAgentAdmission)
+admitStep config local input@CodingAgentStepInput {parent, step = requested, tools} =
   case mkCodingAgentTarget (providerText requested.provider) (accessText requested.access) (repositoryIdText local.repository.identity) of
     Left problem -> pure (Left (WorkspaceUnavailable problem))
     Right target ->
@@ -79,9 +88,11 @@ admitStep local input@CodingAgentStepInput {parent, step = requested} =
                   directory = local.stateDirectory </> "attempts" </> Text.unpack (safeName child)
               createDirectoryIfMissing True directory
               copied <- copySkills directory requested.skills
-              pure case copied of
-                Left problem -> Left (WorkspaceUnavailable problem)
-                Right skills ->
+              rendered <- renderTools config requested.provider (worktreeRootPath worktree.root) directory tools
+              pure case (copied, rendered) of
+                (Left problem, _) -> Left (WorkspaceUnavailable problem)
+                (_, Left problem) -> Left (Misconfigured problem)
+                (Right skills, Right (providerArgs, toolLines)) ->
                   Right
                     CodingAgentAdmission
                       { step = requested,
@@ -92,8 +103,39 @@ admitStep local input@CodingAgentStepInput {parent, step = requested} =
                         base = worktree.base,
                         deadline = addUTCTime (fromIntegral (deadlineMinutesValue requested.deadlineMinutes * 60)) now,
                         attemptDirectory = directory,
-                        skills
+                        skills,
+                        providerArgs,
+                        toolLines
                       }
+
+-- | Render the declared tools into the attempt directory and the vendor's
+-- arguments. Claude Code: a PreToolUse hook running the gate over
+-- @tools.json@ for every shell and MCP call, and an MCP configuration of only
+-- the requested servers. Codex: the requested MCP servers with only their
+-- requested tools enabled; Codex cannot confine shell commands, so declared
+-- CLI tools are refused for it.
+renderTools :: LocalCodingAgentConfig -> CodingAgentProvider -> FilePath -> FilePath -> [ToolDecl] -> IO (Either Text ([Text], [Text]))
+renderTools config provider root directory tools
+  | null tools = pure (Right ([], []))
+  | provider == Codex && not (null (cliTools tools)) = pure (Left "declared CLI tools cannot be confined for Codex; declare only MCP tools for a Codex step")
+  | otherwise = do
+      catalog <- loadToolCatalog =<< defaultToolCatalogPath
+      case catalog >>= \loaded -> either (Left . renderToolResolutionError) Right (checkMcpRequests loaded (mcpRequests tools)) of
+        Left problem -> pure (Left problem)
+        Right servers -> do
+          environment <- fmap (\(name, value) -> (Text.pack name, Text.pack value)) <$> getEnvironment
+          let lines' = (renderCliToolDecl <$> cliTools tools) <> [mcpServerIdText request.server <> " (MCP): " <> Text.intercalate ", " (mcpToolNameText <$> foldr (:) [] request.tools) | request <- mcpRequests tools]
+          case provider of
+            Codex -> pure (Right (codexMcpArguments root servers, lines'))
+            ClaudeCode -> do
+              let toolsFile = directory </> "tools.json"
+                  settingsFile = directory </> "settings.json"
+                  mcpFile = directory </> "mcp.json"
+                  gateCommand = "'" <> Text.pack config.gate <> "' gate '" <> Text.pack toolsFile <> "'"
+              LazyByteString.writeFile toolsFile (Aeson.encode GatedTools {cli = cliTools tools, mcp = mcpRequests tools})
+              LazyByteString.writeFile settingsFile (Aeson.encode (claudeHookSettings gateCommand))
+              LazyByteString.writeFile mcpFile (Aeson.encode (claudeMcpConfig root environment (fst <$> servers)))
+              pure (Right (["--settings", Text.pack settingsFile, "--strict-mcp-config", "--mcp-config", Text.pack mcpFile], lines'))
 
 -- | Copy each attached skill directory (it must hold a @SKILL.md@; at most
 -- eight, 2 MiB in all) into the attempt directory, so the agent reads a copy
@@ -142,7 +184,7 @@ attemptStep config local admission@CodingAgentAdmission {attemptDirectory, root,
       now <- getCurrentTime
       let minutesLeft = max 1 (ceiling (diffUTCTime admission.deadline now / 60) :: Integer)
       prompt <- composedPrompt admission
-      ByteString.writeFile jobFile (Text.Encoding.encodeUtf8 (jobKdl admission.step minutesLeft))
+      ByteString.writeFile jobFile (Text.Encoding.encodeUtf8 (jobKdl admission.step minutesLeft admission.providerArgs))
       ByteString.writeFile promptFile (Text.Encoding.encodeUtf8 prompt)
       pure
         AttemptCommand
@@ -157,8 +199,8 @@ parseEnvelope bytes = case Aeson.decodeStrict bytes of
   Just value@(Object fields) | KeyMap.member "outcome" fields -> Just value
   _ -> Nothing
 
-jobKdl :: CodingAgentStep -> Integer -> Text
-jobKdl requested minutes =
+jobKdl :: CodingAgentStep -> Integer -> [Text] -> Text
+jobKdl requested minutes providerArgs =
   Text.unlines
     ( [ "jobs {",
         "  shikigami-step {",
@@ -171,7 +213,11 @@ jobKdl requested minutes =
       ]
         <> maybe [] (\m -> ["    model " <> quote (vendorModelIdText m)]) requested.model
         <> maybe [] (\e -> ["    effort " <> quote (effortText e)]) requested.effort
-        <> [ "    safety { capability " <> quote (accessText requested.access) <> " }",
+        <> [ "    safety {",
+             "      capability " <> quote (accessText requested.access)
+           ]
+        <> ["      provider-args " <> Text.unwords (quote <$> providerArgs) | not (null providerArgs)]
+        <> [ "    }",
              "  }",
              "}"
            ]
@@ -182,7 +228,7 @@ jobKdl requested minutes =
 -- | The declaration's prompt, a fixed preamble about the worktree, each
 -- attached skill inlined, and the trigger payload quoted as evidence.
 composedPrompt :: CodingAgentAdmission -> IO Text
-composedPrompt CodingAgentAdmission {step = requested, root, branch, skills} = do
+composedPrompt CodingAgentAdmission {step = requested, root, branch, skills, toolLines} = do
   inlined <- forM skills \(name, copy) -> do
     content <- try (ByteString.readFile (copy </> "SKILL.md"))
     pure case content of
@@ -195,6 +241,7 @@ composedPrompt CodingAgentAdmission {step = requested, root, branch, skills} = d
         <> " on branch "
         <> branch
         <> ". Make your changes there. Do not push, do not create or switch branches, and do not commit: Shikigami commits your changes when you finish. End with a short summary of what you changed.\n"
+        <> (if null toolLines then "" else "\nThe only shell commands you may run are these declared tools, one plain command per call (no pipes, redirection or variables); anything else is refused and recorded:\n" <> Text.unlines (("- " <>) <$> toolLines))
         <> if null skills then "" else "\nRead these attached skills before you start; they describe how to do this kind of task.\n\n" <> Text.concat inlined
     )
 
@@ -212,6 +259,7 @@ settleStep local admission result = do
     Collected envelope -> do
       evidence <- evidenceSummary admission.attemptDirectory
       settleEnvelope local admission envelope evidence
+  importGateDecisions local admission
   appendEntry local admission "coding-agent.settled" (object ["outcome" .= outcomeLabel outcome, "child" .= admission.child, "detail" .= settledDetail outcome])
   pure outcome
   where
@@ -345,6 +393,19 @@ evidenceSummary directory = do
                 reportedModel = text "model"
               }
         )
+
+-- | The gate's decisions, one JSON object per line, become @tool.called@
+-- entries of the run.
+importGateDecisions :: LocalWorkspace -> CodingAgentAdmission -> IO ()
+importGateDecisions local admission = do
+  let path = admission.attemptDirectory </> "tool-calls.jsonl"
+  exists <- doesFileExist path
+  if not exists
+    then pure ()
+    else do
+      lines' <- ByteString.split 10 <$> ByteString.readFile path
+      forM_ [value | line <- lines', Just value@(Object _) <- [Aeson.decodeStrict line]] \value ->
+        appendEntry local admission "tool.called" value
 
 appendEntry :: LocalWorkspace -> CodingAgentAdmission -> Text -> Value -> IO ()
 appendEntry local admission kindText payload = do

@@ -54,6 +54,7 @@ import Shikigami.Agent.DeclarationValue (DeclarationCoordinate, declarationCoord
 import Shikigami.Agent.Name (AgentName)
 import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.App (AppEffects)
+import Shikigami.Capability.Declared (ToolDecl)
 import Shikigami.CodingAgent.Types
 import Shikigami.CodingAgentStep.Generated.WorkflowRuntime qualified as Generated
 import Shikigami.Process.Attempt (AttemptResult)
@@ -71,7 +72,10 @@ data CodingAgentStepInput = CodingAgentStepInput
     payload :: !Value,
     -- | The repository the parent run names, if any (a Mori identity or a
     -- checkout path); a composition that resolves the runner per step reads it.
-    repository :: !(Maybe Text)
+    repository :: !(Maybe Text),
+    -- | The declaration's tools, rendered into the agent's configuration
+    -- (EP-3 M3); empty for none.
+    tools :: ![ToolDecl]
   }
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
@@ -90,7 +94,12 @@ data CodingAgentAdmission = CodingAgentAdmission
     -- | Outside the worktree; it is the attempt's recovery state.
     attemptDirectory :: !FilePath,
     -- | Copies of the attached skills, by name, inside the attempt directory.
-    skills :: ![(Text, FilePath)]
+    skills :: ![(Text, FilePath)],
+    -- | Vendor arguments that render the declared tools (EP-3 M3): the gate
+    -- hook and MCP configuration for Claude Code, MCP servers for Codex.
+    providerArgs :: ![Text],
+    -- | One line per declared tool, for the prompt.
+    toolLines :: ![Text]
   }
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
@@ -168,11 +177,12 @@ runCodingAgentChild ::
   CodingAgentStep ->
   Value ->
   Maybe Text ->
+  [ToolDecl] ->
   Eff es CodingAgentOutcome
-runCodingAgentChild agent identity key requested payload repository = do
+runCodingAgentChild agent identity key requested payload repository tools = do
   (_, parentId) <- currentWorkflow
   generation <- currentRunGeneration
-  let input = CodingAgentStepInput {parent = parentId.unWorkflowId, generation, key, agent, identity, step = requested, payload, repository}
+  let input = CodingAgentStepInput {parent = parentId.unWorkflowId, generation, key, agent, identity, step = requested, payload, repository, tools}
       childId = codingAgentStepWorkflowId input
   child <- spawnChild codingAgentStepWorkflowName childId (pure (Failed (TierRefused "the coding-agent child is driven from the workflow registry")))
   now <- liftIO getCurrentTime

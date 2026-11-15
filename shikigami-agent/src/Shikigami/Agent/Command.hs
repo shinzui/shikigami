@@ -112,7 +112,7 @@ localRoleInfo =
         withConfigOptions
           "shikigami-local"
           "Inspect local-operator grants and the action record"
-          (runLocal <$> subparser (approvals <> revoke <> ledger <> tools <> mcp))
+          (runLocal <$> subparser (approvals <> revoke <> ledger <> tools <> mcp <> gate))
           (pure [])
     }
   where
@@ -136,6 +136,7 @@ localRoleInfo =
             )
             (progDesc "Connect to a bound MCP server and list its tools as approved, approved-schema-changed or not approved")
         )
+    gate = command "gate" (info (Gate <$> strArgument (metavar "TOOLS.json" <> help "The run's declared tools, written by the coding-agent runner")) (progDesc "Claude Code's PreToolUse hook: allow or deny one call against a run's declared tools"))
     approvals = command "approvals" (info (pure ShowApprovals) (progDesc "Validate the approvals file and list every grant"))
     revoke = command "revoke" (info (RevokeGrant . Text.pack <$> strArgument (metavar "DIGEST" <> help "At least eight characters of a stored grant's digest")) (progDesc "Delete a stored confirmation"))
     ledger =

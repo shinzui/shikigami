@@ -45,7 +45,7 @@ import Shikigami.CodingAgent.Workflow (refusingCodingAgentRunner)
 import Shikigami.Record (ActionRecord (..))
 import Shikigami.Trust.LocalOperator.Approvals
 import Shikigami.Trust.LocalOperator.Grant
-import Shikigami.Trust.LocalOperator.Host (codingAgentLauncher, compatibilityPrincipal, localRunAuthority, nothingGranted, openLocalRun, recordGrantIn, repositorySelectorText)
+import Shikigami.Trust.LocalOperator.Host (codingAgentLauncher, compatibilityPrincipal, gateExecutable, localRunAuthority, nothingGranted, openLocalRun, recordGrantIn, repositorySelectorText)
 import Shikigami.Trust.Runtime
 import Shikigami.Trust.Tier
 import Shikigami.Workspace.Launch (worktreeRootPath)
@@ -180,7 +180,8 @@ lightComposition config interaction record =
                           Left problem -> pure (Left (CompositionFailed problem))
                           Right (local, worktree) -> do
                             launcherPath <- codingAgentLauncher
-                            let runner = localCodingAgentRunner LocalCodingAgentConfig {launcher = launcherPath} local
+                            gatePath <- gateExecutable
+                            let runner = localCodingAgentRunner LocalCodingAgentConfig {launcher = launcherPath, gate = gatePath} local
                             localCapabilityRuntime (worktreeRootPath worktree.root) local (toolsIn (worktreeRootPath worktree.root)) <&> \case
                               Left problem -> Left (CompositionFailed problem)
                               Right capabilities -> done capabilities (Just (localWorkspaceHost local capabilities)) runner (releaseRunWorktree stateDirectory runId worktree)
@@ -232,7 +233,13 @@ installedOnly descriptors _ descriptor
 prepareDeclaredTools :: AgentDecl -> IO (Either ToolResolutionError ([LocatedCliTool], [(McpBinding, McpToolRequest)]))
 prepareDeclaredTools decl@AgentDecl {behavior}
   | null decl.tools = pure (Right ([], []))
-  | Skill {} <- behavior = do
+  | Skill {} <- behavior = checkedTools
+  | CodingAgent {} <- behavior =
+      -- Checked and located now, rendered into the agent by its runner.
+      fmap (const ([], [])) <$> checkedTools
+  | otherwise = pure (Left (ToolsUnsupportedForBehavior (behaviorName behavior)))
+  where
+    checkedTools = do
       catalog <- loadToolCatalog =<< defaultToolCatalogPath
       case catalog of
         Left problem -> pure (Left (ToolCatalogUnavailable problem))
@@ -240,8 +247,6 @@ prepareDeclaredTools decl@AgentDecl {behavior}
           (Left problem, _) -> pure (Left problem)
           (_, Left problem) -> pure (Left problem)
           (Right (), Right servers) -> fmap (,servers) <$> locateCliTools (cliTools decl.tools)
-  | otherwise = pure (Left (ToolsUnsupportedForBehavior (behaviorName behavior)))
-  where
     behaviorName = \case
       CodingAgent {} -> "CodingAgent"
       Flow {} -> "Flow"

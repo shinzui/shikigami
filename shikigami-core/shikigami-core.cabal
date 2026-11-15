@@ -101,6 +101,7 @@ library
     Shikigami.Capability.Catalog
     Shikigami.Capability.Declared
     Shikigami.Capability.Declared.Catalog
+    Shikigami.Capability.Declared.Gate
     Shikigami.Capability.Mcp
     Shikigami.Capability.Overlay
     Shikigami.Capability.Provider

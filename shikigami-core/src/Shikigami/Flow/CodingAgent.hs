@@ -28,6 +28,7 @@ import Kiroku.Store.Effect (Store)
 import Shikigami.Agent.DeclarationValue (DeclarationCoordinate, declarationCoordinate)
 import Shikigami.Agent.Name (AgentName)
 import Shikigami.Agent.Principal (AgentIdentity)
+import Shikigami.Capability.Declared (ToolDecl)
 import Shikigami.CodingAgent.Types (CodingAgentOutcome (..), CodingAgentStep, FailureReason (TierRefused))
 import Shikigami.CodingAgent.Workflow (runCodingAgentChild)
 
@@ -41,7 +42,9 @@ data CodingAgentEnv = CodingAgentEnv
   { agent :: !AgentName,
     identity :: !AgentIdentity,
     -- | The repository the run names, if any.
-    repository :: !(Maybe Text)
+    repository :: !(Maybe Text),
+    -- | The declaration's tools, given to each coding agent the flow runs.
+    tools :: ![ToolDecl]
   }
 
 -- | A call-site key. It must be stable across code changes: it names the
@@ -55,9 +58,9 @@ runCodingAgentStep :: (CodingAgent :> es) => DeclarationCoordinate "coding-agent
 runCodingAgentStep key requested payload = send (RunCodingAgentStep key requested payload)
 
 runCodingAgent :: (Workflow :> es, Store :> es, IOE :> es) => CodingAgentEnv -> Eff (CodingAgent : es) a -> Eff es a
-runCodingAgent CodingAgentEnv {agent, identity, repository} =
+runCodingAgent CodingAgentEnv {agent, identity, repository, tools} =
   interpret \_ -> \case
-    RunCodingAgentStep key requested payload -> runCodingAgentChild agent identity key requested payload repository
+    RunCodingAgentStep key requested payload -> runCodingAgentChild agent identity key requested payload repository tools
 
 -- | For harnesses that run flow bodies without a run to attach children to.
 unavailableCodingAgent :: Eff (CodingAgent : es) a -> Eff es a

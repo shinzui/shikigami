@@ -60,7 +60,7 @@ tests =
         decl <- either (assertFailure . show) pure loaded
         let paths = LocalOperatorPaths {approvalsFile = "/nonexistent/approvals.dhall", stateDirectory = "/nonexistent/state"}
             input repository agent =
-              CodingAgentStepInput {parent = "run-q", generation = 0, key = declarationCoordinate "behavior", agent, identity = compatibilityIdentity agent, step = maybe (error "no step") id (codingAgentStepOf decl.behavior), payload = Aeson.Null, repository}
+              CodingAgentStepInput {parent = "run-q", generation = 0, key = declarationCoordinate "behavior", agent, identity = compatibilityIdentity agent, step = maybe (error "no step") id (codingAgentStepOf decl.behavior), payload = Aeson.Null, repository, tools = []}
             refusal = \case
               Left reason -> pure reason
               Right _ -> assertFailure "resolved a runner"
