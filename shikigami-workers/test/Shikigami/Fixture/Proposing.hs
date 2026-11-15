@@ -330,6 +330,7 @@ proposingDeps env behavior provider binding objectiveRuntime settings repository
       hooks = Agent.defaultAgentRunHooks,
       codingAgents = Agent.noCodingAgents,
       outputs = emptyOutputRegistry,
+      declaredTools = Agent.noDeclaredTools,
       approvalPolicy = autoApprovePolicy (either (error . show) id (parseDuration 900)),
       approvalWorkflow = Approval.ApprovalWorkflowEnv {notifier = recordingNotifier recorded},
       runTimeout = either (error . show) id (parseDuration 30),

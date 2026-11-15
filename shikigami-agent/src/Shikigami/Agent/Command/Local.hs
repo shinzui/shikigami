@@ -29,6 +29,7 @@ import Data.Time (getCurrentTime)
 import Data.Time.Format.ISO8601 (iso8601Show)
 import Keiro.Workflow (WorkflowId (..))
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
+import Numeric.Natural (Natural)
 import Shikigami.Agent.Approval (ApprovalDecision (Rejected), resolveApproval)
 import Shikigami.Agent.Approval qualified as Approval
 import Shikigami.Agent.Approval.LocalInbox (PendingApproval (..), listPendingApprovals, localInboxDirectory, pendingToken, readPendingApproval, removePendingApproval)
@@ -45,12 +46,17 @@ import Shikigami.Capability.Declared.Local (LocatedCliTool (..), locateCliTools)
 import Shikigami.Capability.Mcp (DiscoveredMcpTool (..), DiscoveryStatus (..), McpBinding (..), discoveryStatus, mkMcpServerId)
 import Shikigami.Capability.Mcp.Local (McpSession (..), mcpBindingRevision, openMcpSession)
 import Shikigami.Capability.Overlay (CapabilityDescriptor (..), capabilityIdText, capabilityRevisionText)
+import Shikigami.DeclaredTool.Local (ToolAttemptResult (..))
 import Shikigami.Migrations (verifyShikigamiMigrations)
 import Shikigami.Record
 import Shikigami.Repository (repositoryId, repositoryIdText)
 import Shikigami.Trust.LocalOperator.Approvals
 import Shikigami.Trust.LocalOperator.Grant
+import Shikigami.Workspace.Launch (CapturedOutput (..), LaunchOutcome (..), LaunchRequest (..), LaunchResult (..), ProcessLauncher (..), renderLaunchRefusal, worktreeRoot)
 import Shikigami.Workspace.Local.Checkout (processCheckoutResolver)
+import Shikigami.Workspace.Local.Launcher (hostProcessLauncher)
+import System.Directory (getCurrentDirectory)
+import System.Environment (getEnvironment)
 import System.Exit (ExitCode (..), exitFailure, exitWith)
 import System.FilePath (takeDirectory, (</>))
 import System.IO (hPutStrLn, stderr)
@@ -67,6 +73,10 @@ data LocalCommand
     PendingApprovals
   | -- | Resolve one ask: approve, or reject with a reason.
     ResolveApproval !Text !(Maybe Text)
+  | -- | Run one declared command for a durable step (EP-3 M4): deadline
+    -- seconds, output bound, the two output files, the program and its
+    -- arguments. Prints the result as JSON when the command ends.
+    ToolAttempt !Natural !Natural !FilePath !FilePath !FilePath ![Text]
   | -- | Claude Code's PreToolUse hook: decide one call against the run's
     -- declared tools (@tools.json@) and record the decision beside it.
     Gate !FilePath
@@ -152,6 +162,27 @@ runLocal command config = case command of
           Left (NoStoredGrant _) -> exitWith (ExitFailure 3)
           Left _ -> exitWith (ExitFailure 1)
   Gate toolsFile -> runGate toolsFile
+  ToolAttempt seconds outputBytes stdoutFile stderrFile program arguments -> do
+    located <- resolveProgram (Text.pack program) >>= maybe (die ("the executable " <> Text.pack program <> " is not found")) pure
+    deadline <- either die pure (mkLaunchDeadline seconds)
+    outputLimit <- either die pure (mkOutputLimit outputBytes)
+    here <- getCurrentDirectory
+    inherited <- fmap (Text.pack . fst) <$> getEnvironment
+    launched <- hostProcessLauncher.launch LaunchRequest {program = located, arguments, directory = worktreeRoot here, inherit = inherited, deadline, outputLimit}
+    case launched of
+      Left refusal -> die (renderLaunchRefusal refusal)
+      Right LaunchResult {outcome, stdout, stderr, elapsedMs} -> do
+        TextIO.writeFile stdoutFile stdout.text
+        TextIO.writeFile stderrFile stderr.text
+        LazyChar8.putStrLn
+          ( Aeson.encode
+              ToolAttemptResult
+                { exitCode = case outcome of Exited ExitSuccess -> Just 0; Exited (ExitFailure code) -> Just code; DeadlineExpired -> Nothing,
+                  timedOut = outcome == DeadlineExpired,
+                  droppedBytes = stdout.dropped + stderr.dropped,
+                  elapsedMs
+                }
+          )
   PendingApprovals -> do
     inbox <- localInboxDirectory <$> maybe defaultStateDirectory pure config.localOperatorStateDirectory
     asks <- listPendingApprovals inbox

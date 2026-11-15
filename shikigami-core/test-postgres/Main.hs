@@ -10,6 +10,7 @@ import Shikigami.CodingAgentFlowSpec qualified as CodingAgentFlowSpec
 import Shikigami.DecisionEvidenceSpec qualified as DecisionEvidenceSpec
 import Shikigami.DecisionExecutionSpec qualified as DecisionExecutionSpec
 import Shikigami.DecisionWorkflowSpec qualified as DecisionWorkflowSpec
+import Shikigami.DeclaredToolFlowSpec qualified as DeclaredToolFlowSpec
 import Shikigami.DelegationBudgetSpec qualified as DelegationBudgetSpec
 import Shikigami.DirectoryStoreSpec qualified as DirectoryStoreSpec
 import Shikigami.ExecutionResourcesSpec qualified as ExecutionResourcesSpec
@@ -102,6 +103,7 @@ suite = withShikigamiMigratedSuite \databaseFixture ->
           DirectoryStoreSpec.tests databaseFixture,
           FlowLifecycleSpec.tests databaseFixture,
           CodingAgentFlowSpec.tests databaseFixture,
+          DeclaredToolFlowSpec.tests databaseFixture,
           GrantStoreSpec.tests databaseFixture,
           ActionRecordStoreSpec.tests databaseFixture,
           PracticeReviewMemorySpec.tests databaseFixture,

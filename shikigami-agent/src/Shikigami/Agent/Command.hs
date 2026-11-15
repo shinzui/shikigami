@@ -116,7 +116,7 @@ localRoleInfo =
         withConfigOptions
           "shikigami-local"
           "Inspect local-operator grants and the action record"
-          (subparser (newRoutine <> runRoutineCommand <> runsCommand <> doctor <> up) <|> (runLocal <$> subparser (approvals <> revoke <> ledger <> tools <> mcp <> gate)))
+          (subparser (newRoutine <> runRoutineCommand <> runsCommand <> doctor <> up) <|> (runLocal <$> subparser (approvals <> revoke <> ledger <> tools <> mcp <> gate <> toolAttempt)))
           (pure [])
     }
   where
@@ -189,6 +189,20 @@ localRoleInfo =
                 )
             )
             (progDesc "List recent runs with outcome, decisions and report, or show one run")
+        )
+    toolAttempt =
+      command
+        "tool-attempt"
+        ( info
+            ( ToolAttempt
+                <$> option auto (long "deadline-seconds" <> metavar "N")
+                <*> option auto (long "output-limit" <> metavar "BYTES")
+                <*> strOption (long "stdout" <> metavar "FILE")
+                <*> strOption (long "stderr" <> metavar "FILE")
+                <*> strArgument (metavar "PROGRAM")
+                <*> many (Text.pack <$> strArgument (metavar "ARG…"))
+            )
+            (progDesc "Internal: run one declared command for a durable step and print its result")
         )
     gate = command "gate" (info (Gate <$> strArgument (metavar "TOOLS.json" <> help "The run's declared tools, written by the coding-agent runner")) (progDesc "Claude Code's PreToolUse hook: allow or deny one call against a run's declared tools"))
     approvals =

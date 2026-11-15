@@ -42,6 +42,8 @@ import Shikigami.Capability.Overlay (CapabilityDescriptor (..), capabilityIdText
 import Shikigami.Capability.Provider (CapabilityProvider (..), CapabilityRuntime (..), installDurableAdapters, mkCapabilityProviderRegistry)
 import Shikigami.CodingAgent.Local (LocalCodingAgentConfig (..), localCodingAgentRunner)
 import Shikigami.CodingAgent.Workflow (refusingCodingAgentRunner)
+import Shikigami.DeclaredTool.Local (localDeclaredToolRunner)
+import Shikigami.DeclaredTool.Workflow (noDeclaredTools)
 import Shikigami.Output (DefaultOutput (..), emptyOutputRegistry, mkOutputRegistry, renderOutputLoadError, validateOutputs)
 import Shikigami.Output.Local (defaultLocalReport, localReportAdapter)
 import Shikigami.Record (ActionRecord (..))
@@ -136,13 +138,14 @@ lightComposition config interaction record =
                           grant = Nothing,
                           codingAgents = refusingCodingAgentRunner containedCodingAgents,
                           outputs = emptyOutputRegistry,
+                          declaredTools = noDeclaredTools,
                           release = pure ()
                         }
                   )
 
     resolveLocal RunSubject {agent = decl, principal, run, repository}
       | sinkKinds <- sinkKindNames decl, (first' : rest) <- sinkKinds = pure (Left (OutputsUnavailable (first' :| rest)))
-      | null (requestedOverlays decl) && not (isCodingAgent decl) =
+      | null (requestedOverlays decl) && null decl.tools && not (isCodingAgent decl) =
           -- Nothing to grant: no repository is opened and every action is
           -- outside the (empty) grant.
           do
@@ -150,7 +153,7 @@ lightComposition config interaction record =
             oneOffCapabilityRuntime Nothing decl >>= \case
               Left problem -> pure (Left (CompositionFailed (renderOneOffCapabilityError problem)))
               Right capabilities ->
-                pure (Right TierRuntime {tier = LocalOperator, authority = scopeToRun run decl.name (recorded record tierLabel nothingGranted), record, capabilities, workspace = Nothing, grant = Nothing, codingAgents = refusingCodingAgentRunner containedCodingAgents, outputs = localOutputs stateDirectory, release = pure ()})
+                pure (Right TierRuntime {tier = LocalOperator, authority = scopeToRun run decl.name (recorded record tierLabel nothingGranted), record, capabilities, workspace = Nothing, grant = Nothing, codingAgents = refusingCodingAgentRunner containedCodingAgents, declaredTools = noDeclaredTools, outputs = localOutputs stateDirectory, release = pure ()})
       | otherwise =
           prepareDeclaredTools decl >>= \case
             Left problem -> pure (Left (CompositionFailed (renderToolResolutionError problem)))
@@ -173,21 +176,21 @@ lightComposition config interaction record =
                 Left refusal -> pure (Left (NoGrant refusal))
                 Right grant -> do
                   let runAuthority = localRunAuthority record decl run grant
-                      done capabilities workspace runner release = Right TierRuntime {tier = LocalOperator, authority = runAuthority, record, capabilities, workspace, grant = Just grant, codingAgents = runner, outputs = localOutputs stateDirectory, release}
+                      done capabilities workspace runner steps release = Right TierRuntime {tier = LocalOperator, authority = runAuthority, record, capabilities, workspace, grant = Just grant, codingAgents = runner, declaredTools = steps, outputs = localOutputs stateDirectory, release}
                       toolsIn root =
                         (cliToolProvider CliToolHost {record, tier = tierLabel, agent = decl.name, root, launcher = hostProcessLauncher, host = "skill"} <$> located)
                           <> [mcpToolProvider record tierLabel decl.name root binding request.tools | (binding, request) <- servers]
-                  if not (requestsMutation decl || isCodingAgent decl)
+                  if not (requestsMutation decl || isCodingAgent decl || runsToolSteps decl)
                     then
                       if null located && null servers
                         then
                           oneOffCapabilityRuntime (Just repo.source) decl <&> \case
                             Left problem -> Left (CompositionFailed (renderOneOffCapabilityError problem))
-                            Right capabilities -> done capabilities Nothing (refusingCodingAgentRunner containedCodingAgents) (pure ())
+                            Right capabilities -> done capabilities Nothing (refusingCodingAgentRunner containedCodingAgents) noDeclaredTools (pure ())
                         else
                           readToolsRuntime repo.source (toolsIn repo.source) <&> \case
                             Left problem -> Left (CompositionFailed problem)
-                            Right capabilities -> done capabilities Nothing (refusingCodingAgentRunner containedCodingAgents) (pure ())
+                            Right capabilities -> done capabilities Nothing (refusingCodingAgentRunner containedCodingAgents) noDeclaredTools (pure ())
                     else case run of
                       Nothing -> pure (Left (CompositionFailed "workspace.edit, workspace.exec, workspace.git and coding agents need a durable run; use shikigami-agent-run"))
                       Just runId ->
@@ -199,13 +202,20 @@ lightComposition config interaction record =
                             let runner = localCodingAgentRunner LocalCodingAgentConfig {launcher = launcherPath, gate = gatePath} local
                             localCapabilityRuntime (worktreeRootPath worktree.root) local (toolsIn (worktreeRootPath worktree.root)) <&> \case
                               Left problem -> Left (CompositionFailed problem)
-                              Right capabilities -> done capabilities (Just (localWorkspaceHost local capabilities)) runner (releaseRunWorktree stateDirectory runId worktree)
+                              Right capabilities -> done capabilities (Just (localWorkspaceHost local capabilities)) runner (\_ -> pure (Right (localDeclaredToolRunner gatePath local))) (releaseRunWorktree stateDirectory runId worktree)
 
 containedCodingAgents :: Text
 containedCodingAgents = "coding agents run only under trust.tier=local-operator until the batch qualification of ADR-40 passes"
 
 isCodingAgent :: AgentDecl -> Bool
 isCodingAgent AgentDecl {behavior} = isJust (codingAgentStepOf behavior)
+
+-- | A flow with declared tools runs them as durable steps in the run's
+-- worktree (EP-3 M4).
+runsToolSteps :: AgentDecl -> Bool
+runsToolSteps AgentDecl {behavior, tools} = case behavior of
+  Flow {} -> not (null (cliTools tools))
+  _ -> False
 
 -- | Whether a declaration asks for a mutating workspace tool.
 requestsMutation :: AgentDecl -> Bool
@@ -251,6 +261,9 @@ prepareDeclaredTools decl@AgentDecl {behavior}
   | Skill {} <- behavior = checkedTools
   | CodingAgent {} <- behavior =
       -- Checked and located now, rendered into the agent by its runner.
+      fmap (const ([], [])) <$> checkedTools
+  | Flow {} <- behavior =
+      -- Checked and located now, run as durable steps by the flow.
       fmap (const ([], [])) <$> checkedTools
   | otherwise = pure (Left (ToolsUnsupportedForBehavior (behaviorName behavior)))
   where

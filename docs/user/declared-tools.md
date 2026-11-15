@@ -169,6 +169,37 @@ policy {
 
 `agents/repo-inventory-coder.dhall` is an example.
 
+## Tools as durable steps
+
+A `Flow` declaration runs its declared tools as durable steps, which may run for hours and
+change the repository. The registered flow `run-declared-tool` runs one, named by the payload:
+
+```dhall
+A.Agent::{
+, name = "build-step"
+, behavior = A.Behavior.Flow { name = "run-declared-tool" }
+, tools =
+  [ A.Tool.CliTool
+      A.CliTool::{
+      , name = "cabal"
+      , executable = A.ExecutableRef.OnPath "cabal"
+      , allow = [ A.pattern [ "build" ] A.Trailing.AnyTrailing ]
+      , operationClass = A.OperationClass.IdempotentMutation
+      }
+  ]
+}
+```
+
+```bash
+shikigami-agent-run --set trust.tier=local-operator --agent build-step.dhall \
+  --workspace mori://shinzui/fsrs-hs --payload '{"tool":"cabal","args":["build","all"],"deadlineMinutes":30}'
+```
+
+The step runs in the run's worktree, with a deadline of 1 to 720 minutes, and any operation
+class the declaration states and you granted. It is launched at most once: if the command is
+interrupted, `shikigami-agent-run --resume <WORKFLOW_ID>` collects its result or reattaches to
+it, and if its launcher was lost the step ends `uncertain` and is never repeated.
+
 ## What the record shows
 
 `shikigami-local ledger --run <WORKFLOW-ID>` shows the authority's decision for each tool

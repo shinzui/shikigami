@@ -135,6 +135,9 @@ library
     Shikigami.Decision.ModelAlias
     Shikigami.Decision.ModelCatalog
     Shikigami.Decision.StubProvider
+    Shikigami.DeclaredTool.Workflow
+    Shikigami.DeclaredToolStep.Generated.WorkflowFacts
+    Shikigami.DeclaredToolStep.Generated.WorkflowRuntime
     Shikigami.Delegation.BudgetStore
     Shikigami.Diagrams
     Shikigami.Directory
@@ -187,6 +190,7 @@ library
     Shikigami.Flow.Capability
     Shikigami.Flow.CodingAgent
     Shikigami.Flow.Decision
+    Shikigami.Flow.DeclaredTool
     Shikigami.Flow.Delegate
     Shikigami.Flow.Initiative
     Shikigami.Flow.Lifecycle.AtRiskCustomer
@@ -627,6 +631,7 @@ library local-host
     Shikigami.Capability.Declared.Local
     Shikigami.Capability.Mcp.Local
     Shikigami.CodingAgent.Local
+    Shikigami.DeclaredTool.Local
     Shikigami.Process.Local
     Shikigami.Trust.LocalOperator.Host
     Shikigami.Workspace.Local.Adapters
@@ -816,6 +821,7 @@ test-suite shikigami-core-postgres-test
     Shikigami.DecisionEvidenceSpec
     Shikigami.DecisionExecutionSpec
     Shikigami.DecisionWorkflowSpec
+    Shikigami.DeclaredToolFlowSpec
     Shikigami.DelegationBudgetSpec
     Shikigami.DirectoryStoreSpec
     Shikigami.ExecutionResourcesSpec

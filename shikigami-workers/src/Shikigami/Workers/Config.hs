@@ -252,6 +252,7 @@ agentRunDeps env =
       AgentWorkflow.hooks = AgentWorkflow.defaultAgentRunHooks,
       AgentWorkflow.codingAgents = env.codingAgents,
       AgentWorkflow.outputs = emptyOutputRegistry,
+      AgentWorkflow.declaredTools = AgentWorkflow.noDeclaredTools,
       AgentWorkflow.approvalPolicy = envApprovalPolicy env,
       AgentWorkflow.approvalWorkflow = ApprovalWorkflow.ApprovalWorkflowEnv {ApprovalWorkflow.notifier = envApprovalNotifier env},
       AgentWorkflow.runTimeout = envRunTimeout env,

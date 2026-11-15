@@ -142,10 +142,21 @@ survives a worker kill, and is launched exactly once.
   launch: "declared CLI tools cannot be confined for Codex". ADR 0127 is accepted. All probe
   branches were removed. Tests: 3 more `declared tools` cases (every shell-syntax refusal
   class, the gate's decisions, and golden Claude and Codex configuration).
-- [ ] M4: Declared tools run as durable steps. The flow capability `runDeclaredTool` runs a
+- [x] M4 (2026-11-15): Declared tools run as durable steps. The flow capability `runDeclaredTool` runs a
   declared, mutating build command on a real checkout with a deadline of minutes to hours.
   Killing the worker mid-run and restarting reattaches without a second launch, and a lost
   launcher ends `Uncertain`. Needs EP-2 M2.
+  Evidence: `build-step` (a `Flow` on `run-declared-tool` declaring `cabal` with `["build"]`,
+  `IdempotentMutation`) ran on `mori://shinzui/fsrs-hs` (run
+  `4cc9d879-5d3b-5ce2-8e5c-da94a2371f6a`). The confirmation listed `cabal (cabal,
+  IdempotentMutation): build …`; the step launched `shikigami-local tool-attempt` (pid 11749)
+  and `shikigami-agent-run` was killed with SIGKILL eleven seconds later while the build ran.
+  `--resume` reattached and collected `{"exitCode":0,"elapsedMs":39830}` from the same
+  attempt (one `launch.json`, pid 11749); the ledger shows the `cli.cabal` `run` decision,
+  `tool.called admitted cli.cabal run ["build","all"] exit 0` and the report. In a second run
+  the wrapper and the `cabal` process were killed with the command; `--resume` ended the step
+  `ToolUncertain LauncherGoneWithoutResult` without launching again. Tests: the
+  `declared-tool flow capability` postgres case (two keys, replay without another attempt).
 
 
 ## Surprises & Discoveries
@@ -361,7 +372,17 @@ survives a worker kill, and is launched exactly once.
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Complete on 2026-11-15. A declaration names CLI tools (an executable and argument patterns)
+and MCP server tools; the operator confirms it once. A `Skill` model gets them as
+`cli.<name>`/`mcp.<server>` overlays, Claude Code through a PreToolUse gate and strict MCP
+configuration, Codex through MCP only, and a `Flow` as durable, restart-safe steps; every
+call is decided by the run's authority and recorded as `tool.called` (ADR 0127).
+
+Departures recorded in the Decision Log: tools ride the existing overlay path rather than a
+`ResolvedToolSet` step; no `RunDeclaredTool` action (each call is `UseCapability` on the tool's
+capability); the operator commands live in `shikigami-local` (`tools`, `mcp`, `gate`,
+`tool-attempt`); the worker runs declared-tool steps only through EP-2's coding-agent path,
+so a durable step in the worker is follow-up work. FRIC-75 and FRIC-76 were met here.
 
 
 ## Context and Orientation

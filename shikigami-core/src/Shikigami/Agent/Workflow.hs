@@ -21,6 +21,7 @@ module Shikigami.Agent.Workflow
     AgentRunHooks (..),
     defaultAgentRunHooks,
     noCodingAgents,
+    noDeclaredTools,
     agentRunWorkflowName,
     agentRunWorkflow,
     runAgentRunWorkflow,
@@ -140,6 +141,7 @@ import Shikigami.Decision.Contract qualified as DecisionContract
 import Shikigami.Decision.Evidence qualified as DecisionEvidence
 import Shikigami.Decision.Execution qualified as DecisionExecution
 import Shikigami.Decision.ModelCatalog qualified as ModelCatalog
+import Shikigami.DeclaredTool.Workflow (DeclaredToolRunners, declaredToolStepRegistry, noDeclaredTools)
 import Shikigami.Directory (DirectoryHandle)
 import Shikigami.Directory qualified as Directory
 import Shikigami.Duration
@@ -163,6 +165,7 @@ import Shikigami.Flow.Acknowledgement
 import Shikigami.Flow.Capability qualified as FlowCapability
 import Shikigami.Flow.CodingAgent qualified as FlowCodingAgent
 import Shikigami.Flow.Decision qualified as FlowDecision
+import Shikigami.Flow.DeclaredTool qualified as FlowDeclaredTool
 import Shikigami.Flow.Delegate qualified as FlowDelegate
 import Shikigami.Flow.Initiative qualified as FlowInitiative
 import Shikigami.Flow.Objectives qualified as FlowObjectives
@@ -247,6 +250,8 @@ data AgentRunDeps = AgentRunDeps
     -- | The tier's coding-agent runner, resolved per run (EP-2). Tiers that
     -- do not admit coding agents use 'noCodingAgents'.
     codingAgents :: !CodingAgentRunners,
+    -- | How each declared-tool step finds its runner (EP-3 M4).
+    declaredTools :: !DeclaredToolRunners,
     -- | Output adapters and the composition's default output (EP-8 M2).
     outputs :: !OutputRegistry,
     -- | Mutable process policy, snapshotted once in each new run.
@@ -394,6 +399,7 @@ agentRunRegistry deps =
   Map.singleton agentRunWorkflowName (WorkflowDef \_wid -> agentRunWorkflow deps Nothing)
     `Map.union` ApprovalWorkflow.approvalRegistry ((.approvalWorkflow) deps)
     `Map.union` codingAgentStepRegistry deps.codingAgents
+    `Map.union` declaredToolStepRegistry deps.declaredTools
 
 ingestJob :: (IOE :> es) => Maybe RunJob -> Eff es RunJob
 ingestJob = \case
@@ -1304,6 +1310,7 @@ runFlowBehavior deps activeBehaviorEnv resolvedProfile approvalPolicyForRun reco
               . FlowCapability.runSink sinkEnv
               . FlowDelegate.runDelegate delegateEnv
               . FlowCodingAgent.runCodingAgent FlowCodingAgent.CodingAgentEnv {agent = decl.name, identity = job.identity, repository = job.repository, tools = decl.tools}
+              . FlowDeclaredTool.runDeclaredToolCapability FlowDeclaredTool.DeclaredToolEnv {agent = decl.name, identity = job.identity, tools = decl.tools, repository = job.repository}
               . FlowWorkers.runWorkers deps.coordination deps.actionAuthority coordinator coordinationPolicy
               . Adaptive.runAdaptiveDelivery (adaptiveRuntime deps) coordinator resolvedProfile (Harness.narrowHarnessPolicy deps.harness decl.harness)
               . FlowObjectives.runObjectives deps.objectives objectivePolicy

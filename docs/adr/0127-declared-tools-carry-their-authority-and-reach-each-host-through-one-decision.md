@@ -47,8 +47,15 @@ each host differently:
   Codex gets the requested MCP servers with `enabled_tools`; it cannot confine shell commands,
   so a Codex step with CLI tools is refused. The vendor arguments travel through Baikai's
   `provider-args`, which the operator's Baikai ceiling must enable.
-* **A durable step** (EP-3 M4) runs a declared tool through the same decision with the
-  restart-safe attempt machinery of [ADR 0126](0126-coding-agents-are-durable-workers-and-batch-qualification-is-tier-scoped.md).
+* **A durable step** runs a declared tool through the same pattern decision and a
+  `UseCapability` decision of the run's authority, as the keyed child workflow
+  `shikigami.declared-tool-step`, using the restart-safe attempt machinery of
+  [ADR 0126](0126-coding-agents-are-durable-workers-and-batch-qualification-is-tier-scoped.md):
+  the launched program is `shikigami-local tool-attempt`, which runs the command with no shell
+  and prints its result when it ends. The step host admits any operation class the grant covers
+  and a deadline of up to 720 minutes, because a step is launched at most once and reports
+  `uncertain` instead of repeating. A flow body calls it through `runDeclaredTool`; the
+  registered flow `run-declared-tool` runs one step from its payload.
 
 Every decision, admitted or refused, is a `tool.called` entry in the action record
 ([ADR 0123](0123-the-kernel-owns-its-action-vocabulary-authority-port-and-action-record.md)).

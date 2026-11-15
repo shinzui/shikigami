@@ -98,6 +98,7 @@ workflow AgentRun
     step complete -> CompletedSession
     child delegate id input via delegatedWorkflowIdV2 -> AgentRunResult
     child coding-agent id input via codingAgentStepWorkflowId -> CodingAgentOutcome
+    child declared-tool id input via declaredToolStepWorkflowId -> ToolStepOutcome
 operation RunAgentRun
   run AgentRun
     input RunJob

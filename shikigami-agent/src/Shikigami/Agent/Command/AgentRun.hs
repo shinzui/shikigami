@@ -51,6 +51,7 @@ import Shikigami.Attestation.Resolve qualified as Profile
 import Shikigami.Behavior.Provider (newBehaviorEnvFor)
 import Shikigami.CodingAgent.Types (renderOutcome)
 import Shikigami.CodingAgent.Workflow (codingAgentStepWorkflow, codingAgentStepWorkflowName, fixedCodingAgentRunner)
+import Shikigami.DeclaredTool.Workflow (declaredToolStepWorkflow, declaredToolStepWorkflowName, renderToolStepOutcome)
 import Shikigami.Directory (disabledDirectoryHandle)
 import Shikigami.Execution.Admission (enrollRootRun)
 import Shikigami.Execution.Driver (ExecutionStart (..))
@@ -240,6 +241,7 @@ runDurableAgent logger store@KirokuStore {pool} appEnv workspace triggerPayload 
             AgentWorkflow.hooks = AgentWorkflow.defaultAgentRunHooks,
             AgentWorkflow.codingAgents = fixedCodingAgentRunner tierRuntime.codingAgents,
             AgentWorkflow.outputs = tierRuntime.outputs,
+            AgentWorkflow.declaredTools = tierRuntime.declaredTools,
             AgentWorkflow.approvalPolicy = approvalPolicy,
             AgentWorkflow.approvalWorkflow = approvalEnv,
             AgentWorkflow.runTimeout = (.runTimeout) config,
@@ -336,19 +338,27 @@ foregroundChildren appEnv deps job = do
       options = shikigamiWorkflowRunOptions appEnv
   traverse
     ( \child ->
-        if ":coding-agent:" `Text.isInfixOf` child
+        if ":declared-tool:" `Text.isInfixOf` child
           then
-            runAppIO appEnv (runChildWorkflow options codingAgentStepWorkflowName (WorkflowId child) (codingAgentStepWorkflow deps.codingAgents Nothing)) <&> \case
-              Right (Completed outcome) -> (child, Right (Just ("coding-agent: " <> renderOutcome outcome)))
+            runAppIO appEnv (runChildWorkflow options declaredToolStepWorkflowName (WorkflowId child) (declaredToolStepWorkflow deps.declaredTools Nothing)) <&> \case
+              Right (Completed outcome) -> (child, Right (Just ("declared-tool: " <> renderToolStepOutcome outcome)))
               Right Suspended -> (child, Right Nothing)
-              Right other -> (child, Left ("the coding-agent step did not finish: " <> Text.pack (show (void other))))
+              Right other -> (child, Left ("the declared-tool step did not finish: " <> Text.pack (show (void other))))
               Left problem -> (child, Left (Text.pack (show problem)))
           else
-            runAppIO appEnv (runChildWorkflow options approvalWorkflowName (WorkflowId child) (approvalWorkflow deps.approvalWorkflow Nothing)) <&> \case
-              Right (Completed _) -> (child, Right (Just ("approval " <> child <> " resolved")))
-              Right Suspended -> (child, Right Nothing)
-              Right other -> (child, Left ("the approval did not finish: " <> Text.pack (show (void other))))
-              Left problem -> (child, Left (Text.pack (show problem)))
+            if ":coding-agent:" `Text.isInfixOf` child
+              then
+                runAppIO appEnv (runChildWorkflow options codingAgentStepWorkflowName (WorkflowId child) (codingAgentStepWorkflow deps.codingAgents Nothing)) <&> \case
+                  Right (Completed outcome) -> (child, Right (Just ("coding-agent: " <> renderOutcome outcome)))
+                  Right Suspended -> (child, Right Nothing)
+                  Right other -> (child, Left ("the coding-agent step did not finish: " <> Text.pack (show (void other))))
+                  Left problem -> (child, Left (Text.pack (show problem)))
+              else
+                runAppIO appEnv (runChildWorkflow options approvalWorkflowName (WorkflowId child) (approvalWorkflow deps.approvalWorkflow Nothing)) <&> \case
+                  Right (Completed _) -> (child, Right (Just ("approval " <> child <> " resolved")))
+                  Right Suspended -> (child, Right Nothing)
+                  Right other -> (child, Left ("the approval did not finish: " <> Text.pack (show (void other))))
+                  Left problem -> (child, Left (Text.pack (show problem)))
     )
     pending
 

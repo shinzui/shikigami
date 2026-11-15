@@ -28,6 +28,7 @@ module Shikigami.Agent.Decl
     Behavior (..),
     codingAgentStepOf,
     requestedOverlays,
+    declaredToolCapabilities,
     Trigger (..),
     StreamMatch (..),
     Sink (..),
@@ -343,10 +344,18 @@ data AgentDecl = AgentDecl
 -- @cli.<name>@ for each declared CLI tool (EP-3). Resolution, the grant and
 -- the behavior environment all read this, never the field alone.
 requestedOverlays :: AgentDecl -> [CapabilityId]
-requestedOverlays AgentDecl {capabilityOverlays, tools, behavior} = case behavior of
-  -- A coding agent runs its declared tools itself, through its gate.
+requestedOverlays decl@AgentDecl {capabilityOverlays, behavior} = case behavior of
+  -- A coding agent runs its declared tools itself, through its gate; a flow
+  -- runs them as durable steps. Neither offers them to a model.
   CodingAgent {} -> capabilityOverlays
-  _ -> capabilityOverlays <> [cliCapabilityId tool.name | tool <- cliTools tools] <> [mcpCapabilityId request.server | request <- mcpRequests tools]
+  Flow {} -> capabilityOverlays
+  _ -> capabilityOverlays <> declaredToolCapabilities decl
+
+-- | @cli.<name>@ and @mcp.<server>@ for every declared tool, whatever host
+-- uses it; the grant covers them.
+declaredToolCapabilities :: AgentDecl -> [CapabilityId]
+declaredToolCapabilities AgentDecl {tools} =
+  [cliCapabilityId tool.name | tool <- cliTools tools] <> [mcpCapabilityId request.server | request <- mcpRequests tools]
 
 -- Defaulted additions preserve the pre-change journal bytes.
 instance ToJSON AgentDecl where

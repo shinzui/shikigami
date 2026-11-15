@@ -16,8 +16,9 @@ module Shikigami.Flow
   )
 where
 
-import Data.Aeson (Value, (.=))
+import Data.Aeson (Value, (.!=), (.:), (.:?), (.=))
 import Data.Aeson qualified as Aeson
+import Data.Aeson.Types (parseMaybe)
 import Data.List (find)
 import Data.List.NonEmpty (NonEmpty ((:|)))
 import Data.List.NonEmpty qualified as NonEmpty
@@ -31,10 +32,12 @@ import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..))
 import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Delegate (DelegationRequest (..))
 import Shikigami.Agent.Name (agentNameFromNonEmpty, agentNameText)
+import Shikigami.Capability.Declared (mkToolName)
 import Shikigami.Coordination.Capability (AdaptiveDelivery)
 import Shikigami.Coordination.Decision (adaptiveSlots)
 import Shikigami.Decision.Contract (DecisionSlot)
 import Shikigami.Decision.ModelCatalog (slotErrors)
+import Shikigami.DeclaredTool.Workflow qualified as DeclaredToolWorkflow
 import Shikigami.Duration
 import Shikigami.Flow.Acknowledgement (Acknowledgement)
 import Shikigami.Flow.AdaptiveDelivery (adaptiveDelivery)
@@ -42,6 +45,8 @@ import Shikigami.Flow.AtRiskCustomer (atRiskCustomerFlow)
 import Shikigami.Flow.Capability (Activity, Memory, Sink)
 import Shikigami.Flow.CodingAgent (CodingAgent)
 import Shikigami.Flow.Decision (Decision)
+import Shikigami.Flow.DeclaredTool (DeclaredTool)
+import Shikigami.Flow.DeclaredTool qualified as DeclaredTool
 import Shikigami.Flow.Delegate (Delegate)
 import Shikigami.Flow.Delegate qualified as Delegate
 import Shikigami.Flow.Initiative (Initiative, proposeWork, proposeWorkFlowName, proposeWorkSlots)
@@ -98,6 +103,7 @@ type FlowEffects es =
     Acknowledgement :> es,
     Delegate :> es,
     CodingAgent :> es,
+    DeclaredTool :> es,
     Workers :> es,
     AdaptiveDelivery :> es,
     Objectives :> es,
@@ -164,7 +170,14 @@ atRiskCustomerLifecycleDiagram =
 -- now, so the body closes over nothing and the question is answerable directly.
 flowRegistry :: [FlowDef]
 flowRegistry =
-  [ FlowDef {name = watchdogFlowName, decisionSlots = watchdogSlots, requiresDefaultModel = DefaultModelOptional, lifecycle = LifecycleDiagram "flowchart LR\n Grant --> Observe --> Classify --> Record --> Drift --> Deliver --> Close" [], run = watchdogSweep},
+  [ FlowDef
+      { name = declarationCoordinate "run-declared-tool",
+        decisionSlots = [],
+        requiresDefaultModel = DefaultModelOptional,
+        lifecycle = LifecycleDiagram "flowchart LR\n Admit --> Attempt --> Settle" [],
+        run = runDeclaredToolFlow
+      },
+    FlowDef {name = watchdogFlowName, decisionSlots = watchdogSlots, requiresDefaultModel = DefaultModelOptional, lifecycle = LifecycleDiagram "flowchart LR\n Grant --> Observe --> Classify --> Record --> Drift --> Deliver --> Close" [], run = watchdogSweep},
     FlowDef
       { name = proposeWorkFlowName,
         decisionSlots = proposeWorkSlots,
@@ -241,6 +254,24 @@ flowRegistry =
         run = opentelemetryPracticeReviewFlow
       }
   ]
+
+-- | Run one of the declaration's tools as a durable step (EP-3 M4). The
+-- payload names it: @{"tool": "cabal", "args": ["build"], "deadlineMinutes": 30}@.
+-- The command may run for hours and change the run's worktree; a replay
+-- reads the journaled outcome, and a lost launcher ends uncertain.
+runDeclaredToolFlow :: (FlowEffects es) => Value -> Eff es Value
+runDeclaredToolFlow payload = case parseMaybe parseStep payload of
+  Nothing -> pure (Aeson.object ["outcome" .= ("refused" :: Text), "reason" .= ("the payload must name a tool, its args and deadlineMinutes" :: Text)])
+  Just requested -> do
+    outcome <- DeclaredTool.runDeclaredTool (DeclaredTool.toolStepKey "step") requested
+    pure (Aeson.object ["outcome" .= DeclaredToolWorkflow.toolStepOutcomeLabel outcome, "summary" .= DeclaredToolWorkflow.renderToolStepOutcome outcome, "result" .= outcome])
+  where
+    parseStep = Aeson.withObject "declared-tool step" \fields -> do
+      toolText <- fields .: "tool"
+      arguments <- fields .:? "args" .!= []
+      minutes <- fields .:? "deadlineMinutes" .!= 30
+      tool <- either (fail . Text.unpack) pure (mkToolName toolText)
+      either (fail . Text.unpack) pure (DeclaredToolWorkflow.mkToolStep tool arguments minutes)
 
 -- | Minimal registered proof that Flow can reach the same governed child-run
 -- machinery as an imperative supervisor. The target and call-site key are
