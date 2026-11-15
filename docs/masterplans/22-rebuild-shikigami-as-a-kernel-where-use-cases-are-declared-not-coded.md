@@ -901,8 +901,11 @@ accepted: a declared `CodingAgent` runs Claude Code on a real repository as a du
 workflow and commits on the run branch (ADR 0126 scopes ADR 0040's batch gate to tiers). EP-2
 is complete: Claude Code and Codex run on a real repository from the one-off command, from
 `--resume` after a kill, from a `local-operator` worker draining `enqueue-run --workspace`, and
-from a flow body under call-site keys. Next in the recommended order is EP-3 M1 to M3; EP-5
-and EP-11 M1 can still start in parallel. Stage 1 (the pilot) ends at
+from a flow body under call-site keys. EP-3 M1 to M3 are accepted (ADR 0127): a declaration
+names CLI tools and MCP server tools, the operator confirms it once, and a `Skill` model, Claude
+Code (through a PreToolUse gate) and Codex (MCP only) use exactly those tools, with every call in
+the action record. Next in the recommended order are EP-8 M2, EP-9 and EP-3 M4; EP-5 and EP-11
+M1 can still start in parallel. Stage 1 (the pilot) ends at
 the declaration baseline, and stage 2 at the kernel baseline.
 
 - [ ] Architectural acceptance: the keiro modernization campaign runs for real on at least
