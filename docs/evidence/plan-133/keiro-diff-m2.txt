@@ -1,0 +1,41 @@
+# just keiro-gate HEAD^ at 2ec21221 (EP-8 M2), 2026-11-15
+# Expected under the pre-release exception (ADR 0027): no tags, no surviving journals or queued
+# jobs, no external consumers. check, inspect and scaffold passed; conformance passes separately.
+
+BREAKING: run_jobs mapped-workqueue workqueue run_jobs payload .triggerKind : RunTriggerKind .enum TriggeredByOperator["TriggeredByOperator"]: enum value added; existing history remains readable, but deploy readers before writers emit the new spelling; a future public surface exposing this closed enum would classify the addition as consumer-breaking; queued jobs remain schema-version-1 history; drain the queue or supply an application-owned transitional codec before deployment [MappedEnumValueAdded]
+    vector: consumer-build=breaking rollout=workers-first,drain-required
+    mapped-persisted-surface: workqueue-history:run_jobs=breaking
+    mapped-consequences: consumer-build:workqueue:run_jobs, workqueue-history:run_jobs
+    declared: shikigami/run-jobs.keiro:5
+BREAKING: AgentRun workflow-body AgentRun: workflow body labels, kinds, result types, or order changed without a new patch guard; wrap a cross-cutting change in patch, or rename the replay label for one changed step [WorkflowBodyChanged]
+    vector: private-history-read=breaking old-binary-read-new-events=breaking snapshot-hydration=advisory rollout=stop-the-world
+    declared: shikigami/agent-run.keiro:5
+    use-site: AgentRun.workflow-body (shikigami/agent-run.keiro:5)
+semantic impact:
+  RunTriggerKind
+    previous aggregate consumers: workqueue:run_jobs
+    current aggregate consumers:  workqueue:run_jobs
+    previous roots: workqueue-payload|workqueue:run_jobs|workqueue run_jobs payload .triggerKind : RunTriggerKind
+    current roots:  workqueue-payload|workqueue:run_jobs|workqueue run_jobs payload .triggerKind : RunTriggerKind
+    previous consequences: consumer-build:workqueue:run_jobs, workqueue-history:run_jobs
+    current consequences:  consumer-build:workqueue:run_jobs, workqueue-history:run_jobs
+    service-conformance: impacted
+explain [MappedEnumValueAdded]
+  path: workqueue run_jobs payload .triggerKind : RunTriggerKind .enum TriggeredByOperator["TriggeredByOperator"]
+  direction: consumer-build is breaking; consumer or generated source must be rebuilt
+  remedy: deploy in workers-first order
+  remedy: drain incompatible queued jobs before deployment
+  remedy: supply an application-owned transitional queue codec when draining is impossible
+  remedy: recompile every affected consumer against the generated interface
+  remedy: run the generated conformance and historical fixture suites
+
+explain [WorkflowBodyChanged]
+  path: AgentRun.workflow-body
+  direction: private-history-read is breaking; the candidate binary may reinterpret or fail to read stored private history
+  direction: old-binary-read-new-events is breaking; a still-running old binary may reject events emitted by the candidate
+  direction: snapshot-hydration is advisory; persisted snapshot seeds require invalidation or rebuild
+  remedy: bump the owning schema or event version
+  remedy: add and retain a contiguous upcaster for every historical version
+  remedy: deploy in stop-the-world order
+
+replay-neutral: stored-data replay is unchanged by this diff
