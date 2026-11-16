@@ -20,12 +20,12 @@
 , { name = "keiro-upgrade"
   , kind = "migrate"
   , source = "mori://shinzui/keiro"
-  , rule = "the build resolves keiro below 0.25; on the first run pass --from with the resolved version"
+  , rule = "the build resolves keiro below 0.25.0.0; window --from=<resolved version>, target --to=0.25.0.0. It entails kiroku-upgrade and the shibuya adapter edges"
   }
 , { name = "kiroku-upgrade"
   , kind = "migrate"
   , source = "mori://shinzui/kiroku"
-  , rule = "the build resolves kiroku directly; keiro-upgrade entails its edges, so select it only when kiroku is a direct dependency"
+  , rule = "only when keiro-upgrade is not selected (keiro-upgrade entails kiroku's edges) and kiroku is a direct dependency below the version keiro 0.25 needs"
   }
 , { name = "migrate-keiro-stack"
   , kind = "run"

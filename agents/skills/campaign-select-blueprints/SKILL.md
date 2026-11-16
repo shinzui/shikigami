@@ -16,7 +16,8 @@ adds anything to the catalog.
 2. For a `migrate` blueprint, find the version of *that blueprint's library* the build
    resolves today (not a Seihou module's version). Set `window` to `--from=<version>` when the
    manifest has no receipt for that blueprint yet; otherwise leave it empty, so Seihou infers
-   the window from the receipts.
+   the window from the receipts. Set `target` to `--to=<version>` as the catalog rule names it
+   (Seihou cannot infer the target before the dependency is bumped); leave it empty for `run`.
 3. Set `vars` to the variables the catalog rule names, as one word
    (`--var=database.policy=disposable`), or leave it empty.
 4. Change no file.
@@ -24,8 +25,8 @@ adds anything to the catalog.
 End your answer with exactly one JSON object on its own line:
 
 ```json
-{"selected": [{"key": "keiro-upgrade", "blueprint": "keiro-upgrade", "command": "migrate", "window": "--from=0.22.0.0", "vars": "", "reason": "…"}], "skipped": [{"blueprint": "upgrade-haskell-runtime", "reason": "…"}]}
+{"selected": [{"key": "keiro-upgrade", "blueprint": "keiro-upgrade", "command": "migrate", "window": "--from=0.22.0.0", "target": "--to=0.25.0.0", "vars": "", "reason": "…"}], "skipped": [{"blueprint": "upgrade-haskell-runtime", "reason": "…"}]}
 ```
 
-`command` is the catalog entry's kind (`run` or `migrate`). For `run`, `window` is always
-empty. `key` is a short kebab-case name that is unique in the list.
+`command` is the catalog entry's kind (`run` or `migrate`). For `run`, `window` and `target`
+are always empty. `key` is a short kebab-case name that is unique in the list.

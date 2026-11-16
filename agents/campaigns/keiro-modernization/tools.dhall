@@ -27,7 +27,10 @@ let blueprintPatterns =
         (List A.ArgumentPattern)
         ( \(blueprint : Blueprint) ->
           \(rest : List A.ArgumentPattern) ->
-            [ any [ "agent", blueprint.kind, blueprint.name ] ] # rest
+              [ any [ "agent", blueprint.kind, blueprint.name ]
+              , any [ "agent", "--debug", blueprint.kind, blueprint.name ]
+              ]
+            # rest
         )
         ([] : List A.ArgumentPattern)
 

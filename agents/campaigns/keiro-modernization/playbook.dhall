@@ -217,29 +217,43 @@ in  { main = "keiro-modernization"
         }
       , { name = "execute-blueprint-plan"
         , steps =
-          [ P.Step.Tool
-              { id = "blueprint"
+          [ P.Step.Probe
+              { id = "guidance"
               , tool = "seihou"
               , args =
                 [ "agent"
+                , "--debug"
                 , "{{plan.command}}"
                 , "{{plan.blueprint}}"
                 , "{{plan.window}}"
+                , "{{plan.target}}"
                 , "{{plan.vars}}"
-                , "--batch"
                 ]
-              , deadlineMinutes = 240
+              , deadlineMinutes = 10
               }
+          , coder
+              "apply"
+              [ "../../skills/campaign-apply-blueprint" ]
+              180
+              ''
+              In {{repo}}, apply blueprint {{plan.blueprint}} ({{plan.command}}, window
+              "{{plan.window}}", target "{{plan.target}}") following the campaign-apply-blueprint
+              skill, as the ExecPlan {{plan.path}} describes. Seihou rendered this guidance:
+
+              {{steps.guidance.output}}
+
+              {{learnings}}
+              ''
           , coder
               "implement"
               ([] : List Text)
               90
               ''
-              In {{repo}}, Seihou just ran blueprint {{plan.blueprint}} ({{plan.command}}); its output
-              is below. Implement the rest of the ExecPlan {{plan.path}} with this repository's
-              exec-plan skill: fallout fixes and the plan's Progress. Do not run blueprints.
+              In {{repo}}, blueprint {{plan.blueprint}} was just applied. Finish the ExecPlan
+              {{plan.path}} with this repository's exec-plan skill: remaining fallout and the plan's
+              Progress. Do not run blueprints. The apply step reported (evidence):
 
-              {{steps.blueprint.output}}
+              {{steps.apply.output}}
               ''
           , build "build"
           , fixBuild "fix-build" "ExecPlan {{plan.path}}"

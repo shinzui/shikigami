@@ -256,6 +256,21 @@ These came from read-only research on 2026-11-15, before implementation.
   stops on the operator's `.gitignore` edits.
   Date: 2026-11-15
 
+- Decision (M2): A Shikigami coding agent applies each blueprint. The run renders the
+  blueprint's guidance with `seihou agent --debug <kind> <blueprint> …`, quotes it to a coding
+  agent with the `campaign-apply-blueprint` skill under the campaign's declared tools, and that
+  agent records migration receipts with `seihou agent migrate … --mark-applied`. For a
+  runnable blueprint the record written by `--debug run` stands as its receipt. Selections gain
+  a `target` (`--to=…`), because Seihou cannot infer the target before the dependency is
+  bumped, and kiroku-upgrade is not selected beside keiro-upgrade, which entails it.
+  Rationale: The user chose this on 2026-11-16, after `seihou agent run
+  fix-nix-haskell-flake-customizations --batch` in kizashi was refused ten commands by the
+  blueprint's own allowedTools and left a half-applied tree (reverted; the patch is kept
+  outside the repository). The gap is filed upstream as
+  `mori://shinzui/seihou/okf/improvement-requests/concepts/IR-23`. This supersedes the earlier
+  decision that blueprints run as `seihou agent run|migrate --batch` tool steps.
+  Date: 2026-11-16
+
 ## Outcomes & Retrospective
 
 (To be filled during and after implementation.)
