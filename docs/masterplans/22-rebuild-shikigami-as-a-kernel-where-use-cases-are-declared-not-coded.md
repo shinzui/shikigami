@@ -964,8 +964,16 @@ which needs curating before the kernel freeze. EP-6 M3 is accepted on 2026-11-16
 owns a configuration setting for the first time (`FlowPack.settings`), and a pack interpreter
 reaches the run's model, stores and grants through `FlowRunContext`. A real review trigger
 for fsrs-hs produced the same `unresolved` verdict before and after the move, and the first
-real routing call exposed and fixed a router prompt defect (`60938b9a`, FRIC-84). Stage 1
-(the pilot) ends at the declaration baseline, and stage 2 at the kernel baseline.
+real routing call exposed and fixed a router prompt defect (`60938b9a`, FRIC-84). EP-6 M4 is
+in progress: the kernel has the pieces Initiative needs to leave, each landed with Initiative
+as its first user and no change in its behavior. A pack setting has a shape and an optional
+default (`a132deeb`); the stream consumer consults a pure, transactional `StreamHook`
+(`f80be910`) that a pack contributes through `FlowPack.triggers` (`dec023b0`); a pack
+contributes admin verbs over an `AdminContext` (`a921ceaf`); and the proposing flow runs as a
+`PackFlow` with a kernel counter port, its two patch gates gone (`ee409f61`). The move to
+`flow-pack-initiative`, the stream consumer executable of the distribution and the real
+transcript run remain. Stage 1 (the pilot) ends at the declaration baseline, and stage 2 at
+the kernel baseline.
 
 - [ ] Architectural acceptance: the keiro modernization campaign runs for real on at least
   two of the user's repositories with no change to `shikigami-core` in the commits that
