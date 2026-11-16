@@ -54,6 +54,7 @@ import Shikigami.Flow.Capability (Memory, MemoryQuery (..), RememberOptions (..)
 import Shikigami.Flow.CodingAgent (CodingAgent, codingAgentKey, runCodingAgentStep, runCodingAgentStepIn)
 import Shikigami.Flow.DeclaredTool (DeclaredTool, runDeclaredTool, toolStepKey)
 import Shikigami.Playbook
+import System.FilePath (takeDirectory, (</>))
 
 -- | What the declaration fixes for the bundle's coding-agent steps.
 data PlaybookAgent = PlaybookAgent
@@ -69,7 +70,9 @@ data StepResult = StepResult {key :: !Text, outcome :: !Text, summary :: !Text}
 data Carried = Carried
   { recalled :: ![Text],
     learned :: ![Text],
-    suggestions :: ![Text]
+    suggestions :: ![Text],
+    -- | Each finished step's JSON output, by step key.
+    outputs :: !(Map Text Value)
   }
 
 -- | What a 'Reflect' step's agent answered.
@@ -122,10 +125,10 @@ runPlaybook ::
 runPlaybook agent pinned payload = do
   let bundle = pinned.bundle
   prior <- recall (declarationCoordinate "playbook-learnings") MemoryQuery {query = bundle.main}
-  let start = Carried {recalled = take 10 (concatMap (filter (not . Text.null) . Text.lines . (.content)) (filter (isPlaybookMemory bundle.main) prior)), learned = [], suggestions = []}
+  let start = Carried {recalled = take 10 (concatMap (filter (not . Text.null) . Text.lines . (.content)) (filter (isPlaybookMemory bundle.main) prior)), learned = [], suggestions = [], outputs = Map.empty}
   (results, stopped, carried) <- case lookupPlaybook bundle bundle.main of
     Nothing -> pure ([], Just "the main playbook is missing", start)
-    Just root -> runSteps agent bundle payload (payloadParameters payload) Map.empty "" start root.steps
+    Just root -> runSteps agent (takeDirectory pinned.file) bundle payload (payloadParameters payload) Map.empty "" start root.steps
   remembered <-
     if null carried.learned
       then pure []
@@ -179,6 +182,8 @@ propose agent pinned payload = \case
 runSteps ::
   (CodingAgent :> es, DeclaredTool :> es, Acknowledgement :> es) =>
   PlaybookAgent ->
+  -- | The bundle's directory, which skill directories are relative to.
+  FilePath ->
   Bundle ->
   Value ->
   Map Text Text ->
@@ -187,7 +192,7 @@ runSteps ::
   Carried ->
   [PlaybookStep] ->
   Eff es ([StepResult], Maybe Text, Carried)
-runSteps agent bundle payload parameters variables prefix = go []
+runSteps agent base bundle payload parameters variables prefix = go []
   where
     go done carried = \case
       [] -> pure (reverse done, Nothing, carried)
@@ -201,14 +206,14 @@ runSteps agent bundle payload parameters variables prefix = go []
     runOne carried current =
       let key = prefix <> stepId current
        in case current of
-            CodingAgent {prompt, workspace, deadlineMinutes} ->
-              coding carried key (render carried prompt) (render carried workspace) agent.access deadlineMinutes \outcome ->
+            CodingAgent {prompt, workspace, deadlineMinutes, skills} ->
+              coding carried key (render carried prompt) (render carried workspace) agent.access deadlineMinutes skills \outcome ->
                 let result = StepResult key (outcomeLabel outcome) (renderOutcome outcome)
                  in case outcome of
-                      Completed _ -> ([result], Nothing, carried)
+                      Completed CompletedRun {finalMessage} -> ([result], Nothing, carried {outputs = maybe carried.outputs (\value -> Map.insert key value carried.outputs) (lastJsonObject finalMessage)})
                       _ -> ([result], Just (key <> ": " <> renderOutcome outcome), carried)
             Reflect {prompt, workspace} ->
-              coding carried key (reflectionInstruction <> "\n" <> render carried prompt) (render carried workspace) ReadOnly 15 \outcome -> case outcome of
+              coding carried key (reflectionInstruction <> "\n" <> render carried prompt) (render carried workspace) ReadOnly 15 [] \outcome -> case outcome of
                 Completed CompletedRun {finalMessage} -> case parseReflection finalMessage of
                   Nothing -> ([StepResult key "completed" "the reflection named no learnings (unparsed)"], Nothing, carried)
                   Just Reflection {learnings, suggestion} ->
@@ -224,7 +229,7 @@ runSteps agent bundle payload parameters variables prefix = go []
                   outcome <- runDeclaredTool (toolStepKey key) requested
                   let result = StepResult key (toolStepOutcomeLabel outcome) (renderToolStepOutcome outcome)
                   pure case outcome of
-                    ToolCompleted ToolRun {exit = 0} -> ([result], Nothing, carried)
+                    ToolCompleted ToolRun {exit = 0, stdout} -> ([result], Nothing, carried {outputs = maybe carried.outputs (\value -> Map.insert key value carried.outputs) (Aeson.decodeStrict (Text.Encoding.encodeUtf8 stdout))})
                     _ -> ([result], Just (key <> ": " <> renderToolStepOutcome outcome), carried)
             Approval {prompt} -> do
               ack <- awaitAck (StepName ("playbook-" <> key)) ApprovalRequest {prompt = render carried prompt, context = object ["step" .= key, "playbook" .= bundle.main], channel = ViaLocalInbox}
@@ -233,34 +238,68 @@ runSteps agent bundle payload parameters variables prefix = go []
                 Declined reason -> ([StepResult key "declined" reason], Just (key <> ": declined" <> (if Text.null reason then "" else " (" <> reason <> ")")), carried)
                 Ack.TimedOut -> ([StepResult key "timed_out" "no answer before the deadline"], Just (key <> ": no answer before the deadline"), carried)
             RunPlaybook {playbook} -> nested key playbook variables carried
-            ForEach {items, item, playbook} -> each key playbook item (itemValues items) [] carried
-    coding carried key promptText target access' minutes settle =
-      case (,) <$> mkCodingAgentPrompt promptText <*> mkDeadlineMinutes minutes of
+            ForEach {items, item, playbook} -> case itemsFor carried item items of
+              Left problem -> pure ([StepResult key "failed" problem], Just (key <> ": " <> problem), carried)
+              Right bound -> each key playbook (zip [0 ..] bound) [] carried
+    coding carried key promptText target access' minutes attached settle =
+      case (,,) <$> mkCodingAgentPrompt promptText <*> mkDeadlineMinutes minutes <*> traverse (mkSkillDirectory . Text.pack . (base </>) . Text.unpack) attached of
         Left problem -> pure ([StepResult key "refused" problem], Just (key <> ": " <> problem), carried)
-        Right (stepPrompt, deadline) -> do
-          let requested = CodingAgentStep {provider = agent.provider, prompt = stepPrompt, access = access', model = agent.model, effort = agent.effort, deadlineMinutes = deadline, skills = []}
+        Right (stepPrompt, deadline, skillDirectories) -> do
+          let requested = CodingAgentStep {provider = agent.provider, prompt = stepPrompt, access = access', model = agent.model, effort = agent.effort, deadlineMinutes = deadline, skills = skillDirectories}
           settle
             <$> if Text.null target
               then runCodingAgentStep (codingAgentKey key) requested payload
               else runCodingAgentStepIn target (codingAgentKey key) requested payload
     nested key name scope carried = case lookupPlaybook bundle name of
       Nothing -> pure ([StepResult key "refused" ("no playbook " <> name)], Just (key <> ": no playbook " <> name), carried)
-      Just child -> runSteps agent bundle payload parameters scope (key <> ".") carried child.steps
-    each _ _ _ [] done carried = pure (done, Nothing, carried)
-    each key name variable ((index, value) : rest) done carried = do
-      (results, stopped, carried') <- nested (key <> "." <> Text.pack (show (index :: Int))) name (Map.insert variable value variables) carried
+      Just child -> runSteps agent base bundle payload parameters scope (key <> ".") carried child.steps
+    each _ _ [] done carried = pure (done, Nothing, carried)
+    each key name ((index, bound) : rest) done carried = do
+      (results, stopped, carried') <- nested (key <> "." <> Text.pack (show (index :: Int))) name (Map.union bound variables) carried
       case stopped of
         Just reason -> pure (done <> results, Just reason, carried')
-        Nothing -> each key name variable rest (done <> results) carried'
-    itemValues =
-      zip [0 ..] . \case
-        Literal values -> values
-        FromPayload field -> case payload of
-          Object fields | Just (Array values) <- KeyMap.lookup (Key.fromText field) fields -> mapMaybe asText (toList values)
-          _ -> []
-    asText = \case
-      String value -> Just value
+        Nothing -> each key name rest (done <> results) carried'
+    -- Each item's variables: the item itself, and for an object its string
+    -- fields as ITEM.FIELD.
+    itemsFor carried variable = \case
+      Literal values -> Right [Map.singleton variable value | value <- values]
+      FromPayload field -> Right case payload of
+        Object fields | Just (Array values) <- KeyMap.lookup (Key.fromText field) fields -> [Map.singleton variable value | String value <- toList values]
+        _ -> []
+      FromStep {step = source, at, key = keyField} -> case Map.lookup (prefix <> source) carried.outputs of
+        Nothing -> Left ("step " <> source <> " left no JSON output")
+        Just output -> case jsonPointer at output of
+          Just (Array values)
+            | length values > 200 -> Left ("step " <> source <> " returned more than 200 items")
+            | otherwise -> do
+                bound <- traverse (itemOf variable keyField) (toList values)
+                let keys = mapMaybe (Map.lookup variable) bound
+                if Set.size (Set.fromList keys) /= length keys then Left ("step " <> source <> " returned duplicate item keys") else Right bound
+          _ -> Left ("step " <> source <> " output at " <> (if Text.null at then "/" else at) <> " is not an array")
+    itemOf variable keyField = \case
+      String value | Text.null keyField -> Right (Map.singleton variable value)
+      Object fields
+        | Just (String itemKey) <- KeyMap.lookup (Key.fromText keyField) fields ->
+            Right (Map.fromList ((variable, itemKey) : [(variable <> "." <> Key.toText name, value) | (name, String value) <- KeyMap.toList fields]))
+      _ -> Left ("an item has no string " <> (if Text.null keyField then "value" else "field " <> keyField))
+
+-- | Resolve a JSON pointer (@/a/0/b@; empty for the whole value).
+jsonPointer :: Text -> Value -> Maybe Value
+jsonPointer pointer root = foldl (\current token -> current >>= into token) (Just root) tokens
+  where
+    tokens = Text.replace "~0" "~" . Text.replace "~1" "/" <$> filter (not . Text.null) (Text.splitOn "/" pointer)
+    into token = \case
+      Object fields -> KeyMap.lookup (Key.fromText token) fields
+      Array values -> case reads (Text.unpack token) of
+        [(index, "")] | index >= 0, index < length values -> Just (toList values !! index)
+        _ -> Nothing
       _ -> Nothing
+
+-- | The last line of a message that is a JSON object.
+lastJsonObject :: Text -> Maybe Value
+lastJsonObject message = case [value | line <- reverse (Text.lines message), Just value@(Object _) <- [Aeson.decodeStrict (Text.Encoding.encodeUtf8 (Text.strip line))]] of
+  value : _ -> Just value
+  [] -> Nothing
 
 -- | Learnings as a prompt quotes them: observed evidence, not instructions.
 learningsText :: Carried -> Text

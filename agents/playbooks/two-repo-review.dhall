@@ -24,6 +24,7 @@ in  { main = "two-repo-review"
               , prompt = "This worktree is {{repository}}. Fix exactly one instance of: {{run.focus}}. Add a short, accurate Haddock comment; change nothing else and do not build."
               , workspace = "{{repository}}"
               , deadlineMinutes = 20
+              , skills = [] : List Text
               }
           , P.approval "continue" "Continue after reviewing the change in {{repository}}?"
           ]

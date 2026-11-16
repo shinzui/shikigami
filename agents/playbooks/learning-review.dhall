@@ -32,6 +32,7 @@ in  { main = "learning-review"
                   ''
               , workspace = "{{repository}}"
               , deadlineMinutes = 20
+              , skills = [] : List Text
               }
           , P.Step.Reflect
               { id = "reflect"

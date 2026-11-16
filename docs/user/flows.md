@@ -11,6 +11,9 @@ generated:
 
 # Flows
 
+A procedure of coding agents, declared tools and approvals is usually better written as a
+[playbook](playbooks.md) in Dhall; write a Haskell flow for behavior a playbook cannot express.
+
 `Flow` is the Haskell behavior DSL for agents whose work is a durable process, not a
 single synchronous computation. It is an embedded DSL: flows are ordinary Haskell functions
 using typed combinators, not a new Dhall syntax or a separate `.flow` language.

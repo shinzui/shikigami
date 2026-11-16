@@ -42,6 +42,7 @@ in  { main = "two-repo-review"
               , prompt = "This worktree is {{repository}}. Fix one instance of: {{run.focus}}."
               , workspace = "{{repository}}"
               , deadlineMinutes = 20
+              , skills = [] : List Text
               }
           , P.approval "continue" "Continue after reviewing the change in {{repository}}?"
           ]
@@ -55,18 +56,64 @@ The steps are:
 
 * `CodingAgent` — a coding agent works in `workspace` (a `mori://` identity or a checkout
   path; empty means the run's repository) and its change is committed on the run branch.
-* `Tool` — a declared CLI tool of the declaration, run as a durable step
-  ([declared tools](declared-tools.md)).
+  `skills` lists skill directories, relative to the bundle, attached to the agent.
+* `Tool` — a declared CLI tool of the declaration, run as a durable step in the run's
+  worktree ([declared tools](declared-tools.md)). Each argument is a template rendered into
+  exactly one word; the declared patterns decide whether the call runs.
 * `Approval` — the run waits for you in the local approval inbox.
+* `Reflect` — a read-only coding agent looks at the work in `workspace` and answers with up
+  to three learnings and an optional suggestion for the bundle (see below).
 * `ForEach` — run a sibling playbook once per item, binding the item to the variable named by
-  `item`. Items are a literal list or a string array of the run's payload (`FromPayload`).
-  Items run one at a time.
+  `item`. Items run one at a time and come from a literal list (`Literal`), a string array of
+  the run's payload (`FromPayload`), or an earlier step's JSON output (`FromStep`).
 * `RunPlaybook` — run a sibling playbook once.
 
-Text fields are templates: `{{run.NAME}}` reads a top-level string of the payload and
-`{{NAME}}` a variable bound by an enclosing `ForEach`. The first step that does not succeed
-(a failed coding agent, a declared tool that does not exit 0, a declined approval) ends the
-run.
+Text fields are templates: `{{run.NAME}}` reads a top-level string of the payload,
+`{{NAME}}` a variable bound by an enclosing `ForEach`, and `{{learnings}}` the learnings so
+far. The first step that does not succeed (a failed coding agent, a declared tool that does
+not exit 0, a declined approval) ends the run.
+
+## Fanning out over a step's output
+
+`FromStep { step, at, key }` reads the JSON output of an earlier step of the same playbook: a
+tool's standard output, or the last line of a coding agent's final message that is a JSON
+object. `at` is a JSON pointer to an array (empty for the whole output). An array of strings
+gives one item per string; an array of objects takes each item's key from its `key` field and
+binds each string field `f` as `{{ITEM.f}}`. More than 200 items, duplicate keys and a value
+that is not an array end the run.
+
+```dhall
+[ P.Step.Tool
+    { id = "packages"
+    , tool = "mori"
+    , args = [ "registry", "show", "{{run.project}}", "--full", "--json" ]
+    , deadlineMinutes = 1
+    }
+, P.Step.ForEach
+    { id = "each-package"
+    , items = P.Items.FromStep { step = "packages", at = "/packages", key = "name" }
+    , item = "package"
+    , playbook = "locate"
+    }
+]
+```
+
+Values from step output are observed: they may appear in prompts and as tool arguments, but a
+`workspace` may never name one, so a repository always comes from the bundle or the payload.
+`playbook validate` refuses a workspace that does.
+
+## Learnings and suggestions
+
+A run recalls the playbook's learnings from earlier runs when it starts, and each `Reflect`
+step adds its own; later prompts quote them through `{{learnings}}` as observed evidence, not
+instructions. The run keeps its new learnings for later runs when it ends.
+
+When a `Reflect` step suggests a change to the playbook, the run ends with one coding agent in
+the Git repository that holds the bundle, on that run's branch. The change is kept only when it
+touches nothing but the bundle file; the report names the commit and the
+`shikigami-local playbook validate` check to run on the branch. Nothing changes the current run
+or your checkout: you review the branch and merge it with Git, and later runs pin whatever the
+file holds when they start.
 
 Check a bundle before running it:
 

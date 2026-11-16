@@ -31,6 +31,7 @@ where
 import Control.Exception (SomeException, try)
 import Data.Aeson (FromJSON, ToJSON)
 import Data.List (nub)
+import Data.List qualified as List
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
@@ -56,17 +57,25 @@ data Playbook = Playbook
   deriving stock (Eq, Show, Generic)
   deriving anyclass (FromDhall, ToJSON, FromJSON)
 
--- | Items of a @ForEach@: literal texts, or a string array of the payload.
+-- | Items of a @ForEach@: literal texts, a string array of the payload, or
+-- an array in an earlier step's JSON output (a coding agent's last JSON
+-- line, or a tool's standard output) at a JSON pointer. An array of objects
+-- takes each item's key from its @key@ field and binds each string field
+-- @f@ as @{{ITEM.f}}@. Items from step output are observed: they may be
+-- quoted in prompts and passed as tool arguments, never name a workspace.
 data Items
   = Literal ![Text]
   | FromPayload !Text
+  | FromStep {step :: !Text, at :: !Text, key :: !Text}
   deriving stock (Eq, Show, Generic)
   deriving anyclass (FromDhall, ToJSON, FromJSON)
 
 data PlaybookStep
   = -- | A coding agent works in @workspace@ (the run's repository when
     -- empty) and its change is committed on the run branch.
-    CodingAgent {id :: !Text, prompt :: !Text, workspace :: !Text, deadlineMinutes :: !Natural}
+    -- @skills@ are skill directories, relative to the bundle, attached to
+    -- the agent.
+    CodingAgent {id :: !Text, prompt :: !Text, workspace :: !Text, deadlineMinutes :: !Natural, skills :: ![Text]}
   | -- | A declared tool of the playbook's declaration, as a durable step.
     Tool {id :: !Text, tool :: !Text, args :: ![Text], deadlineMinutes :: !Natural}
   | -- | Wait for the operator (the local inbox under the local operator).
@@ -100,6 +109,8 @@ data PlaybookError
   | PlaybookCycle ![Text]
   | UndefinedReference !Text !Text !Text
   | EmptyStepId !Text
+  | UnknownSourceStep !Text !Text !Text
+  | ObservedWorkspace !Text !Text !Text
   deriving stock (Eq, Show)
 
 renderPlaybookError :: PlaybookError -> Text
@@ -111,6 +122,8 @@ renderPlaybookError = \case
   PlaybookCycle path -> "playbooks run each other in a cycle: " <> Text.intercalate " -> " path
   UndefinedReference playbook step reference -> playbook <> "/" <> step <> ": {{" <> reference <> "}} names no run parameter or enclosing item"
   EmptyStepId playbook -> playbook <> ": a step has an empty id"
+  UnknownSourceStep playbook step source -> playbook <> "/" <> step <> ": items come from " <> source <> ", which is not an earlier step of this playbook"
+  ObservedWorkspace playbook step reference -> playbook <> "/" <> step <> ": the workspace names {{" <> reference <> "}}, which comes from step output; a repository must come from the bundle or the payload"
 
 lookupPlaybook :: Bundle -> Text -> Maybe Playbook
 lookupPlaybook Bundle {playbooks} wanted = case filter (\playbook -> playbook.name == wanted) playbooks of
@@ -127,29 +140,47 @@ validateBundle bundle@Bundle {main, playbooks} =
       Just root -> nub (walk [] [] root)
   where
     names = (.name) <$> playbooks
+    -- Variables are (name, observed).
     walk path variables Playbook {name, steps} =
       let ids = stepId <$> steps
        in [EmptyStepId name | any Text.null ids]
             <> [DuplicateStep name step | step <- nub ids, length (filter (== step) ids) > 1]
-            <> concatMap (checkStep (path <> [name]) variables name) steps
-    checkStep path variables playbookName step =
+            <> concat (zipWith (\earlier step -> checkStep (path <> [name]) variables name earlier step) (List.inits ids) steps)
+    checkStep path variables playbookName earlier step =
       [UndefinedReference playbookName (stepId step) reference | reference <- references step, not (defined variables reference)]
+        <> [ObservedWorkspace playbookName (stepId step) reference | reference <- workspaceReferences step, observed variables reference]
         <> case step of
-          ForEach {playbook = target, item = variable} -> into path (variables <> [variable]) playbookName (stepId step) target
+          ForEach {items = FromStep {step = source}}
+            | source `notElem` earlier -> [UnknownSourceStep playbookName (stepId step) source]
+          _ -> []
+        <> case step of
+          ForEach {playbook = target, item = variable, items} -> into path (variables <> [(variable, isObserved items)]) playbookName (stepId step) target
           RunPlaybook {playbook = target} -> into path variables playbookName (stepId step) target
           _ -> []
+    isObserved = \case
+      FromStep {} -> True
+      _ -> False
+    workspaceReferences = \case
+      CodingAgent {workspace} -> templateReferences workspace
+      Reflect {workspace} -> templateReferences workspace
+      _ -> []
+    variableOf reference = fst (Text.breakOn "." reference)
+    observed variables reference = maybe False id (lookup (variableOf reference) variables)
     into path variables playbookName step target
       | target `elem` path = [PlaybookCycle (path <> [target])]
       | otherwise = case lookupPlaybook bundle target of
           Nothing -> [UnknownSubPlaybook playbookName step target]
           Just child -> walk path variables child
-    defined variables reference = "run." `Text.isPrefixOf` reference || reference == "learnings" || reference `elem` variables
+    defined variables reference =
+      "run." `Text.isPrefixOf` reference
+        || reference == "learnings"
+        || reference `elem` (fst <$> variables)
+        || maybe False id (lookup (variableOf reference) variables)
     references = \case
       CodingAgent {prompt, workspace} -> templateReferences prompt <> templateReferences workspace
       Tool {args} -> concatMap templateReferences args
       Approval {prompt} -> templateReferences prompt
       Reflect {prompt, workspace} -> templateReferences prompt <> templateReferences workspace
-      ForEach {items = FromPayload _} -> []
       _ -> []
 
 -- | The names inside @{{…}}@.
@@ -196,6 +227,7 @@ renderStepTree bundle@Bundle {main} = maybe [] (go 0 []) (lookupPlaybook bundle 
     itemsText = \case
       Literal values -> "[" <> Text.intercalate ", " values <> "]"
       FromPayload field -> "run." <> field
+      FromStep {step, at} -> step <> " output" <> (if Text.null at then "" else " at " <> at)
     indent depth = Text.replicate (2 * depth) " "
 
 -- | Load and check a bundle file: a Dhall error, or every validation error.

@@ -31,6 +31,7 @@ import Keiro.Workflow (WorkflowId (..))
 import Shikigami.Agent.Capability.OneOff (oneOffCapabilityRuntime, renderOneOffCapabilityError)
 import Shikigami.Agent.Capability.Workspace (renderWorkspaceError, resolveWorkspaceScope, workspaceReadDescriptor, workspaceReadProvider)
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Sink (..), codingAgentAccessOf, requestedOverlays)
+import Shikigami.Agent.Name (agentNameText)
 import Shikigami.App.Config (AppConfig (..))
 import Shikigami.Authority
 import Shikigami.Capability.Catalog (CapabilityResolutionError (..), ResolutionSubject, mkCapabilityCatalog)
@@ -147,6 +148,11 @@ lightComposition config interaction record =
 
     resolveLocal RunSubject {agent = decl, principal, run, repository}
       | sinkKinds <- sinkKindNames decl, (first' : rest) <- sinkKinds = pure (Left (OutputsUnavailable (first' :| rest)))
+      -- Checked before the operator is asked: capability overlays (declared
+      -- tools among them) are resolved for an identity (FRIC-77).
+      | not (null (requestedOverlays decl)),
+        Nothing <- decl.identity =
+          pure (Left (CompositionFailed (agentNameText decl.name <> " requests capabilities (" <> Text.intercalate ", " (capabilityIdText <$> requestedOverlays decl) <> ") but declares no identity; add identity = Some { principal = \"principal_<name>\" }")))
       | null (requestedOverlays decl) && null decl.tools && not (isCodingAgent decl) =
           -- Nothing to grant: no repository is opened and every action is
           -- outside the (empty) grant.

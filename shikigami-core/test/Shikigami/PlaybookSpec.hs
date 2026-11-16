@@ -17,7 +17,7 @@ tests =
         bundle <- either (assertFailure . show) pure loaded
         take 2 (renderStepTree bundle) @?= ["playbook two-repo-review", "  each-repository  for each repository in run.repositories run review-one"],
       testCase "validation names the step for every kind of error" do
-        let step = CodingAgent {id = "fix", prompt = "Fix {{repo}}", workspace = "", deadlineMinutes = 5}
+        let step = CodingAgent {id = "fix", prompt = "Fix {{repo}}", workspace = "", deadlineMinutes = 5, skills = []}
             bundle =
               Bundle
                 { main = "a",
@@ -34,7 +34,7 @@ tests =
                 { main = "m",
                   playbooks =
                     [ Playbook {name = "m", steps = [ForEach {id = "each", items = Literal ["x", "y"], item = "repo", playbook = "one"}]},
-                      Playbook {name = "one", steps = [CodingAgent {id = "fix", prompt = "Fix {{repo}} for {{run.focus}}", workspace = "{{repo}}", deadlineMinutes = 5}]}
+                      Playbook {name = "one", steps = [CodingAgent {id = "fix", prompt = "Fix {{repo}} for {{run.focus}}", workspace = "{{repo}}", deadlineMinutes = 5, skills = []}]}
                     ]
                 }
         validateBundle bundle @?= [],
@@ -43,6 +43,14 @@ tests =
         templateReferences "a {{x}} b {{run.y}}" @?= ["x", "run.y"],
       testCase "{{learnings}} is always defined" do
         validateBundle Bundle {main = "m", playbooks = [Playbook {name = "m", steps = [Reflect {id = "r", prompt = "Given {{learnings}}", workspace = ""}]}]} @?= [],
+      testCase "step-sourced items need an earlier step and never name a workspace" do
+        let fanOut source = ForEach {id = "each", items = FromStep {step = source, at = "/packages", key = "name"}, item = "package", playbook = "one"}
+            tool = Tool {id = "packages", tool = "mori", args = ["registry", "show"], deadlineMinutes = 1}
+            inner workspace = Playbook {name = "one", steps = [CodingAgent {id = "fix", prompt = "Look at {{package}} ({{package.path}})", workspace, deadlineMinutes = 5, skills = []}]}
+            bundle steps workspace = Bundle {main = "m", playbooks = [Playbook {name = "m", steps}, inner workspace]}
+        validateBundle (bundle [tool, fanOut "packages"] "") @?= []
+        validateBundle (bundle [fanOut "packages", tool] "") @?= [UnknownSourceStep "m" "each" "packages"]
+        validateBundle (bundle [tool, fanOut "packages"] "{{package.path}}") @?= [ObservedWorkspace "one" "fix" "package.path"],
       testCase "a reflection is the last JSON line with learnings, bounded" do
         let message = "I looked.\n{\"learnings\": [\"a\", \"b\", \"c\", \"d\"], \"playbookSuggestion\": \"" <> Text.replicate 5000 "x" <> "\"}\n"
         fmap (.learnings) (parseReflection message) @?= Just ["a", "b", "c"]

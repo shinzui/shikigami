@@ -2,11 +2,20 @@
 -- and holds sibling playbooks; ForEach and RunPlaybook name a sibling. Text
 -- fields are templates: {{run.NAME}} reads a top-level string of the run's
 -- payload, {{NAME}} a variable bound by an enclosing ForEach.
-let Items = < Literal : List Text | FromPayload : Text >
+let Items =
+      < Literal : List Text
+      | FromPayload : Text
+      | FromStep : { step : Text, at : Text, key : Text }
+      >
 
 let Step =
       < CodingAgent :
-          { id : Text, prompt : Text, workspace : Text, deadlineMinutes : Natural }
+          { id : Text
+          , prompt : Text
+          , workspace : Text
+          , deadlineMinutes : Natural
+          , skills : List Text
+          }
       | Tool :
           { id : Text, tool : Text, args : List Text, deadlineMinutes : Natural }
       | Approval : { id : Text, prompt : Text }
@@ -22,7 +31,8 @@ let Bundle = { main : Text, playbooks : List Playbook }
 let codingAgent =
       \(id : Text) ->
       \(prompt : Text) ->
-        Step.CodingAgent { id, prompt, workspace = "", deadlineMinutes = 30 }
+        Step.CodingAgent
+          { id, prompt, workspace = "", deadlineMinutes = 30, skills = [] : List Text }
 
 let approval = \(id : Text) -> \(prompt : Text) -> Step.Approval { id, prompt }
 

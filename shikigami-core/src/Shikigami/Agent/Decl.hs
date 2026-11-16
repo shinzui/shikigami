@@ -365,9 +365,10 @@ data AgentDecl = AgentDecl
 requestedOverlays :: AgentDecl -> [CapabilityId]
 requestedOverlays decl@AgentDecl {capabilityOverlays, behavior} = case behavior of
   -- A coding agent runs its declared tools itself, through its gate; a flow
-  -- runs them as durable steps. Neither offers them to a model.
+  -- or a playbook runs them as durable steps. None offers them to a model.
   CodingAgent {} -> capabilityOverlays
   Flow {} -> capabilityOverlays
+  Playbook {} -> capabilityOverlays
   _ -> capabilityOverlays <> declaredToolCapabilities decl
 
 -- | @cli.<name>@ and @mcp.<server>@ for every declared tool, whatever host

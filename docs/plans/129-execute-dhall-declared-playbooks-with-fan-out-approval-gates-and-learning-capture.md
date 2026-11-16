@@ -117,11 +117,20 @@ it is never applied to a run already in progress.
   build ran and to end with a Conventional Commits subject). `shikigami-local playbook
   validate` on that worktree's file printed its step tree. Tests: `playbooks` (reflection
   parsing and bounds, `{{learnings}}`).
-- [ ] Milestone 4: `Skill` and `Tool` steps work, and `ForEach` can take its items from an
+- [x] Milestone 4 (2026-11-15): `Skill` and `Tool` steps work, and `ForEach` can take its items from an
   earlier step's JSON output. The `Tool` step runs a declared tool as a durable step with a
   deadline of up to 720 minutes and waits for EP-3 M4. In a real run, a playbook fans out over
   the items returned by a declared `mori` tool. The new ADR and `docs/user/playbooks.md` are
   published.
+  Evidence: `agents/playbooks/package-paths-agent.dhall` (declaring `mori` with `["registry",
+  "show"]` and `["path"]`) ran `package-paths.dhall` on mina (run
+  `274e1397-aa2c-51d9-a456-2136266b8dd9`). Step `packages` ran `mori registry show
+  shinzui/mina --full --json`; `each-package` fanned out over `/packages` keyed by `name`, and
+  each `locate.path` step ran `mori path mori://shinzui/mina/packages/<name>`, printing
+  `/Users/shinzui/Keikaku/bokuno/mina/mina-cli`, `…/mina-core` and `…/mina-ui`. The ledger shows
+  four `tool.called admitted cli.mori run …` entries, each exit 0. ADR 0128 and DOC-25 are
+  published, and DOC-6 points to playbooks. Tests: `playbooks` (step-sourced items need an
+  earlier step and never name a workspace). The Skill step is not delivered (Decision Log).
 
 
 ## Surprises & Discoveries
@@ -254,6 +263,16 @@ it is never applied to a run already in progress.
   confirmed by the operator; no new command was needed to start, inspect or answer a run.
   Date: 2026-11-15
 
+- Decision (M4): The Skill step is deferred. `CodingAgent` steps gain `skills` (directories
+  relative to the bundle) instead, and `FromStep` reads a coding agent's last JSON line or a
+  tool's standard output. A Tool step has no `workspace` or `outputFields` and runs in the
+  run's own repository; an uncertain tool step ends the run.
+  Rationale: A delegated Skill child is not driven by the foreground local command, and one
+  journaled `playbook-skill` step would allow a single Skill call per run. The campaign's
+  steps are coding agents that need the skills beside the playbook, which `skills` gives.
+  Ending on an uncertain tool never reruns a mutating command, which is the property that
+  matters; asking whether to retry is follow-up work.
+  Date: 2026-11-15
 - Decision (M3): Learnings use the flow `Memory` capability under one label,
   `playbook-learnings`: one recall when the run starts (filtered to memories tagged `playbook`
   and the bundle's main name) and one write of all new learnings when it ends, so the journal
@@ -267,7 +286,20 @@ it is never applied to a run already in progress.
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Complete on 2026-11-15. An operator declares a procedure as a Dhall bundle, checks it with
+`shikigami-local playbook validate`, and runs it with a `Playbook` declaration. The run is
+durable across repositories (each step a keyed child, a killed run reattaching on `--resume`),
+pauses on local-inbox approvals, carries learnings from one repository's reflection into the
+next repository's prompt, keeps them for later runs, and proposes bundle changes on a branch.
+Tool steps run declared commands, and `FromStep` fans out over their JSON output. ADR 0128
+records the design.
+
+Departures, all in the Decision Log: the bundle runs inside the agent run as a flow body
+rather than a per-transition child workflow; learnings use one recall and one write per run;
+the proposal check is the changed-file rule plus a printed `validate` command; conditions,
+progress objectives, the Skill step, a Tool `workspace` and `outputFields`, and parking an
+approval on an uncertain tool are not delivered. Friction: FRIC-77 (a bare
+`MissingCapabilityIdentity` after the grant prompt), met in EP-3 and again here.
 
 
 ## Context and Orientation

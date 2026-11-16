@@ -1,5 +1,11 @@
 # Bundle Update Log
 
+## 2026-11-16
+
+* **Update**: FRIC-77 resolved: Status set to resolved.
+
+* **Addition**: FRIC-77 records slowdown interface friction with mori://shinzui/shikigami: A declaration with declared tools fails late with a bare MissingCapabilityIdentity
+
 ## 2026-11-15
 
 * **Update**: FRIC-76 accepted: Recorded the likely cause and the group-level reproduction.

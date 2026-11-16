@@ -381,7 +381,7 @@ rule.
 | EP-1 | Run declared agents on the operator's own machine through a local-operator trust tier | [docs/plans/126-run-declared-agents-on-the-operator-s-own-machine-through-a-local-operator-trust-tier.md](../plans/126-run-declared-agents-on-the-operator-s-own-machine-through-a-local-operator-trust-tier.md) | EP-8 M1 | None | Complete |
 | EP-2 | Run Claude Code and Codex as durable harness workers inside agent runs | [docs/plans/127-run-claude-code-and-codex-as-durable-harness-workers-inside-agent-runs.md](../plans/127-run-claude-code-and-codex-as-durable-harness-workers-inside-agent-runs.md) | EP-1 | None | Complete |
 | EP-3 | Let agents declare CLI tools and MCP servers with authority attached to the declaration | [docs/plans/128-let-agents-declare-cli-tools-and-mcp-servers-with-authority-attached-to-the-declaration.md](../plans/128-let-agents-declare-cli-tools-and-mcp-servers-with-authority-attached-to-the-declaration.md) | EP-1; EP-2 M1 (for M3); EP-2 M2 (for M4) | None | Complete |
-| EP-4 | Execute Dhall-declared playbooks with fan-out, approval gates, and learning capture | [docs/plans/129-execute-dhall-declared-playbooks-with-fan-out-approval-gates-and-learning-capture.md](../plans/129-execute-dhall-declared-playbooks-with-fan-out-approval-gates-and-learning-capture.md) | EP-2; EP-8 M2 (for M2); EP-3 M4 (for M4) | EP-3 | In Progress |
+| EP-4 | Execute Dhall-declared playbooks with fan-out, approval gates, and learning capture | [docs/plans/129-execute-dhall-declared-playbooks-with-fan-out-approval-gates-and-learning-capture.md](../plans/129-execute-dhall-declared-playbooks-with-fan-out-approval-gates-and-learning-capture.md) | EP-2; EP-8 M2 (for M2); EP-3 M4 (for M4) | EP-3 | Complete |
 | EP-5 | Move the extension boundary out of shikigami-core with flow packs and an architecture fitness check | [docs/plans/130-move-the-extension-boundary-out-of-shikigami-core-with-flow-packs-and-an-architecture-fitness-check.md](../plans/130-move-the-extension-boundary-out-of-shikigami-core-with-flow-packs-and-an-architecture-fitness-check.md) | None | None | Not Started |
 | EP-6 | Shrink shikigami-core to the kernel by moving or retiring use-case subsystems | [docs/plans/131-shrink-shikigami-core-to-the-kernel-by-moving-or-retiring-use-case-subsystems.md](../plans/131-shrink-shikigami-core-to-the-kernel-by-moving-or-retiring-use-case-subsystems.md) | EP-5 | None | Not Started |
 | EP-7 | Modernize the keiro services with a declared campaign playbook | [docs/plans/132-modernize-the-keiro-services-with-a-declared-campaign-playbook.md](../plans/132-modernize-the-keiro-services-with-a-declared-campaign-playbook.md) | EP-3, EP-4 | EP-5 | Not Started |
@@ -908,7 +908,9 @@ the action record. Next in the recommended order are EP-8 M2, EP-9 and EP-3 M4; 
 M1 can still start in parallel. EP-8 M2 is accepted: outputs with a composition default (a
 local report), a local approval inbox, and `Trigger.Manual` as the default; the Kikan sinks
 keep their path until EP-10. EP-3 is complete (declared tools also run as durable, restart-safe
-flow steps). EP-9 is complete: a routine agent is one short file, `shikigami-local
+flow steps). EP-4 is complete: Dhall playbooks run durably across repositories with
+approvals, reflections that carry learnings forward, bundle proposals on a branch, and fan-out
+over tool output (ADR 0128). EP-9 is complete: a routine agent is one short file, `shikigami-local
 run` runs it with one confirmation, and `shikigami-local up` runs scheduled ones locally (the
 worker still composes local-operator ports only for coding agents; Surprises). Stage 1 (the pilot) ends at
 the declaration baseline, and stage 2 at the kernel baseline.
@@ -928,6 +930,13 @@ the declaration baseline, and stage 2 at the kernel baseline.
 
 
 ## Surprises & Discoveries
+
+- Observation: A declaration whose declared tools become capability overlays needs an
+  `identity`, and without one the run stopped after the grant prompt with only
+  `MissingCapabilityIdentity`. It cost a rerun in EP-3 and again in EP-4 (FRIC-77, resolved:
+  the local-operator composition now refuses such a declaration before the prompt and names
+  the field).
+  Evidence: FRIC-77; `docs/plans/129-execute-dhall-declared-playbooks-with-fan-out-approval-gates-and-learning-capture.md`.
 
 - Observation: The persisted execution snapshot whitelists workspace providers, and a finite
   token bound reserves each attempt's output plus its whole context window. EP-2's coding-agent
