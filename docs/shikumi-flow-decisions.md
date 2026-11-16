@@ -8,9 +8,9 @@ using governed delegation. No-match and ambiguous proposals create no children.
 The ordinary agent lifecycle dispatches declared sinks after a successful Flow.
 
 The implementation is in [Flow.Decision](../shikigami-core/src/Shikigami/Flow/Decision.hs),
-[the example](../shikigami-core/src/Shikigami/Flow/ShikumiDecisionExample.hs), and
-[its typed programs](../shikigami-core/src/Shikigami/Program/Decision/Examples.hs).
-The [proof declaration](../agents/proof/shikumi-decision-example.dhall) grants both
+[the example](../packs/flow-pack-examples/bodies/FlowPack/Examples/Body/DecisionExample.hs), and
+[its typed programs](../packs/flow-pack-examples/bodies/FlowPack/Examples/Program/Triage.hs).
+The [example declaration](../packs/flow-pack-examples/agents/shikumi-decision-example.dhall) grants both
 aliases and a bounded specialist set. Its request payload is
 `{"request":"Review the architecture practice"}`. Summaries and confidence are
 validated result fields; confidence must be finite and between zero and one.
@@ -131,7 +131,7 @@ cannot interpret durable Flow capabilities.
 The compiled `shikumi-judgment-example` Flow accepts
 `{"ticket":"Checkout is unavailable."}` and uses only the `judge` decision alias.
 It returns urgency, category and severity with their probability data. The
-[proof declaration](../agents/proof/shikumi-judgment-example.dhall) grants that
+[example declaration](../packs/flow-pack-examples/agents/shikumi-judgment-example.dhall) grants that
 alias and no delegation or sinks. Configure a matching binding:
 
 ```yaml
@@ -167,12 +167,12 @@ cabal run shikigami -- --config judgment.yaml enqueue-run shikumi-judgment-examp
 cabal run shikigami-worker -- --config judgment.yaml
 ```
 
-Immutable role packages also supply this declaration at
-`share/shikigami/agents/proof/shikumi-judgment-example.dhall`. For installed
-commands outside the checkout, set `SHIKIGAMI_AGENTS_DIRECTORY` to that absolute
-installed `agents/proof` directory; its schema import resolves inside the same
-package. Use the installed `shikigami` and `shikigami-worker` commands with the
-same private configuration and payload.
+The example flows ship in `packs/flow-pack-examples`, so run these commands from
+a distribution composed with that pack: `kikan-shikigami` and
+`kikan-shikigami-worker` in place of `shikigami` and `shikigami-worker`. The stock
+commands refuse the declaration and name the flows they have. The immutable role
+packages no longer ship the declaration; a Nix package of a distribution does not
+exist yet.
 
 This makes a real TypeSafe call when pointed at its public endpoint. The
 deterministic acceptance tests instead use a local HTTP server and synthetic
@@ -186,9 +186,7 @@ rewritten to match the local answer.
 Structured outcomes retain the raw answer separately from the derived result
 and actual call receipt. Committed outcomes replay after credentials and model
 bindings are removed, using retained codecs and the original result. New calls
-under changed settings require a new program identity. New judgment steps use
-the `shikigami-structured-judgments-v1` patch; historical generative steps keep
-their original labels and result envelope.
+under changed settings require a new program identity.
 
 Shikumi 0.5.1.0 implements
 `mori://shinzui/shikumi/okf/improvement-requests/concepts/IR-5`.
@@ -210,8 +208,12 @@ The registry retains effective instructions, demonstrations and local derivation
 state. Changing any of them requires a new immutable registration. Reusing a
 program ID and version with changed state is refused.
 
-Declare the finite slot inventory on `FlowDef`, add a closed `DecisionLabel`,
-and map it to literal preparation/result labels. A Flow calls
+Declare the finite slot inventory on `FlowDef`. Each step names its decision
+site, a checked label built with `decisionSite`, who pays for its calls, and its
+program: `decisionStep (decisionSite "examples-triage") UnaccountedCall (programRef triageProgram)`.
+The site names the journal steps `decision-prepare-<site>` and
+`decision-result-<site>`, so a pack's site starts with the pack's name. A pack
+lists its programs and their retained codecs in its `FlowPack` value. A Flow calls
 `decide staticStep authorizedAlias typedInput`; it never receives IO, a provider
 handler or credentials. The whole-Flow policy pins every slot before the first
 call, including a branch that has not yet executed. Decision-only Flows declare
@@ -226,10 +228,10 @@ no permission.
 
 ## Replay and version retention
 
-The supplied-ticket Judgment segment is guarded by
-`shikigami-structured-judgments-v1`; historical snapshots cannot enter its new
-steps. Generative triage/investigation labels belong to the current baseline,
-and Propose is guarded by `shikigami-initiative-v1`. The static labels and
+The example flows' labels belong to the examples pack and are pinned by its
+golden inventory. The `shikigami-structured-judgments-v1` patch was removed under
+the first-release exception (plan 131, M2). Propose is guarded by
+`shikigami-initiative-v1`. The static labels and
 envelope contracts are recorded in [workflow versioning](workflow-versioning.md).
 Each slot may run once per generation. Repeating a slot is refused. Unbounded
 decision loops need a rotating workflow with `restoreSeed` and `continueAsNew`.

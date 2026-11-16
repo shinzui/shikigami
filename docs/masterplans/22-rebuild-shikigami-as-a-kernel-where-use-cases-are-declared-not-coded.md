@@ -949,7 +949,12 @@ policy. The core exposes 388 modules, of which 149 have no consumer. EP-6 M1 is 
 2026-11-16 (`2965ac6e`): the `Deterministic` arm, `ShikumiProgram.enabledBy`, the
 `shikigami.fired` table, `shikigami danwa-spike` and `agents/detectors/` are gone, and the
 `agent-declaration` and `cli-shikigami` surfaces are re-pinned. Its real-model Skill run
-needs the operator's local-operator confirmation and is still open. Stage 1 (the pilot) ends at
+needs the operator's local-operator confirmation and is still open. EP-6 M2 is accepted on
+2026-11-16: decision and route sites are checked values a pack supplies, the remaining
+example flows and their programs moved to `flow-pack-examples`, and the `kikan-shikigami`
+distribution's worker created a real objective from `objective-example` while the stock
+worker refused the manifest. `flow-sdk` now re-exports whole kernel modules (758 names),
+which needs curating before the kernel freeze. Stage 1 (the pilot) ends at
 the declaration baseline, and stage 2 at the kernel baseline.
 
 - [ ] Architectural acceptance: the keiro modernization campaign runs for real on at least

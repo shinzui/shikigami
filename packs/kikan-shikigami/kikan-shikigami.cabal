@@ -1,0 +1,46 @@
+cabal-version: 3.4
+name: kikan-shikigami
+version: 0.1.0.0
+synopsis: The Kikan distribution of Shikigami: stock roles composed with flow packs
+description:
+  The stock Shikigami executables run kernel behaviors and declared agents.
+  The organizational use cases ship as flow packs, and this distribution
+  composes them into a worker, an admin command and a one-off agent command.
+  It holds executables and no library. See docs/user/flows.md.
+
+license: BSD-3-Clause
+build-type: Simple
+
+common common
+  default-language: GHC2024
+  hs-source-dirs: src-shared
+  other-modules: Packs
+  ghc-options:
+    -Wall
+    -Wcompat
+    -threaded
+    -rtsopts
+    -with-rtsopts=-N
+
+  build-depends:
+    base,
+    flow-pack-examples,
+    shikigami-core:flow-sdk,
+
+executable kikan-shikigami-worker
+  import: common
+  hs-source-dirs: app/worker
+  main-is: Main.hs
+  build-depends: shikigami-workers
+
+executable kikan-shikigami
+  import: common
+  hs-source-dirs: app/admin
+  main-is: Main.hs
+  build-depends: shikigami-server
+
+executable kikan-shikigami-agent-run
+  import: common
+  hs-source-dirs: app/agent-run
+  main-is: Main.hs
+  build-depends: shikigami-agent

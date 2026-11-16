@@ -24,7 +24,7 @@ selection and recoverable intermediate Skill turns remain planned.
 
 ## Run the example without a model key
 
-The [proof declaration](../../agents/proof/shikumi-decision-example.dhall) selects
+The [example declaration](../../packs/flow-pack-examples/agents/shikumi-decision-example.dhall), a flow of the examples [flow pack](flows.md#flow-packs), selects
 `shikumi-decision-example` and grants `decisionModels = [ "triage", "investigate" ]`.
 Triage either returns immediately or selects investigation. Investigation uses
 two Predict nodes and can return a result or propose a specialist route.
@@ -116,8 +116,8 @@ Library consumers query `Shikigami.Decision.Evidence.readDecisionReport` and
 pages of at most 200. There is no decision-report HTTP endpoint.
 
 New decisions require immutable program/validator/schema/parameter identities,
-a retained result codec, a closed `DecisionLabel`, and literal preparation/result
-step labels. Each declared slot runs once per workflow generation; loops need
+a retained result codec, and a decision site: a checked label that names the
+preparation and result steps and, for a pack, starts with the pack's name. Each declared slot runs once per workflow generation; loops need
 generation rotation. Follow [Flows](flows.md), the
 [authoring guide](../shikumi-flow-decisions.md), and
 [workflow versioning](../workflow-versioning.md) before changing a durable body.

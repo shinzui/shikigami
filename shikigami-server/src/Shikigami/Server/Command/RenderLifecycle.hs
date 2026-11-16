@@ -12,7 +12,7 @@ import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..))
 import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Loader (LoadError (..), loadAgent)
 import Shikigami.Flow (FlowDef (..), LifecycleDiagram (..))
-import Shikigami.Flow.Pack (FlowPack, FlowRegistry, PackFlow (..), RegisteredFlow (..), lookupFlow)
+import Shikigami.Flow.Pack (FlowPack, FlowRegistry, PackFlow (..), RegisteredFlow (..), lookupFlow, registeredFlowNames)
 import Shikigami.Server.Command.Flows (composeOrDie)
 import System.Exit (exitFailure)
 import System.IO (hPutStrLn, stderr)
@@ -38,7 +38,13 @@ renderFlow :: FlowRegistry -> DeclarationCoordinate "flow" -> IO ()
 renderFlow flows flowName =
   case lookupFlow flows flowName of
     Nothing -> do
-      hPutStrLn stderr ("render-lifecycle: unknown flow " <> Text.unpack (declarationCoordinateText flowName))
+      hPutStrLn
+        stderr
+        ( "render-lifecycle: unknown flow "
+            <> Text.unpack (declarationCoordinateText flowName)
+            <> "; registered flows: "
+            <> Text.unpack (Text.intercalate ", " (map declarationCoordinateText (registeredFlowNames flows)))
+        )
       exitFailure
     Just entry ->
       TIO.putStrLn entry.flow.definition.lifecycle.mermaid

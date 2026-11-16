@@ -97,8 +97,10 @@ component:
 You never edit `shikigami-core` to add a flow. `just kernel-fitness` fails the build if a
 use case is added there, and its message points back to this section.
 
-The pack in this repository is `packs/flow-pack-examples`, which owns the
-`at-risk-customer` flow. Its layout is the layout of every pack:
+The pack in this repository is `packs/flow-pack-examples`. It owns the teaching flows:
+`at-risk-customer`, `objective-example`, `shikumi-decision-example`,
+`shikumi-judgment-example` and `delegation-proof`. The walk-through below follows
+`at-risk-customer`. Its layout is the layout of every pack:
 
 ```text
 packs/flow-pack-examples/
@@ -196,6 +198,9 @@ main = runRole (agentRunRoleInfoWith [examplesPack])   -- shikigami-examples-age
 main :: IO ()
 main = runAdminWith [examplesPack]                      -- shikigami-examples
 ```
+
+`packs/kikan-shikigami` is the distribution for organizational use: a worker, the admin
+command and the one-off command, all composed from one list of packs.
 
 The entry points are `agentRunRoleInfoWith` (`Shikigami.Agent.Command`),
 `workerRoleInfoWith` (`Shikigami.Workers.Command`) and `runAdminWith`

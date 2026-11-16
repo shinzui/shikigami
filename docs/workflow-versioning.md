@@ -108,6 +108,14 @@ is in plan 130. No journal in the development database has ever recorded `classi
 labels are outside `just keiro-gate` until keiro can declare workflow fragments from separate
 packages (`mori://shinzui/keiro/okf/improvement-requests/concepts/IR-61`).
 
+Plan 131 (M2) moves the remaining example flows into the same pack. The decision labels of
+`triage`, `investigate` and `judge`, `decision-catalog-investigate` and the four
+`objectives-example-*` steps leave the AgentRun declaration, and the pack's sites and keys
+carry its prefix. The `shikigami-structured-judgments-v1` patch is removed with them: its
+guarded steps were example labels, and no workflow generation predates structured
+judgments. The retained native findings (`WorkflowPatchRemoved` and `WorkflowBodyChanged`)
+are in plan 131.
+
 
 ## What a durable workflow is, and why editing one is not like editing ordinary code
 

@@ -118,10 +118,39 @@ this Mac through the same operator verbs as before (`watchdog inspect`, `proposa
     clean on all eight surfaces after the re-pin. The wire fixture
     `shikigami-core/test/fixtures/wire/agent-decl-v1.json` lost its `enabledBy` key; the old
     bytes still decode, because the decoder ignores an unknown key.
-- [ ] M2: Flow decision, routing and slot vocabularies are open, checked values rather than
-  closed kernel enumerations. The example flows run from `flow-pack-examples`. The
+- [x] M2 (2026-11-16): Flow decision and routing vocabularies are open, checked values rather
+  than closed kernel enumerations. The example flows run from `flow-pack-examples`. The
   `kikan-shikigami` distribution exists, and its worker runs `objective-example`, which
-  creates a real objective in the local database.
+  creates a real objective.
+  - Evidence, commits `9e69d438` (open vocabularies), `9e73c8ba` (the examples) and the
+    distribution commit that follows. `kikan-shikigami render-lifecycle
+    packs/flow-pack-examples/agents/shikumi-decision-example.dhall` prints
+    `flowchart LR` / `Request --> Triage --> Investigation --> Specialist`; the stock
+    `shikigami render-lifecycle` on the same file exits 1 with `unknown flow
+    shikumi-decision-example; registered flows: run-declared-tool, watchdog-sweep,
+    propose-work, adaptive-delivery, architecture-practice-router,
+    opentelemetry-practice-review`.
+  - Real run, on an isolated database `shikigami_ep6_m2` in the local PostgreSQL (dropped
+    afterwards), with the repository's fixture authorizer (`shikigami-objective-fixture
+    authority` and `tests/objective-tracking/fixture-oauth.py`) as the action authority.
+    `kikan-shikigami-worker` logged `flow.registry.composed` with pack `examples` holding
+    `at-risk-customer`, `objective-example`, `shikumi-decision-example`,
+    `shikumi-judgment-example` and `delegation-proof`. After `kikan-shikigami enqueue-run
+    objective-example` it logged `flow.selected` with `"pack":"examples"` and
+    `worker.job.completed`. The run journaled `objectives-policy`,
+    `objectives-examples-create` (`ObjectiveCreated`, revision 0), `objectives-examples-plan`
+    (revision 1), `objectives-examples-progress` (revision 2) and
+    `objectives-examples-inspect`. `kikan-shikigami objectives inspect
+    shikigami_objective_01m7hfdjjwex2v8bqp1wa2sxw3 --json` showed one assignment
+    `flow-work` in state `Working`, goal "Reviewed artifact".
+  - The stock `shikigami-worker` on the same agents directory logged
+    `worker.agents.undeployable` with `unknown flow objective-example; registered flows: ...`
+    and exited with `refusing to start; 1 agent declaration(s) name a behavior this build
+    cannot run`.
+  - Suites at `9e73c8ba`: shikigami-core-test 963, shikigami-core-postgres-test 688,
+    shikigami-agent-test 42, shikigami-server-test 113, shikigami-workers-test 354 (FRIC-76
+    flake only), flow-pack-examples-test 14, api-baseline-test 39, conformance.
+    `just kernel-fitness` passes with three packages under `packs/`.
 - [ ] M3: `PracticeReview` and the `architecture-practice-router` flow run from
   `flow-pack-practice-review`. A real review trigger for a local repository produces the
   same outcome as before the move.
@@ -142,6 +171,45 @@ this Mac through the same operator verbs as before (`watchdog inspect`, `proposa
 
 ## Surprises & Discoveries
 
+- Observation (M2): a first worker start attached to the development database and resumed
+  its parked runs (FRIC-83). No external effect followed.
+  Evidence: the development shell exports `PG_CONNECTION_STRING`, which overrides
+  `database.connection_string` in a `--config` file. The worker meant for the isolated
+  database ran its resume loop on the development one for about thirty seconds. Campaign
+  run `c4341273-0d66-516c-a51b-b840d26be160`, which was not to be resumed, completed: its
+  coding-agent child journaled `admit = Left TierRefused "coding agents are admitted only
+  under the local-operator trust tier ..."`, so no coding agent was launched, and the run
+  then recorded a memory and ended. Run `56d2d81c` completed after
+  `ApprovalNotificationFailed`. Run `7a28975f` now fails to resume on a journal shape older
+  than the current codecs (`requireOutputs` and `tools` keys missing). Kizashi is unchanged
+  at `75b4308` with no worktree, no agent process existed, the worker had no sink
+  credentials and the stub provider. The rerun set `PG_CONNECTION_STRING` and `PGDATABASE`
+  in the environment of each process. The drain rule's open question in plan 130 is thereby
+  mostly settled: two of the three parked runs are terminal.
+- Observation (M2): `objective-example` cannot create an objective under
+  `authorization.actions.mode=disabled`.
+  Evidence: the first isolated run journaled `objectives-policy = Left ObjectiveDenied` and
+  no objective step. With the fixture authorizer configured as the Kikan authority the same
+  run created the objective. A worker has no local-operator authority for objectives; the
+  plan's Validation assumed EP-1's tier would cover this.
+- Observation (M2): `just keiro-diff` reports the two expected findings.
+  Evidence: for `9e69d438`,
+  `BREAKING: AgentRun workflow-patch shikigami-structured-judgments-v1: patch id existed in the old spec but was removed; the differ cannot prove that no workflow generation still replays its journaled branch [WorkflowPatchRemoved]`.
+  For `9e73c8ba`,
+  `BREAKING: AgentRun workflow-body AgentRun: workflow body labels, kinds, result types, or order changed without a new patch guard ... [WorkflowBodyChanged]`,
+  which covers the eleven removed example labels. Both runs end
+  `replay-neutral: stored-data replay is unchanged by this diff`.
+- Observation (M2): re-exporting whole kernel modules made `flow-sdk` large.
+  Evidence: `just api-baseline` reported `flow-sdk CHANGED` and its pin grew from 135 to 758
+  exported names, because `Shikigami.Flow.Decision`, `Shikigami.Decision.Contract`,
+  `Shikigami.Agent.Delegate` and the others export interpreters, hosts and store-facing
+  types beside the operations a body calls. A body cannot use an interpreter, since it
+  cannot name `IOE`, but the names are now public surface. Curating these modules into
+  facade exports is work for before the kernel freeze (plan 136, M3).
+- Observation (M2): the example programs carried a kernel type.
+  Evidence: `Shikigami.Program.Decision.Initiative` imported `ModelConfidence` from the
+  examples module. It is now `Shikigami.Program.Decision.Confidence`, a kernel module that
+  `flow-sdk` re-exports.
 - Observation (M1): the API baseline of plan 136 saw the removals the day it landed, and
   classified them as its rules say.
   Evidence: `just api-baseline` after the edits printed `agent-declaration  provisional
@@ -211,6 +279,47 @@ this Mac through the same operator verbs as before (`watchdog inspect`, `proposa
 
 ## Decision Log
 
+- Decision (M2): A decision site is the slot's existing checked label
+  (`DecisionSite = DecisionSlotLabel`), and `FlowDef` keeps EP-5's `decisionMode` with no
+  separate `SlotPolicy`.
+  Rationale: the slot label already was the suffix of both step names for all six sites, so
+  one value serves and no label byte moves. The plan sketched a new coordinate type and a
+  `SlotsDisabledWithoutAlias` policy; `AdvisoryDecisions` already drops a slot whose models
+  the declaration does not list, which is the watchdog's rule stated without naming an alias.
+  Date: 2026-11-16
+- Decision (M2): The `shikigami-structured-judgments-v1` patch gate is removed.
+  Rationale: its declared block held only the `judge` example labels, which leave the core
+  specification, and the kernel evaluated it by comparing the site with the example's name.
+  ADR-27 allows removing an unreleased patch branch: no generation predates structured
+  judgments, and the pre-release facts are unchanged from M1's recheck.
+  Date: 2026-11-16
+- Decision (M2): The kernel's decision, delegation and objective tests use test-local copies
+  of the example flows and programs (`Shikigami.Fixture.ExamplePack` and five fixture
+  modules under `shikigami-core/test/Shikigami/Fixture/`), with their original labels. The
+  pack has its own tests.
+  Rationale: about twenty kernel test modules use the examples as vehicles for decision
+  evidence, replay, accounting and delegation, and a core test may not depend on a pack.
+  This is the choice EP-5 made for at-risk-customer. The cost is about 430 duplicated lines
+  that are free to diverge.
+  Date: 2026-11-16
+- Decision (M2): The pack's golden label inventory derives decision labels from the declared
+  slots and at-risk-customer's labels from a journal. The objective and delegation keys of
+  the example flows are not derived by a test.
+  Rationale: walking those bodies needs replies only the kernel's stores can build. The real
+  run journaled `objectives-examples-{create,plan,progress,inspect}`, which is the evidence
+  for those four. keiro IR-61 would close the gap.
+  Date: 2026-11-16
+- Decision (M2): `kikan-shikigami` ships a worker, the admin command and the one-off command.
+  It has no server executable yet, and `examples-distribution` stays.
+  Rationale: the server composes no flow, so a `kikan-shikigami-server` would be the stock
+  server under another name (ADR-1). It arrives with the first pack that adds a route or a
+  server-side setting. The scheduler and stream consumer arrive in M5 and M4, as planned.
+  Date: 2026-11-16
+- Decision (M2): The runtime Nix package no longer ships the judgment example manifest, and
+  `--installed-judgment` qualification needs a worker composed with the examples pack.
+  Rationale: the stock worker no longer has the flow. `tools/qualification/README.md` says
+  so. A Nix package of a distribution is a follow-up, as EP-5 recorded.
+  Date: 2026-11-16
 - Decision (M1): The classification in Context and Orientation is confirmed against the tree
   at `e6378f8f`, with one amendment already written into its table: `AtRiskCustomer` left for
   `flow-pack-examples` under EP-5. Every other path in the table exists, and `kernel.namespaces`
@@ -1051,3 +1160,7 @@ kernel because it has no Kikan service dependency. M6 became a confirmation mile
 
 Revision note (2026-11-16, M1 implementation): M1's removals are implemented and committed.
 The real-model Skill run remains open because it needs the operator's confirmation.
+
+Revision note (2026-11-16, M2 implementation): M2 is complete. Decision sites reuse the slot
+label, the structured-judgments patch is removed, kernel tests keep fixture copies of the
+examples, and the first real run exposed the database override recorded as FRIC-83.

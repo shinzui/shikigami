@@ -121,11 +121,17 @@ no library; each `main` passes its packs to `agentRunRoleInfoWith`, `workerRoleI
 `runAdminWith`. A pack's test suite may depend on `shikigami-core` and on
 `shikigami-migrations:test-support`; its libraries may not.
 
+`packs/kikan-shikigami` is the distribution for organizational use. It composes every pack
+into `kikan-shikigami-worker`, the `kikan-shikigami` admin command and
+`kikan-shikigami-agent-run`, all reading one list in `src-shared/Packs.hs`. The stock
+executables run kernel behaviors and declared agents only; a use case that ships as a pack
+runs from the distribution.
+
 The stock executables compose only the builtin pack (`Shikigami.Flow.Builtin`), the flows
 still compiled into the core, so the frozen Nix closure of
 [ADR-39](../adr/0039-deployment-roles-share-a-frozen-cabal-source-closure.md) and the light
 one-off package of ADR-3 are unchanged. `packs/flow-pack-examples` and
-`packs/examples-distribution` are the first pair.
+`packs/examples-distribution` were the first pair.
 
 `just kernel-fitness` enforces these arrows, pins both stanzas' `reexported-modules` and each
 facade's export list (`shikigami-core/test/golden/sdk/`), and refuses a new use-case namespace

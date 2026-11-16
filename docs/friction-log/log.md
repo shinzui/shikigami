@@ -2,6 +2,9 @@
 
 ## 2026-11-16
 
+* **Addition**: FRIC-83 records detour environment friction with mori://shinzui/shikigami: A worker given a scratch database in its config file attached to the development database
+
+
 * **Addition**: FRIC-82 records detour environment friction with mori://shinzui/shikigami: The development shell acts on whatever directory it is entered from
 
 
