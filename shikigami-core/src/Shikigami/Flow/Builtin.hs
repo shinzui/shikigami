@@ -28,7 +28,7 @@ import Shikigami.Capability.Declared (mkToolName)
 import Shikigami.Coordination.Capability (AdaptiveDelivery)
 import Shikigami.Coordination.Decision (adaptiveSlots)
 import Shikigami.DeclaredTool.Workflow qualified as DeclaredToolWorkflow
-import Shikigami.Flow (FlowDef (..), FlowEffects, LifecycleDiagram (..))
+import Shikigami.Flow (DecisionMode (..), FlowDef (..), FlowEffects, LifecycleDiagram (..))
 import Shikigami.Flow.AdaptiveDelivery (adaptiveDelivery)
 import Shikigami.Flow.AtRiskCustomer (atRiskCustomerFlow)
 import Shikigami.Flow.DeclaredTool qualified as DeclaredTool
@@ -82,17 +82,19 @@ builtinFlows =
         { name = declarationCoordinate "run-declared-tool",
           decisionSlots = [],
           requiresDefaultModel = DefaultModelOptional,
+          decisionMode = StrictDecisions,
           lifecycle = LifecycleDiagram "flowchart LR\n Admit --> Attempt --> Settle" []
         }
       runDeclaredToolFlow,
     kernelCapabilityFlow
-      FlowDef {name = watchdogFlowName, decisionSlots = watchdogSlots, requiresDefaultModel = DefaultModelOptional, lifecycle = LifecycleDiagram "flowchart LR\n Grant --> Observe --> Classify --> Record --> Drift --> Deliver --> Close" []}
+      FlowDef {name = watchdogFlowName, decisionSlots = watchdogSlots, requiresDefaultModel = DefaultModelOptional, decisionMode = AdvisoryDecisions, lifecycle = LifecycleDiagram "flowchart LR\n Grant --> Observe --> Classify --> Record --> Drift --> Deliver --> Close" []}
       watchdogSweep,
     kernelCapabilityFlow
       FlowDef
         { name = proposeWorkFlowName,
           decisionSlots = proposeWorkSlots,
           requiresDefaultModel = DefaultModelOptional,
+          decisionMode = StrictDecisions,
           lifecycle = LifecycleDiagram "flowchart LR\n Observe --> Prefilter --> Assess --> Propose --> Await --> Accept" []
         }
       proposeWork,
@@ -101,6 +103,7 @@ builtinFlows =
         { name = declarationCoordinate "adaptive-delivery",
           decisionSlots = adaptiveSlots,
           requiresDefaultModel = DefaultModelOptional,
+          decisionMode = StrictDecisions,
           lifecycle = LifecycleDiagram "flowchart LR\n Checkpoint --> Decision --> Validate --> Commands --> Findings --> Checkpoint\n Validate --> ExactCompletionProposal" []
         }
       adaptiveDelivery,
@@ -109,6 +112,7 @@ builtinFlows =
         { name = declarationCoordinate "objective-example",
           decisionSlots = [],
           requiresDefaultModel = DefaultModelOptional,
+          decisionMode = StrictDecisions,
           lifecycle = LifecycleDiagram "flowchart LR\n Create --> Plan --> Progress --> Inspect" []
         }
       objectiveExample,
@@ -117,6 +121,7 @@ builtinFlows =
         { name = declarationCoordinate "shikumi-decision-example",
           decisionSlots = exampleSlots,
           requiresDefaultModel = DefaultModelOptional,
+          decisionMode = StrictDecisions,
           lifecycle = LifecycleDiagram "flowchart LR\n Request --> Triage --> Investigation --> Specialist" []
         }
       shikumiDecisionExample,
@@ -125,6 +130,7 @@ builtinFlows =
         { name = declarationCoordinate "shikumi-judgment-example",
           decisionSlots = judgmentSlots,
           requiresDefaultModel = DefaultModelOptional,
+          decisionMode = StrictDecisions,
           lifecycle = LifecycleDiagram "flowchart LR\n Ticket --> Judgment --> Result" []
         }
       shikumiJudgmentExample,
@@ -133,6 +139,7 @@ builtinFlows =
         { name = declarationCoordinate "at-risk-customer",
           decisionSlots = [],
           requiresDefaultModel = DefaultModelRequired,
+          decisionMode = StrictDecisions,
           lifecycle = atRiskCustomerLifecycleDiagram
         }
       atRiskCustomerFlow,
@@ -141,6 +148,7 @@ builtinFlows =
         { name = declarationCoordinate "delegation-proof",
           decisionSlots = [],
           requiresDefaultModel = DefaultModelRequired,
+          decisionMode = StrictDecisions,
           lifecycle =
             LifecycleDiagram
               { mermaid = "flowchart LR\n  Supervisor --> WebResearcher",
@@ -153,6 +161,7 @@ builtinFlows =
         { name = declarationCoordinate "architecture-practice-router",
           decisionSlots = [],
           requiresDefaultModel = DefaultModelRequired,
+          decisionMode = StrictDecisions,
           lifecycle =
             LifecycleDiagram
               { mermaid = "flowchart LR\n  Input --> Router --> Specialist",
@@ -165,6 +174,7 @@ builtinFlows =
         { name = declarationCoordinate opentelemetryPracticeReviewFlowName,
           decisionSlots = [],
           requiresDefaultModel = DefaultModelRequired,
+          decisionMode = StrictDecisions,
           lifecycle =
             LifecycleDiagram
               { mermaid = opentelemetryPracticeReviewMermaid,

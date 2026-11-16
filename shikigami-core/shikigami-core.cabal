@@ -201,6 +201,8 @@ library
     Shikigami.Flow.OpenTelemetryPracticeReview
     Shikigami.Flow.Pack
     Shikigami.Flow.Routing
+    Shikigami.Flow.Sdk
+    Shikigami.Flow.Sdk.Program
     Shikigami.Flow.ShikumiDecisionExample
     Shikigami.Flow.ShikumiJudgmentExample
     Shikigami.Flow.Watchdog
@@ -302,6 +304,7 @@ library
     Shikigami.ObjectiveTrackerLookup.ReadModelHoles
     Shikigami.Output
     Shikigami.Output.Local
+    Shikigami.Pack.Sdk
     Shikigami.Playbook
     Shikigami.Playbook.Run
     Shikigami.PracticeReview
@@ -622,6 +625,34 @@ library inspection
     wai,
     wai-websockets,
     websockets,
+
+-- The flow SDK: everything a flow body and a pack value may import
+-- (docs/adr/0129). A pack's `bodies` sublibrary depends on this component
+-- alone, so GHC holds a body to these modules. The list is pinned in
+-- tools/style/module-ownership.json (kernel.sdkModules).
+library flow-sdk
+  import: common
+  visibility: public
+  build-depends:
+    base,
+    shikigami-core,
+
+  reexported-modules:
+    Shikigami.Flow.Sdk,
+    Shikigami.Flow.Sdk.Program,
+
+-- The pack SDK: what a pack's interpreter may import in addition. Only a
+-- pack's main library depends on it; IOE and Store are nameable here and
+-- nowhere a flow body can see.
+library pack-sdk
+  import: common
+  visibility: public
+  build-depends:
+    base,
+    shikigami-core,
+
+  reexported-modules:
+    Shikigami.Pack.Sdk
 
 -- Host adapters of the local-operator tier: the process launcher, the
 -- worktree provider and the checkout resolver. The domain library links no

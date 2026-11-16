@@ -39,7 +39,7 @@ import Shikigami.PackageArchitectureSpec (Stanza (..), cabalFieldEntries, cabalP
 import System.Directory (doesDirectoryExist, listDirectory)
 import System.FilePath (dropExtension, makeRelative, splitDirectories, takeExtension, (</>))
 import Test.Tasty (TestTree, testGroup)
-import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
+import Test.Tasty.HUnit (assertBool, assertEqual, assertFailure, testCase, (@?=))
 
 -- ── The policy ──────────────────────────────────────────────────────────────
 
@@ -261,7 +261,7 @@ readTree = do
   let coreCabal = maybe "" id (lookup "shikigami-core" stockFiles)
       sdkExports =
         Map.fromList
-          [ (component, cabalFieldEntries "reexported-modules:" block)
+          [ (component, Text.dropWhileEnd (== ',') <$> cabalFieldEntries "reexported-modules:" block)
           | component <- Map.keys ownership.kernel.sdkModules,
             Just block <- [stanzaBlock ("library " <> component) coreCabal]
           ]
@@ -294,6 +294,16 @@ stanzaBlock header contents = case dropWhile ((/= header) . Text.stripEnd) (Text
   [] -> Nothing
   (first : rest) -> Just (Text.unlines (first : takeWhile (\line -> Text.null line || Text.head line == ' ') rest))
 
+-- | The names a module header exports, one per entry, sorted. Comments and
+-- section headings are dropped, so only a change to the surface moves it.
+exportList :: Text -> [Text]
+exportList source = sort [Text.unwords (Text.words entry) | entry <- Text.splitOn "," body, not (Text.null (Text.strip entry))]
+  where
+    header = Text.unlines (takeWhile (/= "where") (dropWhile (not . Text.isPrefixOf "module ") (Text.lines source)))
+    uncommented = Text.unlines [fst (Text.breakOn "--" line) | line <- Text.lines header]
+    -- No entry of these facades has an inner comma, so splitting on commas is exact.
+    body = Text.dropEnd 1 (Text.stripEnd (Text.drop 1 (Text.dropWhile (/= '(') uncommented)))
+
 -- ── Tests ───────────────────────────────────────────────────────────────────
 
 tests :: TestTree
@@ -311,6 +321,20 @@ tests =
         let roots = Set.fromList (mapMaybe (\path -> moduleOf path >>= rootOf) inputs.sources)
         Map.keysSet policy.namespaces @?= roots
         assertBool "something is leaving" (any (/= Kernel) (Map.elems policy.namespaces)),
+      -- Adding a name to an SDK facade is a reviewed diff: the golden file
+      -- changes with it. EP-11 reuses this as the SDK's compatibility check.
+      testCase "each SDK facade exports exactly its golden list" do
+        root <- repositoryRoot
+        (policy, _) <- readTree
+        let facades = concat (Map.elems policy.sdkModules)
+        assertBool "the policy names SDK facades" (not (null facades))
+        mapM_
+          ( \facade -> do
+              source <- TIO.readFile (root </> "shikigami-core/src" </> Text.unpack (Text.replace "." "/" facade) <> ".hs")
+              golden <- TIO.readFile (root </> "shikigami-core/test/golden/sdk" </> Text.unpack facade <> ".txt")
+              assertEqual (Text.unpack facade <> " differs from its golden export list") (Text.lines golden) (exportList source)
+          )
+          facades,
       testCase "a planted use-case namespace fails with the route out of the core" do
         let found = kernelViolations synthetic (fixture {sources = "Shikigami/Campaign/Plan.hs" : fixture.sources})
         found @?= [UnknownNamespace "Campaign" "Shikigami/Campaign/Plan.hs"]

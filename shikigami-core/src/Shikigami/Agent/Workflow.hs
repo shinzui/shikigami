@@ -1267,7 +1267,8 @@ playbookFlow agent pinned =
       { Flow.name = declarationCoordinate "playbook",
         Flow.lifecycle = Flow.LifecycleDiagram "flowchart LR\n Admit --> Steps --> Report" [],
         Flow.decisionSlots = [],
-        Flow.requiresDefaultModel = DefaultModelOptional
+        Flow.requiresDefaultModel = DefaultModelOptional,
+        Flow.decisionMode = Flow.StrictDecisions
       }
     (runPlaybook agent pinned)
 
@@ -1283,7 +1284,7 @@ runFlowDefinition ::
   FlowPack.PackFlow ->
   Eff (Workflow : AppEffects) (Either Text Value)
 runFlowDefinition deps activeBehaviorEnv resolvedProfile approvalPolicyForRun recordedIdentity sid decl job FlowPack.PackFlow {FlowPack.definition = flow, FlowPack.run = runFlow} = do
-  (_, childWorkflowId) <- currentWorkflow
+  (flowWorkflowName, childWorkflowId) <- currentWorkflow
   -- The read view a pack's interpreter is given. It is plain data built
   -- outside every step, so it adds nothing to the journal.
   let runContext =
@@ -1291,6 +1292,7 @@ runFlowDefinition deps activeBehaviorEnv resolvedProfile approvalPolicyForRun re
           { FlowPack.agent = decl,
             FlowPack.identity = recordedIdentity,
             FlowPack.session = sid,
+            FlowPack.workflowName = flowWorkflowName,
             FlowPack.runId = childWorkflowId,
             FlowPack.occurredAt = runJobOccurredAt job,
             FlowPack.activity = activityFromJob job,
@@ -1345,7 +1347,7 @@ runFlowDefinition deps activeBehaviorEnv resolvedProfile approvalPolicyForRun re
         | Left refusal <- decisionTimeout = EffException.throwIO (DecisionAbort (DecisionContract.decisionFailure DecisionContract.InvalidSlot refusal))
         | Just pool <- (.deliveryPool) deps,
           Right timeout <- decisionTimeout =
-            (if flow.name == WatchdogFlow.watchdogFlowName then FlowDecision.runDecisionAdvisory else FlowDecision.runDecision)
+            (case flow.decisionMode of Flow.AdvisoryDecisions -> FlowDecision.runDecisionAdvisory; Flow.StrictDecisions -> FlowDecision.runDecision)
               FlowDecision.DecisionEnv
                 { agent = decl,
                   inventory = inventory,

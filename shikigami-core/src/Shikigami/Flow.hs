@@ -3,6 +3,7 @@
 
 module Shikigami.Flow
   ( FlowDef (..),
+    DecisionMode (..),
     FlowEffects,
     FlowRuntime (..),
     LifecycleDiagram (..),
@@ -17,7 +18,7 @@ import Shikigami.Agent.Approval (ApprovalEnv)
 import Shikigami.Agent.Decl (AgentDecl (..))
 import Shikigami.Agent.DeclarationValue
 import Shikigami.Coordination.Capability (AdaptiveDelivery)
-import Shikigami.Decision.Contract (DecisionSlot)
+import Shikigami.Decision.Contract (DecisionSlot (..))
 import Shikigami.Duration
 import Shikigami.Flow.Acknowledgement (Acknowledgement)
 import Shikigami.Flow.Capability (Activity, Memory, Sink)
@@ -29,7 +30,6 @@ import Shikigami.Flow.Initiative (Initiative)
 import Shikigami.Flow.Objectives (Objectives)
 import Shikigami.Flow.Observe (Observe)
 import Shikigami.Flow.Routing (Routing)
-import Shikigami.Flow.Watchdog (driftAlias, watchdogFlowName)
 import Shikigami.Flow.Workers (Workers)
 import Shikigami.PracticeReview.Capability
   ( ExecutionContext,
@@ -100,6 +100,17 @@ data LifecycleDiagram = LifecycleDiagram
   }
   deriving stock (Eq, Show)
 
+-- | How a flow's decisions bind it.
+--
+-- A strict flow needs every slot it declares: a declaration that cannot fill
+-- one is refused, and a failed decision fails the run. An advisory flow
+-- treats a decision as an optional opinion: a slot none of whose models the
+-- declaration lists is left out of the run's inventory, and a decision that
+-- cannot be made is reported to the body instead of failing the run. This is
+-- declaration data so that the kernel never has to know a flow by name.
+data DecisionMode = StrictDecisions | AdvisoryDecisions
+  deriving stock (Eq, Show)
+
 -- | A flow's declaration data. The body and its interpreter live beside it in
 -- 'Shikigami.Flow.Pack.PackFlow'; a caller that only wants a flow's name,
 -- diagram or decision slots needs nothing that can run it.
@@ -107,14 +118,15 @@ data FlowDef = FlowDef
   { name :: !(DeclarationCoordinate "flow"),
     lifecycle :: !LifecycleDiagram,
     decisionSlots :: ![DecisionSlot],
-    requiresDefaultModel :: !DefaultModelRequirement
+    requiresDefaultModel :: !DefaultModelRequirement,
+    decisionMode :: !DecisionMode
   }
 
 instance Show FlowDef where
   show FlowDef {name} = "FlowDef {name = " <> show name <> "}"
 
--- Only the watchdog's advisory drift slot is optional. Other inventories stay strict.
+-- | The decision slots one declaration's run of a flow is held to.
 flowDecisionSlotsFor :: AgentDecl -> FlowDef -> [DecisionSlot]
-flowDecisionSlotsFor declaration flow
-  | flow.name == watchdogFlowName && driftAlias `notElem` declaration.decisionModels = []
-  | otherwise = flow.decisionSlots
+flowDecisionSlotsFor declaration flow = case flow.decisionMode of
+  StrictDecisions -> flow.decisionSlots
+  AdvisoryDecisions -> [slot | slot <- flow.decisionSlots, any (`elem` declaration.decisionModels) slot.models]

@@ -59,9 +59,11 @@ import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Text
 import Data.Time (UTCTime)
 import Effectful (Eff, IOE, (:>))
-import Keiro.Workflow.Types (WorkflowId)
+import Effectful.Error.Static (Error)
+import Keiro.Workflow.Types (WorkflowId, WorkflowName)
 import Kioku.Id (SessionId)
 import Kiroku.Store.Effect (Store)
+import Kiroku.Store.Error (StoreError)
 import Shikigami.Activity (ActivityEnvelope)
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..))
 import Shikigami.Agent.DeclarationValue
@@ -113,14 +115,16 @@ data FlowPack = FlowPack
 
 -- | A flow body plus the pack-owned interpreter that runs it.
 --
--- @run@ is the only place a pack may use 'IOE' and 'Store'. A pack with a
+-- @run@ is the only place a pack may use 'IOE' and 'Store'. It is also given
+-- the store's error channel, because a journaled read that fails must reach
+-- the workflow driver as the retryable store error it is. A pack with a
 -- capability of its own builds it as @\\ctx -> interpretMine ctx . body@, where
 -- @body@ lives in the pack's @bodies@ sublibrary and is typed
 -- @(FlowEffects es, Mine :> es) => Value -> Eff es Value@. The kernel
 -- installs its interpreters around @run@ and never names the pack's.
 data PackFlow = PackFlow
   { definition :: !FlowDef,
-    run :: !(forall es. (FlowEffects es, IOE :> es, Store :> es) => FlowRunContext -> Value -> Eff es Value)
+    run :: !(forall es. (FlowEffects es, IOE :> es, Store :> es, Error StoreError :> es) => FlowRunContext -> Value -> Eff es Value)
   }
 
 -- | A flow whose body needs only kernel capabilities, so it has no
@@ -135,6 +139,8 @@ data FlowRunContext = FlowRunContext
   { agent :: !AgentDecl,
     identity :: !ResolvedAgentIdentity,
     session :: !SessionId,
+    -- | The native workflow this run is an instance of, and its id.
+    workflowName :: !WorkflowName,
     runId :: !WorkflowId,
     occurredAt :: !UTCTime,
     activity :: !ActivityEnvelope,

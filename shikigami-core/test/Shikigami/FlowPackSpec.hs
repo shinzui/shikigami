@@ -7,7 +7,7 @@ import Data.List.NonEmpty qualified as NonEmpty
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Shikigami.Agent.DeclarationValue (declarationCoordinate, declarationCoordinateText)
-import Shikigami.Flow (FlowDef (..), LifecycleDiagram (..))
+import Shikigami.Flow (DecisionMode (..), FlowDef (..), LifecycleDiagram (..))
 import Shikigami.Flow.Builtin (builtinFlowRegistry, builtinPack)
 import Shikigami.Flow.Pack
 import Shikigami.Program.Registry (noopSummaryTask)
@@ -71,5 +71,6 @@ probePack name flowNames =
         { name = declarationCoordinate flowName,
           lifecycle = LifecycleDiagram "flowchart LR\n Start --> End" [],
           decisionSlots = [],
-          requiresDefaultModel = DefaultModelOptional
+          requiresDefaultModel = DefaultModelOptional,
+          decisionMode = StrictDecisions
         }
