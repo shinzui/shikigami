@@ -9,7 +9,8 @@
 -- it to the Flow.
 module Shikigami.Flow.Routing
   ( Routing,
-    RouteLabel (..),
+    RouteSite,
+    routeSite,
     RoutedRoute (..),
     RoutingEnv (..),
     RoutingRuntime (..),
@@ -42,6 +43,7 @@ import Keiro.Workflow (StepName (..), Workflow, WorkflowId (..), WorkflowName (.
 import Kioku.Id (SessionId, idText)
 import Shibuya.Telemetry.Effect (Span, Tracing, addAttribute, defaultSpanArguments, withSpan')
 import Shikigami.Agent.Decl (AgentDecl (..), RouterConfidence (..))
+import Shikigami.Agent.DeclarationValue (DeclarationCoordinate, declarationCoordinate, declarationCoordinateText)
 import Shikigami.Agent.ExpertiseKey (expertiseKeyText)
 import Shikigami.Agent.Loader (AgentLoadReport)
 import Shikigami.Agent.Name (agentNameText)
@@ -53,10 +55,15 @@ import Shikigami.Router.Catalog (CandidateAvailability (..), CandidateCatalog (.
 import Shikigami.Router.Decision (RouteDecision (..), RouteOutcome (..), RouteSelection (..), RoutingError, renderRoutingError, validateRouteDecision)
 import Shikigami.Router.Declaration (RouterDeclarationError, RouterDeclarationView (policy), ValidatedRouterDeclaration, renderRouterDeclarationError, validateRouterDeclaration, validatedRouterDeclaration)
 
--- | Closed registry of routing call sites.  A constructor maps to two literal
--- declared step names; payload data can never become a durable label.
-data RouteLabel = ArchitecturePractice
-  deriving stock (Eq, Ord, Show, Generic)
+-- | A routing call site, as a checked coordinate a flow supplies. It names
+-- the two journal steps of a routing decision, @route-catalog-\<site\>@ and
+-- @route-decision-\<site\>@, so it is a durable label and a pack's site
+-- starts with the pack's name. It is a literal of the flow's code; payload
+-- data never becomes a site.
+type RouteSite = DeclarationCoordinate "route-site"
+
+routeSite :: Text -> RouteSite
+routeSite = declarationCoordinate
 
 -- | Process-local dependencies.  Neither function result is trusted until it
 -- crosses the journal and validation boundary in 'runRouting'.
@@ -91,14 +98,14 @@ data RoutedRoute = RoutedRoute
   deriving stock (Eq, Show)
 
 data Routing :: Effect where
-  Route :: RouteLabel -> Value -> Routing m RoutedRoute
+  Route :: RouteSite -> Value -> Routing m RoutedRoute
 
 type instance DispatchOf Routing = Dynamic
 
-route :: (Routing :> es) => RouteLabel -> Value -> Eff es RouteDecision
+route :: (Routing :> es) => RouteSite -> Value -> Eff es RouteDecision
 route label payload = (.decision) <$> routeWithCatalog label payload
 
-routeWithCatalog :: (Routing :> es) => RouteLabel -> Value -> Eff es RoutedRoute
+routeWithCatalog :: (Routing :> es) => RouteSite -> Value -> Eff es RoutedRoute
 routeWithCatalog label payload = send (Route label payload)
 
 runRouting ::
@@ -207,10 +214,10 @@ boundedRationales = Text.intercalate " | " . fmap (boundedText rationaleLimit) .
 boundedText :: Int -> Text -> Text
 boundedText = Text.take
 
-routeStepNames :: RouteLabel -> (StepName, StepName)
-routeStepNames ArchitecturePractice =
-  ( StepName "route-catalog-architecture-practice",
-    StepName "route-decision-architecture-practice"
+routeStepNames :: RouteSite -> (StepName, StepName)
+routeStepNames site =
+  ( StepName ("route-catalog-" <> declarationCoordinateText site),
+    StepName ("route-decision-" <> declarationCoordinateText site)
   )
 
 -- | Production runtime over the exact startup loader report and one immutable

@@ -258,7 +258,7 @@ alias :: ModelAlias
 alias = modelAliasFromNonEmpty ('d' :| "rift")
 
 driftStep :: Decision.DecisionStep DriftInput DriftProposal
-driftStep = Decision.decisionStep Decision.Drift (programRef driftProgram)
+driftStep = Decision.decisionStep (Decision.decisionSite "drift") Decision.RootAccountedCall (programRef driftProgram)
 
 catalog :: ModelCatalog
 catalog = must (modelCatalog [must (modelBinding alias "1" "drift" "1" (stubModel & #modelId .~ "stub-drift" & #contextWindow .~ 128) (Options.emptyOptions & #maxTokens .~ Just 64) Nothing)])

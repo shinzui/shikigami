@@ -1,7 +1,7 @@
 {-# LANGUAGE DataKinds #-}
 
 -- | One bounded advisory sweep per invocation. No intervention operations.
-module Shikigami.Flow.Watchdog (watchdogSweep, watchdogFlowName, watchdogSlots, driftAlias) where
+module Shikigami.Flow.Watchdog (watchdogSweep, watchdogFlowName, watchdogSlots, driftAlias, driftStep) where
 
 import Data.Aeson (Value, object, toJSON, (.=))
 import Data.List.NonEmpty (NonEmpty (..))
@@ -15,7 +15,7 @@ import Shikigami.Agent.DeclarationValue (DeclarationCoordinate, declarationCoord
 import Shikigami.Decision.Contract (DecisionSlot, FailureCode (EvidenceFailure), failureCode)
 import Shikigami.Decision.ModelAlias (ModelAlias, modelAliasFromNonEmpty)
 import Shikigami.Flow.Capability (Sink, emitSignals)
-import Shikigami.Flow.Decision (Decision, DecisionLabel (Drift), decide, decisionSlot, decisionStep)
+import Shikigami.Flow.Decision (Decision, DecisionAccounting (RootAccountedCall), DecisionStep, decide, decisionSite, decisionSlot, decisionStep)
 import Shikigami.Flow.Observe
 import Shikigami.Objective.Observation (ObjectiveObservation (..))
 import Shikigami.Program.Decision (programRef)
@@ -37,7 +37,10 @@ driftAlias :: ModelAlias
 driftAlias = modelAliasFromNonEmpty ('d' :| "rift")
 
 watchdogSlots :: [DecisionSlot]
-watchdogSlots = [decisionSlot (decisionStep Drift (programRef Program.driftProgram)) [driftAlias]]
+watchdogSlots = [decisionSlot driftStep [driftAlias]]
+
+driftStep :: DecisionStep Program.DriftInput Program.DriftProposal
+driftStep = decisionStep (decisionSite "drift") RootAccountedCall (programRef Program.driftProgram)
 
 watchdogSweep :: (Observe :> es, Decision :> es, Sink :> es) => Value -> Eff es Value
 watchdogSweep _ =
@@ -84,7 +87,7 @@ assessDrift granted observed outcomes opened
               [owner] -> case Drift.buildDriftInput budget owner subjects of
                 Left reason -> pure (Left reason)
                 Right input -> do
-                  result <- try @DecisionAbort (decide (decisionStep Drift (programRef Program.driftProgram)) driftAlias input)
+                  result <- try @DecisionAbort (decide driftStep driftAlias input)
                   case result of
                     Left abort@(DecisionAbort failure) | failureCode failure == EvidenceFailure -> throwIO abort
                     Left (DecisionAbort _) -> pure (Left "drift decision refused")

@@ -130,7 +130,7 @@ tests fixture =
           release <- newEmptyMVar
           intervals <- newIORef []
           let alias = template.selection.descriptor.alias
-              slot = Decision.decisionSlot (Decision.decisionStep Decision.Adaptive (programRef investigationProgram)) [alias]
+              slot = Decision.decisionSlot (Decision.decisionStep Decision.adaptiveSite Decision.UnaccountedCall (programRef investigationProgram)) [alias]
               declaration = Fixture.routerDecl & #decisionModels .~ [alias]
               policy = rightPure (resolvePolicy runtime.programs [slot] runtime.catalog declaration Nothing)
               metadata prepared = template & #executionId .~ decisionExecutionId prepared & #runId .~ prepared.workflowId & #selection . #assignmentId .~ assignmentIdFor ("typed-decision:" <> decisionPreparationIdText prepared.identity)
@@ -150,7 +150,7 @@ tests fixture =
                         )
                   )
               decisionEnv = Decision.DecisionEnv declaration [slot] (Decision.builtinDecisionServices runtime.catalog) runtime.runtime Nothing evidence (Routing.RoutingRuntime (\_ -> error "unused routing catalog") (\_ _ _ -> error "unused routing evaluation")) runtime.timeoutMicros Nothing (const (pure ())) (const (pure ()))
-              parent = runWorkflow (WorkflowName "accepted-decision-slot") template.runId (Decision.runDecisionAccepted decisionEnv host policy (Decision.decide (Decision.decisionStep Decision.Adaptive (programRef investigationProgram)) alias (InvestigationInput "build" "early finding" "bounded catalog")))
+              parent = runWorkflow (WorkflowName "accepted-decision-slot") template.runId (Decision.runDecisionAccepted decisionEnv host policy (Decision.decide (Decision.decisionStep Decision.adaptiveSite Decision.UnaccountedCall (programRef investigationProgram)) alias (InvestigationInput "build" "early finding" "bounded catalog")))
               hold provider =
                 provider
                   & #complete
@@ -210,7 +210,7 @@ tests fixture =
           readIORef count >>= (@?= 2)
           -- A committed parent result replays after implementations are retired.
           let retired = decisionEnv {Decision.services = decisionEnv.services & #programs .~ rightPure (programRegistry [])}
-          replayed <- run env (runWorkflow (WorkflowName "accepted-decision-slot") template.runId (Decision.runDecisionAccepted retired host policy (Decision.decide (Decision.decisionStep Decision.Adaptive (programRef investigationProgram)) alias (InvestigationInput "changed input ignored by replay" "finding" "catalog"))))
+          replayed <- run env (runWorkflow (WorkflowName "accepted-decision-slot") template.runId (Decision.runDecisionAccepted retired host policy (Decision.decide (Decision.decisionStep Decision.adaptiveSite Decision.UnaccountedCall (programRef investigationProgram)) alias (InvestigationInput "changed input ignored by replay" "finding" "catalog"))))
           replayed @?= final,
       testCase "an internal second call cannot escape the root attempt limit" $
         withDecision fixture (Map.insert R.ModelAttempts (R.Limited (rightPure (Shikigami.Execution.Quantity.parseResourceAmount 1)))) $ \env snapshot executor runtime evidence prepared load count _ -> do

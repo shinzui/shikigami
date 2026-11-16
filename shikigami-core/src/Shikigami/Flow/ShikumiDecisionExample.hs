@@ -19,10 +19,10 @@ import Shikigami.Program.Decision.Examples (proposedRouteJsonText)
 import Shikigami.Router.Decision (RouteDecision (..), RouteOutcome (..), RouteSelection (..))
 
 triageStep :: DecisionStep Request TriageResult
-triageStep = decisionStep Triage (programRef triageProgram)
+triageStep = decisionStep triageDecisionSlot UnaccountedCall (programRef triageProgram)
 
 investigationStep :: DecisionStep InvestigationInput InvestigationResult
-investigationStep = decisionStep Investigation (programRef investigationProgram)
+investigationStep = decisionStep investigationDecisionSlot UnaccountedCall (programRef investigationProgram)
 
 exampleSlots :: [DecisionSlot]
 exampleSlots = [decisionSlot triageStep [modelAliasFromNonEmpty ('t' :| "riage")], decisionSlot investigationStep [modelAliasFromNonEmpty ('i' :| "nvestigate")]]
@@ -36,7 +36,7 @@ shikumiDecisionExample payload = do
   case triage.action of
     ReturnNow -> pure (object ["triage" .= triage, "results" .= ([] :: [Value])])
     Investigate -> do
-      catalog <- investigationCatalog
+      catalog <- decisionCatalog investigationDecisionSlot
       investigation <-
         decide
           investigationStep
@@ -47,7 +47,7 @@ shikumiDecisionExample payload = do
         ProposeRoute -> do
           proposal <- case eitherDecodeStrict (TE.encodeUtf8 (proposedRouteJsonText investigation.routeJson)) of
             Left _ -> refuseDecision (decisionFailure OutputDecodeFailure "investigation route proposal cannot be decoded")
-            Right value -> validateInvestigationRoute catalog value
+            Right value -> validateDecisionRoute catalog value
           results <- case proposal.outcome of
             Matched selections -> do
               children <-

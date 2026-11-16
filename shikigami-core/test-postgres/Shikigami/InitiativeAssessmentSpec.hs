@@ -156,7 +156,7 @@ triageAlias :: ModelAlias
 triageAlias = modelAliasFromNonEmpty ('t' :| "riage")
 
 triageStep :: Decision.DecisionStep Request TriageResult
-triageStep = Decision.decisionStep Decision.Triage (programRef triageProgram)
+triageStep = Decision.decisionStep (Decision.decisionSite "triage") Decision.UnaccountedCall (programRef triageProgram)
 
 triageInput :: Request
 triageInput = Request {request = "Investigate the checkout"}

@@ -23,9 +23,10 @@ import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Principal (AgentIdentity (..), mkAgentPrincipal)
 import Shikigami.Attestation.PolicyValue qualified as PV
 import Shikigami.Behavior.StubProvider (stubModel)
+import Shikigami.Coordination.Decision (adaptiveStep)
 import Shikigami.Decision.Contract
 import Shikigami.Decision.ModelCatalog
-import Shikigami.Flow.Decision (DecisionAccounting (..), DecisionLabel (..), decisionAccounting, decisionSlot, decisionStepNames, proposeAlias, proposeStep)
+import Shikigami.Flow.Decision (DecisionAccounting (..), DecisionStep (..), decisionSlot, decisionStepNames, proposeAlias, proposeStep)
 import Shikigami.Initiative.Intake (Disposition (..), disposition)
 import Shikigami.Initiative.Settings (InitiativeSettings)
 import Shikigami.Initiative.Types hiding (NotActionable)
@@ -48,10 +49,10 @@ tests =
   testGroup
     "InitiativeAssessment"
     [ testCase "only the proposing slot is root-accounted" do
-        forM_ [Triage, Investigation, Judgment, Adaptive] \label -> decisionAccounting label @?= UnaccountedCall
-        decisionAccounting Propose @?= RootAccountedCall,
+        proposeStep.accounting @?= RootAccountedCall
+        adaptiveStep.accounting @?= UnaccountedCall,
       testCase "the slot has its declared label and step names" do
-        decisionStepNames Propose @?= (StepName "decision-prepare-propose", StepName "decision-result-propose")
+        decisionStepNames proposeStep.site @?= (StepName "decision-prepare-propose", StepName "decision-result-propose")
         modelAliasText proposeAlias @?= "propose"
         (decisionSlot proposeStep [proposeAlias]).label @?= either (error . show) id (parseDecisionSlotLabel "propose"),
       testCase "the registry resolves the program and retains its result codec" do

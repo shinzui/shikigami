@@ -323,7 +323,7 @@ runDirect appEnv behaviorEnv workflowId probe =
                 Routing.behaviorEnv = behaviorEnv,
                 Routing.runtime = (.runtime) probe
               }
-            (Routing.routeWithCatalog Routing.ArchitecturePractice secretPayload)
+            (Routing.routeWithCatalog (Routing.routeSite "architecture-practice") secretPayload)
         )
     )
 

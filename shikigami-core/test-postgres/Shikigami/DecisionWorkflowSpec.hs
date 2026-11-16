@@ -352,9 +352,9 @@ tests fixture =
               assertBool "prepare declared" (("step " <> prepare) `Text.isInfixOf` declared)
               assertBool "result declared" (("step " <> result) `Text.isInfixOf` declared)
           )
-          [Decision.Triage, Decision.Investigation, Decision.Judgment, Decision.Propose, Decision.Drift]
+          (map Decision.decisionSite ["triage", "investigate", "judge", "propose", "drift"])
         adaptive <- TextIO.readFile (if atRoot then "domain/shikigami/adaptive-delivery.keiro" else "../domain/shikigami/adaptive-delivery.keiro")
-        let (StepName prepare, StepName result) = Decision.decisionStepNames Decision.Adaptive
+        let (StepName prepare, StepName result) = Decision.decisionStepNames Decision.adaptiveSite
         mapM_ (\label -> assertBool "accepted adaptive label declared in its child family" (("step " <> label) `Text.isInfixOf` adaptive)) [prepare, "decision-submit-adapt", result],
       testCase "local derivation changes neither an old committed result nor a pinned pending state" $
         withRuntime fixture \app store behavior -> do

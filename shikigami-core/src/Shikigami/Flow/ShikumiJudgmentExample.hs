@@ -9,7 +9,7 @@ import Shikigami.Program.Decision (programRef)
 import Shikigami.Program.Decision.JudgmentExample (Ticket, TicketJudgment, judgmentProgram)
 
 judgmentStep :: DecisionStep Ticket TicketJudgment
-judgmentStep = decisionStep Judgment (programRef judgmentProgram)
+judgmentStep = decisionStep judgmentDecisionSlot UnaccountedCall (programRef judgmentProgram)
 
 judgmentSlots :: [DecisionSlot]
 judgmentSlots = [decisionSlot judgmentStep [modelAliasFromNonEmpty ('j' :| "udge")]]

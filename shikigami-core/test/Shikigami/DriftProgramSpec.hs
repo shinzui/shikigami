@@ -15,7 +15,9 @@ import Keiro.Workflow.Types (StepName (..))
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Execution.Policy.Types (RecoveryClass (RepeatableObservation))
 import Shikigami.Execution.Transcript qualified as Execution
+import Shikigami.Flow.Decision (DecisionStep (..))
 import Shikigami.Flow.Decision qualified as Flow
+import Shikigami.Flow.Watchdog (driftStep)
 import Shikigami.Objective.Types qualified as Objective
 import Shikigami.Program.Decision
 import Shikigami.Program.Decision.Drift
@@ -34,8 +36,8 @@ tests =
     [ testCase "registered descriptor and root-accounted slot are stable" do
         let descriptorValue = descriptor (programRef driftProgram)
         versionedDigest "shikigami.watchdog-drift-descriptor/1" descriptorValue @?= "sha256:d8d47c490849c498c7b251378221af9eeb47a89b204fde64d60f563aa4ae0705"
-        Flow.decisionAccounting Flow.Drift @?= Flow.RootAccountedCall
-        Flow.decisionStepNames Flow.Drift @?= (StepName "decision-prepare-drift", StepName "decision-result-drift")
+        driftStep.accounting @?= Flow.RootAccountedCall
+        Flow.decisionStepNames driftStep.site @?= (StepName "decision-prepare-drift", StepName "decision-result-drift")
         _ <- checked (lookupProgram decisionPrograms (programRef driftProgram))
         _ <- checked (lookupResultCodec @DriftProposal decisionCodecs descriptorValue)
         pure (),

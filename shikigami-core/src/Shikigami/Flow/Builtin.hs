@@ -198,7 +198,7 @@ delegationProofFlow payload = do
 architecturePracticeRouterFlow :: (FlowEffects es) => Value -> Eff es Value
 architecturePracticeRouterFlow payload = do
   Routing.RoutedRoute {catalog, decision = decision@RouteDecision {outcome}} <-
-    Routing.routeWithCatalog Routing.ArchitecturePractice payload
+    Routing.routeWithCatalog (Routing.routeSite "architecture-practice") payload
   case outcome of
     Matched selections -> do
       children <- Delegate.delegateBatch catalog (toRequest <$> selections)

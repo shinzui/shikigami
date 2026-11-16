@@ -2,18 +2,19 @@
 
 module Shikigami.Flow.Decision
   ( Decision,
-    DecisionLabel (..),
+    DecisionSite,
+    decisionSite,
+    adaptiveSite,
     DecisionAccounting (..),
-    decisionAccounting,
-    DecisionStep,
+    DecisionStep (..),
     decisionStep,
     decisionSlot,
     decisionStepNames,
     decide,
     proposeStep,
     proposeAlias,
-    investigationCatalog,
-    validateInvestigationRoute,
+    decisionCatalog,
+    validateDecisionRoute,
     refuseDecision,
     DecisionServices (..),
     builtinDecisionServices,
@@ -37,6 +38,7 @@ import Data.IORef (atomicModifyIORef', newIORef)
 import Data.List (find)
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Maybe (isNothing)
+import Data.Text (Text)
 import Data.Typeable (Typeable)
 import Effectful (Dispatch (Dynamic), DispatchOf, Eff, Effect, IOE, liftIO, (:>))
 import Effectful.Dispatch.Dynamic (interpret, send)
@@ -71,49 +73,51 @@ import Shikigami.Router.Catalog (CandidateCatalog)
 import Shikigami.Router.Decision (RouteDecision, validateRouteDecision)
 import Shikigami.Router.Declaration (RouterDeclarationView (policy), validateRouterDeclaration, validatedRouterDeclaration)
 
-data DecisionLabel = Triage | Investigation | Judgment | Adaptive | Propose | Drift
-  deriving stock (Eq, Ord, Show)
+-- | A decision call site: the checked label of the slot a flow decides at.
+--
+-- It is a value a pack supplies, not a kernel enumeration, so a flow outside
+-- the core can decide without the kernel knowing its name. The site names the
+-- two journal steps of a decision, @decision-prepare-\<site\>@ and
+-- @decision-result-\<site\>@, so it is a durable label: a pack's site starts
+-- with the pack's name.
+type DecisionSite = DecisionSlotLabel
 
--- | Who pays for a slot's provider calls. Spelled out per label so a new slot
--- states its answer and no existing Flow changes behavior.
+-- | A site from a literal. A malformed literal is a programming error, found
+-- the first time the module is loaded.
+decisionSite :: Text -> DecisionSite
+decisionSite = either (error . show) id . parseDecisionSlotLabel
+
+-- | Who pays for a site's provider calls. A step states its answer, so a new
+-- site cannot inherit one by accident.
 data DecisionAccounting = UnaccountedCall | RootAccountedCall
   deriving stock (Eq, Show)
 
-decisionAccounting :: DecisionLabel -> DecisionAccounting
-decisionAccounting = \case
-  Triage -> UnaccountedCall
-  Investigation -> UnaccountedCall
-  Judgment -> UnaccountedCall
-  Adaptive -> UnaccountedCall
-  Propose -> RootAccountedCall
-  Drift -> RootAccountedCall
+-- | One typed decision a flow may make: where, who pays, and which program.
+data DecisionStep i o = DecisionStep
+  { site :: !DecisionSite,
+    accounting :: !DecisionAccounting,
+    program :: !(DecisionProgramRef i o)
+  }
 
-data DecisionStep i o = DecisionStep !DecisionLabel !(DecisionProgramRef i o)
-
-decisionStep :: DecisionLabel -> DecisionProgramRef i o -> DecisionStep i o
+decisionStep :: DecisionSite -> DecisionAccounting -> DecisionProgramRef i o -> DecisionStep i o
 decisionStep = DecisionStep
 
 decisionSlot :: DecisionStep i o -> [ModelAlias] -> DecisionSlot
-decisionSlot (DecisionStep label ref) models = DecisionSlot (slotLabel label) [descriptor ref] models
+decisionSlot step' models = DecisionSlot step'.site [descriptor step'.program] models
 
-slotLabel :: DecisionLabel -> DecisionSlotLabel
-slotLabel Triage = triageDecisionSlot
-slotLabel Investigation = investigationDecisionSlot
-slotLabel Judgment = judgmentDecisionSlot
-slotLabel Adaptive = either (error . show) id (parseDecisionSlotLabel "adapt")
-slotLabel Drift = either (error . show) id (parseDecisionSlotLabel "drift")
-slotLabel Propose = either (error . show) id (parseDecisionSlotLabel "propose")
+decisionStepNames :: DecisionSite -> (StepName, StepName)
+decisionStepNames site =
+  ( StepName ("decision-prepare-" <> decisionSlotLabelText site),
+    StepName ("decision-result-" <> decisionSlotLabelText site)
+  )
 
-decisionStepNames :: DecisionLabel -> (StepName, StepName)
-decisionStepNames Triage = (StepName "decision-prepare-triage", StepName "decision-result-triage")
-decisionStepNames Investigation = (StepName "decision-prepare-investigate", StepName "decision-result-investigate")
-decisionStepNames Adaptive = (StepName "decision-prepare-adapt", StepName "decision-result-adapt")
-decisionStepNames Judgment = (StepName "decision-prepare-judge", StepName "decision-result-judge")
-decisionStepNames Drift = (StepName "decision-prepare-drift", StepName "decision-result-drift")
-decisionStepNames Propose = (StepName "decision-prepare-propose", StepName "decision-result-propose")
+-- | The kernel's own site: the adaptive-delivery coordinator's decision. It is
+-- the only site the accepted-work interpreter serves.
+adaptiveSite :: DecisionSite
+adaptiveSite = decisionSite "adapt"
 
 proposeStep :: DecisionStep AssessmentInput AssessmentOutput
-proposeStep = decisionStep Propose (programRef assessmentProgram)
+proposeStep = decisionStep (decisionSite "propose") RootAccountedCall (programRef assessmentProgram)
 
 -- | The alias a proposing agent's declaration lists in @decisionModels@.
 proposeAlias :: ModelAlias
@@ -161,8 +165,8 @@ data Decision :: Effect where
   PinnedDecisionPolicy :: Decision m DecisionPolicySnapshot
   Decide :: (Typeable i, Typeable o, ToJSON i, FromJSON i) => DecisionStep i o -> ModelAlias -> i -> Decision m o
   RefuseDecision :: DecisionFailure -> Decision m a
-  InvestigationCatalog :: Decision m CandidateCatalog
-  ValidateInvestigationRoute :: CandidateCatalog -> RouteDecision -> Decision m RouteDecision
+  DecisionCatalog :: DecisionSite -> Decision m CandidateCatalog
+  ValidateDecisionRoute :: CandidateCatalog -> RouteDecision -> Decision m RouteDecision
 
 type instance DispatchOf Decision = Dynamic
 
@@ -172,11 +176,15 @@ decide slot model input = send (Decide slot model input)
 refuseDecision :: (Decision :> es) => DecisionFailure -> Eff es a
 refuseDecision failure = send (RefuseDecision failure)
 
-investigationCatalog :: (Decision :> es) => Eff es CandidateCatalog
-investigationCatalog = send InvestigationCatalog
+-- | The journaled candidate catalog a decision at this site may route among.
+-- Its step is @decision-catalog-\<site\>@.
+decisionCatalog :: (Decision :> es) => DecisionSite -> Eff es CandidateCatalog
+decisionCatalog site = send (DecisionCatalog site)
 
-validateInvestigationRoute :: (Decision :> es) => CandidateCatalog -> RouteDecision -> Eff es RouteDecision
-validateInvestigationRoute catalog decision = send (ValidateInvestigationRoute catalog decision)
+-- | Hold a program's route proposal to the declaration's router policy and
+-- the journaled catalog before it can influence delegation.
+validateDecisionRoute :: (Decision :> es) => CandidateCatalog -> RouteDecision -> Eff es RouteDecision
+validateDecisionRoute catalog decision = send (ValidateDecisionRoute catalog decision)
 
 runDecisionDisabled :: Eff (Decision : es) a -> Eff es a
 runDecisionDisabled = interpret (\_ _ -> throwIO (DecisionAbort (decisionFailure InvalidSlot "decision capability is unavailable for this workflow")))
@@ -219,11 +227,10 @@ runDecisionUsing env accepted policy action = do
     ( \_ -> \case
         PinnedDecisionPolicy -> pure policy
         RefuseDecision failure -> throwIO (DecisionAbort failure)
-        Decide (DecisionStep label (_currentRef :: DecisionProgramRef i o)) alias input -> do
-          when (maybe False (const (label /= Adaptive)) accepted) (throwIO (DecisionAbort (decisionFailure InvalidSlot "accepted interpreter requires the adaptive slot")))
-          when (label == Judgment) requireStructuredPatch
+        Decide DecisionStep {site = label, accounting, program = (_currentRef :: DecisionProgramRef i o)} alias input -> do
+          when (maybe False (const (label /= adaptiveSite)) accepted) (throwIO (DecisionAbort (decisionFailure InvalidSlot "accepted interpreter requires the adaptive slot")))
           -- Before the prepare step: a run that cannot pay records nothing it would owe.
-          when (decisionAccounting label == RootAccountedCall && isNothing env.root) (throwIO (DecisionAbort (decisionFailure InvalidSlot "decision slot requires an enrolled resource root")))
+          when (accounting == RootAccountedCall && isNothing env.root) (throwIO (DecisionAbort (decisionFailure InvalidSlot "decision slot requires an enrolled resource root")))
           repeated <- liftIO (atomicModifyIORef' used (\labels -> (label : labels, label `elem` labels)))
           when repeated (throwIO (DecisionAbort (decisionFailure InvalidSlot "decision slot repeated within one generation")))
           let (prepareName, resultName) = decisionStepNames label
@@ -236,7 +243,7 @@ runDecisionUsing env accepted policy action = do
                 maybe
                   (Left (decisionFailure InvalidSlot "decision slot is absent from pinned policy"))
                   Right
-                  (find (\slot -> slot.label == slotLabel label) policy.slots)
+                  (find (\slot -> slot.label == label) policy.slots)
               unless (alias `elem` slot.models) (Left (decisionFailure ForbiddenModel "model alias is not allowed for this pinned slot"))
               selected <- maybe (Left (decisionFailure UnknownModel "pinned model alias is unavailable")) Right (find (\model -> model.alias == alias) policy.models)
               program <- case slot.programs of
@@ -250,16 +257,15 @@ runDecisionUsing env accepted policy action = do
                       ( object
                           [ "workflow" .= workflowId,
                             "generation" .= generation,
-                            "label" .= slotLabel label,
+                            "label" .= label,
                             "program" .= program,
                             "model" .= selected,
                             "input" .= toJSON checked,
                             "policy" .= policy.policy
                           ]
                       )
-              Right (PreparedDecision identity (runCorrelationId workflowId) nativeWorkflowId checkedGeneration (slotLabel label) program (toJSON checked) selected policy.policy)
+              Right (PreparedDecision identity (runCorrelationId workflowId) nativeWorkflowId checkedGeneration label program (toJSON checked) selected policy.policy)
           prepared <- either (throwIO . DecisionAbort) pure preparedResult
-          when (label /= Judgment && prepared.program.outputCapability == ClosedSetJudgment) requireStructuredPatch
           outcome <- case accepted of
             Just host -> do
               submitted <- journal env (StepName "decision-submit-adapt") do
@@ -305,7 +311,7 @@ runDecisionUsing env accepted policy action = do
                             timeoutMicros = env.timeoutMicros,
                             callLimit = either (error . show) id (mkCeiling 64)
                           }
-                  liftIO case (decisionAccounting label, env.root) of
+                  liftIO case (accounting, env.root) of
                     (RootAccountedCall, Just root) -> runDecisionProgramWithAccounting (rootAccountedDecisionHooks env.evidence env.profile root) decisionRuntime prepared ref storedInput
                     _ -> runDecisionProgramWithAnswers decisionRuntime prepared ref storedInput
               reportResult <- liftIO (readDecisionReport env.evidence prepared.runId)
@@ -328,21 +334,16 @@ runDecisionUsing env accepted policy action = do
             Right value -> do
               codec <- either (throwIO . DecisionAbort) pure (lookupResultCodec @o env.services.codecs outcome.program)
               either (throwIO . DecisionAbort) pure (decodeResult codec value)
-        InvestigationCatalog -> do
+        DecisionCatalog site -> do
           validated <- either (const (throwIO (DecisionAbort (decisionFailure InvalidSlot "decision router declaration is invalid")))) pure (validateRouterDeclaration env.agent)
-          journal env (StepName "decision-catalog-investigate") (liftIO (env.routing.resolveCatalog validated))
-        ValidateInvestigationRoute catalog decision -> do
+          journal env (StepName ("decision-catalog-" <> decisionSlotLabelText site)) (liftIO (env.routing.resolveCatalog validated))
+        ValidateDecisionRoute catalog decision -> do
           validated <- either (const (throwIO (DecisionAbort (decisionFailure InvalidSlot "decision router declaration is invalid")))) pure (validateRouterDeclaration env.agent)
           case validateRouteDecision (validatedRouterDeclaration validated).policy catalog decision of
-            Left _ -> throwIO (DecisionAbort (decisionFailure OutputValidationFailure "investigation route proposal is invalid"))
+            Left _ -> throwIO (DecisionAbort (decisionFailure OutputValidationFailure "decision route proposal is invalid"))
             Right _ -> pure decision
     )
     action
-
-requireStructuredPatch :: (Workflow :> es, IOE :> es) => Eff es ()
-requireStructuredPatch = do
-  enabled <- Workflow.patch (Workflow.PatchId "shikigami-structured-judgments-v1")
-  unless enabled (throwIO (DecisionAbort (decisionFailure ContractMismatch "structured judgments are unavailable to this historical workflow generation")))
 
 journal :: (Workflow :> es, IOE :> es, ToJSON a, FromJSON a) => DecisionEnv -> StepName -> Eff es a -> Eff es a
 journal env name action = step name do
