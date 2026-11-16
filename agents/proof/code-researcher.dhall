@@ -6,7 +6,6 @@ in  A.Agent::{
           { task = "code-researcher"
           , preferEnrichment = False
           , grounding = None Text
-          , enabledBy = None Text
           }
     , trigger = A.Trigger.Event { eventType = "proof.research.code" }
     , sinks = [] : List A.Sink

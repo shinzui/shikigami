@@ -51,7 +51,7 @@ import Settei.Optparse (namedOption)
 import Settei.Source (Source)
 import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Payload (payloadArgument)
-import Shikigami.App.Config (AppConfig, Role (AdminRole), kafkaActivityTopicKey, kafkaBrokerKey, sinksDanwaBaseUrlKey)
+import Shikigami.App.Config (AppConfig, Role (AdminRole), kafkaActivityTopicKey, kafkaBrokerKey)
 import Shikigami.App.Config.Load
   ( ConfigOptions (..),
     configOptions,
@@ -63,7 +63,6 @@ import Shikigami.Execution.Identity (parseExecutionRootId, parseOperationId)
 import Shikigami.Flow.Pack (FlowPack)
 import Shikigami.Objective.Tracker.Control.Types (HistoryKind (Proposals, Publications))
 import Shikigami.Server.Command.Agents (runAgentsList, runAgentsSync)
-import Shikigami.Server.Command.DanwaSpike (runDanwaSpike)
 import Shikigami.Server.Command.EnqueueRun (runEnqueueRun)
 import Shikigami.Server.Command.Executions (runExecutionsInspect)
 import Shikigami.Server.Command.Flows (runFlows)
@@ -189,7 +188,6 @@ adminSubcommandsWith packs =
     ("publish-fixture", command "publish-fixture" publishFixtureInfo),
     ("stub-kawa", command "stub-kawa" stubKawaInfo),
     ("stub-kanmon", command "stub-kanmon" stubKanmonInfo),
-    ("danwa-spike", command "danwa-spike" danwaSpikeInfo),
     ("grants", command "grants" grantsInfo),
     ("agents", command "agents" agentsInfo),
     ("runs", command "runs" runsInfo),
@@ -592,18 +590,6 @@ stubKanmonInfo =
         <$> option auto (long "port" <> metavar "PORT" <> help "Port to listen on")
         <*> many (strOption (long "allow-conversation" <> metavar "KEY" <> help "Conversation key the proof route may target (repeatable; default conv_55012)"))
 
-danwaSpikeInfo :: ParserInfo AdminAction
-danwaSpikeInfo =
-  info
-    (parser <**> helper)
-    (progDesc "Spike the danwa HTTP client by posting a human message and agent reply")
-  where
-    parser =
-      (\human agent sources -> (runDanwaSpike human agent, sources))
-        <$> strOption (long "human" <> metavar "PARTICIPANT" <> help "Human participant id, e.g. part_...")
-        <*> strOption (long "agent" <> metavar "PARTICIPANT" <> help "Agent participant id, e.g. part_...")
-        <*> sourcesOf [danwaUrlOption]
-
 -- ── Command-line configuration sources ──────────────────────────────────────
 
 -- | Collect the flags that were actually given. An absent flag contributes no
@@ -624,13 +610,6 @@ topicOption =
     "--topic"
     kafkaActivityTopicKey
     (long "topic" <> metavar "TOPIC" <> help "Activity topic (sets kafka.activity.topic)")
-
-danwaUrlOption :: Parser (Maybe Source)
-danwaUrlOption =
-  namedOption
-    "--danwa-url"
-    sinksDanwaBaseUrlKey
-    (long "danwa-url" <> metavar "URL" <> help "danwa base URL (sets sinks.danwa.base_url)")
 
 revisionReader :: ReadM (StateRevision scope)
 revisionReader = eitherReader \raw -> case reads raw of

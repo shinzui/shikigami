@@ -193,9 +193,6 @@ runBehavior env decl input
         pure (Left (UnsupportedBehavior "Playbook runs only as a durable agent run"))
       CoordinatingSkill {} ->
         pure (Left (UnsupportedBehavior "CoordinatingSkill requires an admitted durable coordination scope"))
-      Deterministic {} ->
-        -- Deterministic-rule behaviors are EP-6's concern; the runner does not execute them.
-        pure (Left (UnsupportedBehavior "Deterministic"))
 
 overlaysMatch :: BehaviorEnv -> AgentDecl -> Bool
 overlaysMatch BehaviorEnv {activeOverlays} decl =

@@ -555,7 +555,7 @@ reviewAgentDecl =
     { name = fixtureAgentName "opentelemetry-practice-reviewer",
       description = "practice-review memory integration test agent",
       trigger = Event {eventType = declarationCoordinate ("architecture.practice-review.test")},
-      behavior = Deterministic {rule = "practice-review-memory-test", params = mempty},
+      behavior = Flow {name = declarationCoordinate "test-flow"},
       sinks = [],
       delegates = map fixtureAgentName [],
       delegationBudget = Nothing,

@@ -398,7 +398,7 @@ drainAgent =
     { name = fixtureAgentName "codec-agent",
       description = "drain lifecycle fixture",
       trigger = Event {eventType = declarationCoordinate ("fixture.event")},
-      behavior = Deterministic {rule = "test", params = Map.empty},
+      behavior = Flow {name = declarationCoordinate "test-flow"},
       sinks = [],
       delegates = map fixtureAgentName [],
       delegationBudget = Nothing,

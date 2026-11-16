@@ -26,7 +26,7 @@ Two halves, and it matters which is which when something behaves unexpectedly.
 
 **Shikigami's own**: `agents`, `runs`, `resources`, `executions`, `workers`, and `validate`,
 `render-lifecycle`, `enqueue-run`, `resolve-approval`, `publish-fixture`, `stub-kawa`, `stub-kanmon`,
-`danwa-spike`, and `grants`. These are defined in this repository.
+and `grants`. These are defined in this repository.
 
 **Keiro's**: `wf`, `timer`, `outbox`, `inbox`, `pgmq`, `projection`, `shard`,
 `snapshot`, and `stream`. These come from the `keiro-ops` package, whose command

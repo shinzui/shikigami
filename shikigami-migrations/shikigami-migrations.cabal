@@ -2,7 +2,7 @@ cabal-version: 3.0
 name: shikigami-migrations
 version: 0.1.0.0
 synopsis:
-  Schema migrations for shikigami (composes kioku + shikigami_fired)
+  Schema migrations for shikigami (composes kioku, pgmq and the shikigami schema)
 
 build-type: Simple
 extra-source-files:

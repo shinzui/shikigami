@@ -95,7 +95,6 @@
     "Shikigami.Server.Boot",
     "Shikigami.Server.Command",
     "Shikigami.Server.Command.Agents",
-    "Shikigami.Server.Command.DanwaSpike",
     "Shikigami.Server.Command.EnqueueRun",
     "Shikigami.Server.Command.Executions",
     "Shikigami.Server.Command.Flows",

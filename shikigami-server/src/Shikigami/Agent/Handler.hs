@@ -74,7 +74,6 @@ agentView env decl = do
           Decl.Event {} -> "event"
           Decl.Manual -> "manual",
         behavior = case decl.behavior of
-          Decl.Deterministic {} -> "deterministic"
           Decl.ShikumiProgram {} -> "shikumi_program"
           Decl.Skill {} -> "skill"
           Decl.CoordinatingSkill {} -> "coordinating_skill"

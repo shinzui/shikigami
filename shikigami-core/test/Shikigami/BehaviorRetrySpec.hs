@@ -93,8 +93,7 @@ missingTaskAgent =
         ShikumiProgram
           { task = declarationCoordinate ("missing-task"),
             preferEnrichment = False,
-            grounding = Nothing,
-            enabledBy = Nothing
+            grounding = Nothing
           },
       sinks = [],
       delegates = map fixtureAgentName [],

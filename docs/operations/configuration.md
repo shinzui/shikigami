@@ -368,14 +368,13 @@ declared key, so it shows up in `--explain-config` with its spelling.
 | | `--topic`, `--group` | `kafka.events.topic`, `kafka.groups.events` |
 | `shikigami publish-fixture` | `--broker`, `--topic` | `kafka.broker`, `kafka.activity.topic` |
 | `shikigami stub-kawa` | `--broker` | `kafka.broker` |
-| `shikigami danwa-spike` | `--danwa-url` | `sinks.danwa.base_url` |
 
 Note that `--topic` and `--group` mean different keys on the two consumers, because the
 two consumers read different topics. That is why they are separate binaries.
 
 Flags that are *not* configuration stay ordinary arguments, because they name what a single
 invocation is about rather than how the deployment is set up: `shikigami stub-kawa --port`
-and `--republish-topic`, `shikigami danwa-spike --human` and `--agent`,
+and `--republish-topic`,
 `shikigami-run-behavior --agent` and `--payload`, `shikigami-agent-run --agent` and
 `--from-activity`, and the file or agent arguments of `validate`, `render-lifecycle`,
 `enqueue-run`, `resolve-approval`, and `publish-fixture`.

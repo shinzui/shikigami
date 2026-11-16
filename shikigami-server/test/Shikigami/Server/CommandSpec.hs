@@ -55,7 +55,6 @@ tests =
                 "publish-fixture",
                 "stub-kawa",
                 "stub-kanmon",
-                "danwa-spike",
                 "grants",
                 "agents",
                 "runs",
@@ -212,11 +211,6 @@ tests =
           Success _ -> assertBool "stub-kanmon accepted a plaintext token argument" False
           Failure _ -> pure ()
           CompletionInvoked _ -> assertBool "unexpected completion invocation" False,
-      testCase "danwa-spike keeps its participant options" do
-        let rendered = helpTextOf ["danwa-spike", "--help"]
-        mapM_
-          (\flag -> assertBool ("danwa-spike help does not mention " <> flag) (flag `isInfixOf` rendered))
-          ["--danwa-url", "--human", "--agent"],
       testCase "resolve-approval accepts exactly one typed decision" do
         let token = "123e4567-e89b-42d3-a456-426614174000"
         case parseResolution [token, "--approve"] of
@@ -283,8 +277,7 @@ tests =
         assertBool ("agents sync help does not mention --alias:\n" <> syncHelp) ("--alias" `isInfixOf` syncHelp),
       testCase "a subcommand's downstream flags name the configuration keys they set" do
         assertMentions ["publish-fixture", "--help"] ["kafka.broker", "kafka.activity.topic"]
-        assertMentions ["stub-kawa", "--help"] ["kafka.broker"]
-        assertMentions ["danwa-spike", "--help"] ["sinks.danwa.base_url"],
+        assertMentions ["stub-kawa", "--help"] ["kafka.broker"],
       -- The mounted keiro-ops tree is not in `adminSubcommands` -- it cannot be,
       -- because keiro-ops exports its tree as one ParserInfo over an abstract
       -- type -- so nothing above covers it. A mount that silently stopped

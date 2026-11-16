@@ -208,7 +208,6 @@ admitOperationClass Durable CapabilityDescriptor {capability, tools} = go tools
 
 behaviorKindText :: Behavior -> Text
 behaviorKindText = \case
-  Deterministic {} -> "Deterministic"
   ShikumiProgram {} -> "ShikumiProgram"
   Skill {} -> "Skill"
   CoordinatingSkill {} -> "Skill"

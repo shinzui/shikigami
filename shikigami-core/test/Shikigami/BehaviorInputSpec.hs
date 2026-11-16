@@ -219,7 +219,7 @@ programArgumentTests =
             ),
       testCase "an unknown task retains its lookup failure" do
         env <- newBehaviorEnv
-        let decl = heartbeatDecl {behavior = ShikumiProgram (declarationCoordinate "missing-task") False Nothing Nothing}
+        let decl = heartbeatDecl {behavior = ShikumiProgram (declarationCoordinate "missing-task") False Nothing}
         result <- runBehavior env decl (triggerOnly samplePayload)
         result @?= Left (UnknownTask "missing-task"),
       -- End to end through the declaration union, on the shipped stub program:
@@ -317,8 +317,7 @@ heartbeatDecl =
         ShikumiProgram
           { task = declarationCoordinate ("noop-summary"),
             preferEnrichment = False,
-            grounding = Nothing,
-            enabledBy = Nothing
+            grounding = Nothing
           },
       sinks = [],
       delegates = map fixtureAgentName [],

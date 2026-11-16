@@ -37,13 +37,10 @@ let CodingAgentEffort =
 
 -- The behavior union covers all three arms the seeds and the spec need.
 let Behavior =
-      < Deterministic :
-          { rule : Text, params : List { mapKey : Text, mapValue : Text } }
-      | ShikumiProgram :
+      < ShikumiProgram :
           { task : Text
           , preferEnrichment : Bool
           , grounding : Optional Text
-          , enabledBy : Optional Text
           }
       | Skill : { path : Text }
       | CoordinatingSkill : { path : Text }

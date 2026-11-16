@@ -83,8 +83,7 @@ baseRouter =
         ShikumiProgram
           { task = declarationCoordinate ("noop-summary"),
             preferEnrichment = False,
-            grounding = Nothing,
-            enabledBy = Nothing
+            grounding = Nothing
           },
       sinks = [],
       delegates = map fixtureAgentName ["reviewer-a", "reviewer-b"],

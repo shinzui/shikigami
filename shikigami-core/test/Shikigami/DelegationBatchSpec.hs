@@ -134,7 +134,7 @@ routerDecl =
     { name = fixtureAgentName "router",
       description = "batch routing fixture",
       trigger = Event {eventType = declarationCoordinate ("test")},
-      behavior = Deterministic {rule = "test", params = mempty},
+      behavior = Flow {name = declarationCoordinate "test-flow"},
       sinks = [],
       delegates = map fixtureAgentName ["first", "second", "paused"],
       delegationBudget = Nothing,

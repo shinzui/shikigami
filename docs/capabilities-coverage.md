@@ -113,7 +113,6 @@ mechanism remain grouped under that provision.
 | shikigami-server | `Server` | 6 | [CAP-16](capabilities/http-health-contract.md), [CAP-17](capabilities/worker-operations-and-telemetry.md) |
 | shikigami-server | `Server.Command` | 1 | [CAP-17](capabilities/worker-operations-and-telemetry.md) |
 | shikigami-server | `Server.Command.Agents` | 1 | [CAP-6](capabilities/principal-lifecycle-and-continuity.md) |
-| shikigami-server | `Server.Command.DanwaSpike` | 1 | [CAP-20](capabilities/local-integration-fixtures.md) |
 | shikigami-server | `Server.Command.EnqueueRun` | 1 | [CAP-2](capabilities/durable-trigger-intake.md) |
 | shikigami-server | `Server.Command.Grants` | 1 | [CAP-9](capabilities/authorized-sink-outbox.md) |
 | shikigami-server | `Server.Command.Ops` | 1 | [CAP-17](capabilities/worker-operations-and-telemetry.md) |
@@ -179,7 +178,6 @@ its commands belong to
 | `publish-fixture` | [CAP-20](capabilities/local-integration-fixtures.md) |
 | `stub-kawa` | [CAP-20](capabilities/local-integration-fixtures.md) |
 | `stub-kanmon` | [CAP-20](capabilities/local-integration-fixtures.md) |
-| `danwa-spike` | [CAP-20](capabilities/local-integration-fixtures.md) |
 | `grants` | [CAP-9](capabilities/authorized-sink-outbox.md) |
 | `agents` | [CAP-6](capabilities/principal-lifecycle-and-continuity.md) |
 | `runs` | [CAP-17](capabilities/worker-operations-and-telemetry.md), [CAP-25](capabilities/http-agent-run-lifecycle.md) |

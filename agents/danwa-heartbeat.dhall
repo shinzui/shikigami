@@ -6,7 +6,6 @@ in  A.Agent::{
           { task = "noop-summary"
           , preferEnrichment = False
           , grounding = None Text
-          , enabledBy = None Text
           }
     , trigger = A.Trigger.Event { eventType = "danwa.message-addressed-to-agent" }
     , sinks = [ A.Sink.DanwaConversation { topic = "support" } ]

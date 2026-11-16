@@ -8,7 +8,7 @@ status: "shipped"
 stability: "experimental"
 since: "unreleased"
 packages: ["shikigami-server"]
-interface: ["shikigami publish-fixture", "shikigami stub-kawa", "shikigami stub-kanmon", "shikigami danwa-spike"]
+interface: ["shikigami publish-fixture", "shikigami stub-kawa", "shikigami stub-kanmon"]
 tags: ["fixtures", "integration", "local-development"]
 generated:
   by: "process:shikigami-capabilities-bootstrap"
@@ -26,9 +26,6 @@ evidence:
   - kind: module
     resource: "shikigami-server/src/Shikigami/Sink/KawaStub/Republish.hs"
     proves: "Accepted fixture digests can re-enter Kafka with the integration header shape."
-  - kind: module
-    resource: "shikigami-server/src/Shikigami/Server/Command/DanwaSpike.hs"
-    proves: "The probe creates a conversation, joins participants, posts a human message, and replies through the public client."
 ---
 
 # Local integration fixtures
@@ -46,8 +43,7 @@ creation, participant joins, posting, and replies against a configured service.
 
 Use `publish-fixture` with an activity envelope and configured broker/topic.
 Start `stub-kawa` with an optional `--republish-topic`, or `stub-kanmon` with its
-destination allow-list. `danwa-spike` accepts the chosen human and agent
-participants. [The Living Loop](../user/living-loop.md) describes the local
+destination allow-list. [The Living Loop](../user/living-loop.md) describes the local
 topology; configure the current authorization prerequisites separately before
 expecting protected agent outputs to reach a stub.
 
@@ -57,7 +53,6 @@ expecting protected agent outputs to reach a stub.
 - [KanmonStubSpec.hs](../../shikigami-server/test/Shikigami/Server/KanmonStubSpec.hs): routing, destination policy, and idempotency.
 - [PublishFixture.hs](../../shikigami-server/src/Shikigami/Server/Command/PublishFixture.hs): fixture publication.
 - [Republish.hs](../../shikigami-server/src/Shikigami/Sink/KawaStub/Republish.hs): optional feedback publication.
-- [DanwaSpike.hs](../../shikigami-server/src/Shikigami/Server/Command/DanwaSpike.hs): outbound probe implementation.
 
 ## Limits
 

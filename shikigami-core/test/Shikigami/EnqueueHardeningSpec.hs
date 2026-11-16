@@ -144,7 +144,7 @@ streamAgent =
                   verbs = map activityCoordinate ([])
                 }
           },
-      behavior = Deterministic {rule = "test", params = mempty},
+      behavior = Flow {name = declarationCoordinate "test-flow"},
       sinks = [],
       delegates = map fixtureAgentName [],
       delegationBudget = Nothing,

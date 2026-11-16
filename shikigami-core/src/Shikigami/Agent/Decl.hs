@@ -42,7 +42,6 @@ where
 
 import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
-import Data.Map.Strict (Map)
 import Data.Text qualified as Text
 import Dhall (Decoder (..), FromDhall (..))
 import Dhall qualified
@@ -250,12 +249,10 @@ data Trigger
   deriving anyclass (FromDhall, ToJSON, FromJSON)
 
 data Behavior
-  = Deterministic {rule :: !Text, params :: !(Map Text Text)}
-  | ShikumiProgram
+  = ShikumiProgram
       { task :: !(DeclarationCoordinate "task"),
         preferEnrichment :: !Bool,
-        grounding :: !(Maybe Text),
-        enabledBy :: !(Maybe Text)
+        grounding :: !(Maybe Text)
       }
   | Skill {path :: !(DeclarationCoordinate "skill-path")}
   | CoordinatingSkill {path :: !(DeclarationCoordinate "skill-path")}

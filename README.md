@@ -17,9 +17,8 @@ memory    = what it carries forward across runs
 ```
 
 For synchronous agents, Dhall names a registered `shikumi` program
-or a `baikai` skill. The schema also accepts `Deterministic` rules, but the
-current runner rejects that arm as unsupported. For lifecycle-backed work, Dhall
-names a compiled Haskell `FlowDef`; the Haskell flow owns the durable control flow, journaled
+or a `baikai` skill. For lifecycle-backed work, Dhall
+names a compiled Haskell flow that ships in a flow pack; the Haskell flow owns the durable control flow, journaled
 steps, waits, mid-run sink emissions, memory writes, and timeout or
 acknowledgement branches.
 

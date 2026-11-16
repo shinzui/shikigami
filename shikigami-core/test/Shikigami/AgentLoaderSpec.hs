@@ -177,8 +177,7 @@ tests =
       -- A manifest typo used to be invisible: the directory walk dropped the file
       -- and the process started with one fewer agent than the operator declared.
       -- @agents/broken.dhall@ is the checked-in fixture for that, and it is the
-      -- only failing file the walk reaches — the traversal is not recursive, so
-      -- @agents/detectors/schema.dhall@ is never opened.
+      -- only failing file the walk reaches; the traversal is not recursive.
       testCase "loadAgentsLoud reports the broken manifest through the logger" do
         (logger, captured) <- capturingLogger
         report@AgentLoadReport {entries} <- loadAgentsLoud logger "../agents" LenientManifests (const (pure ()))
@@ -273,7 +272,6 @@ dhallFilesRecursively directory = do
 isLiveManifest :: FilePath -> Bool
 isLiveManifest path =
   not ("/broken.dhall" `isSuffixOf` path)
-    && not ("/detectors/schema.dhall" `isSuffixOf` path)
     -- Playbook bundles sit beside the declarations that run them.
     && not ("/playbooks/" `isInfixOf` path && not ("-agent.dhall" `isSuffixOf` path))
     -- A campaign directory holds one declaration named after it, beside its

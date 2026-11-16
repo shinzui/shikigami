@@ -100,7 +100,7 @@ main = withShikigamiMigratedSuite \databaseFixture ->
                 expected <- Text.IO.readFile "expected-schema.txt"
                 Schema.compareSchemaSnapshot expected actual @?= []
                 verifyShikigamiSchema connectionString
-                runSession connection (Session.script "ALTER TABLE shikigami.fired ADD COLUMN unexpected_probe boolean")
+                runSession connection (Session.script "ALTER TABLE shikigami.action_record ADD COLUMN unexpected_probe boolean")
                 drifted <- runSession connection (Schema.snapshotSchema "shikigami")
                 refused <- try @IOException (verifyShikigamiSchema connectionString)
                 assertBool "operator verification refuses drift" (either (const True) (const False) refused)
@@ -220,7 +220,7 @@ releasedPrerequisites =
       AND (SELECT count(*) = 5 FROM pgmigrate.migrations
            WHERE component = 'kiroku' AND migration IN ('0012','0013','0014','0015','0016') AND status = 'applied')
       AND to_regprocedure('pgmq.notify_queue_listeners()') IS NOT NULL
-      AND to_regclass('shikigami.fired') IS NOT NULL
+      AND to_regclass('shikigami.action_record') IS NOT NULL
     """
     E.noParams
     (D.singleRow (D.column (D.nonNullable D.bool)))

@@ -270,19 +270,19 @@ overlayEnvironmentTests =
         derivedActive @?= Set.singleton workspaceReadId,
       testCase "empty requests still pass the overlay guard" do
         base <- newBehaviorEnv
-        result <- runBehavior base (declFor [] (Deterministic {rule = "not-run", params = Map.empty})) (triggerOnly Aeson.Null)
-        result @?= Left (UnsupportedBehavior "Deterministic"),
+        result <- runBehavior base (declFor [] (Flow {name = declarationCoordinate "test-flow"})) (triggerOnly Aeson.Null)
+        result @?= Left (UnsupportedBehavior "Flow"),
       testCase "matching requested and active ids pass the overlay guard" do
         base <- newBehaviorEnv
         let derived = withCapabilityTools resolvedRead namespacedRegistry base
-        result <- runBehavior derived (declFor [workspaceReadId] (Deterministic {rule = "not-run", params = Map.empty})) (triggerOnly Aeson.Null)
-        result @?= Left (UnsupportedBehavior "Deterministic"),
+        result <- runBehavior derived (declFor [workspaceReadId] (Flow {name = declarationCoordinate "test-flow"})) (triggerOnly Aeson.Null)
+        result @?= Left (UnsupportedBehavior "Flow"),
       testCase "missing, extra, and duplicate requests are permanent mismatches" do
         base <- newBehaviorEnv
         let derived = withCapabilityTools resolvedRead namespacedRegistry base
-        missing <- runBehavior base (declFor [workspaceReadId] (Deterministic {rule = "not-run", params = Map.empty})) (triggerOnly Aeson.Null)
-        extra <- runBehavior derived (declFor [] (Deterministic {rule = "not-run", params = Map.empty})) (triggerOnly Aeson.Null)
-        duplicate <- runBehavior derived (declFor [workspaceReadId, workspaceReadId] (Deterministic {rule = "not-run", params = Map.empty})) (triggerOnly Aeson.Null)
+        missing <- runBehavior base (declFor [workspaceReadId] (Flow {name = declarationCoordinate "test-flow"})) (triggerOnly Aeson.Null)
+        extra <- runBehavior derived (declFor [] (Flow {name = declarationCoordinate "test-flow"})) (triggerOnly Aeson.Null)
+        duplicate <- runBehavior derived (declFor [workspaceReadId, workspaceReadId] (Flow {name = declarationCoordinate "test-flow"})) (triggerOnly Aeson.Null)
         missing @?= Left (CapabilityOverlayMismatch [workspaceReadId] [])
         extra @?= Left (CapabilityOverlayMismatch [] [workspaceReadId])
         duplicate @?= Left (CapabilityOverlayMismatch [workspaceReadId, workspaceReadId] [workspaceReadId])

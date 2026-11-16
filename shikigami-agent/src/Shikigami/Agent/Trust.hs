@@ -308,7 +308,6 @@ prepareDeclaredTools decl@AgentDecl {behavior}
       CodingAgent {} -> "CodingAgent"
       Flow {} -> "Flow"
       ShikumiProgram {} -> "ShikumiProgram"
-      Deterministic {} -> "Deterministic"
       CoordinatingSkill {} -> "CoordinatingSkill"
       Skill {} -> "Skill"
       Playbook {} -> "Playbook"

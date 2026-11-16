@@ -36,7 +36,7 @@ Stay with the simpler behavior arms when the agent can run once and return one J
 
 | Need | Use |
 | --- | --- |
-| A cheap rule over structured fields | A registered `ShikumiProgram`; `Deterministic` execution is not implemented |
+| A cheap rule over structured fields | A registered `ShikumiProgram` |
 | A typed pipeline or model-backed classifier | `ShikumiProgram` |
 | Natural-language instructions and tools | `Skill` |
 

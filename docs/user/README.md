@@ -43,7 +43,7 @@ in  A.Agent::{
     , behavior =
         A.Behavior.ShikumiProgram
           { task = "noop-summary", preferEnrichment = False
-          , grounding = None Text, enabledBy = None Text }
+          , grounding = None Text }
     , trigger = A.Trigger.Schedule { cron = "* * * * *" }
     , sinks = [ A.Sink.KawaDigest { subjectType = "heartbeat", verb = "heartbeat.tick" } ]
     }
@@ -65,7 +65,7 @@ agent declaration in order:
 | **[Getting Started](./getting-started.md)** | Prerequisites, building, the database, your first validate + run |
 | **[Writing Agents](./writing-agents.md)** | The Dhall schema: `name`, `description`, and how the four parts fit together |
 | **[Triggers](./triggers.md)** | The three trigger classes — Schedule, Stream, Event — and the feedback guard |
-| **[Behaviors](./behaviors.md)** | The behavior union — Deterministic, ShikumiProgram, Skill, CoordinatingSkill, Flow |
+| **[Behaviors](./behaviors.md)** | The behavior union — ShikumiProgram, Skill, CoordinatingSkill, Flow, CodingAgent |
 | **[Flows](./flows.md)** | Durable lifecycle-backed behaviors that can park, resume, and render diagrams |
 | **[Typed decisions in Flows](./typed-decisions.md)** | Model aliases, validated typed results, replay, and actual-attempt evidence |
 | **[HTTP API — agents and runs](./http-api.md)** | Authentication, agent discovery, idempotent submission, status, and acceptance history |
@@ -105,9 +105,7 @@ Danwa addressed conversations use the Event path: Danwa publishes
 public topic with `consume-events`, and replies through Danwa's HTTP API. Shikigami does not
 read Danwa's database or private event store.
 
-> **Status note.** The schema's `Deterministic` arm and some detector seed tasks
-> are not executable yet; see [Behaviors](./behaviors.md) and [Detectors](./detectors.md).
-> Protected external actions fail closed by default and need deployment authorization.
+> **Status note.** Protected external actions fail closed by default and need deployment authorization.
 > Stubs and fixtures provide local contract proofs; the
 > [initial spec](../initial-spec.md) records the original design, not current feature status.
 

@@ -68,7 +68,7 @@ delegatingAgent =
     { name = fixtureAgentName "lead",
       description = "delegation guard fixture",
       trigger = Event {eventType = declarationCoordinate ("test")},
-      behavior = Deterministic {rule = "test", params = mempty},
+      behavior = Flow {name = declarationCoordinate "test-flow"},
       sinks = [],
       delegates = map fixtureAgentName ["worker"],
       delegationBudget = Nothing,

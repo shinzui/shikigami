@@ -9,8 +9,7 @@
     "tag": "ShikumiProgram",
     "task": "noop-summary",
     "preferEnrichment": false,
-    "grounding": null,
-    "enabledBy": null
+    "grounding": null
   },
   "sinks": [
     {

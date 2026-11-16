@@ -134,7 +134,7 @@ tests databaseFixture =
         assertEqual
           "a non-flow behavior is not this check's business"
           []
-          (flowDeclarationErrors builtinFlowRegistry (flowBehaviorAgent (Deterministic {rule = "flow-test", params = mempty}))),
+          (flowDeclarationErrors builtinFlowRegistry (flowBehaviorAgent (Skill {path = declarationCoordinate "unused"}))),
       testCase "trivial flow completes through keiro runWorkflowWith" do
         outcome <- (runFlowWorkflow databaseFixture) completedFlow (WorkflowId "flow-completed-spike")
         assertEqual "two-step flow completes" (Right (Completed (toJSON (2 :: Int)))) outcome,
@@ -779,10 +779,7 @@ flowAgentDecl flowAgent =
       description = "flow capability test agent",
       trigger = Event {eventType = declarationCoordinate ("customer.risk_detected")},
       behavior =
-        Deterministic
-          { rule = "flow-test",
-            params = mempty
-          },
+        Flow {name = declarationCoordinate "test-flow"},
       sinks = [],
       delegates = map fixtureAgentName [],
       delegationBudget = Nothing,

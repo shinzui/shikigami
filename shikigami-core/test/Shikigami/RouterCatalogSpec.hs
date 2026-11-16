@@ -145,7 +145,7 @@ tests =
               ],
       testCase "failed manifests contribute only an unassociated count" do
         snapshot <- configuredSnapshot [principalRecord "reviewer" Directory.Active]
-        let declaration = (specialist "reviewer" True Nothing) {behavior = Deterministic {rule = "secret behavior prompt", params = Map.empty}}
+        let declaration = (specialist "reviewer" True Nothing) {behavior = Skill {path = declarationCoordinate "secret behavior prompt"}}
             catalog =
               build
                 (AgentLoadReport [loaded "reviewer.dhall" declaration, failed "/secret/path.dhall" "secret diagnostic"])
@@ -192,7 +192,7 @@ routerDeclarationFixture delegates =
     { name = fixtureAgentName "architecture-practice-router",
       description = "Routes architecture practice reviews",
       trigger = Event {eventType = declarationCoordinate ("proof.architecture-practice")},
-      behavior = Deterministic {rule = "route", params = Map.empty},
+      behavior = Flow {name = declarationCoordinate "test-flow"},
       sinks = [],
       delegates = map fixtureAgentName delegates,
       delegationBudget = Nothing,
@@ -226,7 +226,7 @@ specialistWithDescription description name enabled declaredPrincipal =
     { name = fixtureAgentName name,
       description,
       trigger = Event {eventType = declarationCoordinate ("proof.specialist")},
-      behavior = Deterministic {rule = "review", params = Map.empty},
+      behavior = Flow {name = declarationCoordinate "test-flow"},
       sinks = [],
       delegates = map fixtureAgentName [],
       delegationBudget = Nothing,

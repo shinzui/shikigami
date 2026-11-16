@@ -48,7 +48,7 @@ in  [ { name = "agent-declaration"
       , check =
           S.Check.DhallSchema
             { schema = "schema/Agent.dhall"
-            , hash = "sha256:cd64b5b991d1ad1a5d3b7e2a87263a5f6b5d74dc4d2e6896d0eb47c779fbc2c7"
+            , hash = "sha256:3f2b4809a5c20e4464c746c33c3c7900ab835609d99c6c59c8e78b6c3c309dcb"
             , corpus = "api-baseline/corpus/agents"
             }
       , freeze = S.Freeze.Declaration

@@ -47,3 +47,4 @@
 0048-watchdog-inspection-indexes.sql
 0049-recurring-mandates.sql
 0050-action-record.sql
+0051-drop-detector-suppression-table.sql

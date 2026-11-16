@@ -440,8 +440,7 @@ successSpecialist specialistName =
     ShikumiProgram
       { task = declarationCoordinate ("noop-summary"),
         preferEnrichment = False,
-        grounding = Nothing,
-        enabledBy = Nothing
+        grounding = Nothing
       }
 
 failingSpecialist :: AgentDecl
@@ -451,8 +450,7 @@ failingSpecialist =
     ShikumiProgram
       { task = declarationCoordinate ("missing-router-test-task"),
         preferEnrichment = False,
-        grounding = Nothing,
-        enabledBy = Nothing
+        grounding = Nothing
       }
 
 specialist :: Text -> Behavior -> AgentDecl

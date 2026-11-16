@@ -43,7 +43,7 @@ Start with [Writing Agents](../user/writing-agents.md), then run `shikigami vali
 
 ## Limits
 
-Parsing does not establish executability or authorization. `Deterministic` is accepted by the schema but its runner returns `UnsupportedBehavior`. `ShikumiProgram` enrichment, grounding, and `enabledBy` fields are metadata unless the selected program implements them.
+Parsing does not establish executability or authorization. `ShikumiProgram` enrichment and grounding fields are metadata unless the selected program implements them.
 
 The available implementation is unreleased. No Shikigami release tags or published releases were present when this catalog was authored; the Cabal package version alone does not establish a released compatibility promise.
 

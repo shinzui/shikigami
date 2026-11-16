@@ -275,7 +275,7 @@ tests databaseFixture =
                     ("duplicate", capabilityDecl "overlay-duplicate" (Skill {path = declarationCoordinate ("unused")}) [workspaceReadId, workspaceReadId] (Just overlayIdentity) [], allowedRuntime),
                     ("denied", capabilityDecl "overlay-denied" (Skill {path = declarationCoordinate ("unused")}) [workspaceReadId] (Just overlayIdentity) [], deniedRuntime),
                     ("missing-identity", capabilityDecl "overlay-no-identity" (Skill {path = declarationCoordinate ("unused")}) [workspaceReadId] Nothing [], allowedRuntime),
-                    ("non-skill", capabilityDecl "overlay-non-skill" (ShikumiProgram {task = declarationCoordinate ("noop-summary"), preferEnrichment = False, grounding = Nothing, enabledBy = Nothing}) [workspaceReadId] (Just overlayIdentity) [], allowedRuntime),
+                    ("non-skill", capabilityDecl "overlay-non-skill" (ShikumiProgram {task = declarationCoordinate ("noop-summary"), preferEnrichment = False, grounding = Nothing}) [workspaceReadId] (Just overlayIdentity) [], allowedRuntime),
                     ("mutation", capabilityDecl "overlay-mutation" (Skill {path = declarationCoordinate ("unused")}) [descriptorCapability mutation] (Just overlayIdentity) [], mutationRuntime)
                   ]
             forM_ cases \(label, declaration, runtime) -> do
@@ -2659,8 +2659,7 @@ decl =
         ShikumiProgram
           { task = declarationCoordinate ("noop-summary"),
             preferEnrichment = False,
-            grounding = Nothing,
-            enabledBy = Nothing
+            grounding = Nothing
           },
       sinks = [KawaDigest {subjectType = activityCoordinate ("heartbeat"), verb = activityCoordinate ("heartbeat.tick")}],
       delegates = map fixtureAgentName [],
@@ -2689,8 +2688,7 @@ missingTaskDecl =
         ShikumiProgram
           { task = declarationCoordinate ("missing-task"),
             preferEnrichment = False,
-            grounding = Nothing,
-            enabledBy = Nothing
+            grounding = Nothing
           },
       sinks = [],
       delegates = map fixtureAgentName [],
@@ -2719,8 +2717,7 @@ profiledDecl =
         ShikumiProgram
           { task = declarationCoordinate ("noop-summary"),
             preferEnrichment = False,
-            grounding = Nothing,
-            enabledBy = Nothing
+            grounding = Nothing
           },
       sinks = [KawaDigest {subjectType = activityCoordinate ("heartbeat"), verb = activityCoordinate ("heartbeat.tick")}],
       delegates = map fixtureAgentName [],

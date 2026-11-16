@@ -517,7 +517,7 @@ in  Schema.Project::{
         , type = Schema.PackageType.Tool
         , language = Schema.Language.Haskell
         , path = Some "shikigami-migrations"
-        , description = Some "Schema migrations for shikigami (composes kioku + shikigami_fired)"
+        , description = Some "Schema migrations for shikigami (composes kioku, pgmq and the shikigami schema)"
         , dependencies =
           [ Schema.Dependency.WithAugmentation
               { name = "haskell/aeson:aeson"

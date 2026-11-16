@@ -50,7 +50,7 @@ tests fixture =
         attempt "principal cannot create" context {objectives = Objective.defaultObjectiveSettings & #enabled .~ Objective.ObjectivesEnabled} (document valid) PrincipalCannotCreateObjectives
         attempt "repository outside the catalog" context (document valid {repositoryNames = ["repo_other"]}) (UnknownRepository (repositoryId "repo_other"))
         attempt "unknown coordinator" context (document valid {coordinatorName = "nobody"}) (UnknownCoordinator (name "nobody"))
-        attempt "coordinator cannot coordinate" context {declarations = [coordinatorDecl & #behavior .~ Deterministic {rule = "x", params = Map.empty}]} (document valid) (CoordinatorNotCoordinating (name "coordinator"))
+        attempt "coordinator cannot coordinate" context {declarations = [coordinatorDecl & #behavior .~ Skill {path = declarationCoordinate "unused"}]} (document valid) (CoordinatorNotCoordinating (name "coordinator"))
         attempt "coordinator without an identity" context {declarations = [coordinatorDecl & #identity .~ Nothing]} (document valid) CoordinatorHasNoIdentity
         attempt "no model attempts" context (document valid {perObjectiveLimits = object ["ActiveWork" .= (1 :: Int), "Tokens" .= unbounded, "CostMicroUsd" .= unbounded]}) EnvelopeDeniesModelAttempts
         attempt "a finite cost" context (document valid {perObjectiveLimits = limits 2 (9 :: Int)}) EnvelopeDeniesModelAttempts

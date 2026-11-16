@@ -236,7 +236,6 @@ behavior  ×  trigger  ×  sinks
 ```
 
 - A **registered program** on a **stream** trigger raising a **signal** → a detector.
-  The `Deterministic` arm is schema-only today and fails with `UnsupportedBehavior`.
 - A **shikumi program** on a **schedule** writing a **kawa digest** → a recurring summarizer.
 - A **skill** on a public **event** trigger opening a **danwa conversation** → an addressed responder.
 - A **skill** on an external conversation activity using **ChannelEgress** → a guarded reply through Kanmon.
@@ -284,9 +283,8 @@ This says: *when a `ticket.received` activity about a `ticket` subject arrives o
 
 - `agents/*.dhall` — top-level declared agents the worker loads from its `--agents`
   directory.
-- `agents/detectors/*.dhall` — the intelligence-layer **detectors** (see
-  **[Detectors](./detectors.md)**). Point both worker and consumer at that directory.
-  Directory loading is not recursive; a new program or Flow also needs a compiled registry entry.
+- A **detector** is an agent on a stream trigger (see **[Detectors](./detectors.md)**).
+  Directory loading is not recursive; a new Flow ships in a [flow pack](./flows.md#flow-packs).
 - `agents/skills/<name>/SKILL.md` — skill behaviors referenced by `Skill { path = … }` (see
   **[Skills](./skills.md)**).
 

@@ -31,7 +31,6 @@ shikigami enqueue-run <AGENT> [--payload <JSON>] [--conversation] [--key <TEXT>]
 shikigami resolve-approval <TOKEN> (--approve | --reject <REASON>)
 shikigami publish-fixture <FILE> [--broker <HOST:PORT>] [--topic <TOPIC>]
 shikigami stub-kawa --port <PORT> [--republish-topic <TOPIC>] [--broker <HOST:PORT>]
-shikigami danwa-spike --human <PARTICIPANT> --agent <PARTICIPANT> [--danwa-url <URL>]
 shikigami grants list [--limit <N>] [--after <AGENT:KIND>]
 shikigami grants grant <AGENT> <KIND> [--by <WHO>]
 shikigami grants revoke <AGENT> <KIND> [--by <WHO>]
@@ -250,7 +249,7 @@ appends JSON Lines to `$XDG_STATE_HOME/shikigami/record.jsonl` (normally
 
 `shikigami-run-behavior` rejects sanctioned-profile requirements before dispatch;
 use `shikigami-agent-run` to resolve those from the database. It also rejects
-`Flow` and `Deterministic` behavior arms.
+the `Flow` behavior arm.
 
 → See [Behaviors](./behaviors.md).
 
@@ -478,16 +477,6 @@ principal, tier and kind, then the action tag, resource, decision and who decide
 `--refusals` keeps only decisions that did not allow; `--kind authority.` keeps kinds with that
 prefix; `--json` prints JSON Lines. A decision whose record append fails is refused, so every
 action that ran has a row. **Needs the DB** (`database.connection_string`).
-
-## `shikigami danwa-spike`
-
-```bash
-$ shikigami danwa-spike --human <PARTICIPANT> --agent <PARTICIPANT> [--danwa-url <URL>]
-```
-
-Exercise the Danwa HTTP client end to end by starting a conversation, posting a human message,
-and replying as the agent. A development spike for checking connectivity and participant ids
-against a running Danwa, not part of the runtime path.
 
 ---
 

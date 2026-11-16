@@ -17,11 +17,8 @@ has five arms:
 
 ```dhall
 let Behavior =
-      < Deterministic :
-          { rule : Text, params : List { mapKey : Text, mapValue : Text } }
-      | ShikumiProgram :
-          { task : Text, preferEnrichment : Bool
-          , grounding : Optional Text, enabledBy : Optional Text }
+      < ShikumiProgram :
+          { task : Text, preferEnrichment : Bool, grounding : Optional Text }
       | Skill : { path : Text }
       | CoordinatingSkill : { path : Text }
       | Flow : { name : Text }
@@ -35,7 +32,6 @@ let Behavior =
 
 | Arm | Runs via | Needs a model key? | Use for |
 | --- | --- | --- | --- |
-| **Deterministic** | schema only; runner returns `UnsupportedBehavior` | — | reserved rule declaration |
 | **ShikumiProgram** | `mori://shinzui/shikumi` | Only when the program calls a model | typed, structured, evaluable pipelines |
 | **Skill** | `mori://shinzui/baikai` | Only when the skill calls a model | "follow these instructions, maybe call these tools" |
 | **CoordinatingSkill** | admitted durable execution | When the selected provider requires one | instructions controlling a bounded set of continuing workers |
@@ -46,21 +42,6 @@ Supported behaviors return JSON to the shared session, memory, and sink lifecycl
 Flows execute through the durable agent workflow, while the synchronous runner
 supports registered programs and Skills.
 
-## Deterministic — a named rule
-
-```dhall
-behavior =
-  A.Behavior.Deterministic
-    { rule = "stalled-intention"
-    , params = toMap { staleAfterDays = "7" }
-    }
-```
-
-The schema accepts this arm, but `Shikigami.Behavior.Run.runBehavior` returns
-`UnsupportedBehavior "Deterministic"`. The worker uses that same runner for this
-arm. A valid manifest therefore does not imply an executable rule. Implement
-rule logic as a registered program or compiled Flow until this arm has a runner.
-
 ## ShikumiProgram — the typed path
 
 ```dhall
@@ -69,7 +50,6 @@ behavior =
     { task = "noop-summary"      -- a registered Shikumi task
     , preferEnrichment = False   -- schema metadata; task must implement this
     , grounding = None Text      -- schema metadata; task must implement this
-    , enabledBy = None Text      -- schema metadata; not an enforced gate
     }
 ```
 
@@ -81,10 +61,9 @@ schemas, validation, ensembles, an eval harness. Fields:
   entries are `noop-summary`, `web-researcher`, and `code-researcher`, all deterministic
   proof programs. The durable agent workflow additionally handles the
   `research-supervisor` delegation program; the synchronous runner cannot run it.
-- `preferEnrichment`, `grounding`, and `enabledBy` are accepted declaration fields
-  but are not consulted by the current dispatcher. In particular, `enabledBy`
-  does not provide an environment-variable execution gate. Use `enabled = False`
-  to exclude an agent from long-running loaders.
+- `preferEnrichment` and `grounding` are accepted declaration fields but are not
+  consulted by the current dispatcher. Use `enabled = False` to exclude an agent
+  from long-running loaders.
 
 The runner supplies trigger payload and recalled memory through the task argument
 map. New tasks must implement any enrichment or grounding behavior themselves.

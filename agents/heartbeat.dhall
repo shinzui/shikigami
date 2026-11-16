@@ -6,7 +6,6 @@ in  A.Agent::{
           { task = "noop-summary"
           , preferEnrichment = False
           , grounding = None Text
-          , enabledBy = None Text
           }
     , trigger = A.Trigger.Schedule { cron = "* * * * *" }
     , sinks = [ A.Sink.KawaDigest { subjectType = "heartbeat", verb = "heartbeat.tick" } ]

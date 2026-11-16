@@ -8,7 +8,6 @@ in  A.Agent::{
           { task = "noop-summary"
           , preferEnrichment = False
           , grounding = None Text
-          , enabledBy = None Text
           }
     , delegates = [ "proof-reviewer" ]
     , routing = Some

@@ -56,7 +56,8 @@ data RunError
   | -- | The declaration's requested overlays and the run-local environment's
     -- active overlays disagree, or the declaration repeats an id.
     CapabilityOverlayMismatch ![CapabilityId] ![CapabilityId]
-  | -- | A behavior arm not implemented by this plan (e.g. Deterministic, owned by EP-6).
+  | -- | A behavior arm the one-off runner does not execute; it needs the
+    -- durable agent-run path (a Flow, a coordinating Skill, a coding agent).
     UnsupportedBehavior !Text
   | HarnessPolicyRefused !Text
   deriving stock (Eq, Show, Generic)

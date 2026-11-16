@@ -68,7 +68,7 @@ tests =
         listCapabilities catalog @?= [repositorySearchDescriptor, workspaceReadDescriptor],
       testCase "empty resolution needs no identity, behavior compatibility, or policy call" do
         let catalog = expectRight (mkCapabilityCatalog [])
-            incompatible = ResolutionSubject {principal = Nothing, mode = Durable, behavior = Deterministic {rule = "none", params = Map.empty}, profile = Nothing}
+            incompatible = ResolutionSubject {principal = Nothing, mode = Durable, behavior = Flow {name = declarationCoordinate "test-flow"}, profile = Nothing}
         resolveCapabilityOverlays catalog (\_ _ -> error "policy must not run") incompatible []
           @?= Right emptyResolvedCapabilitySet,
       testCase "resolves authorized Skill requests to a canonical snapshot" do
@@ -80,7 +80,7 @@ tests =
         let catalog = expectRight (mkCapabilityCatalog [workspaceReadDescriptor])
             unknown = expectRight (mkCapabilityId "unknown.capability")
             noIdentity = (durableSkillSubject & #principal .~ (Nothing))
-            nonSkill = (durableSkillSubject & #behavior .~ (Deterministic {rule = "none", params = Map.empty}))
+            nonSkill = (durableSkillSubject & #behavior .~ (Flow {name = declarationCoordinate "test-flow"}))
             deny _ CapabilityDescriptor {capability} = Left CapabilityAuthorizationDenied {capability, reason = "policy denied"}
         resolveCapabilityOverlays catalog allow durableSkillSubject [workspaceReadId, workspaceReadId]
           @?= Left DuplicateCapabilityRequest {capability = workspaceReadId}
@@ -91,7 +91,7 @@ tests =
         resolveCapabilityOverlays catalog deny durableSkillSubject [workspaceReadId]
           @?= Left CapabilityAuthorizationDenied {capability = workspaceReadId, reason = "policy denied"}
         resolveCapabilityOverlays catalog allow nonSkill [workspaceReadId]
-          @?= Left CapabilityBehaviorUnsupported {behaviorKind = "Deterministic"},
+          @?= Left CapabilityBehaviorUnsupported {behaviorKind = "Flow"},
       testCase "durable resolution admits observation tools only" do
         let mutation = descriptorWithClass "workspace.write" IdempotentMutation
             emission = descriptorWithClass "workspace.publish" IrreversibleEmission

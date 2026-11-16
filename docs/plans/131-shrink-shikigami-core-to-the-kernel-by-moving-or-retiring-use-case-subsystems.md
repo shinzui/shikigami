@@ -88,6 +88,23 @@ this Mac through the same operator verbs as before (`watchdog inspect`, `proposa
   run on a checkout under `/Users/shinzui/Keikaku/bokuno/` still succeeds. This milestone is
   a prerequisite of EP-11's first freeze, the declaration baseline, because it is the last
   change this plan makes to `schema/Agent.dhall` and the `AgentDecl` codec.
+  - Implemented 2026-11-16; one acceptance item is open. The removals, the migration, the
+    tests and the docs are done. The real-model Skill run on a checkout is not: under
+    `local-operator` it needs the operator's one-time confirmation, and no grant is stored in
+    the default state directory. `shikigami-agent-run --set trust.tier=local-operator
+    --no-confirm --agent agents/local-maintainer.dhall --workspace mori://shinzui/fsrs-hs`
+    answers `no stored grant for this declaration; run it once in a terminal to confirm it`.
+    An agent must not answer that prompt for the operator. Run it once in a terminal with
+    `behavior.provider=openai` and tick this box.
+  - Evidence so far. The plan's acceptance search
+    `rg -n 'Deterministic \{|Behavior\.Deterministic|< Deterministic' --glob '!docs/plans/**' --glob '!docs/masterplans/**'`
+    matches only `docs/evidence/keiro-0.22/domain-declarations.json`, a retained record of an
+    earlier tree. Every manifest under `agents/`, `agents/proof/` and the examples pack
+    validates. A stub-provider Skill run through the durable path completes:
+    `shikigami-agent-run --agent agents/triage-note.dhall --payload '{"ticket":"..."}'` printed
+    `reply: stub-skill: instructions acknowledged; no model was called` and exit 0.
+    `just migrate` applied `shikigami/0051-drop-detector-suppression-table` and
+    `to_regclass('shikigami.fired')` is null; the table held 0 rows before.
 - [ ] M2: Flow decision, routing and slot vocabularies are open, checked values rather than
   closed kernel enumerations. The example flows run from `flow-pack-examples`. The
   `kikan-shikigami` distribution exists, and its worker runs `objective-example`, which
@@ -112,6 +129,27 @@ this Mac through the same operator verbs as before (`watchdog inspect`, `proposa
 
 ## Surprises & Discoveries
 
+- Observation (M1): the API baseline of plan 136 saw the removals the day it landed, and
+  classified them as its rules say.
+  Evidence: `just api-baseline` after the edits printed `agent-declaration  provisional
+  CHANGED` with the schema hash moving from `sha256:cd64b5b9…` to `sha256:3f2b4809…`, and
+  `cli-shikigami  provisional  BREAKING` with `shikigami no longer offers: danwa-spike`.
+  `agent-journal-codec` stayed `clean`: the three corpus declarations use neither the removed
+  arm nor `enabledBy`, so their journal encodings did not move. Removing a union alternative
+  is breaking for a declaration that used it, and the corpus rule cannot say so unless the
+  corpus holds one. None could have run.
+- Observation (M1): eleven shipped manifests and three test fixtures carried
+  `enabledBy = None Text`, and one test built `ShikumiProgram` positionally.
+  Evidence: the field was removed from `agents/heartbeat.dhall`, `agents/danwa-heartbeat.dhall`,
+  seven manifests under `agents/proof/`, two under `tests/hurl/agents/` and three under
+  `shikigami-core/test/fixtures/agents/`. Dhall record completion does not tolerate an
+  unknown field, so a declaration elsewhere that still sets it fails to load with
+  "Expression doesn't match annotation".
+- Observation (M1): the migrations smoke test used `shikigami.fired` as its probe table.
+  Evidence: `shikigami-migrations/test/Migrate.hs` altered that table to prove drift
+  detection and tested its presence as a provisioning prerequisite. Both now use
+  `shikigami.action_record`. `expected-schema.txt` lost the table's 15 lines, and
+  `migrations.lock` gained the checksum of `0051-drop-detector-suppression-table.sql`.
 - Observation: The use cases are woven into the kernel's own workflow and flow runner, not
   just registered beside it. `domain/shikigami/agent-run.keiro` declares watchdog,
   initiative, practice-review, routing and adaptive-delivery step labels in the `AgentRun`
@@ -160,6 +198,41 @@ this Mac through the same operator verbs as before (`watchdog inspect`, `proposa
 
 ## Decision Log
 
+- Decision (M1): The classification in Context and Orientation is confirmed against the tree
+  at `e6378f8f`, with one amendment already written into its table: `AtRiskCustomer` left for
+  `flow-pack-examples` under EP-5. Every other path in the table exists, and `kernel.namespaces`
+  and `kernel.frozenModules` in `tools/style/module-ownership.json` agree with it: `Watchdog`,
+  `Initiative` and `PracticeReview` are `flow-pack`, `DanwaConversation` is `kikan-binding`,
+  and the frozen list holds the example flows, `Flow.{Initiative, Observe, Watchdog,
+  OpenTelemetryPracticeReview}`, the four `Program.Decision` modules and `Flow.Builtin`.
+  Baseline at M1, measured after its deletions with the commands in Concrete Steps: 469
+  modules, 83,611 lines, 73 top-level namespaces, and 38 modules importing `Watchdog`,
+  `Initiative` or `PracticeReview`. The draft's 437 modules, 78,094 lines and 63 namespaces
+  were measured on 2026-11-15, before MasterPlan 22's kernel work landed.
+  Date: 2026-11-16
+- Decision (M1): Recheck of the pre-release facts before the codec change. `git tag --list`
+  is empty; `docs/workflow-versioning.md` still carries the first-release exception; MasterPlan
+  22 records no end of it. The development database still holds the three parked agent runs
+  recorded in plan 130's Decision Log, and M1 proceeded.
+  Rationale: `AgentDecl` is journaled by `lookup-agent`. A journal written before this change
+  decodes after it unless its declaration used the `Deterministic` arm, and none can: no
+  manifest that ran ever named it, because the runner refused it. An `enabledBy` key in an
+  old journal is ignored by the decoder. The parked runs are a playbook run and two Skill
+  runs. `just keiro-gate` reports no finding for the change (see Surprises).
+  Date: 2026-11-16
+- Decision (M1): `agents/detectors/` is deleted whole, with its README.
+  Rationale: the plan named three files in it. `at-risk-customer-flow.dhall` had already moved
+  to the examples pack, so the README would have described an empty directory.
+  `docs/user/detectors.md` now says a detector is an ordinary agent on a stream trigger.
+  Date: 2026-11-16
+- Decision (M1): The two public surfaces the removals touch were re-pinned in the same
+  commit: `agent-declaration` (the schema hash) and `cli-shikigami` (`danwa-spike` is gone).
+  Rationale: both are provisional and report-only (plan 136, M1). `just api-baseline` reported
+  `agent-declaration CHANGED`, because the three corpus declarations still load and
+  `agent-journal-codec` stayed clean, and `cli-shikigami BREAKING: shikigami no longer offers:
+  danwa-spike`. Both removals are this plan's approved removals; the owners' Decision Logs
+  point here.
+  Date: 2026-11-16
 - Decision: No subsystem is re-expressed as a playbook in this plan. All movable use cases
   become flow packs.
   Rationale: Every candidate needs something EP-4's step kinds (`CodingAgent`, `Skill`,

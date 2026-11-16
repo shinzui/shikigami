@@ -8,7 +8,6 @@ in  A.Agent::{
           { task = "noop-summary"
           , preferEnrichment = False
           , grounding = None Text
-          , enabledBy = None Text
           }
     , trigger = A.Trigger.Event { eventType = "proof.identity" }
     , identity = Some { principal = "principal_shikigami_proof" }
