@@ -43,7 +43,6 @@ module Shikigami.Server.Command
   )
 where
 
-import Control.Exception (finally)
 import Control.Lens ((&), (.~))
 import Data.Bifunctor (first)
 import Data.Generics.Labels ()
@@ -249,8 +248,10 @@ adminContext verb config =
             Directory.AllowRun (Just _) -> True
             _ -> False
           )
-          <$> Directory.consultLifecycle directoryRuntime.handle (Just (declarationCoordinate (principalText principal))) (principalText principal)
-            `finally` maybe (pure ()) id directoryRuntime.refresher,
+          -- 'startDirectory' has already loaded the projection once. Its
+          -- @refresher@ is the periodic loop a long-lived role supervises; a
+          -- one-shot verb must not run it, because it never returns.
+          <$> Directory.consultLifecycle directoryRuntime.handle (Just (declarationCoordinate (principalText principal))) (principalText principal),
       runStore = \action -> do
         connection <- revealSecretText <$> requireDatabaseUrl verb config
         verifyShikigamiMigrations connection

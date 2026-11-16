@@ -10,6 +10,7 @@
 -- spawning, and the rendered help text is available to assert on.
 module Shikigami.Server.CommandSpec (tests) where
 
+import Control.Exception (bracket)
 import Control.Lens ((&), (.~))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
@@ -24,18 +25,25 @@ import Keiro.Workflow.Awakeable (AwakeableId, awakeableIdText)
 import Options.Applicative
 import Settei.Env (envSnapshot, environmentSource)
 import Shikigami.Agent.Approval (ApprovalDecision (..))
-import Shikigami.App.Config (AppConfig (..), Role (..), environmentBindings, revealSecretText)
+import Shikigami.Agent.Principal (mkAgentPrincipal)
+import Shikigami.App.Config (AppConfig (..), Role (..), defaultAppConfig, environmentBindings, revealSecretText)
 import Shikigami.App.Config.Load (ConfigOptions (..), ConfigRun (..), DiagnosticMode (..), appConfigRun)
+import Shikigami.Directory (DirectorySettings (..))
+import Shikigami.Duration (remainingDuration)
 import Shikigami.Execution.Counter (nextAttempt, noAttempts)
 import Shikigami.Execution.Quantity (ResourceAmount, parseResourceAmount)
 import Shikigami.Execution.Resources qualified as Resources
-import Shikigami.Flow.Pack (AdminVerb (..), FlowPack (..), noTriggerHooks, parseFlowPackName)
-import Shikigami.Server.Command (adminInfo, adminInfoWith, adminPrefs, adminSubcommands, adminSubcommandsWith, repeatedVerbs)
+import Shikigami.Flow.Pack (AdminContext (..), AdminVerb (..), FlowPack (..), noTriggerHooks, parseFlowPackName)
+import Shikigami.Server.Command (adminContext, adminInfo, adminInfoWith, adminPrefs, adminSubcommands, adminSubcommandsWith, repeatedVerbs)
 import Shikigami.Server.Command.Ops (redactDatabaseUrl)
 import Shikigami.Server.Command.ResolveApproval (resolutionResult, resolveApprovalOptionsParser)
 import Shikigami.Server.Command.Resources (resourceView)
 import Shikigami.StateRevision (StateRevision, parseRevision)
+import System.Directory (removeFile)
+import System.Environment (lookupEnv)
 import System.Exit (ExitCode (..))
+import System.IO (hClose, hPutStr, openTempFile)
+import System.Timeout (timeout)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, testCase, (@?=))
 
@@ -68,6 +76,19 @@ tests =
       testCase "a verb declared twice is named, and distinct verbs are not" do
         repeatedVerbs (map fst adminSubcommands) @?= []
         repeatedVerbs ["flows", "proposals", "record", "proposals", "flows"] @?= ["flows", "proposals"],
+      -- A one-shot verb reads the directory once. It used to run the periodic
+      -- refresh loop as cleanup, which never returns, so every verb that
+      -- checked a principal hung under a configured directory.
+      testCase "a verb's principal check returns under a file directory" do
+        temporary <- maybe "/tmp" id <$> lookupEnv "TMPDIR"
+        bracket (openTempFile temporary "shikigami-admin-directory.json") (\(file, handle) -> hClose handle >> removeFile file) \(file, handle) -> do
+          hPutStr handle "[{\"principal_id\":\"agent_probe\",\"handle\":\"probe\",\"lifecycle\":\"active\"}]"
+          hClose handle
+          let context = adminContext "probe" (defaultAppConfig & #directorySettings .~ DirectoryFile file (remainingDuration 5))
+          known <- either (error . Text.unpack) pure (mkAgentPrincipal "agent_probe")
+          unknown <- either (error . Text.unpack) pure (mkAgentPrincipal "agent_absent")
+          timeout 5_000_000 (context.principalActive known) >>= (@?= Just True)
+          timeout 5_000_000 (context.principalActive unknown) >>= (@?= Just False),
       -- A use case's verbs arrive with its pack (docs/adr/0129): a composed
       -- admin command mounts them, and the stock command does not have them.
       testCase "a pack's verb is mounted in a composed admin command and absent from the stock one" do
