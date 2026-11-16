@@ -92,7 +92,11 @@ data KernelInputs = KernelInputs
     sdkExports :: !(Map Text [Text]),
     -- | The ADR-75 domain roots, and the roots of the composition modules and
     -- the generated layer.
-    reviewedRoots :: !(Set Text)
+    reviewedRoots :: !(Set Text),
+    -- | What each module of the adaptive coordinator imports. The coordinator
+    -- is a kernel primitive on the strength of depending on no Kikan service
+    -- (plan 131, M6), so that claim is checked and not only recorded.
+    coordinatorImports :: ![(Text, [Text])]
   }
   deriving stock (Eq, Show)
 
@@ -118,7 +122,22 @@ data KernelViolation
   | PrefixedOutOfCorePackage !Text
   | -- | (SDK component, the modules it re-exports)
     SdkExportsDrifted !Text ![Text]
+  | -- | (coordinator module, the Kikan binding module it imports)
+    CoordinatorImportsBinding !Text !Text
   deriving stock (Eq, Show)
+
+-- | The adaptive coordinator: the modules that stay in the kernel as a
+-- primitive rather than leaving as a use case.
+isCoordinatorModule :: Text -> Bool
+isCoordinatorModule name =
+  "Shikigami.Coordination." `Text.isPrefixOf` name || name `elem` ["Shikigami.Flow.AdaptiveDelivery", "Shikigami.Program.Decision.Adaptive"]
+
+-- | The Kikan service bindings still compiled into the core. EP-10 moves them
+-- to a binding package, after which the package dependency rule covers this.
+isBindingModule :: Text -> Bool
+isBindingModule name =
+  name `elem` ["Shikigami.Sink.KawaClient", "Shikigami.Sink.KizashiClient", "Shikigami.Sink.Danwa", "Shikigami.Sink.KanmonClient", "Shikigami.Sink.ReiAction", "Shikigami.Integration.Danwa", "Shikigami.Authority.KikanEn"]
+    || any (`Text.isPrefixOf` name) ["Shikigami.Authority.KikanEn.", "Shikigami.DanwaConversation."]
 
 -- ── The rules ───────────────────────────────────────────────────────────────
 
@@ -140,7 +159,8 @@ kernelViolations policy inputs =
       | (component, pinned) <- Map.toList policy.sdkModules,
         Just found <- [Map.lookup component inputs.sdkExports],
         sort found /= sort pinned
-      ]
+      ],
+      [CoordinatorImportsBinding owner imported | (owner, imports) <- inputs.coordinatorImports, isCoordinatorModule owner, imported <- imports, isBindingModule imported]
     ]
   where
     modules = mapMaybe (\path -> (path,) <$> moduleOf path) inputs.sources
@@ -231,6 +251,8 @@ renderKernelViolation policy = \case
     package <> " lives under packs/ but uses the shikigami- prefix, which names the seven stock packages."
   SdkExportsDrifted component found ->
     "shikigami-core:" <> component <> " re-exports " <> Text.intercalate ", " found <> ", which differs from kernel.sdkModules."
+  CoordinatorImportsBinding owner imported ->
+    owner <> " imports " <> imported <> ". The adaptive coordinator is a kernel primitive because it depends on no Kikan service; reach the service through a capability, or record a new disposition."
   where
     leaving = \case
       LeavingToPack -> "to a flow pack"
@@ -266,7 +288,20 @@ readTree = do
             Just block <- [stanzaBlock ("library " <> component) coreCabal]
           ]
       reviewedRoots = Set.fromList (ownership.domainRoots <> mapMaybe rootOf (ownership.generatedRoot : ownership.compositionModules))
-  pure (ownership.kernel, KernelInputs {sources, stock = fmap parseStanzas <$> stockFiles, outOfCore, sdkExports, reviewedRoots})
+  coordinatorImports <-
+    mapM
+      (\(path, name) -> (name,) . importedModules <$> TIO.readFile (sourceRoot </> path))
+      [(path, name) | path <- sources, Just name <- [moduleOf path], isCoordinatorModule name]
+  pure (ownership.kernel, KernelInputs {sources, stock = fmap parseStanzas <$> stockFiles, outOfCore, sdkExports, reviewedRoots, coordinatorImports})
+
+-- | The modules a source file imports, qualified or not.
+importedModules :: Text -> [Text]
+importedModules source =
+  [ name
+  | line <- Text.lines source,
+    Just rest <- [Text.stripPrefix "import " line],
+    name : _ <- [filter (/= "qualified") (Text.words rest)]
+  ]
 
 -- | Every package directly under @packs/@.
 packPackages :: FilePath -> IO [OutOfCorePackage]
@@ -323,6 +358,20 @@ tests =
         assertBool "something is leaving" (any (/= Kernel) (Map.elems policy.namespaces)),
       -- Adding a name to an SDK facade is a reviewed diff: the golden file
       -- changes with it. EP-11 reuses this as the SDK's compatibility check.
+      -- The adaptive coordinator stays in the kernel because it needs no Kikan
+      -- service (plan 131, M6). A planted import of a binding fails; the same
+      -- import from a module outside the coordinator is not this rule's concern.
+      testCase "the adaptive coordinator imports no Kikan binding module" do
+        (_, inputs) <- readTree
+        assertBool "the walk found the coordinator" (length inputs.coordinatorImports > 5)
+        let planted owner = fixture {coordinatorImports = [(owner, ["Shikigami.Flow.Decision", "Shikigami.Sink.KizashiClient", "Shikigami.DanwaConversation.Loop"])]}
+        kernelViolations synthetic (planted "Shikigami.Coordination.Workflow")
+          @?= [ CoordinatorImportsBinding "Shikigami.Coordination.Workflow" "Shikigami.Sink.KizashiClient",
+                CoordinatorImportsBinding "Shikigami.Coordination.Workflow" "Shikigami.DanwaConversation.Loop"
+              ]
+        kernelViolations synthetic (planted "Shikigami.Program.Decision.Adaptive") @?= [CoordinatorImportsBinding "Shikigami.Program.Decision.Adaptive" "Shikigami.Sink.KizashiClient", CoordinatorImportsBinding "Shikigami.Program.Decision.Adaptive" "Shikigami.DanwaConversation.Loop"]
+        kernelViolations synthetic (planted "Shikigami.Agent.Run") @?= []
+        assertBool "the refusal says why it is a primitive" ("depends on no Kikan service" `Text.isInfixOf` renderKernelViolation synthetic (CoordinatorImportsBinding "Shikigami.Coordination.Workflow" "Shikigami.Sink.KizashiClient")),
       testCase "each SDK facade exports exactly its golden list" do
         root <- repositoryRoot
         (policy, _) <- readTree
@@ -380,7 +429,8 @@ tests =
           stock = [("shikigami-agent", [library "" ["base", "shikigami-core"]])],
           outOfCore = [],
           sdkExports = Map.empty,
-          reviewedRoots = Set.fromList ["Agent", "Watchdog", "DanwaConversation"]
+          reviewedRoots = Set.fromList ["Agent", "Watchdog", "DanwaConversation"],
+          coordinatorImports = [("Shikigami.Coordination.Workflow", ["Shikigami.Coordination.Runtime", "Shikigami.Flow.Decision"])]
         }
     library = Stanza "library"
     goodPack =

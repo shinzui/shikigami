@@ -357,6 +357,16 @@ this Mac through the same operator verbs as before (`watchdog inspect`, `proposa
   `shikigami-core`. Its disposition is recorded, an import check shows it has no Kikan
   service dependency, and a real objective on a local repository receives an adaptive
   decision from a stock executable.
+  - Disposition and import check (2026-11-16). `kernel.namespaces` lists `Coordination` and
+    `AdaptiveDelivery` as `kernel` and no coordinator module is frozen; nothing needed
+    correcting. The `kernel boundary` group has a new rule, `CoordinatorImportsBinding`:
+    no module under `Shikigami.Coordination`, nor `Shikigami.Flow.AdaptiveDelivery`, nor
+    `Shikigami.Program.Decision.Adaptive`, imports `Shikigami.Sink.{KawaClient,
+    KizashiClient, Danwa, KanmonClient, ReiAction}`, `Shikigami.Integration.Danwa`,
+    `Shikigami.Authority.KikanEn` or anything under it, or `Shikigami.DanwaConversation`.
+    The real tree passes; a planted import of `Shikigami.Sink.KizashiClient` from
+    `Shikigami.Coordination.Workflow` fails with the reason the coordinator is a primitive.
+    `just kernel-fitness` 8. The real run is still to be made.
 - [ ] M7: Kernel namespace list closed, the core specification holds no use-case label,
   dispositions recorded in ADRs and architecture docs, before/after size reported. All packs
   composed in the `kikan-shikigami` distribution, plus a kernel mandate cycle, run on this Mac
