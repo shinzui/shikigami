@@ -26,6 +26,7 @@ module Shikigami.Agent.Command
     -- * The individual roles
     runBehaviorRoleInfo,
     agentRunRoleInfo,
+    agentRunRoleInfoWith,
     localRoleInfo,
   )
 where
@@ -43,6 +44,7 @@ import Shikigami.Agent.Payload (payloadArgument)
 import Shikigami.App.Config (Role (..))
 import Shikigami.App.Config.Load (withConfigOptions)
 import Shikigami.App.Role (RoleInfo (..), runRole)
+import Shikigami.Flow.Pack (FlowPack)
 
 -- | Every one-off executable, in the order they are documented.
 --
@@ -86,7 +88,13 @@ runBehaviorRoleInfo =
 -- here means it does not link the platform's messaging, queueing, and telemetry
 -- export stack, not that it has no dependencies.
 agentRunRoleInfo :: RoleInfo
-agentRunRoleInfo =
+agentRunRoleInfo = agentRunRoleInfoWith []
+
+-- | The same role composed with flow packs beside the builtin pack. Only a
+-- distribution package calls this with a non-empty list (docs/adr/0129); the
+-- stock executable composes none, which is why it refuses a pack's agent.
+agentRunRoleInfoWith :: [FlowPack] -> RoleInfo
+agentRunRoleInfoWith packs =
   RoleInfo
     { binaryName = "shikigami-agent-run",
       role = AgentRunRole,
@@ -94,7 +102,7 @@ agentRunRoleInfo =
         withConfigOptions
           "shikigami-agent-run"
           "Run an agent with the durable workflow and kioku memory lifecycle"
-          ( runAgentRun
+          ( runAgentRun packs
               <$> strOption (long "agent" <> metavar "NAME|FILE" <> help "Agent name (agents/<name>.dhall) or manifest path")
               <*> optional (strOption (long "from-activity" <> metavar "FILE" <> help "Record an activity.v1 envelope as a memory instead of running"))
               <*> optional (strOption (long "workspace" <> metavar "DIR|mori://…" <> help "Repository for requested capability overlays: a checkout path or a Mori identity"))

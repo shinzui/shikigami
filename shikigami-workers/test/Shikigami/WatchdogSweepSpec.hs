@@ -146,7 +146,7 @@ tests fixture =
                   & #directory .~ directory
                   & #grants .~ DbGrants h.pool
                   & #observe .~ Observe.ObserveSeed (Just configured) Observe.noObserveHooks
-                  & #decisions .~ (Decision.defaultDecisionServices (checked (modelCatalog [binding])) & #providers .~ [provider])
+                  & #decisions .~ (Decision.builtinDecisionServices (checked (modelCatalog [binding])) & #providers .~ [provider])
           cron <- right (parseCron "* * * * *")
           due <- maybe (assertFailure "no due tick") pure (nextDue cron now)
           let scheduler = SchedulerEnv h.pool (Map.singleton declaration.name cron) [declaration] (Just configured) (Map.singleton declaration.name (Just (declarationCoordinate "agent_watchdog"))) directory SkipMissed Log.silentLogger

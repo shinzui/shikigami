@@ -70,7 +70,7 @@ tests fixture =
                       lineage = [declaration.name]
                     }
                 catalog = fixtureCatalog server.endpoint
-                services = Decision.defaultDecisionServices catalog
+                services = Decision.builtinDecisionServices catalog
                 routing = Routing.RoutingRuntime (\_ -> pure Fixture.catalog) (\_ _ _ -> error "judgment cannot route")
                 app = AppEnv {connectionSettings = defaultConnectionSettings connection, tracer, metrics = Nothing, store = Nothing}
                 make store selected hooks =
@@ -185,7 +185,7 @@ tests fixture =
               behavior <- newBehaviorEnv
               let request = (Fixture.routerJob "typesafe-pending-binding") {agentName = declaration.name, identity = compatibilityIdentity declaration.name, triggerPayload = toJSON fixtureTicket, lineage = [declaration.name]}
                   app = AppEnv {connectionSettings = defaultConnectionSettings connection, tracer, metrics = Nothing, store = Nothing}
-                  selected = Decision.defaultDecisionServices (fixtureCatalog server.endpoint)
+                  selected = Decision.builtinDecisionServices (fixtureCatalog server.endpoint)
                   deps = (Fixture.routerDeps app behavior (Routing.RoutingRuntime (\_ -> pure Fixture.catalog) (\_ _ _ -> error "no routing")) [declaration]) {Agent.decisions = selected, Agent.deliveryPool = Just store.pool}
                   crash = Agent.defaultAgentRunHooks & #beforeStepBody .~ (\(StepName name) -> when (name == "decision-result-judge") (ioError (userError "stop before judgment")))
               _ <- try @SomeException (Agent.runAgentRunWorkflow (deps {Agent.hooks = crash}) request)

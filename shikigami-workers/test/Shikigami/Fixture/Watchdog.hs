@@ -154,7 +154,7 @@ withWatchdog fixture use = P.withProposing fixture P.defaultOptions \h -> do
           & #directory .~ directory
           & #grants .~ DbGrants h.pool
           & #observe .~ Observe.ObserveSeed (Just configured) Observe.noObserveHooks
-          & #decisions .~ (Decision.defaultDecisionServices (checked (modelCatalog [binding])) & #providers .~ [provider])
+          & #decisions .~ (Decision.builtinDecisionServices (checked (modelCatalog [binding])) & #providers .~ [provider])
   use (Watchdog h identity declaration configured directory dependencies objective.objectiveId targetRoot admission started (readIORef calls) (readIORef prompts) (writeIORef answerRef . Just))
 
 seed :: Watchdog -> [Subject] -> IO ()

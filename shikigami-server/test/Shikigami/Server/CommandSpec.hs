@@ -49,6 +49,7 @@ tests =
         fmap fst adminSubcommands
           @?= [ "validate",
                 "render-lifecycle",
+                "flows",
                 "enqueue-run",
                 "resolve-approval",
                 "publish-fixture",

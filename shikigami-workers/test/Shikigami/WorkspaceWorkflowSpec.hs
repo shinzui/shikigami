@@ -58,6 +58,7 @@ import Shikigami.Execution.SelectionRuntime (assignmentIdFor)
 import Shikigami.Execution.Store qualified as Execution
 import Shikigami.Execution.Transcript (ExecutionSnapshot (..), executionIdFor)
 import Shikigami.Fixture.ExecutionIdentity (fixtureOperationId, fixtureRootId)
+import Shikigami.Flow.Builtin (builtinFlowRegistry)
 import Shikigami.Flow.Decision qualified as Decision
 import Shikigami.Flow.Initiative qualified as FlowInitiative
 import Shikigami.Flow.Observe qualified as FlowObserve
@@ -359,6 +360,7 @@ withWorkflowAuthority authorizer configure fixture use = Fixture.withFixture fix
           { appEnv = env,
             behaviorEnv = base & #providerRegistry .~ Just providers,
             decisions = Decision.emptyDecisionServices,
+            flows = builtinFlowRegistry,
             actionAuthority = authorizer,
             capabilities = host.capabilities,
             workspace = Just host,

@@ -58,6 +58,7 @@ import Shikigami.Execution.ResourcesStore qualified as Roots
 import Shikigami.Execution.SelectionRuntime (assignmentIdFor)
 import Shikigami.Execution.Store qualified as Execution
 import Shikigami.Execution.Transcript
+import Shikigami.Flow.Builtin (builtinFlowRegistry)
 import Shikigami.Flow.Decision qualified as Decision
 import Shikigami.Flow.Initiative qualified as Initiative
 import Shikigami.Flow.Observe qualified as Observe
@@ -158,6 +159,7 @@ workflowCase configFile prefix stage = do
             { appEnv = env,
               behaviorEnv = base & #providerRegistry .~ Just providers,
               decisions = Decision.emptyDecisionServices,
+              flows = builtinFlowRegistry,
               actionAuthority = authorizer,
               capabilities = host.capabilities,
               workspace = Just host,

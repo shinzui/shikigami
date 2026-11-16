@@ -78,6 +78,7 @@ import Shikigami.Behavior.Run (BehaviorEnv (..), defaultToolTurnLimit)
 import Shikigami.Behavior.StubProvider (registerStubProvider, stubModel)
 import Shikigami.Decision.ModelCatalog (ModelBinding, bindingCredential, bindingModel, bindingOptions, revealCredential)
 import Shikigami.Log qualified as Log
+import Shikigami.Program.Registry (lookupTask)
 import Shikigami.Program.Runtime (newProgramRuntime)
 import Shikumi.Tool (mkRegistry)
 
@@ -151,7 +152,8 @@ newBehaviorEnvFor logger selection traceSink = do
             providerRegistry = Nothing,
             tools = mkRegistry [],
             activeOverlays = Set.empty,
-            toolTurnLimit = defaultToolTurnLimit
+            toolTurnLimit = defaultToolTurnLimit,
+            tasks = lookupTask
           }
     UseAnthropic model credential -> do
       Claude.register
@@ -164,7 +166,8 @@ newBehaviorEnvFor logger selection traceSink = do
             providerRegistry = Nothing,
             tools = mkRegistry [],
             activeOverlays = Set.empty,
-            toolTurnLimit = defaultToolTurnLimit
+            toolTurnLimit = defaultToolTurnLimit,
+            tasks = lookupTask
           }
     UseHttp model options credential -> do
       case Model.api model of
@@ -181,7 +184,8 @@ newBehaviorEnvFor logger selection traceSink = do
             providerRegistry = Nothing,
             tools = mkRegistry [],
             activeOverlays = Set.empty,
-            toolTurnLimit = defaultToolTurnLimit
+            toolTurnLimit = defaultToolTurnLimit,
+            tasks = lookupTask
           }
 
 validateProviderSelection :: ProviderSelection -> Either ResponseCompatibilityError ()

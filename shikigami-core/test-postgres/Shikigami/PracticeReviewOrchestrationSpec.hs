@@ -60,6 +60,7 @@ import Shikigami.Directory (disabledDirectoryHandle)
 import Shikigami.Duration (parseDuration)
 import Shikigami.Execution.Policy.Types qualified as Harness
 import Shikigami.Fixture.SinkHttp (testSinkHttp)
+import Shikigami.Flow.Builtin (builtinFlowRegistry)
 import Shikigami.Flow.Capability (SinkEnv (..), runSink)
 import Shikigami.Flow.Decision qualified as FlowDecision
 import Shikigami.Flow.Initiative qualified as FlowInitiative
@@ -702,6 +703,7 @@ specialistAgentRunDeps appEnv behaviorEnv practiceReview =
     { AgentWorkflow.appEnv,
       AgentWorkflow.behaviorEnv,
       AgentWorkflow.decisions = FlowDecision.emptyDecisionServices,
+      AgentWorkflow.flows = builtinFlowRegistry,
       AgentWorkflow.actionAuthority = allowAllForTests,
       AgentWorkflow.capabilities = CapabilityProvider.emptyCapabilityRuntime,
       AgentWorkflow.coordination = Nothing,

@@ -122,6 +122,7 @@ import Shikigami.ExecutionSelectionWorkflowSpec qualified as ExecutionFixture
 import Shikigami.Fixture.ExecutionIdentity (fixtureRootId)
 import Shikigami.Fixture.KawaStub (kawaDoorwayApplication)
 import Shikigami.Fixture.SinkHttp (testSinkHttp, testSinkHttpFor)
+import Shikigami.Flow.Builtin (builtinFlowRegistry)
 import Shikigami.Flow.Decision qualified as FlowDecision
 import Shikigami.Flow.Initiative qualified as FlowInitiative
 import Shikigami.Flow.Observe qualified as FlowObserve
@@ -2000,6 +2001,7 @@ testDepsWithAgents appEnv behaviorEnv hooks agentDecls =
     { appEnv,
       behaviorEnv,
       decisions = FlowDecision.emptyDecisionServices,
+      flows = builtinFlowRegistry,
       actionAuthority = allowAllForTests,
       capabilities = CapabilityProvider.emptyCapabilityRuntime,
       coordination = Nothing,
@@ -2042,6 +2044,7 @@ testDepsWithApprovalAndDeadline appEnv behaviorEnv hooks approval deadline =
     { appEnv,
       behaviorEnv,
       decisions = FlowDecision.emptyDecisionServices,
+      flows = builtinFlowRegistry,
       actionAuthority = allowAllForTests,
       capabilities = CapabilityProvider.emptyCapabilityRuntime,
       coordination = Nothing,

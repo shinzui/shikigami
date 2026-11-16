@@ -73,6 +73,7 @@ import Shikigami.Duration (parseDuration)
 import Shikigami.Execution.Policy.Types qualified as Harness
 import Shikigami.Fixture.KawaStub (kawaDoorwayApplication)
 import Shikigami.Fixture.SinkHttp (testHttpLimits, testSinkHttpFor)
+import Shikigami.Flow.Builtin (builtinFlowRegistry)
 import Shikigami.Flow.Decision qualified as FlowDecision
 import Shikigami.Flow.Initiative qualified as FlowInitiative
 import Shikigami.Flow.Observe qualified as FlowObserve
@@ -556,6 +557,7 @@ withFixtureUsingTracer databaseFixture tracer label sinks kizashi danwa use =
               { AgentWorkflow.appEnv = appEnv,
                 AgentWorkflow.behaviorEnv = behaviorEnv,
                 AgentWorkflow.decisions = FlowDecision.emptyDecisionServices,
+                AgentWorkflow.flows = builtinFlowRegistry,
                 AgentWorkflow.actionAuthority = allowAllForTests,
                 AgentWorkflow.capabilities = emptyCapabilityRuntime,
                 AgentWorkflow.coordination = Nothing,

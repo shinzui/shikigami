@@ -55,6 +55,7 @@ import Shikigami.ExecutionResourcesSpec qualified as ExecutionResourcesSpec
 import Shikigami.ExecutionSelectionSpec qualified as ExecutionSelectionSpec
 import Shikigami.Fixture.KawaStub (kawaDoorwayApplication)
 import Shikigami.Fixture.SinkHttp (testSinkHttp, testSinkHttpFor)
+import Shikigami.FlowPackSpec qualified as FlowPackSpec
 import Shikigami.FormatVersionSpec qualified as FormatVersionSpec
 import Shikigami.InitiativeAssessmentSpec qualified as InitiativeAssessmentSpec
 import Shikigami.InitiativePrefilterSpec qualified as InitiativePrefilterSpec
@@ -175,6 +176,7 @@ main =
           KanmonClientSpec.tests,
           LogSpec.tests,
           PackageArchitectureSpec.tests,
+          FlowPackSpec.tests,
           KernelBoundarySpec.tests,
           AuthoritySpec.tests,
           RecordSpec.tests,

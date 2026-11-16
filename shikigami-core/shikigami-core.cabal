@@ -187,6 +187,7 @@ library
     Shikigami.Flow.Acknowledgement
     Shikigami.Flow.AdaptiveDelivery
     Shikigami.Flow.AtRiskCustomer
+    Shikigami.Flow.Builtin
     Shikigami.Flow.Capability
     Shikigami.Flow.CodingAgent
     Shikigami.Flow.Decision
@@ -198,6 +199,7 @@ library
     Shikigami.Flow.Objectives
     Shikigami.Flow.Observe
     Shikigami.Flow.OpenTelemetryPracticeReview
+    Shikigami.Flow.Pack
     Shikigami.Flow.Routing
     Shikigami.Flow.ShikumiDecisionExample
     Shikigami.Flow.ShikumiJudgmentExample
@@ -699,6 +701,7 @@ test-suite shikigami-core-test
     Shikigami.Fixture.KawaStub
     Shikigami.Fixture.SinkHttp
     Shikigami.Fixture.TypeSafe
+    Shikigami.FlowPackSpec
     Shikigami.FormatVersionSpec
     Shikigami.InitiativeAssessmentSpec
     Shikigami.InitiativePrefilterSpec

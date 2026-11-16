@@ -10,8 +10,9 @@ import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..))
 import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Loader (LoadError (..), loadAgent)
 import Shikigami.Agent.Skill (validateSkill)
-import Shikigami.Flow (flowDeclarationErrors)
+import Shikigami.Flow.Pack (FlowPack, flowDeclarationErrors)
 import Shikigami.Router.Declaration (renderRouterDeclarationError, routerDeclarationErrors)
+import Shikigami.Server.Command.Flows (composeOrDie)
 import Shikigami.Sink.Validate (sinkDeclarationErrors)
 import System.Exit (exitFailure)
 import System.IO (hPutStrLn, stderr)
@@ -25,11 +26,13 @@ import System.IO (hPutStrLn, stderr)
 -- because it needs nothing from the filesystem, so a manifest with both problems
 -- reports the cheaper one first.
 --
--- The flow check refuses a @Behavior.Flow { name }@ this build cannot run. It
+-- The flow check refuses a @Behavior.Flow { name }@ this executable was not
+-- composed with; a distribution's admin command accepts its packs' flows. It
 -- belongs here rather than at first trigger because the alternative is a failed
 -- agent run per trigger, forever, for a typo a parse-time check can see.
-runValidate :: FilePath -> IO ()
-runValidate path = do
+runValidate :: [FlowPack] -> FilePath -> IO ()
+runValidate packs path = do
+  flows <- composeOrDie packs
   result <- loadAgent path
   case result of
     Left (LoadError msg) -> do
@@ -48,7 +51,7 @@ runValidate path = do
           traverse_ (\err -> hPutStrLn stderr ("validate: sink error: " <> Text.unpack err)) errors
           exitFailure
         [] -> pure ()
-      case flowDeclarationErrors decl of
+      case flowDeclarationErrors flows decl of
         errors@(_ : _) -> do
           traverse_ (\err -> hPutStrLn stderr ("validate: " <> Text.unpack err)) errors
           exitFailure

@@ -59,10 +59,9 @@ import Shikigami.Execution.ResourcesStore qualified as Roots
 import Shikigami.Execution.Selection (ExecutionSelection (..))
 import Shikigami.Execution.Transcript qualified as Owner
 import Shikigami.ExecutionTranscriptSpec qualified as ExecutionFixture
-import Shikigami.Flow (FlowDef (..), LifecycleDiagram (..))
 import Shikigami.Flow.Decision qualified as Decision
 import Shikigami.Flow.Routing qualified as Routing
-import Shikigami.FlowLifecycleSpec (runFlowBodyWithDecision, spikeRuntime)
+import Shikigami.FlowLifecycleSpec (SpikeFlow (..), runFlowBodyWithDecision, spikeRuntime)
 import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Log.Correlation (runCorrelationId)
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
@@ -250,7 +249,7 @@ withHarness fixture use = withObjective fixture \env admission objectiveId -> do
             let evidence = (\value -> value & #responseCommitment .~ Evidence.Observed (Evidence.commitmentDigest reply)) <$> response.evidence
             pure (response & #message . #content .~ Vector.singleton (AssistantText (TextContent (decodeUtf8 (Lazy.toStrict (encode reply))))) & #evidence .~ evidence)
           provider = decisionStubProvider & #complete .~ completing & #stream .~ liftCompleteToStream completing
-      use (Harness env runtime (postgresDecisionEvidenceStore store.pool) (Decision.defaultDecisionServices catalog & #providers .~ [provider]) input (readIORef count) (readIORef prompts) (writeIORef replies) (reverse <$> readIORef seen) (\name -> atomicModifyIORef' seen (\values -> (name : values, ()))) objectiveRoot store.pool admission)
+      use (Harness env runtime (postgresDecisionEvidenceStore store.pool) (Decision.builtinDecisionServices catalog & #providers .~ [provider]) input (readIORef count) (readIORef prompts) (writeIORef replies) (reverse <$> readIORef seen) (\name -> atomicModifyIORef' seen (\values -> (name : values, ()))) objectiveRoot store.pool admission)
   where
     scoped :: Objective.ObjectiveId -> Owner.ExecutionSnapshot -> Owner.ExecutionSnapshot
     scoped objective snapshot = snapshot & #objectiveScope .~ Just (Scope.ObjectiveScope V1 snapshot.runId snapshot.identity snapshot.sessionId snapshot.selection.rootId (Just (addUTCTime 3600 snapshot.selection.admittedAt)) (Just snapshot.selection.permittedAliases) (Just objective) (Scope.AgentScope snapshot.selection.assignmentId) Nothing [Scope.InspectObjectives, Scope.ApplyObjectiveCommands] Nothing)
@@ -264,8 +263,11 @@ driftStep = Decision.decisionStep Decision.Drift (programRef driftProgram)
 catalog :: ModelCatalog
 catalog = must (modelCatalog [must (modelBinding alias "1" "drift" "1" (stubModel & #modelId .~ "stub-drift" & #contextWindow .~ 128) (Options.emptyOptions & #maxTokens .~ Just 64) Nothing)])
 
-harnessFlow :: FlowDef
-harnessFlow = FlowDef (declarationCoordinate "watchdog-drift-harness") (LifecycleDiagram "flowchart LR\n start --> assessment" []) [Decision.decisionSlot driftStep [alias]] DefaultModelOptional \raw -> do
+harnessSlots :: [DecisionSlot]
+harnessSlots = [Decision.decisionSlot driftStep [alias]]
+
+harnessFlow :: SpikeFlow
+harnessFlow = SpikeFlow (declarationCoordinate "watchdog-drift-harness") \raw -> do
   input <- case Aeson.fromJSON raw of Aeson.Success value -> pure value; Aeson.Error _ -> Decision.refuseDecision (decisionFailure InvalidInput "invalid drift harness input")
   output <- Decision.decide driftStep alias input
   assessment <- either Decision.refuseDecision pure (validateDriftAssessment input output)
@@ -275,7 +277,7 @@ decisionEnv :: Harness -> Maybe ExecutionRootId -> Decision.DecisionEnv
 decisionEnv h root =
   Decision.DecisionEnv
     { agent = RouterFixture.routerDecl & #decisionModels .~ [alias],
-      inventory = harnessFlow.decisionSlots,
+      inventory = harnessSlots,
       services = h.services,
       runtime = h.runtime.runtime,
       profile = Nothing,

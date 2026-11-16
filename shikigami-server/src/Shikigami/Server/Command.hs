@@ -31,10 +31,12 @@
 -- @execParserPure@.
 module Shikigami.Server.Command
   ( adminInfo,
+    adminInfoWith,
     adminPrefs,
     adminSubcommands,
     AdminAction,
     runAdmin,
+    runAdminWith,
   )
 where
 
@@ -58,11 +60,13 @@ import Shikigami.App.Config.Load
   )
 import Shikigami.App.Version (versionOption)
 import Shikigami.Execution.Identity (parseExecutionRootId, parseOperationId)
+import Shikigami.Flow.Pack (FlowPack)
 import Shikigami.Objective.Tracker.Control.Types (HistoryKind (Proposals, Publications))
 import Shikigami.Server.Command.Agents (runAgentsList, runAgentsSync)
 import Shikigami.Server.Command.DanwaSpike (runDanwaSpike)
 import Shikigami.Server.Command.EnqueueRun (runEnqueueRun)
 import Shikigami.Server.Command.Executions (runExecutionsInspect)
+import Shikigami.Server.Command.Flows (runFlows)
 import Shikigami.Server.Command.Grants (runGrantsGrant, runGrantsList, runGrantsRevoke)
 import Shikigami.Server.Command.Mandates
 import Shikigami.Server.Command.ObjectiveTrackers
@@ -109,9 +113,15 @@ type AdminAction = (AppConfig -> IO (), [Source])
 -- resolves here rather than upstream. None collide today; if one ever does,
 -- this is where the collision is decided, and deliberately.
 adminInfo :: ParserInfo (Maybe AdminAction, ConfigOptions)
-adminInfo =
+adminInfo = adminInfoWith []
+
+-- | The command line of an admin executable composed with flow packs beside
+-- the builtin pack (docs/adr/0129). @validate@, @render-lifecycle@ and
+-- @flows@ answer from that composition.
+adminInfoWith :: [FlowPack] -> ParserInfo (Maybe AdminAction, ConfigOptions)
+adminInfoWith packs =
   info
-    ( ((,) <$> optional (subparser (foldMap snd adminSubcommands) <|> opsAction) <*> configOptions)
+    ( ((,) <$> optional (subparser (foldMap snd (adminSubcommandsWith packs)) <|> opsAction) <*> configOptions)
         <**> helper
         <**> versionOption "shikigami"
     )
@@ -145,8 +155,12 @@ adminPrefs = prefs subparserInline
 -- mode completes without a subcommand opening a database, a socket, or a Kafka
 -- producer.
 runAdmin :: IO ()
-runAdmin = do
-  (chosen, options) <- customExecParser adminPrefs adminInfo
+runAdmin = runAdminWith []
+
+-- | 'runAdmin' for a distribution: the same commands over more packs.
+runAdminWith :: [FlowPack] -> IO ()
+runAdminWith packs = do
+  (chosen, options) <- customExecParser adminPrefs (adminInfoWith packs)
   case chosen of
     -- A diagnostic with no subcommand is legitimate, and 'runAppConfig' exits
     -- inside it. Reaching the next line therefore means no command was given.
@@ -163,9 +177,13 @@ runAdmin = do
 -- Exists so a test can assert each one parses and renders help without listing
 -- them a second time.
 adminSubcommands :: [(String, Mod CommandFields AdminAction)]
-adminSubcommands =
-  [ ("validate", command "validate" validateInfo),
-    ("render-lifecycle", command "render-lifecycle" renderLifecycleInfo),
+adminSubcommands = adminSubcommandsWith []
+
+adminSubcommandsWith :: [FlowPack] -> [(String, Mod CommandFields AdminAction)]
+adminSubcommandsWith packs =
+  [ ("validate", command "validate" (validateInfo packs)),
+    ("render-lifecycle", command "render-lifecycle" (renderLifecycleInfo packs)),
+    ("flows", command "flows" (flowsInfo packs)),
     ("enqueue-run", command "enqueue-run" enqueueRunInfo),
     ("resolve-approval", command "resolve-approval" resolveApprovalInfo),
     ("publish-fixture", command "publish-fixture" publishFixtureInfo),
@@ -497,16 +515,23 @@ grantsRevokeInfo =
 offline :: IO () -> AdminAction
 offline action = (const action, [])
 
-validateInfo :: ParserInfo AdminAction
-validateInfo =
+validateInfo :: [FlowPack] -> ParserInfo AdminAction
+validateInfo packs =
   info
-    ((offline . runValidate <$> argument str (metavar "FILE")) <**> helper)
+    ((offline . runValidate packs <$> argument str (metavar "FILE")) <**> helper)
     (progDesc "Parse and validate an agent manifest (.dhall)")
 
-renderLifecycleInfo :: ParserInfo AdminAction
-renderLifecycleInfo =
+-- | List the flows this executable was composed with, one per line.
+flowsInfo :: [FlowPack] -> ParserInfo AdminAction
+flowsInfo packs =
   info
-    ((offline . runRenderLifecycle <$> argument str (metavar "FILE")) <**> helper)
+    (pure (offline (runFlows packs)) <**> helper)
+    (progDesc "List every composed flow with its pack, default-model requirement and decision slots")
+
+renderLifecycleInfo :: [FlowPack] -> ParserInfo AdminAction
+renderLifecycleInfo packs =
+  info
+    ((offline . runRenderLifecycle packs <$> argument str (metavar "FILE")) <**> helper)
     (progDesc "Render a Flow agent lifecycle as Mermaid")
 
 enqueueRunInfo :: ParserInfo AdminAction

@@ -82,7 +82,7 @@ runUp UpOptions {forMinutes} config = do
               when (isDue entry.cron minute && not already) do
                 modifyIORef' fired (Set.insert (entry.name, minute))
                 TextIO.putStrLn ("run       " <> entry.name <> "   " <> Text.pack (show minute))
-                outcome <- try @SomeException (runAgentRun entry.path Nothing (Just entry.checkout) Nothing True Nothing local)
+                outcome <- try @SomeException (runAgentRun [] entry.path Nothing (Just entry.checkout) Nothing True Nothing local)
                 either (\failure -> TextIO.putStrLn ("failed    " <> entry.name <> "   " <> Text.take 200 (Text.pack (show failure)))) (const (pure ())) outcome
             stop <- maybe (pure False) (\until' -> (> until') <$> getCurrentTime) deadline
             unless stop (threadDelay 15000000 >> loop)

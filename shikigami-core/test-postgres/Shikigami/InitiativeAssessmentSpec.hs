@@ -138,7 +138,7 @@ withHarness fixture use = withShikigamiFreshDatabase fixture \connection ->
         { env = AppEnv {connectionSettings = defaultConnectionSettings connection, tracer, metrics = Nothing, store = Nothing},
           evidence = postgresDecisionEvidenceStore store.pool,
           runtime = behavior,
-          services = Decision.defaultDecisionServices catalog & #providers .~ [counted],
+          services = Decision.builtinDecisionServices catalog & #providers .~ [counted],
           calls = readIORef count,
           steps = reverse <$> readIORef seen,
           recordStep = \name -> modifyIORef' seen (name :)

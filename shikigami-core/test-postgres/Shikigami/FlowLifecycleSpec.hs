@@ -1,4 +1,6 @@
-module Shikigami.FlowLifecycleSpec (tests, runFlowBodyWithDecision, spikeRuntime) where
+{-# LANGUAGE RankNTypes #-}
+
+module Shikigami.FlowLifecycleSpec (tests, SpikeFlow (..), runFlowBodyWithDecision, spikeRuntime) where
 
 import Control.Lens ((&), (.~))
 import Data.Aeson (Value (Bool, Object, String), object, toJSON, (.=))
@@ -45,8 +47,10 @@ import Shikigami.Behavior.Run (newBehaviorEnv)
 import Shikigami.Coordination.Capability qualified as Adaptive
 import Shikigami.Directory (disabledDirectoryHandle)
 import Shikigami.Duration (parseDuration)
-import Shikigami.Flow (FlowDef (..), FlowEffects, FlowRuntime (..), atRiskCustomerLifecycleDiagram, flowDeclarationErrors, flowRegistry, lookupFlow, registeredFlowNames)
+import Shikigami.Flow (FlowDef (..), FlowEffects, FlowRuntime (..))
 import Shikigami.Flow.Acknowledgement (Ack (..), ackFromDecision, runAcknowledgement)
+import Shikigami.Flow.AtRiskCustomer (atRiskCustomerFlow)
+import Shikigami.Flow.Builtin (builtinFlowRegistry)
 import Shikigami.Flow.Capability
   ( MemoryEnv (..),
     MemoryPriority (..),
@@ -72,6 +76,7 @@ import Shikigami.Flow.Delegate qualified as FlowDelegate
 import Shikigami.Flow.Initiative qualified as FlowInitiative
 import Shikigami.Flow.Objectives qualified as FlowObjectives
 import Shikigami.Flow.Observe qualified as FlowObserve
+import Shikigami.Flow.Pack (PackFlow (..), RegisteredFlow (..), flowDeclarationErrors, lookupFlow, registeredFlowNames, registeredFlows)
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Flow.Workers qualified as FlowWorkers
 import Shikigami.Memory.Access (shikigamiMemorySpace)
@@ -96,34 +101,34 @@ tests databaseFixture =
     [ -- No FlowRuntime is constructed here any more, and that is the assertion:
       -- asking which flows exist no longer requires the machinery for running one.
       testCase "flow registry resolves at-risk-customer and misses unknown flows" do
-        case lookupFlow (declarationCoordinate ("at-risk-customer")) of
-          Just FlowDef {name = flowName} -> assertEqual "registered flow name" (declarationCoordinate "at-risk-customer") flowName
+        case lookupFlow builtinFlowRegistry (declarationCoordinate ("at-risk-customer")) of
+          Just entry -> assertEqual "registered flow name" (declarationCoordinate "at-risk-customer") entry.flow.definition.name
           Nothing -> assertFailure "expected at-risk-customer flow to be registered"
-        case lookupFlow (declarationCoordinate ("unknown-flow")) of
+        case lookupFlow builtinFlowRegistry (declarationCoordinate ("unknown-flow")) of
           Nothing -> pure ()
-          Just flow -> assertFailure ("expected unknown lookup to miss, got " <> show flow),
+          Just entry -> assertFailure ("expected unknown lookup to miss, got " <> show entry.flow.definition),
       -- registeredFlowNames is what `shikigami validate` and worker boot consult,
       -- and they must never disagree with what the runtime can actually run. The
       -- two are projections of one list in Shikigami.Flow, and this pins that.
       testCase "registeredFlowNames names exactly the flows the registry builds" do
         assertEqual
           "registered names match the built registry"
-          [flowName | FlowDef {name = flowName} <- flowRegistry]
-          registeredFlowNames
-        assertBool "at least one flow is registered" (not (null registeredFlowNames)),
+          [entry.flow.definition.name | entry <- registeredFlows builtinFlowRegistry]
+          (registeredFlowNames builtinFlowRegistry)
+        assertBool "at least one flow is registered" (not (null (registeredFlowNames builtinFlowRegistry))),
       testCase "a Flow behavior naming an unregistered flow is a declaration error" do
         assertEqual
           "unknown flow is refused, and the message names what is registered"
           ["unknown flow no-such-flow; registered flows: run-declared-tool, watchdog-sweep, propose-work, adaptive-delivery, objective-example, shikumi-decision-example, shikumi-judgment-example, at-risk-customer, delegation-proof, architecture-practice-router, opentelemetry-practice-review"]
-          (flowDeclarationErrors (flowBehaviorAgent (Flow {name = declarationCoordinate ("no-such-flow")})))
+          (flowDeclarationErrors builtinFlowRegistry (flowBehaviorAgent (Flow {name = declarationCoordinate ("no-such-flow")})))
         assertEqual
           "a registered flow is accepted"
           []
-          (flowDeclarationErrors (flowBehaviorAgent (Flow {name = declarationCoordinate ("at-risk-customer")})))
+          (flowDeclarationErrors builtinFlowRegistry (flowBehaviorAgent (Flow {name = declarationCoordinate ("at-risk-customer")})))
         assertEqual
           "a non-flow behavior is not this check's business"
           []
-          (flowDeclarationErrors (flowBehaviorAgent (Deterministic {rule = "flow-test", params = mempty}))),
+          (flowDeclarationErrors builtinFlowRegistry (flowBehaviorAgent (Deterministic {rule = "flow-test", params = mempty}))),
       testCase "trivial flow completes through keiro runWorkflowWith" do
         outcome <- (runFlowWorkflow databaseFixture) completedFlow (WorkflowId "flow-completed-spike")
         assertEqual "two-step flow completes" (Right (Completed (toJSON (2 :: Int)))) outcome,
@@ -366,35 +371,34 @@ tests databaseFixture =
         assertEqual "timeout maps to timeout" TimedOut (ackFromDecision Approval.TimedOut)
     ]
 
-completedFlow :: FlowDef
+-- | A flow body under this harness. The harness installs every kernel
+-- interpreter itself, so it needs a body and a name and nothing a registry
+-- or a pack would add.
+data SpikeFlow = SpikeFlow
+  { name :: !(DeclarationCoordinate "flow"),
+    run :: !(forall es. (FlowEffects es) => Value -> Eff es Value)
+  }
+
+completedFlow :: SpikeFlow
 completedFlow =
-  FlowDef
+  SpikeFlow
     { name = declarationCoordinate "completed-spike",
-      decisionSlots = [],
-      requiresDefaultModel = DefaultModelRequired,
-      lifecycle = atRiskCustomerLifecycleDiagram,
       run = twoStepFlow
     }
 
-activityFlow :: FlowDef
+activityFlow :: SpikeFlow
 activityFlow =
-  FlowDef
+  SpikeFlow
     { name = declarationCoordinate "activity-spike",
-      decisionSlots = [],
-      requiresDefaultModel = DefaultModelRequired,
-      lifecycle = atRiskCustomerLifecycleDiagram,
       run = \_payload -> do
         activity <- currentActivity
         pure (String (activityCoordinateText ((.activityId) activity)))
     }
 
-memoryFlow :: FlowDef
+memoryFlow :: SpikeFlow
 memoryFlow =
-  FlowDef
+  SpikeFlow
     { name = declarationCoordinate "memory-spike",
-      decisionSlots = [],
-      requiresDefaultModel = DefaultModelRequired,
-      lifecycle = atRiskCustomerLifecycleDiagram,
       run = \_payload -> do
         _ <- remember (declarationCoordinate "note") (object ["summary" .= ("flow durable note" :: Text)])
         memories <- recall (declarationCoordinate "note-back") (MemoryQuery "flow durable note")
@@ -406,13 +410,10 @@ memoryFlow =
 -- Deliberately has no 'step' after the recall: its result /is/ the recall's
 -- result, so a replay that re-queried the store instead of reading the journal
 -- would return a different number.
-recallCountFlow :: FlowDef
+recallCountFlow :: SpikeFlow
 recallCountFlow =
-  FlowDef
+  SpikeFlow
     { name = declarationCoordinate "recall-count-spike",
-      decisionSlots = [],
-      requiresDefaultModel = DefaultModelRequired,
-      lifecycle = atRiskCustomerLifecycleDiagram,
       run = \_payload -> toJSON . length <$> recall (declarationCoordinate "history") (MemoryQuery "prior escalation")
     }
 
@@ -424,13 +425,10 @@ recallCountFlow =
 -- target is replay-stable and the deterministic id of the superseding row does
 -- not move between a run and its replay. Building the second write out of
 -- anything /not/ journaled would break exactly that.
-supersessionFlow :: FlowDef
+supersessionFlow :: SpikeFlow
 supersessionFlow =
-  FlowDef
+  SpikeFlow
     { name = declarationCoordinate "supersession-spike",
-      decisionSlots = [],
-      requiresDefaultModel = DefaultModelRequired,
-      lifecycle = atRiskCustomerLifecycleDiagram,
       run = \_payload -> do
         first <- remember (declarationCoordinate "first") (object ["summary" .= ("original note" :: Text)])
         second <- rememberWith (declarationCoordinate "constraint") (revisionOptions first) (object ["summary" .= ("revised note" :: Text)])
@@ -447,13 +445,10 @@ revisionOptions first =
       extraTags = Set.singleton "revision"
     }
 
-sinkFlow :: FlowDef
+sinkFlow :: SpikeFlow
 sinkFlow =
-  FlowDef
+  SpikeFlow
     { name = declarationCoordinate "sink-spike",
-      decisionSlots = [],
-      requiresDefaultModel = DefaultModelRequired,
-      lifecycle = atRiskCustomerLifecycleDiagram,
       run = \_payload -> toJSON <$> emitSignal (declarationCoordinate "alert") sampleKizashiSink (object ["summary" .= ("flow alert" :: Text)])
     }
 
@@ -477,7 +472,7 @@ sleepFlow _payload = do
 
 runFlowWorkflow ::
   DatabaseFixture ->
-  FlowDef ->
+  SpikeFlow ->
   WorkflowId ->
   IO (Either StoreError (WorkflowOutcome Value))
 runFlowWorkflow databaseFixture flow workflowId =
@@ -486,7 +481,7 @@ runFlowWorkflow databaseFixture flow workflowId =
 runFlowWorkflowWithAgent ::
   DatabaseFixture ->
   Text ->
-  FlowDef ->
+  SpikeFlow ->
   WorkflowId ->
   IO (Either StoreError (WorkflowOutcome Value), Either StoreError Int)
 runFlowWorkflowWithAgent databaseFixture flowAgent flow workflowId =
@@ -534,7 +529,7 @@ runFlowInAppEnv ::
   AppEnv ->
   FlowRuntime ->
   Text ->
-  FlowDef ->
+  SpikeFlow ->
   WorkflowId ->
   Value ->
   IO (Either StoreError (WorkflowOutcome Value))
@@ -544,19 +539,19 @@ runFlowBody ::
   AppEnv ->
   FlowRuntime ->
   Text ->
-  FlowDef ->
+  SpikeFlow ->
   WorkflowId ->
   Value ->
   IO (Either StoreError (WorkflowOutcome Value))
 runFlowBody = runFlowBodyUsing Nothing Nothing
 
 runFlowBodyWithDecision ::
-  FlowDecision.DecisionEnv -> Maybe (IO ()) -> AppEnv -> FlowRuntime -> Text -> FlowDef -> WorkflowId -> Value -> IO (Either StoreError (WorkflowOutcome Value))
+  FlowDecision.DecisionEnv -> Maybe (IO ()) -> AppEnv -> FlowRuntime -> Text -> SpikeFlow -> WorkflowId -> Value -> IO (Either StoreError (WorkflowOutcome Value))
 runFlowBodyWithDecision decision onAppend = runFlowBodyUsing (Just decision) onAppend
 
 runFlowBodyUsing ::
-  Maybe FlowDecision.DecisionEnv -> Maybe (IO ()) -> AppEnv -> FlowRuntime -> Text -> FlowDef -> WorkflowId -> Value -> IO (Either StoreError (WorkflowOutcome Value))
-runFlowBodyUsing decision onAppend appEnv runtime flowAgent FlowDef {run} workflowId input =
+  Maybe FlowDecision.DecisionEnv -> Maybe (IO ()) -> AppEnv -> FlowRuntime -> Text -> SpikeFlow -> WorkflowId -> Value -> IO (Either StoreError (WorkflowOutcome Value))
+runFlowBodyUsing decision onAppend appEnv runtime flowAgent SpikeFlow {run} workflowId input =
   newBehaviorEnv >>= \behaviorEnv ->
     runEff
       . runTracingNoop
@@ -652,7 +647,7 @@ runFlowBodyUsing decision onAppend appEnv runtime flowAgent FlowDef {run} workfl
 -- | The runtime is handed to the test rather than consumed by 'lookupFlow',
 -- because 'lookupFlow' no longer takes one: it configures
 -- 'runAcknowledgement' inside 'runFlowBody' instead.
-withAtRiskFlow :: DatabaseFixture -> (AppEnv -> FlowRuntime -> IORef (Maybe AwakeableId) -> FlowDef -> IO ()) -> IO ()
+withAtRiskFlow :: DatabaseFixture -> (AppEnv -> FlowRuntime -> IORef (Maybe AwakeableId) -> SpikeFlow -> IO ()) -> IO ()
 withAtRiskFlow databaseFixture action =
   (withShikigamiFreshDatabase databaseFixture) \connStr ->
     withStore (defaultConnectionSettings connStr) \kirokuStore -> do
@@ -665,9 +660,7 @@ withAtRiskFlow databaseFixture action =
               { approval = approvalEnv aidRef session,
                 acknowledgementDeadline = (either (error . show) id (parseDuration (secondsToNominalDiffTime 1)))
               }
-      case lookupFlow (declarationCoordinate ("at-risk-customer")) of
-        Just flow -> action appEnv runtime aidRef flow
-        Nothing -> assertFailure "at-risk-customer flow should be registered"
+      action appEnv runtime aidRef SpikeFlow {name = declarationCoordinate "at-risk-customer", run = atRiskCustomerFlow}
 
 approvalEnv :: IORef (Maybe AwakeableId) -> SessionId -> Approval.ApprovalEnv
 approvalEnv aidRef currentSession =

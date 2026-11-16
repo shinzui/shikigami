@@ -54,8 +54,11 @@ import Shikigami.Decision.Evidence
 import Shikigami.Decision.ModelAlias qualified as Alias
 import Shikigami.Decision.ModelCatalog
 import Shikigami.Decision.StubProvider (decisionStubProvider)
-import Shikigami.Flow qualified as Flow
+import Shikigami.Flow (FlowDef (..))
+import Shikigami.Flow.Builtin (builtinFlowRegistry)
 import Shikigami.Flow.Decision qualified as Decision
+import Shikigami.Flow.Pack (PackFlow (..), RegisteredFlow (..))
+import Shikigami.Flow.Pack qualified as FlowPack
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Log.Correlation (runCorrelationId)
@@ -118,6 +121,7 @@ deps :: AppEnv -> KirokuStore -> BehaviorEnv -> ApiProvider -> Decision.Decision
 deps app store behavior handler services =
   (Fixture.routerDeps app behavior (Routing.RoutingRuntime (\_ -> pure Fixture.catalog) (\_ _ _ -> error "router evaluator must not run")) [declaration, Fixture.successSpecialist "first"])
     { Agent.decisions = (services & #providers .~ ([handler])),
+      Agent.flows = builtinFlowRegistry,
       Agent.deliveryPool = Just store.pool
     }
 
@@ -146,7 +150,7 @@ tests fixture =
     [ testCase "the example executes three actual calls under two selected models" $
         withRuntime fixture \app store behavior -> do
           (handler, observed) <- scriptedProvider Investigate returned
-          let runtime = deps app store behavior handler (Decision.defaultDecisionServices catalog)
+          let runtime = deps app store behavior handler (Decision.builtinDecisionServices catalog)
               request = job "decision-three-calls"
           _ <- assertCompleted =<< Agent.runAgentRunWorkflow runtime request
           observed >>= (@?= ["stub-triage", "stub-investigate", "stub-investigate"])
@@ -182,7 +186,7 @@ tests fixture =
       testCase "ReturnNow makes no investigation call and creates no child" $
         withRuntime fixture \app store behavior -> do
           (handler, observed) <- scriptedProvider ReturnNow returned
-          let runtime = deps app store behavior handler (Decision.defaultDecisionServices catalog)
+          let runtime = deps app store behavior handler (Decision.builtinDecisionServices catalog)
               request = job "decision-return-now"
           _ <- assertCompleted =<< Agent.runAgentRunWorkflow runtime request
           observed >>= (@?= ["stub-triage"])
@@ -193,7 +197,7 @@ tests fixture =
           (handler, observed) <- scriptedProvider Investigate returned
           hooks <- crashAt False "record"
           let withSink = (declaration & #sinks .~ ([KizashiSignal (activityCoordinate ("shinzui/shikigami")) Reminder Normal (either (error . show) id (parseSignalImportance (50))) SubjectOwner (fmap declarationCoordinate ((Just "recipient"))) "decision complete" []]))
-              runtime = (deps app store behavior handler (Decision.defaultDecisionServices catalog)) {Agent.hooks = hooks, Agent.agents = [withSink, Fixture.successSpecialist "first"], Agent.grants = StaticGrants (Map.singleton (compatibilityIdentity (either (error . show) id (mkAgentName "router"))) (Set.singleton SKizashiSignal))}
+              runtime = (deps app store behavior handler (Decision.builtinDecisionServices catalog)) {Agent.hooks = hooks, Agent.agents = [withSink, Fixture.successSpecialist "first"], Agent.grants = StaticGrants (Map.singleton (compatibilityIdentity (either (error . show) id (mkAgentName "router"))) (Set.singleton SKizashiSignal))}
               request = job "decision-completed-replay"
           first <- try @SomeException (Agent.runAgentRunWorkflow runtime request)
           assertBool "crashed after decision commits" (either (const True) (const False) first)
@@ -211,22 +215,22 @@ tests fixture =
         withRuntime fixture \app store behavior -> do
           (handler, observed) <- scriptedProvider Investigate returned
           hooks <- crashAt False "decision-catalog-investigate"
-          let runtime = (deps app store behavior handler (Decision.defaultDecisionServices catalog)) {Agent.hooks = hooks}
+          let runtime = (deps app store behavior handler (Decision.builtinDecisionServices catalog)) {Agent.hooks = hooks}
               request = job "decision-pending-binding"
           _ <- try @SomeException (Agent.runAgentRunWorkflow runtime request)
           observed >>= (@?= ["stub-triage"])
           let changedCatalog = mustRight (retainModelBindings (mustRight (modelCatalog [a, changedB])) [b])
-          _ <- assertCompleted =<< Agent.runAgentRunWorkflow (deps app store behavior handler (Decision.defaultDecisionServices changedCatalog)) request
+          _ <- assertCompleted =<< Agent.runAgentRunWorkflow (deps app store behavior handler (Decision.builtinDecisionServices changedCatalog)) request
           observed >>= (@?= ["stub-triage", "stub-investigate", "stub-investigate"]),
       testCase "an unavailable pinned binding refuses before dispatch" $
         withRuntime fixture \app store behavior -> do
           (handler, observed) <- scriptedProvider Investigate returned
           hooks <- crashAt False "decision-result-investigate"
-          let runtime = (deps app store behavior handler (Decision.defaultDecisionServices catalog)) {Agent.hooks = hooks}
+          let runtime = (deps app store behavior handler (Decision.builtinDecisionServices catalog)) {Agent.hooks = hooks}
               request = job "decision-unavailable-binding"
           _ <- try @SomeException (Agent.runAgentRunWorkflow runtime request)
           let changedCatalog = mustRight (modelCatalog [a, changedB])
-          result <- Agent.runAgentRunWorkflow (deps app store behavior handler (Decision.defaultDecisionServices changedCatalog)) request
+          result <- Agent.runAgentRunWorkflow (deps app store behavior handler (Decision.builtinDecisionServices changedCatalog)) request
           assertBool "bounded unavailable failure" (case result of Right (Completed (Left _)) -> True; _ -> False)
           observed >>= (@?= ["stub-triage"])
           evidence <- report store "decision-unavailable-binding"
@@ -235,7 +239,7 @@ tests fixture =
         withRuntime fixture \app store behavior -> do
           (handler, observed) <- scriptedProvider Investigate returned
           hooks <- crashAt True "decision-result-investigate"
-          let runtime = (deps app store behavior handler (Decision.defaultDecisionServices catalog)) {Agent.hooks = hooks}
+          let runtime = (deps app store behavior handler (Decision.builtinDecisionServices catalog)) {Agent.hooks = hooks}
               request = job "decision-lost-append"
           _ <- try @SomeException (Agent.runAgentRunWorkflow runtime request)
           observed >>= (\calls -> length calls @?= 3)
@@ -248,7 +252,7 @@ tests fixture =
         withRuntime fixture \app store behavior -> do
           (handler, observed) <- scriptedProvider Investigate returned
           hooks <- crashAt False "decision-result-investigate"
-          let services = Decision.defaultDecisionServices catalog
+          let services = Decision.builtinDecisionServices catalog
               runtime = (deps app store behavior handler services) {Agent.hooks = hooks}
               request = job "decision-corrupt-ledger"
               evidenceStore = postgresDecisionEvidenceStore store.pool
@@ -288,7 +292,7 @@ tests fixture =
           let policy = profileFor ["stub-triage", "stub-investigate"]
               declared = (declaration & #sanctionedProfile .~ (Just (ProfileRequirement (ProfileId ("decision-profile")) (fmap ProfileVersion ((Just "1"))))))
               runtime =
-                (deps app store behavior handler (Decision.defaultDecisionServices catalog))
+                (deps app store behavior handler (Decision.builtinDecisionServices catalog))
                   { Agent.agents = [declared],
                     Agent.resolveRunProfile = \_ _ -> pure (Right policy)
                   }
@@ -302,7 +306,7 @@ tests fixture =
           let policy = profileFor ["stub-triage"]
               declared = (declaration & #sanctionedProfile .~ (Just (ProfileRequirement (ProfileId ("decision-profile")) (fmap ProfileVersion ((Just "1"))))))
               runtime =
-                (deps app store behavior handler (Decision.defaultDecisionServices catalog))
+                (deps app store behavior handler (Decision.builtinDecisionServices catalog))
                   { Agent.agents = [declared],
                     Agent.resolveRunProfile = \_ _ -> pure (Right policy)
                   }
@@ -315,7 +319,7 @@ tests fixture =
           let policy = profileFor ["stub-triage", "stub-investigate"]
               declared = (Fixture.routerDecl & #sanctionedProfile .~ (Just (ProfileRequirement (ProfileId ("decision-profile")) (fmap ProfileVersion ((Just "1"))))))
               runtime =
-                (deps app store behavior handler (Decision.defaultDecisionServices catalog))
+                (deps app store behavior handler (Decision.builtinDecisionServices catalog))
                   { Agent.agents = [declared],
                     Agent.resolveRunProfile = \_ _ -> pure (Right policy)
                   }
@@ -330,7 +334,7 @@ tests fixture =
                 let invalid = object ["action" .= Investigate, "summary" .= ("invalid confidence" :: Text), "confidence" .= (2.0 :: Double)]
                 pure (response & #message . #content .~ V.singleton (AssistantText (TextContent (TE.decodeUtf8 (LBS.toStrict (encode invalid))))))
               handler = (base & #complete .~ (complete) & #stream .~ (liftCompleteToStream complete))
-              runtime = deps app store behavior handler (Decision.defaultDecisionServices catalog)
+              runtime = deps app store behavior handler (Decision.builtinDecisionServices catalog)
               request = job "decision-invalid-output"
           outcome <- Agent.runAgentRunWorkflow runtime request
           assertBool "bounded invalid output failure" (case outcome of Right (Completed (Left _)) -> True; _ -> False)
@@ -340,7 +344,7 @@ tests fixture =
       testCase "every compiled slot maps to its exact declared prepare and result labels" do
         atRoot <- doesFileExist "domain/shikigami/agent-run.keiro"
         declared <- TextIO.readFile (if atRoot then "domain/shikigami/agent-run.keiro" else "../domain/shikigami/agent-run.keiro")
-        let compiled = [slot.label | flow <- Flow.flowRegistry, slot <- flow.decisionSlots]
+        let compiled = [slot.label | entry <- FlowPack.registeredFlows builtinFlowRegistry, slot <- entry.flow.definition.decisionSlots]
         compiled @?= [mustRight (parseDecisionSlotLabel "drift"), mustRight (parseDecisionSlotLabel "propose"), mustRight (parseDecisionSlotLabel "adapt"), triageDecisionSlot, investigationDecisionSlot, judgmentDecisionSlot]
         mapM_
           ( \label -> do
@@ -356,12 +360,12 @@ tests fixture =
         withRuntime fixture \app store behavior -> do
           (handler, observed) <- scriptedProvider Investigate returned
           hooks <- crashAt False "decision-catalog-investigate"
-          let runtime = (deps app store behavior handler (Decision.defaultDecisionServices catalog)) {Agent.hooks = hooks}
+          let runtime = (deps app store behavior handler (Decision.builtinDecisionServices catalog)) {Agent.hooks = hooks}
               request = job "decision-local-derivation"
           _ <- try @SomeException (Agent.runAgentRunWorkflow runtime request)
           let programs = mustRight (programRegistry [SomeProgram triageProgram, SomeProgram investigationProgram, SomeProgram derivedInvestigation])
               codecs = mustRight (resultCodecRegistry [retainedCodec triageProgram, retainedCodec investigationProgram, retainedCodec derivedInvestigation])
-              services = (Decision.defaultDecisionServices catalog) {Decision.programs = programs, Decision.codecs = codecs}
+              services = (Decision.builtinDecisionServices catalog) {Decision.programs = programs, Decision.codecs = codecs}
           output <- assertCompleted =<< Agent.runAgentRunWorkflow (deps app store behavior handler services) request
           assertBool "pending state retains original full result" ("original investigation" `Text.isInfixOf` Text.pack (show output) && "0.91" `Text.isInfixOf` Text.pack (show output))
           observed >>= (\calls -> length calls @?= 3)
@@ -387,10 +391,10 @@ tests fixture =
         withRuntime fixture \app store behavior -> do
           (handler, observed) <- scriptedProvider Investigate returned
           hooks <- crashAt False "decision-result-investigate"
-          let runtime = (deps app store behavior handler (Decision.defaultDecisionServices catalog)) {Agent.hooks = hooks}
+          let runtime = (deps app store behavior handler (Decision.builtinDecisionServices catalog)) {Agent.hooks = hooks}
               request = job "decision-missing-state"
           _ <- try @SomeException (Agent.runAgentRunWorkflow runtime request)
-          let services = (Decision.defaultDecisionServices catalog) {Decision.programs = mustRight (programRegistry [SomeProgram triageProgram, SomeProgram derivedInvestigation])}
+          let services = (Decision.builtinDecisionServices catalog) {Decision.programs = mustRight (programRegistry [SomeProgram triageProgram, SomeProgram derivedInvestigation])}
           outcome <- Agent.runAgentRunWorkflow (deps app store behavior handler services) request
           assertBool "unavailable pinned state is bounded" (case outcome of Right (Completed (Left _)) -> True; _ -> False)
           observed >>= (@?= ["stub-triage"]),
@@ -398,7 +402,7 @@ tests fixture =
         withRuntime fixture \app store behavior -> do
           (handler, observed) <- scriptedProvider Investigate returned
           _ <- expectRight =<< Pool.use store.pool (Session.script "CREATE FUNCTION shikigami.reject_workflow_terminal() RETURNS trigger LANGUAGE plpgsql AS 'BEGIN RAISE EXCEPTION ''fixture terminal fault''; END'; CREATE TRIGGER reject_workflow_terminal BEFORE UPDATE ON shikigami.decision_attempts FOR EACH ROW EXECUTE FUNCTION shikigami.reject_workflow_terminal();")
-          let runtime = deps app store behavior handler (Decision.defaultDecisionServices catalog)
+          let runtime = deps app store behavior handler (Decision.builtinDecisionServices catalog)
               request = job "decision-evidence-failure"
           outcome <- Agent.runAgentRunWorkflow runtime request
           assertBool "bounded evidence failure" (case outcome of Right (Completed (Left _)) -> True; _ -> False)
@@ -417,7 +421,7 @@ tests fixture =
               let investigation = InvestigationResult ProposeRoute "route proposal" (proposedRouteJson (TE.decodeUtf8 (LBS.toStrict (encode route)))) ((either (error . show) id . parseModelConfidence) 0.9)
               (handler, observed) <- scriptedProvider Investigate investigation
               let request = job key
-              outcome <- Agent.runAgentRunWorkflow (deps app store behavior handler (Decision.defaultDecisionServices catalog)) request
+              outcome <- Agent.runAgentRunWorkflow (deps app store behavior handler (Decision.builtinDecisionServices catalog)) request
               if succeeds
                 then do _ <- assertCompleted outcome; pure ()
                 else assertBool "invalid route fails" (case outcome of Right (Completed (Left _)) -> True; _ -> False)
@@ -434,7 +438,7 @@ tests fixture =
           let route = RouteDecision V1 Fixture.catalog.version (Matched (RouteSelection (fixtureAgentName "first") [(fixtureExpertiseKey "observability")] RoutingHigh "specialist" :| []))
               investigation = InvestigationResult ProposeRoute "delegate safely" (proposedRouteJson (TE.decodeUtf8 (LBS.toStrict (encode route)))) ((either (error . show) id . parseModelConfidence) 0.9)
           (handler, observed) <- scriptedProvider Investigate investigation
-          let runtime = deps app store behavior handler (Decision.defaultDecisionServices catalog)
+          let runtime = deps app store behavior handler (Decision.builtinDecisionServices catalog)
               request = job "decision-delegate"
           parked <- Agent.runAgentRunWorkflow runtime request
           case parked of Right Suspended -> pure (); _ -> assertFailure "expected governed child suspension"

@@ -38,7 +38,9 @@ import Shikigami.Decision.Contract
 import Shikigami.Decision.ModelAlias qualified as Alias
 import Shikigami.Decision.ModelCatalog
 import Shikigami.Fixture.TypeSafe qualified as TypeSafe
-import Shikigami.Flow (FlowDef (..), flowDecisionSlotsFor, flowRegistry)
+import Shikigami.Flow (FlowDef (..), flowDecisionSlotsFor)
+import Shikigami.Flow.Builtin (builtinFlowRegistry)
+import Shikigami.Flow.Pack (PackFlow (..), RegisteredFlow (..), registeredFlows)
 import Shikigami.Program.Decision
 import Shikigami.Program.Decision.JudgmentExample (judgmentProgram)
 import Shikigami.Trigger.Schedule (parseCron)
@@ -48,6 +50,9 @@ import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
 
 registered :: RegisteredProgram Text Text
 registered = mustRight (registerProgram "example" "1" "sha256:code" "input/1" "result/1" "validator/1" "derive/1" Null (Embed pure) jsonResultCodec Right Right)
+
+builtinFlows :: [FlowDef]
+builtinFlows = [entry.flow.definition | entry <- registeredFlows builtinFlowRegistry]
 
 registry :: ProgramRegistry
 registry = mustRight (programRegistry [SomeProgram registered])
@@ -107,13 +112,13 @@ tests =
         assertBool "duplicate slot labels" (not (null (slotErrors registry declaration [slot, slot])))
         assertBool "unknown contract" (not (null (slotErrors (mustRight (programRegistry [])) declaration [slot])))
         assertBool "undeclared alias" (not (null (slotErrors registry ((declaration & #decisionModels .~ ([]))) [slot])))
-        watchdog <- case [flow | flow <- flowRegistry, flow.name == declarationCoordinate "watchdog-sweep"] of
+        watchdog <- case [flow | flow <- builtinFlows, flow.name == declarationCoordinate "watchdog-sweep"] of
           [flow] -> pure flow
           _ -> assertFailure "watchdog Flow registration is absent or duplicated"
         flowDecisionSlotsFor (declaration & #decisionModels .~ []) watchdog @?= []
         assertBool "declared optional Drift retains its inventory" (not (null (flowDecisionSlotsFor (declaration & #decisionModels .~ [fixtureModelAlias "drift"]) watchdog)))
-        assertBool "other flows have empty inventories" (all (\flow -> flow.name `elem` map declarationCoordinate ["watchdog-sweep", "propose-work", "adaptive-delivery", "shikumi-decision-example", "shikumi-judgment-example"] || null flow.decisionSlots) flowRegistry)
-        map (.decisionSlots) (filter (\flow -> flow.name == declarationCoordinate "adaptive-delivery") flowRegistry) @?= [adaptiveSlots],
+        assertBool "other flows have empty inventories" (all (\flow -> flow.name `elem` map declarationCoordinate ["watchdog-sweep", "propose-work", "adaptive-delivery", "shikumi-decision-example", "shikumi-judgment-example"] || null flow.decisionSlots) builtinFlows)
+        map (.decisionSlots) (filter (\flow -> flow.name == declarationCoordinate "adaptive-delivery") builtinFlows) @?= [adaptiveSlots],
       testCase "historical declaration JSON defaults to no permission and keeps its bytes" do
         declaration <- mustRight <$> loadAgent "../agents/heartbeat.dhall"
         case toJSON declaration of

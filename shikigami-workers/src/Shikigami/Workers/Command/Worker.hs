@@ -29,14 +29,15 @@ import Shikigami.App.Config.Load (requireDatabaseUrl)
 import Shikigami.Authority (Authority, recordedIn)
 import Shikigami.Authority.KikanEn.Config (buildConfiguredAuthority)
 import Shikigami.Behavior.Provider (newBehaviorEnvFor)
+import Shikigami.Behavior.Run (withProgramTasks)
 import Shikigami.CodingAgent.Workflow (CodingAgentRunners)
 import Shikigami.Directory (DirectoryRuntime (..))
 import Shikigami.Duration
 import Shikigami.Execution.Capacity qualified as Capacity
-import Shikigami.Flow (flowDeclarationErrors)
-import Shikigami.Flow.Decision qualified as FlowDecision
+import Shikigami.Flow.Builtin (builtinPack)
 import Shikigami.Flow.Initiative qualified as FlowInitiative
 import Shikigami.Flow.Observe qualified as FlowObserve
+import Shikigami.Flow.Pack (FlowPack, FlowRegistry, composeFlowRegistryOrExit, decisionServices, flowDeclarationErrors, lookupTask)
 import Shikigami.Health.Worker (LoopName (OutboxLoop, QueueLoop, TelemetryLoop, TimerLoop), loopStaleAfter, loopStaleness, newHeartbeatsWithStaleness, serveProbesWith)
 import Shikigami.Inspection.Consumer (consumerInspection)
 import Shikigami.Inspection.Store (withObservedStore)
@@ -79,14 +80,14 @@ import System.Exit qualified as Exit
 --
 -- The logger is built first, before anything that could want to log, and every
 -- line this process writes goes through it as one JSON object per line.
-runWorkerCmd :: AppConfig -> IO ()
-runWorkerCmd = runWorkerCmdWith Nothing
+runWorkerCmd :: [FlowPack] -> AppConfig -> IO ()
+runWorkerCmd packs = runWorkerCmdWith packs Nothing
 
 -- | Bounded operational resume owns the same dependencies as the worker.
 -- Without force this reports the budgets and performs no workflow advancement.
-runResumeCmd :: Int -> Int -> Bool -> AppConfig -> IO ()
-runResumeCmd passes candidates force config
-  | force = runWorkerCmdWith (Just (passes, candidates)) config
+runResumeCmd :: [FlowPack] -> Int -> Int -> Bool -> AppConfig -> IO ()
+runResumeCmd packs passes candidates force config
+  | force = runWorkerCmdWith packs (Just (passes, candidates)) config
   | otherwise = do
       logger <- Log.newStderrLogger Log.Info
       Log.logInfo
@@ -94,14 +95,15 @@ runResumeCmd passes candidates force config
         "worker.resume.preview"
         ["passes" .= passes, "candidates_per_pass" .= candidates, "force_required" .= True]
 
-runWorkerCmdWith :: Maybe (Int, Int) -> AppConfig -> IO ()
-runWorkerCmdWith resumeBudget config = do
+runWorkerCmdWith :: [FlowPack] -> Maybe (Int, Int) -> AppConfig -> IO ()
+runWorkerCmdWith packs resumeBudget config = do
   logger <- Log.newStderrLogger Log.Info
+  flows <- composeFlowRegistryOrExit logger "shikigami-worker" (builtinPack : packs)
   either Exit.die pure (workerTierAdmission config)
   connStr <- Config.revealSecretText <$> requireDatabaseUrl "shikigami-worker" config
   verifyShikigamiMigrations connStr
   withRunTelemetry "shikigami.worker" \tr keiroMetrics shikigamiMetrics -> do
-    behEnv <- newBehaviorEnvFor logger ((.behaviorProvider) config) (Just (otelSink tr))
+    behEnv <- withProgramTasks (lookupTask flows) <$> newBehaviorEnvFor logger ((.behaviorProvider) config) (Just (otelSink tr))
     let settings = runtimeConnectionSettings logger keiroMetrics connStr
     withObservedStore tr settings $ \st storeMetrics -> do
       registerRuntimeCatalog st
@@ -115,7 +117,7 @@ runWorkerCmdWith resumeBudget config = do
           (persistAgentLoadReport logger storePool manifestDirectory)
       agents <- enabledAgentsFromReport logger report
       Log.logInfo logger "worker.agents.loaded" ["count" .= length agents]
-      refuseUndeployableAgents logger agents
+      refuseUndeployableAgents flows logger agents
       let kizashiConfig =
             KizashiConfig
               { baseUrl = (.kizashiBaseUrl) config,
@@ -212,7 +214,8 @@ runWorkerCmdWith resumeBudget config = do
                   agents,
                   agentReport = report,
                   behaviorEnv = behEnv,
-                  decisions = FlowDecision.defaultDecisionServices (either (error . show) id config.decisionModelCatalog),
+                  decisions = decisionServices flows (either (error . show) id config.decisionModelCatalog),
+                  flows,
                   actionAuthority,
                   workspace,
                   codingAgents,
@@ -317,9 +320,9 @@ buildActionAuthorizer logger config =
 -- This is deliberately fatal rather than a skip: silently dropping the agent is
 -- what 'Shikigami.Agent.Loader.loadAgentsIn' already does to an unparseable
 -- manifest, and that behavior is documented there as preserved-not-endorsed.
-refuseUndeployableAgents :: Log.Logger -> [AgentDecl] -> IO ()
-refuseUndeployableAgents logger agents =
-  case [(name, err) | decl@AgentDecl {name} <- agents, err <- flowDeclarationErrors decl] of
+refuseUndeployableAgents :: FlowRegistry -> Log.Logger -> [AgentDecl] -> IO ()
+refuseUndeployableAgents flows logger agents =
+  case [(name, err) | decl@AgentDecl {name} <- agents, err <- flowDeclarationErrors flows decl] of
     [] -> pure ()
     problems -> do
       traverse_

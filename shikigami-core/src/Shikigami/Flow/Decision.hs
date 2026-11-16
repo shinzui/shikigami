@@ -16,7 +16,8 @@ module Shikigami.Flow.Decision
     validateInvestigationRoute,
     refuseDecision,
     DecisionServices (..),
-    defaultDecisionServices,
+    builtinDecisionServices,
+    decisionProviders,
     emptyDecisionServices,
     DecisionEnv (..),
     runDecision,
@@ -126,11 +127,13 @@ data DecisionServices = DecisionServices
   }
   deriving stock (Generic)
 
-defaultDecisionServices :: ModelCatalog -> DecisionServices
-defaultDecisionServices catalog = DecisionServices catalog decisionPrograms decisionCodecs decisionProviders
+-- | The decision services of the builtin pack alone. Tests use it; a process
+-- composes its packs and calls 'Shikigami.Flow.Pack.decisionServices'.
+builtinDecisionServices :: ModelCatalog -> DecisionServices
+builtinDecisionServices catalog = DecisionServices catalog decisionPrograms decisionCodecs decisionProviders
 
 emptyDecisionServices :: DecisionServices
-emptyDecisionServices = defaultDecisionServices (either (error . show) id (modelCatalog []))
+emptyDecisionServices = builtinDecisionServices (either (error . show) id (modelCatalog []))
 
 data DecisionEnv = DecisionEnv
   { agent :: !AgentDecl,

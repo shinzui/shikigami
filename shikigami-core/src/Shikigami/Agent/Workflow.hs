@@ -170,6 +170,7 @@ import Shikigami.Flow.Delegate qualified as FlowDelegate
 import Shikigami.Flow.Initiative qualified as FlowInitiative
 import Shikigami.Flow.Objectives qualified as FlowObjectives
 import Shikigami.Flow.Observe qualified as FlowObserve
+import Shikigami.Flow.Pack qualified as FlowPack
 import Shikigami.Flow.Routing (RoutingRuntime)
 import Shikigami.Flow.Routing qualified as FlowRouting
 import Shikigami.Flow.Watchdog qualified as WatchdogFlow
@@ -226,6 +227,10 @@ data AgentRunDeps = AgentRunDeps
   { appEnv :: !AppEnv,
     behaviorEnv :: !BehaviorEnv,
     decisions :: !FlowDecision.DecisionServices,
+    -- | The packs this executable composed at start. A flow, its pack and its
+    -- interpreter are found here and nowhere else; the lookup is pure and
+    -- sits outside every step.
+    flows :: !FlowPack.FlowRegistry,
     -- | Process-local C13 authorizer. The value never crosses a workflow or
     -- outbox boundary; every protected IO boundary asks it afresh.
     actionAuthority :: !Authority,
@@ -500,7 +505,7 @@ runProfiledAgent deps job decl resolvedProfile resolvedOverlays = do
                 Selection.ProcessDefault -> inheritedPermissions decl job
            in runWith active (job & #executionPermissions .~ permissions)
   where
-    runWith active selectedJob = case behaviorEnvForProfile decl resolvedProfile active of
+    runWith active selectedJob = case behaviorEnvForProfile deps.flows decl resolvedProfile active of
       Left violation -> pure (Left (PermanentAgentRunFailure (renderProfileViolation violation)))
       Right constrained -> runProfiledAgentWith deps constrained Nothing resolvedProfile resolvedOverlays selectedJob decl
 
@@ -512,15 +517,15 @@ durableSkill decl = case decl.behavior of
 
 resolveRunSelection :: AgentRunDeps -> RunJob -> AgentDecl -> Maybe ResolvedProfile -> UTCTime -> Either Selection.ExecutionSelectionFailure (Maybe Selection.ExecutionSelection)
 resolveRunSelection deps job decl profile now
-  | usesDefaultModel decl = Just <$> Selection.resolveExecutionSelection (SelectionRuntime.assignmentIdFor ((runJobWorkflowId job).unWorkflowId)) deps.decisions.catalog (Selection.defaultBinding deps.behaviorEnv.model deps.behaviorEnv.options) decl.execution job.executionRequest job.executionPermissions profile job.executionRootId now
+  | usesDefaultModel deps.flows decl = Just <$> Selection.resolveExecutionSelection (SelectionRuntime.assignmentIdFor ((runJobWorkflowId job).unWorkflowId)) deps.decisions.catalog (Selection.defaultBinding deps.behaviorEnv.model deps.behaviorEnv.options) decl.execution job.executionRequest job.executionPermissions profile job.executionRootId now
   | isJust job.executionRequest = Left Selection.ExecutionBehaviorUnsupported
   | otherwise = Right Nothing
 
-usesDefaultModel :: AgentDecl -> Bool
-usesDefaultModel decl = case decl.behavior of
+usesDefaultModel :: FlowPack.FlowRegistry -> AgentDecl -> Bool
+usesDefaultModel flows decl = case decl.behavior of
   Skill {} -> null decl.delegates || isJust decl.routing
   CoordinatingSkill {} -> True
-  Flow {name} -> maybe True (defaultModelRequired . (.requiresDefaultModel)) (Flow.lookupFlow name)
+  Flow {name} -> maybe True (\entry -> defaultModelRequired entry.flow.definition.requiresDefaultModel) (FlowPack.lookupFlow flows name)
   _ -> isJust decl.routing
 
 inheritedPermissions :: AgentDecl -> RunJob -> Maybe [DecisionContract.ModelAlias]
@@ -656,21 +661,22 @@ selectionRuntime deps job profile =
     }
 
 behaviorEnvForProfile ::
+  FlowPack.FlowRegistry ->
   AgentDecl ->
   Maybe ResolvedProfile ->
   BehaviorEnv ->
   Either ProfileViolation BehaviorEnv
-behaviorEnvForProfile AgentDecl {behavior = Skill {}} (Just resolvedProfile) =
+behaviorEnvForProfile _ AgentDecl {behavior = Skill {}} (Just resolvedProfile) =
   constrainBehaviorEnv resolvedProfile
-behaviorEnvForProfile AgentDecl {behavior = CoordinatingSkill {}} (Just resolvedProfile) =
+behaviorEnvForProfile _ AgentDecl {behavior = CoordinatingSkill {}} (Just resolvedProfile) =
   constrainBehaviorEnv resolvedProfile
-behaviorEnvForProfile AgentDecl {behavior = Flow {name}} (Just resolvedProfile) =
-  case Flow.lookupFlow name of
-    Just flow | not (defaultModelRequired flow.requiresDefaultModel) -> Right
+behaviorEnvForProfile flows AgentDecl {behavior = Flow {name}} (Just resolvedProfile) =
+  case FlowPack.lookupFlow flows name of
+    Just entry | not (defaultModelRequired entry.flow.definition.requiresDefaultModel) -> Right
     _ -> constrainBehaviorEnv resolvedProfile
-behaviorEnvForProfile AgentDecl {routing = Just _} (Just resolvedProfile) =
+behaviorEnvForProfile _ AgentDecl {routing = Just _} (Just resolvedProfile) =
   constrainBehaviorEnv resolvedProfile
-behaviorEnvForProfile _decl _resolvedProfile = Right
+behaviorEnvForProfile _ _decl _resolvedProfile = Right
 
 runProfiledAgentWith ::
   AgentRunDeps ->
@@ -1247,20 +1253,23 @@ runFlowBehavior ::
   DeclarationCoordinate "flow" ->
   Eff (Workflow : AppEffects) (Either Text Value)
 runFlowBehavior deps activeBehaviorEnv resolvedProfile approvalPolicyForRun recordedIdentity sid decl job flowName =
-  case Flow.lookupFlow flowName of
+  case FlowPack.lookupFlow deps.flows flowName of
     Nothing -> pure (Left ("unknown flow " <> declarationCoordinateText flowName))
-    Just flow -> runFlowDefinition deps activeBehaviorEnv resolvedProfile approvalPolicyForRun recordedIdentity sid decl job flow
+    Just entry -> do
+      Log.logInfo deps.logger "flow.selected" ["agent" .= agentNameText decl.name, "flow" .= declarationCoordinateText flowName, "pack" .= FlowPack.flowPackNameText entry.pack, "run_id" .= runCorrelationId (jobIdempotencyKey job)]
+      runFlowDefinition deps activeBehaviorEnv resolvedProfile approvalPolicyForRun recordedIdentity sid decl job entry.flow
 
 -- | A pinned playbook bundle as a flow body.
-playbookFlow :: PlaybookAgent -> Playbook.PinnedPlaybook -> Flow.FlowDef
+playbookFlow :: PlaybookAgent -> Playbook.PinnedPlaybook -> FlowPack.PackFlow
 playbookFlow agent pinned =
-  Flow.FlowDef
-    { Flow.name = declarationCoordinate "playbook",
-      Flow.lifecycle = Flow.LifecycleDiagram "flowchart LR\n Admit --> Steps --> Report" [],
-      Flow.decisionSlots = [],
-      Flow.requiresDefaultModel = DefaultModelOptional,
-      Flow.run = runPlaybook agent pinned
-    }
+  FlowPack.kernelCapabilityFlow
+    Flow.FlowDef
+      { Flow.name = declarationCoordinate "playbook",
+        Flow.lifecycle = Flow.LifecycleDiagram "flowchart LR\n Admit --> Steps --> Report" [],
+        Flow.decisionSlots = [],
+        Flow.requiresDefaultModel = DefaultModelOptional
+      }
+    (runPlaybook agent pinned)
 
 runFlowDefinition ::
   AgentRunDeps ->
@@ -1271,10 +1280,24 @@ runFlowDefinition ::
   SessionId ->
   AgentDecl ->
   RunJob ->
-  Flow.FlowDef ->
+  FlowPack.PackFlow ->
   Eff (Workflow : AppEffects) (Either Text Value)
-runFlowDefinition deps activeBehaviorEnv resolvedProfile approvalPolicyForRun recordedIdentity sid decl job flow@Flow.FlowDef {Flow.run} = do
+runFlowDefinition deps activeBehaviorEnv resolvedProfile approvalPolicyForRun recordedIdentity sid decl job FlowPack.PackFlow {FlowPack.definition = flow, FlowPack.run = runFlow} = do
   (_, childWorkflowId) <- currentWorkflow
+  -- The read view a pack's interpreter is given. It is plain data built
+  -- outside every step, so it adds nothing to the journal.
+  let runContext =
+        FlowPack.FlowRunContext
+          { FlowPack.agent = decl,
+            FlowPack.identity = recordedIdentity,
+            FlowPack.session = sid,
+            FlowPack.runId = childWorkflowId,
+            FlowPack.occurredAt = runJobOccurredAt job,
+            FlowPack.activity = activityFromJob job,
+            FlowPack.executionRoot = job.executionRootId,
+            FlowPack.directory = depsDirectory deps,
+            FlowPack.declarations = deps.agents
+          }
   let coordinator = WorkerCapability.CoordinatorRun childWorkflowId job.identity sid job.executionRootId job.executionPermissions
   coordinationPolicy <- step (StepName "worker-coordination-policy") (liftIO (FlowWorkers.resolveCoordinationPolicy deps.coordination deps.actionAuthority coordinator))
   useObjectives <- Workflow.patch (Workflow.PatchId "shikigami-objective-tracking-v1")
@@ -1359,7 +1382,7 @@ runFlowDefinition deps activeBehaviorEnv resolvedProfile approvalPolicyForRun re
           . PracticeReview.runPracticeReviewEvaluator True activeBehaviorEnv ((.practiceReview) deps)
           . PracticeReviewMemory.runPracticeReviewMemory practiceReviewMemoryEnv
           . attentionInterpreter
-          $ run ((.triggerPayload) job)
+          $ runFlow runContext ((.triggerPayload) job)
       )
   case attempted of
     Left _ | useWatchdog && flow.name == WatchdogFlow.watchdogFlowName -> liftIO deps.observe.hooks.onSweepFailed

@@ -68,6 +68,7 @@ import Shikigami.Execution.Policy.Types (HarnessPolicy)
 import Shikigami.Flow.Decision qualified as FlowDecision
 import Shikigami.Flow.Initiative qualified as FlowInitiative
 import Shikigami.Flow.Observe qualified as FlowObserve
+import Shikigami.Flow.Pack (FlowRegistry)
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Health.Worker (Heartbeats, LoopName (DirectoryLoop), LoopStaleness, beat, loopStaleness)
 import Shikigami.Inspection.Consumer (ConsumerInspection)
@@ -118,6 +119,8 @@ data WorkerEnv = WorkerEnv
     agentReport :: !AgentLoadReport,
     behaviorEnv :: !BehaviorEnv,
     decisions :: !FlowDecision.DecisionServices,
+    -- | The packs this worker composed at start.
+    flows :: !FlowRegistry,
     actionAuthority :: !Authority,
     workspace :: !(Maybe WorkspaceHost),
     -- | How each coding-agent step finds its runner: per step under
@@ -235,6 +238,7 @@ agentRunDeps env =
     { AgentWorkflow.appEnv = (.appEnv) env,
       AgentWorkflow.behaviorEnv = (.behaviorEnv) env,
       AgentWorkflow.decisions = (.decisions) env,
+      AgentWorkflow.flows = env.flows,
       AgentWorkflow.actionAuthority = (.actionAuthority) env,
       AgentWorkflow.capabilities = maybe emptyCapabilityRuntime (.capabilities) env.workspace,
       AgentWorkflow.workspace = env.workspace,

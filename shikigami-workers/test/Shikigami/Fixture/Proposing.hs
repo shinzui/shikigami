@@ -103,6 +103,7 @@ import Shikigami.Directory qualified as Directory
 import Shikigami.Duration (Duration, durationTime, parseDuration, remainingDuration)
 import Shikigami.Execution.Identity (parseOperationId)
 import Shikigami.Execution.Policy.Types (defaultHarnessPolicy)
+import Shikigami.Flow.Builtin (builtinFlowRegistry)
 import Shikigami.Flow.Decision qualified as Decision
 import Shikigami.Flow.Initiative qualified as FlowInitiative
 import Shikigami.Flow.Observe qualified as FlowObserve
@@ -301,7 +302,8 @@ proposingDeps env behavior provider binding objectiveRuntime settings repository
   Agent.AgentRunDeps
     { appEnv = env,
       behaviorEnv = behavior,
-      decisions = Decision.defaultDecisionServices (either (error . show) id (modelCatalog [binding])) & #providers .~ [provider],
+      decisions = Decision.builtinDecisionServices (either (error . show) id (modelCatalog [binding])) & #providers .~ [provider],
+      flows = builtinFlowRegistry,
       actionAuthority = allowAllForTests,
       capabilities = CapabilityProvider.emptyCapabilityRuntime,
       workspace = Nothing,

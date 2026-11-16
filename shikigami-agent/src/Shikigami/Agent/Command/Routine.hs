@@ -150,7 +150,7 @@ runRoutine RunRoutine {agent, task, repository = requested, noConfirm} config = 
         Right top -> pure (Just top)
         Left _ -> die (renderRoutineRefusal (NotInRepository here))
   let payload = if null task then Nothing else Just (LazyChar8.unpack (Aeson.encode (Aeson.object ["task" .= Text.unwords task])))
-  runAgentRun path Nothing repository payload noConfirm Nothing config {trustTier = LocalOperator}
+  runAgentRun [] path Nothing repository payload noConfirm Nothing config {trustTier = LocalOperator}
 
 -- | A name is @<agents directory>/<name>.dhall@; a path is used as it is.
 resolveAgent :: String -> IO FilePath

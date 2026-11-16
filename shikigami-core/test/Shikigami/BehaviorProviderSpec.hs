@@ -302,17 +302,7 @@ profileConstraintTests =
     ]
 
 envWithThinking :: Profile.ThinkingLevel -> BehaviorEnv -> BehaviorEnv
-envWithThinking level BehaviorEnv {runtime, model, options, traceSink, providerRegistry, tools, activeOverlays, toolTurnLimit} =
-  BehaviorEnv
-    { runtime,
-      model,
-      options = (options & #thinking .~ (Just level)),
-      traceSink,
-      providerRegistry,
-      tools,
-      activeOverlays,
-      toolTurnLimit
-    }
+envWithThinking level env = env & #options . #thinking .~ Just level
 
 stubProfile :: Text -> Profile.Prohibitions -> ResolvedProfile
 stubProfile allowedModel prohibitions =

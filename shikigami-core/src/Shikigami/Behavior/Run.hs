@@ -22,6 +22,7 @@ module Shikigami.Behavior.Run
     runProgramTask,
     triggerOnly,
     withCapabilityTools,
+    withProgramTasks,
   )
 where
 
@@ -83,7 +84,13 @@ data BehaviorEnv = BehaviorEnv
     providerRegistry :: !(Maybe ProviderRegistry),
     tools :: !ToolRegistry,
     activeOverlays :: !(Set CapabilityId),
-    toolTurnLimit :: !ToolTurnLimit
+    toolTurnLimit :: !ToolTurnLimit,
+    -- | How a @ShikumiProgram@ behavior finds its task. The stub and provider
+    -- constructors answer from the builtin tasks; a composition that adds packs
+    -- replaces it with its registry's lookup ('Shikigami.Flow.Pack.lookupTask').
+    -- It is a function, not the registry, because the registry module depends
+    -- on this one.
+    tasks :: !(Text -> Maybe ProgramTask)
   }
   deriving stock (Generic)
 
@@ -130,8 +137,14 @@ newBehaviorEnvWithTraceSink traceSink = do
         providerRegistry = Nothing,
         tools = mkRegistry [],
         activeOverlays = Set.empty,
-        toolTurnLimit = defaultToolTurnLimit
+        toolTurnLimit = defaultToolTurnLimit,
+        tasks = lookupTask
       }
+
+-- | Replace how a @ShikumiProgram@ behavior finds its task. A composition
+-- that adds packs passes its registry's lookup.
+withProgramTasks :: (Text -> Maybe ProgramTask) -> BehaviorEnv -> BehaviorEnv
+withProgramTasks lookupComposed env = env & #tasks .~ lookupComposed
 
 -- | Derive one callback-local environment from an immutable base environment.
 -- The active ids come from the same resolved snapshot whose leases produced the
@@ -158,7 +171,7 @@ runBehavior env decl input
         )
   | otherwise = case (.behavior) decl of
       ShikumiProgram {task = t} ->
-        case lookupTask (declarationCoordinateText t) of
+        case env.tasks (declarationCoordinateText t) of
           Nothing -> pure (Left (UnknownTask (declarationCoordinateText t)))
           Just tk -> runProgramTask ((.runtime) env) tk input
       Skill {path = p} ->

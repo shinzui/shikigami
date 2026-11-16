@@ -5,7 +5,8 @@ import Data.Text.IO qualified as Text
 import Keiki.Acceptor qualified as Acceptor
 import Keiki.Render.Validate (MermaidValidationOptions (..), defaultMermaidValidationOptions, validateMermaidAtlas)
 import Shikigami.Diagrams (domainAtlas, domainEdgeInspectors)
-import Shikigami.Flow (LifecycleDiagram (..), atRiskCustomerLifecycleDiagram)
+import Shikigami.Flow (LifecycleDiagram (..))
+import Shikigami.Flow.Builtin (atRiskCustomerLifecycleDiagram)
 import Shikigami.Flow.Lifecycle.AtRiskCustomer (AtRiskCustomerCommand (..), atRiskCustomerLifecycle, atRiskCustomerMermaid, atRiskCustomerValidationWarnings)
 import System.Environment (getArgs, withArgs)
 import Test.Tasty (defaultMain, testGroup)

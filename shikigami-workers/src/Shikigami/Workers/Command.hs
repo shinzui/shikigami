@@ -41,6 +41,7 @@ module Shikigami.Workers.Command
 
     -- * The individual roles
     workerRoleInfo,
+    workerRoleInfoWith,
     workspaceSupervisorRoleInfo,
     schedulerRoleInfo,
     consumeStreamRoleInfo,
@@ -70,6 +71,7 @@ import Shikigami.App.Config
   )
 import Shikigami.App.Config.Load (withConfigOptions)
 import Shikigami.App.Role (RoleInfo (..), runRole)
+import Shikigami.Flow.Pack (FlowPack)
 import Shikigami.Workers.Command.Scheduler (runSchedulerCmd)
 import Shikigami.Workers.Command.Worker (runResumeCmd, runWorkerCmd)
 import Shikigami.Workers.Subscription (runConsumeEvents, runConsumeStream)
@@ -93,7 +95,12 @@ workerRoles =
 
 -- | @shikigami-worker@: drain the run-job queue and run agents end to end.
 workerRoleInfo :: RoleInfo
-workerRoleInfo =
+workerRoleInfo = workerRoleInfoWith []
+
+-- | The worker composed with flow packs beside the builtin pack. Only a
+-- distribution package passes a non-empty list (docs/adr/0129).
+workerRoleInfoWith :: [FlowPack] -> RoleInfo
+workerRoleInfoWith packs =
   RoleInfo
     { binaryName = "shikigami-worker",
       role = WorkerRole,
@@ -101,7 +108,7 @@ workerRoleInfo =
         withConfigOptions
           "shikigami-worker"
           "Drain shikigami_run_jobs: run each agent, dispatch its sinks, record the session"
-          (workerAction)
+          (workerAction packs)
           ( sourcesOf
               [ agentsOption,
                 kawaUrlOption,
@@ -270,8 +277,8 @@ danwaAgentOption =
 
 -- Bounded maintenance stays in the resource-owning worker binary; the embedded
 -- server hook cannot interpret the application's Kioku effect row.
-workerAction :: Parser (AppConfig -> IO ())
-workerAction = workspaceMaintenanceAction <|> resumeAction
+workerAction :: [FlowPack] -> Parser (AppConfig -> IO ())
+workerAction packs = workspaceMaintenanceAction <|> resumeAction packs
 
 workspaceMaintenanceAction :: Parser (AppConfig -> IO ())
 workspaceMaintenanceAction =
@@ -281,15 +288,15 @@ workspaceMaintenanceAction =
             <|> (CleanupWorkspace <$> strOption (long "workspace-cleanup" <> metavar "RESOURCE" <> help "Remove the exact terminal workspace files and scratch; retain receipts"))
         )
 
-resumeAction :: Parser (AppConfig -> IO ())
-resumeAction =
+resumeAction :: [FlowPack] -> Parser (AppConfig -> IO ())
+resumeAction packs =
   choose
     <$> optional (option positiveInt (long "resume-passes" <> metavar "N" <> help "Preview bounded workflow resume; use --force to advance"))
     <*> option positiveInt (long "resume-limit" <> value 100 <> metavar "N" <> help "Maximum candidates per bounded resume pass")
     <*> switch (long "force" <> help "Execute the bounded resume action")
   where
-    choose Nothing _ _ = runWorkerCmd
-    choose (Just passes) candidates force = runResumeCmd passes candidates force
+    choose Nothing _ _ = runWorkerCmd packs
+    choose (Just passes) candidates force = runResumeCmd packs passes candidates force
     positiveInt = eitherReader \raw -> case reads raw of
       [(value, "")] | value > 0 -> Right value
       _ -> Left "expected a positive integer"

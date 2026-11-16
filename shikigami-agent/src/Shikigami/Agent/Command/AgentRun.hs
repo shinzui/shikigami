@@ -49,6 +49,7 @@ import Shikigami.App.Config qualified as Config
 import Shikigami.App.Config.Load (requireDatabaseUrl)
 import Shikigami.Attestation.Resolve qualified as Profile
 import Shikigami.Behavior.Provider (newBehaviorEnvFor)
+import Shikigami.Behavior.Run (withProgramTasks)
 import Shikigami.CodingAgent.Types (renderOutcome)
 import Shikigami.CodingAgent.Workflow (codingAgentStepWorkflow, codingAgentStepWorkflowName, fixedCodingAgentRunner)
 import Shikigami.DeclaredTool.Workflow (declaredToolStepWorkflow, declaredToolStepWorkflowName, renderToolStepOutcome)
@@ -60,9 +61,10 @@ import Shikigami.Execution.Quantity (parseResourceAmount)
 import Shikigami.Execution.Resources (Dimension (..), Envelope (..), Limit (..))
 import Shikigami.Execution.SelectionRuntime (assignmentIdFor)
 import Shikigami.Execution.Transcript (executionIdFor)
-import Shikigami.Flow.Decision qualified as FlowDecision
+import Shikigami.Flow.Builtin (builtinPack)
 import Shikigami.Flow.Initiative qualified as FlowInitiative
 import Shikigami.Flow.Observe qualified as FlowObserve
+import Shikigami.Flow.Pack qualified as FlowPack
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations (verifyShikigamiMigrations)
@@ -89,9 +91,10 @@ import System.IO (hPutStrLn, stderr)
 -- @--from-activity@ — map an @activity.v1@ envelope into a memory under the agent
 -- scope. The connection string comes from @database.connection_string@, which the
 -- development shell still supplies as @PG_CONNECTION_STRING@.
-runAgentRun :: String -> Maybe FilePath -> Maybe String -> Maybe String -> Bool -> Maybe Text -> AppConfig -> IO ()
-runAgentRun agentArg mActivity workspace payloadArgument noConfirm resume config = do
+runAgentRun :: [FlowPack.FlowPack] -> String -> Maybe FilePath -> Maybe String -> Maybe String -> Bool -> Maybe Text -> AppConfig -> IO ()
+runAgentRun packs agentArg mActivity workspace payloadArgument noConfirm resume config = do
   logger <- Log.newStderrLogger Log.Info
+  flows <- FlowPack.composeFlowRegistryOrExit logger "shikigami-agent-run" (builtinPack : packs)
   let path = resolvePath agentArg
   declE <- loadAgent path
   case declE of
@@ -123,11 +126,16 @@ runAgentRun agentArg mActivity workspace payloadArgument noConfirm resume config
             triggerPayload <- case supplied of
               Nothing -> pure Aeson.Null
               Just raw -> maybe (dieAgentRun "payload input is not valid JSON") pure (Aeson.decodeStrict (TE.encodeUtf8 (Text.pack raw)))
+            -- Refused before a session opens: a manifest naming a flow this
+            -- executable was not composed with can never run here.
+            case FlowPack.flowDeclarationErrors flows decl of
+              [] -> pure ()
+              problems -> dieAgentRun (Text.intercalate "; " problems)
             interaction <- terminalInteraction noConfirm
-            runDurableAgent logger store appEnv (parseWorkspaceArgument <$> workspace) triggerPayload interaction config decl resume
+            runDurableAgent flows logger store appEnv (parseWorkspaceArgument <$> workspace) triggerPayload interaction config decl resume
 
-runDurableAgent :: Log.Logger -> KirokuStore -> AppEnv -> Maybe WorkspaceArgument -> Aeson.Value -> Interaction -> AppConfig -> AgentDecl -> Maybe Text -> IO ()
-runDurableAgent logger store@KirokuStore {pool} appEnv workspace triggerPayload interaction config decl resume = do
+runDurableAgent :: FlowPack.FlowRegistry -> Log.Logger -> KirokuStore -> AppEnv -> Maybe WorkspaceArgument -> Aeson.Value -> Interaction -> AppConfig -> AgentDecl -> Maybe Text -> IO ()
+runDurableAgent flows logger store@KirokuStore {pool} appEnv workspace triggerPayload interaction config decl resume = do
   occurredAt <- getCurrentTime
   freshKey <- newCliRunKey ((.name) decl)
   -- With --resume, the run is the journaled job of an earlier invocation: the
@@ -192,7 +200,7 @@ runDurableAgent logger store@KirokuStore {pool} appEnv workspace triggerPayload 
       approvalEnv
         | localTier = ApprovalWorkflow.ApprovalWorkflowEnv {notifier = localInboxNotifier (localInboxDirectory stateDirectory)}
         | otherwise = ApprovalWorkflow.defaultApprovalWorkflowEnv
-  behEnv <- newBehaviorEnvFor logger ((.behaviorProvider) config) Nothing
+  behEnv <- withProgramTasks (FlowPack.lookupTask flows) <$> newBehaviorEnvFor logger ((.behaviorProvider) config) Nothing
   let capabilities = tierRuntime.capabilities
       kizashiConfig =
         KizashiConfig
@@ -223,7 +231,8 @@ runDurableAgent logger store@KirokuStore {pool} appEnv workspace triggerPayload 
         AgentWorkflow.AgentRunDeps
           { AgentWorkflow.appEnv = appEnv,
             AgentWorkflow.behaviorEnv = behEnv,
-            AgentWorkflow.decisions = FlowDecision.defaultDecisionServices (either (error . show) id config.decisionModelCatalog),
+            AgentWorkflow.decisions = FlowPack.decisionServices flows (either (error . show) id config.decisionModelCatalog),
+            AgentWorkflow.flows = flows,
             AgentWorkflow.actionAuthority = tierRuntime.authority,
             AgentWorkflow.capabilities = capabilities,
             AgentWorkflow.coordination = Nothing,
