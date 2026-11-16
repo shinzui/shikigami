@@ -15,6 +15,9 @@
 -- A change to a rule there should change a case here.
 module Shikigami.WorkflowVersioningSpec (tests) where
 
+import Control.Concurrent (threadDelay)
+import Control.Concurrent.Async (async, wait)
+import Control.Concurrent.MVar (newEmptyMVar, putMVar, readMVar, takeMVar, tryPutMVar)
 import Control.Exception (SomeException, try)
 import Control.Lens ((&), (.~))
 import Data.Aeson (Value)
@@ -37,7 +40,7 @@ import Shikigami.Agent.Workflow.Input (awaitInput, deliverInputTo)
 import Shikigami.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Shikigami.ObjectiveWorkflowSpec qualified as Objectives
-import Shikigami.Workflow.Versioning (shikigamiActivePatches, shikigamiWorkflowResumeOptions)
+import Shikigami.Workflow.Versioning (LeasedRun (..), runWorkflowLeased, shikigamiActivePatches, shikigamiWorkflowResumeOptions, shikigamiWorkflowRunOptions)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertEqual, testCase)
 
@@ -56,6 +59,7 @@ tests databaseFixture =
         assertEqual "resume lease includes the scheduling margin" (secondsToNominalDiffTime 330) leaseTtl
         assertEqual "resume worker, not direct runs, installs the instance heartbeat" Nothing leaseHeartbeat,
       testCase "in-flight workflow survives a simulated deploy under a patch guard" (inFlightSurvivesDeploy databaseFixture),
+      testCase "a resume pass leaves a leased direct run alone while its step is in flight" (leasedRunExcludesResume databaseFixture),
       testCase "failed workflows resurrect through the public owner" (failedWorkflowResurrects databaseFixture),
       testCase "an old agent journal replays without objective policy or tools" (Objectives.oldAgentReplay databaseFixture),
       testCase "an old conversation journal replays without objective policy or tools" (Objectives.oldConversationReplay databaseFixture),
@@ -63,6 +67,70 @@ tests databaseFixture =
       testCase "only the declared application workflow patches are active" do
         assertEqual "active application patches" (Set.fromList [PatchId "shikigami-watchdog-v1", PatchId "shikigami-objective-tracking-v1", PatchId "shikigami-conversation-objective-tracking-v1", PatchId "shikigami-adaptive-delivery-v1", PatchId "shikigami-worker-objective-children-v1"]) shikigamiActivePatches
     ]
+
+-- | The first drive of a run and the resume worker exclude each other.
+--
+-- A plain direct run holds no lease, so a resume pass taken while its step is
+-- still working re-enters the run and executes that step a second time
+-- (FRIC-86). The first half shows that hazard as it is; the second shows the
+-- leased run closes it, and that the lease is gone once the run returns.
+leasedRunExcludesResume :: DatabaseFixture -> IO ()
+leasedRunExcludesResume databaseFixture =
+  (withShikigamiFreshDatabase databaseFixture) \connStr ->
+    withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
+      tracer <- noopTracer
+      let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
+          timeout = secondsToNominalDiffTime 300
+          resumeOnce body =
+            runAppIO appEnv $
+              resumeWorkflowsOnceUpTo
+                10
+                (shikigamiWorkflowResumeOptions appEnv timeout)
+                (Map.singleton versioningWorkflowName (WorkflowDef (const body)))
+          slowBody runs entered release = step (StepName "slow") do
+            liftIO do
+              _ <- atomicModifyIORef' runs (\n -> (n + 1, ()))
+              _ <- tryPutMVar entered ()
+              readMVar release
+            pure ("done" :: Text)
+
+      -- Unleased: the resume pass runs the in-flight step again.
+      plainRuns <- newIORef (0 :: Int)
+      plainEntered <- newEmptyMVar
+      plainRelease <- newEmptyMVar
+      plain <- async (runAppIO appEnv (runWorkflowWith (shikigamiWorkflowRunOptions appEnv) versioningWorkflowName (WorkflowId "lease-plain") (slowBody plainRuns plainEntered plainRelease)))
+      takeMVar plainEntered
+      plainPass <- async (resumeOnce (slowBody plainRuns plainEntered plainRelease))
+      waitUntil "the resume pass re-enters the unleased step" ((== 2) <$> readIORef plainRuns)
+      putMVar plainRelease ()
+      _ <- wait plain
+      _ <- wait plainPass
+
+      -- Leased: the pass skips the instance, and a second leased drive stands aside.
+      runs <- newIORef (0 :: Int)
+      entered <- newEmptyMVar
+      release <- newEmptyMVar
+      let leasedId = WorkflowId "lease-held"
+          leased = runAppIO appEnv (runWorkflowLeased appEnv timeout versioningWorkflowName leasedId (slowBody runs entered release))
+      first <- async leased
+      takeMVar entered
+      pass <- resumeOnce (slowBody runs entered release)
+      assertEqual "the pass found the instance and skipped it for its lease" (Right (1, 1)) ((\summary -> (summary.discovered, summary.leaseSkipped)) <$> pass)
+      second <- leased
+      assertEqual "a second leased drive makes no progress" (Right AdvancedElsewhere) second
+      assertEqual "the step ran once while the lease was held" 1 =<< readIORef runs
+      putMVar release ()
+      finished <- wait first
+      assertEqual "the leased drive completes" (Right (Advanced (Completed "done"))) finished
+      replayed <- leased
+      assertEqual "a terminal run replays its outcome without a lease" (Right (Advanced (Completed "done"))) replayed
+      assertEqual "nothing ran the step again" 1 =<< readIORef runs
+  where
+    waitUntil :: String -> IO Bool -> IO ()
+    waitUntil label check = go (200 :: Int)
+      where
+        go 0 = assertBool label False
+        go n = check >>= \done -> if done then pure () else threadDelay 25_000 >> go (n - 1)
 
 -- ── Test A: the patch primitive, end to end ─────────────────────────────────
 

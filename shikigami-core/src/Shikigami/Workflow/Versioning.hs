@@ -22,7 +22,10 @@
 -- @docs\/plans\/17-behavior-retry-semantics-run-timeouts-and-visibility-heartbeat.md@
 -- needs uses @Keiro.PGMQ.JobContext.extendLease@; the Keiro resume worker
 -- injects @WorkflowRunOptions.leaseHeartbeat@ itself and is configured through
--- @WorkflowResumeOptions.leaseTtl@. Direct runs leave @leaseHeartbeat@ unset.
+-- @WorkflowResumeOptions.leaseTtl@. A direct run in a process that has no
+-- resume worker leaves @leaseHeartbeat@ unset. A direct run beside a resume
+-- worker goes through 'runWorkflowLeased', which holds the same instance lease
+-- the resume worker claims.
 --
 -- The rules that govern when a change needs a patch at all are in
 -- @docs\/workflow-versioning.md@.
@@ -31,6 +34,8 @@ module Shikigami.Workflow.Versioning
     shikigamiWorkflowRunOptions,
     shikigamiWorkflowResumeOptions,
     shikigamiWorkflowResumeOptionsWith,
+    LeasedRun (..),
+    runWorkflowLeased,
     terminalWorkflowRetention,
     prepareAdmittedInput,
     admitWorkflowInput,
@@ -46,14 +51,20 @@ import Data.Maybe (isNothing)
 import Data.Set (Set)
 import Data.Set qualified as Set
 import Data.Time (NominalDiffTime, getCurrentTime)
+import Data.UUID qualified as UUID
+import Data.UUID.V4 qualified as UUIDv4
 import Effectful (Eff, IOE, liftIO, (:>))
+import Effectful.Error.Static (Error)
+import Effectful.Exception (catch, finally)
 import Hasql.Transaction (Transaction)
 import Hasql.Transaction qualified as Tx
-import Keiro.Workflow (JournalAppendOutcome (..), PatchId (..), StepName (..), WorkflowError (WorkflowJournalAppendError), WorkflowId (..), WorkflowJournalEvent (..), WorkflowName (..), WorkflowRunOptions (..), defaultWorkflowRunOptions, patchSetStepName, prepareJournalAppend)
+import Keiro.Workflow (JournalAppendOutcome (..), LeaseHeartbeat (..), PatchId (..), StepName (..), Workflow, WorkflowError (WorkflowJournalAppendError), WorkflowId (..), WorkflowJournalEvent (..), WorkflowLeaseLost (..), WorkflowName (..), WorkflowOutcome, WorkflowRunOptions (..), defaultWorkflowRunOptions, patchSetStepName, prepareJournalAppend, runWorkflowWith)
 import Keiro.Workflow.Gc (WorkflowGcPolicy (..))
+import Keiro.Workflow.Instance (ClaimOutcome (..), claimInstance, releaseInstance)
 import Keiro.Workflow.Resume (WorkflowResumeOptions (..), defaultWorkflowResumeOptions)
 import Keiro.Workflow.Schema (lockWorkflowStepTx, lookupStepResultTx, workflowLifecycleMarkersTx, workflowStepLockKey)
 import Kiroku.Store.Effect (Store)
+import Kiroku.Store.Error (StoreError)
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.AdaptiveDelivery.Generated.WorkflowRuntime qualified as Adaptive
 import Shikigami.AgentRun.Generated.WorkflowRuntime qualified as AgentRun
@@ -111,8 +122,59 @@ shikigamiWorkflowResumeOptionsWith :: RuntimeLimits -> AppEnv -> NominalDiffTime
 shikigamiWorkflowResumeOptionsWith limits appEnv timeout =
   defaultWorkflowResumeOptions
     & #runOptions .~ shikigamiWorkflowRunOptions appEnv
-    & #leaseTtl .~ (timeout + 30)
+    & #leaseTtl .~ workflowLeaseTtl timeout
     & #maxConcurrentAdvances .~ capacityLimit limits.advances
+
+-- | How long an instance lease lasts for a run bounded by @timeout@. The
+-- direct path and the resume worker use the same value, so neither outlives
+-- the other's claim.
+workflowLeaseTtl :: NominalDiffTime -> NominalDiffTime
+workflowLeaseTtl timeout = timeout + 30
+
+-- | What a leased direct run did.
+data LeasedRun a
+  = -- | This caller held the instance lease and ran the workflow.
+    Advanced !(WorkflowOutcome a)
+  | -- | Another runner holds the lease, or took it mid-run. That runner owns
+    -- the run's progress; this caller made none and has nothing to report.
+    AdvancedElsewhere
+  deriving stock (Eq, Show)
+
+-- | Run a workflow directly while holding its instance lease.
+--
+-- Keiro's plain direct run takes no lease, and resume discovery returns every
+-- @running@ instance whose lease is absent. In a process that runs both, the
+-- resume worker therefore re-enters a first run still in flight, and each
+-- executes the step the other has not journaled yet: a model call is made
+-- twice, and a step that refuses a second concurrent attempt fails the run
+-- while the first attempt is still working (FRIC-86). Claiming the lease the
+-- resume worker claims makes the two paths exclude each other.
+--
+-- A terminal instance cannot be claimed and needs no lease: its run is a
+-- side-effect-free replay of the recorded outcome, which a redelivered job
+-- still wants. The lease is renewed before each fresh step, exactly as for a
+-- resumed run, and released when the run returns or throws.
+runWorkflowLeased ::
+  (IOE :> es, Store :> es, Error StoreError :> es) =>
+  AppEnv ->
+  NominalDiffTime ->
+  WorkflowName ->
+  WorkflowId ->
+  Eff (Workflow : es) a ->
+  Eff es (LeasedRun a)
+runWorkflowLeased appEnv timeout name wid body = do
+  owner <- UUID.toText <$> liftIO UUIDv4.nextRandom
+  let ttl = workflowLeaseTtl timeout
+      options = shikigamiWorkflowRunOptions appEnv
+  claimInstance owner ttl name wid >>= \case
+    ClaimAcquired ->
+      ( (Advanced <$> runWorkflowWith (options & #leaseHeartbeat .~ Just LeaseHeartbeat {owner, ttl}) name wid body)
+          `catch` (\WorkflowLeaseLost -> pure AdvancedElsewhere)
+      )
+        `finally` releaseInstance owner False name wid
+    ClaimUnavailable -> Advanced <$> runWorkflowWith options name wid body
+    ClaimLeaseHeld -> pure AdvancedElsewhere
+    ClaimPaced -> pure AdvancedElsewhere
 
 -- | Keep terminal workflow journals for ninety days. This bounds the workflow
 -- idempotency window; redelivery older than that requires operator review.

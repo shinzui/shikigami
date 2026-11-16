@@ -2,6 +2,12 @@
 
 ## 2026-11-16
 
+* **Addition**: FRIC-87 records nuisance interface friction with mori://shinzui/shikigami: The scheduler logs an error for every memory-session timer it does not own
+
+
+* **Addition**: FRIC-86 records detour interface friction with mori://shinzui/shikigami: The worker's resume loop re-enters a run its job loop is still driving, so a step slower than a second runs twice
+
+
 * **Addition**: FRIC-85 records detour tooling friction with mori://shinzui/shikigami: No operator command provisions a sanctioned execution profile, so the shipped reviewer manifest cannot run on a fresh database
 
 

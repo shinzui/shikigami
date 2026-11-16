@@ -227,7 +227,7 @@ this Mac through the same operator verbs as before (`watchdog inspect`, `proposa
     `tests/types/revision-domains.py` pass. Measured core after M3: 457 modules, 78,436 lines,
     72 top-level namespaces, 29 modules importing `Watchdog`, `Initiative` or
     `PracticeReview` (none imports `PracticeReview`). `FlowEffects` holds 15 capabilities.
-- [ ] M4: `Initiative` runs from `flow-pack-initiative` through a kernel stream-intake
+- [x] M4 (2026-11-16): `Initiative` runs from `flow-pack-initiative` through a kernel stream-intake
   hook. A real transcript excerpt produces an approval request, and accepting it creates an
   objective.
   - In progress (2026-11-16). Two kernel steps are landed and Initiative still lives in the
@@ -264,13 +264,33 @@ this Mac through the same operator verbs as before (`watchdog inspect`, `proposa
     and no proposing flow, hook or assessment program), `coreUseCaseSettings` is empty, and
     `Initiative` is gone from `kernel.namespaces`. The distribution composes the pack and
     gains `kikan-shikigami-consume-stream` and a test suite, `kikan-shikigami-test`, for what
-    needs two use cases together. The real transcript run is still to be made.
+    needs two use cases together.
   - Suites after the move: shikigami-core-test, shikigami-core-postgres-test,
     shikigami-server-test and shikigami-agent-test pass; shikigami-workers-test 297 of 298
     (FRIC-76 only); flow-pack-initiative-test 118; flow-pack-practice-review-test and
     flow-pack-examples-test pass; kikan-shikigami-test 12. `just kernel-fitness` 7,
     `just haskell-conventions` and `tests/types/initiative-values.py` pass.
 
+  - Real transcript run (2026-11-16), on an isolated database with the fixture authorizer,
+    a loopback stand-in for the Kizashi signal endpoint, the local Kafka broker and OpenAI
+    `gpt-5.4-mini` under the `propose` alias. One meeting-transcript envelope
+    (`external/transcripts`, a same-day interval regression in fsrs-hs nobody owns) was
+    published with `kikan-shikigami publish-fixture`. `kikan-shikigami-consume-stream`
+    matched it and the pack's hook committed one candidate and one evaluation root;
+    `kikan-shikigami-worker` logged `flow.selected` with `pack: initiative`, the model
+    assessed it (`reproduce-and-diagnose`, confidence 0.97, repository
+    `mori://shinzui/fsrs-hs`, four criteria), the proposal was recorded and one ask was
+    posted. `resolve-approval TOKEN --approve` resumed the run, which created objective
+    `shikigami_objective_01m7jvqsz4ewg9mqez1hg9mykz` with the stated criteria;
+    `kikan-shikigami proposals list` shows the proposal `accepted` with that objective, and
+    `proposals inspect` shows one evaluation, one proposal and one notification against the
+    observer's window. One model attempt was charged to the root.
+  - The stock executables refuse all of it on the same configuration:
+    `shikigami-worker --check-config` answers `initiatives.observers: unknown key`.
+  - The first attempt of that run failed for a kernel reason the fixtures cannot reach, and
+    the fix is part of this milestone: see the lease entries under Surprises and the
+    Decision Log (FRIC-86). A second attempt was refused `creation-denied` only because the
+    fixture authorizer admits three fixed principals; the accepted run uses one of them.
 - [ ] M5: `Watchdog` runs from `flow-pack-watchdog` through a kernel schedule-allowance
   hook. A scheduled sweep observes a real local run and `kikan-shikigami watchdog inspect` shows it.
 - [ ] M6: The adaptive-delivery coordinator is confirmed as a kernel primitive and stays in
@@ -284,6 +304,21 @@ this Mac through the same operator verbs as before (`watchdog inspect`, `proposa
 
 
 ## Surprises & Discoveries
+
+- Observation (M4): a worker executed every run twice whenever a step took longer than a
+  second, and the proposing flow does not survive it.
+  Evidence: the first real transcript run logged `flow.selected` twice, a second apart. The
+  worker's job loop drives a run with keiro's plain `runWorkflowWith`, which takes no lease;
+  its resume loop discovers every `running` instance without a lease and drives it too. The
+  second execution replayed to the decision step while the first was waiting on the
+  provider, was refused, and wrote `fail-session` and `__workflow_completed__`. The first
+  then journaled the proposal and parked on an approval whose result could never resume a
+  completed instance: the approval resolved and the proposal stayed pending. The M3 worker
+  logs, from the stock worker before any pack moved, show the same double `flow.selected`;
+  there it cost a second provider call per run and nothing else. No fixture reaches it,
+  because a scripted model answers inside the one-second resume poll. FRIC-86.
+- Observation (M4): the worker logs `scheduler.timer.unknown_kind` at error level for the
+  memory session's own timers on a healthy run (FRIC-87). Not changed here.
 
 - Observation (M4): `just keiro-gate HEAD~1` reports two findings for the commit that drops
   the initiative patch gates, and both are the removed patches.
@@ -445,6 +480,21 @@ this Mac through the same operator verbs as before (`watchdog inspect`, `proposa
 
 ## Decision Log
 
+- Decision (M4): The worker's first drive of a run holds the keiro instance lease.
+  Rationale: the discovery above. `Shikigami.Workflow.Versioning.runWorkflowLeased` claims
+  the lease the resume worker claims (same owner scheme, same `timeout + 30` lifetime),
+  runs with `leaseHeartbeat` set so it renews before each fresh step, and releases on
+  return or exception. It answers `Advanced outcome`, or `AdvancedElsewhere` when another
+  runner holds or takes the lease; the job path logs `worker.job.advanced_elsewhere` and
+  settles the delivery, since the other runner finishes the run. A terminal instance cannot
+  be claimed and is replayed without a lease, so a redelivered job still reads its recorded
+  outcome. `runAgentRunWorkflow` keeps its unleased meaning for the one-off command, which
+  has no resume loop, and for the tests that drive a run by hand. No journal step, label or
+  stored value changes, so docs/workflow-versioning.md does not apply. This is outside the
+  milestone's stated scope and is here because the milestone's acceptance could not pass
+  without it. Left open: `runConversationWorkflow` drives conversations the same unleased
+  way, and one step longer than the lease can still lose it.
+  Date: 2026-11-16
 - Decision (M4): Tests that need two use cases together live in the distribution, and the
   initiative pack publishes its proposing fixture as a `test-support` sublibrary.
   Rationale: `WatchdogQualificationSpec`, `WatchdogSweepSpec` and one telemetry case in

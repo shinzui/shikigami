@@ -966,14 +966,19 @@ owns a configuration setting for the first time (`FlowPack.settings`), and a pac
 reaches the run's model, stores and grants through `FlowRunContext`. A real review trigger
 for fsrs-hs produced the same `unresolved` verdict before and after the move, and the first
 real routing call exposed and fixed a router prompt defect (`60938b9a`, FRIC-84). EP-6 M4 is
-in progress: the kernel has the pieces Initiative needs to leave, each landed with Initiative
-as its first user and no change in its behavior. A pack setting has a shape and an optional
+accepted on 2026-11-16 (`8780e464`): the kernel got the pieces Initiative needed to leave,
+each landed with Initiative as its first user and no change in its behavior. A pack setting has a shape and an optional
 default (`a132deeb`); the stream consumer consults a pure, transactional `StreamHook`
 (`f80be910`) that a pack contributes through `FlowPack.triggers` (`dec023b0`); a pack
 contributes admin verbs over an `AdminContext` (`a921ceaf`); and the proposing flow runs as a
-`PackFlow` with a kernel counter port, its two patch gates gone (`ee409f61`). The move to
-`flow-pack-initiative`, the stream consumer executable of the distribution and the real
-transcript run remain. Stage 1 (the pilot) ends at the declaration baseline, and stage 2 at
+`PackFlow` with a kernel counter port, its two patch gates gone (`ee409f61`). Initiative
+then moved to `flow-pack-initiative`, and the distribution gained
+`kikan-shikigami-consume-stream`. A real meeting transcript published to Kafka became a
+proposal from a real model assessment, an ask, an approval and an objective. That run found
+a kernel defect no fixture reaches: a worker's resume loop re-entered every run its job loop
+was still driving, so any step slower than a second ran twice and the proposing run was
+failed by its duplicate. The worker's first drive now holds the instance lease (FRIC-86).
+EP-6 M5 is next. Stage 1 (the pilot) ends at the declaration baseline, and stage 2 at
 the kernel baseline.
 
 - [ ] Architectural acceptance: the keiro modernization campaign runs for real on at least

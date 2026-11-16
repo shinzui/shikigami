@@ -25,6 +25,8 @@ module Shikigami.Agent.Workflow
     agentRunWorkflowName,
     agentRunWorkflow,
     runAgentRunWorkflow,
+    runAgentRunWorkflowLeased,
+    LeasedRun (..),
     agentRunRegistry,
     resolveCapabilitiesForRun,
     runBehaviorWithCapabilities,
@@ -218,7 +220,7 @@ import Shikigami.WorkerSession.Handoff qualified as WorkerHandoff
 import Shikigami.WorkerSession.Store qualified as WorkerStore
 import Shikigami.WorkerSession.Tools qualified as WorkerTools
 import Shikigami.WorkerSession.Workflow qualified as WorkerSession
-import Shikigami.Workflow.Versioning (shikigamiWorkflowRunOptions)
+import Shikigami.Workflow.Versioning (LeasedRun (..), runWorkflowLeased, shikigamiWorkflowRunOptions)
 import Shikigami.Workspace.Admission (WorkspaceHost (..))
 
 data AgentRunDeps = AgentRunDeps
@@ -401,6 +403,22 @@ runAgentRunWorkflow deps job =
           agentRunWorkflowName
           (runJobWorkflowId job)
           (agentRunWorkflow deps (Just job))
+
+-- | 'runAgentRunWorkflow' for a process that also runs the resume worker: the
+-- run holds its instance lease, so the resume worker cannot re-enter it while
+-- it is in flight ('runWorkflowLeased').
+runAgentRunWorkflowLeased ::
+  AgentRunDeps ->
+  RunJob ->
+  IO (Either StoreError (LeasedRun (Either AgentRunFailure AgentRunResult)))
+runAgentRunWorkflowLeased deps job =
+  runAppIO deps.appEnv $
+    runWorkflowLeased
+      deps.appEnv
+      (durationTime deps.runTimeout)
+      agentRunWorkflowName
+      (runJobWorkflowId job)
+      (agentRunWorkflow deps (Just job))
 
 agentRunRegistry :: AgentRunDeps -> WorkflowRegistry AppEffects
 agentRunRegistry deps =

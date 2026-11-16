@@ -376,64 +376,76 @@ runOneAgent env job =
       addAttribute traceSpan "run.idempotency_key" ((runKeyText ((.idempotencyKey) job)))
       addAttribute traceSpan "run.workflow_id" (runJobWorkflowId job).unWorkflowId
       liftIO do
-        resE <- AgentWorkflow.runAgentRunWorkflow (agentRunDeps env) job
-        case resE of
-          Left err -> do
-            runMetric Metrics.recordRunFailed env job
-            runMetric Metrics.recordRunRetried env job
-            jobLog
-              env
-              job
-              Log.Error
-              "worker.job.retried"
-              [ "error" .= Text.pack (show err),
-                "reason" .= ("store_error" :: Text)
-              ]
-            pure ()
-          Right (Completed (Right _result)) -> do
-            runMetric Metrics.recordRunCompleted env job
-            jobLog env job Log.Info "worker.job.completed" []
-            pure ()
-          Right (Completed (Left failure@(AgentWorkflow.PermanentAgentRunFailure _))) -> do
-            let err = AgentWorkflow.agentRunFailureDetail failure
-            runMetric Metrics.recordRunFailed env job
-            runMetric Metrics.recordRunDeadLettered env job
-            jobLog
-              env
-              job
-              Log.Error
-              "worker.job.dead_lettered"
-              [ "error" .= err,
-                "reason" .= ("permanent_workflow_failure" :: Text)
-              ]
-            pure ()
-          Right Suspended -> do
-            jobLog env job Log.Info "worker.job.suspended" []
-            pure ()
-          Right Cancelled -> do
-            runMetric Metrics.recordRunFailed env job
-            runMetric Metrics.recordRunDeadLettered env job
-            jobLog
-              env
-              job
-              Log.Warn
-              "worker.job.dead_lettered"
-              ["reason" .= ("workflow_cancelled" :: Text)]
-            pure ()
-          Right Failed -> do
-            runMetric Metrics.recordRunFailed env job
-            runMetric Metrics.recordRunDeadLettered env job
-            jobLog
-              env
-              job
-              Log.Error
-              "worker.job.dead_lettered"
-              ["reason" .= ("workflow_failed" :: Text)]
-            pure ()
-          Right ContinuedAsNew -> do
-            jobLog env job Log.Info "worker.job.continued_as_new" []
-            pure ()
-        pure (agentJobOutcome ((agentNameText ((.agentName) job))) resE)
+        -- The resume loop of this process claims every running instance that
+        -- has no lease, so the first drive holds the lease too (FRIC-86).
+        leased <- AgentWorkflow.runAgentRunWorkflowLeased (agentRunDeps env) job
+        case leased of
+          Right AgentWorkflow.AdvancedElsewhere -> do
+            -- Another runner owns this run's progress and will finish it; the
+            -- delivery has nothing left to do.
+            jobLog env job Log.Info "worker.job.advanced_elsewhere" []
+            pure Done
+          Right (AgentWorkflow.Advanced outcome) -> settle (Right outcome)
+          Left err -> settle (Left err)
+  where
+    settle resE = do
+      case resE of
+        Left err -> do
+          runMetric Metrics.recordRunFailed env job
+          runMetric Metrics.recordRunRetried env job
+          jobLog
+            env
+            job
+            Log.Error
+            "worker.job.retried"
+            [ "error" .= Text.pack (show err),
+              "reason" .= ("store_error" :: Text)
+            ]
+          pure ()
+        Right (Completed (Right _result)) -> do
+          runMetric Metrics.recordRunCompleted env job
+          jobLog env job Log.Info "worker.job.completed" []
+          pure ()
+        Right (Completed (Left failure@(AgentWorkflow.PermanentAgentRunFailure _))) -> do
+          let err = AgentWorkflow.agentRunFailureDetail failure
+          runMetric Metrics.recordRunFailed env job
+          runMetric Metrics.recordRunDeadLettered env job
+          jobLog
+            env
+            job
+            Log.Error
+            "worker.job.dead_lettered"
+            [ "error" .= err,
+              "reason" .= ("permanent_workflow_failure" :: Text)
+            ]
+          pure ()
+        Right Suspended -> do
+          jobLog env job Log.Info "worker.job.suspended" []
+          pure ()
+        Right Cancelled -> do
+          runMetric Metrics.recordRunFailed env job
+          runMetric Metrics.recordRunDeadLettered env job
+          jobLog
+            env
+            job
+            Log.Warn
+            "worker.job.dead_lettered"
+            ["reason" .= ("workflow_cancelled" :: Text)]
+          pure ()
+        Right Failed -> do
+          runMetric Metrics.recordRunFailed env job
+          runMetric Metrics.recordRunDeadLettered env job
+          jobLog
+            env
+            job
+            Log.Error
+            "worker.job.dead_lettered"
+            ["reason" .= ("workflow_failed" :: Text)]
+          pure ()
+        Right ContinuedAsNew -> do
+          jobLog env job Log.Info "worker.job.continued_as_new" []
+          pure ()
+      pure (agentJobOutcome ((agentNameText ((.agentName) job))) resE)
 
 -- | The complete agent-workflow outcome table. The store error is deliberately
 -- polymorphic: its value is diagnostic only, while every store failure is a
