@@ -2,6 +2,9 @@
 
 ## 2026-11-16
 
+* **Addition**: FRIC-82 records detour environment friction with mori://shinzui/shikigami: The development shell acts on whatever directory it is entered from
+
+
 * **Update**: FRIC-81 promoted: Status set to promoted.
 
 

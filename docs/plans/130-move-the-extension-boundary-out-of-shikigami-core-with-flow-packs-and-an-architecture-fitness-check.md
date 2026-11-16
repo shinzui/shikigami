@@ -133,10 +133,23 @@ again.
     Surprises), and `just keiro-diff HEAD` is clean.
   - Filed `mori://shinzui/keiro/okf/improvement-requests/concepts/IR-61` (keiro commit
     `136879d1`).
-- [ ] M3. A pack in a separate repository with no Shikigami change. A local repository,
-  `mori://shinzui/shikigami-operator-packs` (intended URI), builds a `repository-ledger` pack
-  and its distribution against this checkout and runs it over real checkouts under `/Users/shinzui/Keikaku/bokuno/`.
-  `git status` in this repository stays clean.
+- [x] M3 (2026-11-16). A pack in a separate repository with no Shikigami change. The local
+  repository `/Users/shinzui/Keikaku/bokuno/shikigami-operator-packs` (intended URI
+  `mori://shinzui/shikigami-operator-packs`; not registered, not pushed) holds
+  `flow-pack-repository-ledger` and `operator-distribution`, builds against this checkout
+  through `just sync-cohort`, and ran the flow over real checkouts.
+  - Evidence, commit `b5a9f31` of that repository, built against this repository at
+    `7256c709`. `flow-pack-repository-ledger-test` passes 7 tests, including the golden labels
+    `ledger-compare`, `recall-ledger-prior` and `remember-ledger-observed` read from a real
+    journal.
+  - Four runs of `operator-agent-run --agent agents/repository-ledger.dhall`, each logging
+    `"flow":"repository-ledger","pack":"ledger"`: keiro printed
+    `"movement":"FirstObservation"` with `"previousHead":null`; shikigami printed
+    `"movement":"FirstObservation"`; the second and third keiro runs printed
+    `"movement":"Unchanged"` with `previousHead` equal to keiro's HEAD
+    `15d9ac3ac74048db92cb34730a77efbd883a4649`. A fifth run through `just observe ../keiro`
+    printed `Unchanged` again.
+  - `git status --short` in this repository printed nothing after the runs.
 
 
 ## Surprises & Discoveries
@@ -225,6 +238,23 @@ again.
 - Observation (M2): `shikigami-agent-run` already had `--payload` and already printed the
   behavior output, so M2 added only the composition, the pre-session refusal and
   `flow.selected`. The line is `output: <json>`, with a colon.
+- Observation (M3): the development shell acts on the directory it is entered from, so the
+  plan's commands for the external repository needed two changes (FRIC-82).
+  Evidence: `nix develop /Users/shinzui/Keikaku/bokuno/shikigami --command ...` run from the
+  other repository ran `initdb` into its `./db`, linked `.pre-commit-config.yaml`, installed
+  Shikigami's commit hooks into its `.git/hooks`, and reset `PGHOST` and
+  `PG_CONNECTION_STRING` to that empty directory. The `export PG_CONNECTION_STRING=...` of
+  Concrete Steps is therefore overridden, and the first run failed with
+  `connection to server on socket ".../shikigami-operator-packs/db/.s.PGSQL.5432" failed`.
+  The working form sets both inside the shell:
+  `nix develop ... --command env PGHOST=<shikigami>/db PG_CONNECTION_STRING=... cabal run ...`.
+  The external repository's `just observe` and `just test` do that, its `.gitignore` covers
+  the two created paths, and its README says to remove the installed hooks, which look for
+  Shikigami's `flake.nix` and fail there.
+- Observation (M3): a pack test that uses the database fixture must link the threaded
+  runtime.
+  Evidence: without `-threaded` the suite died before printing, with
+  `registerDelay: requires -threaded`. The in-repository pack already had the option.
 - Observation (M2): the qualification fixture `fixtures/qualification/agents/at-risk-customer.dhall`
   named the moved flow. A stock worker loading that directory would refuse to start, so the
   agent moved to `packs/flow-pack-examples/agents/qualification-at-risk-customer.dhall`. Its
@@ -420,7 +450,46 @@ again.
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+All three milestones are accepted (2026-11-16). The plan's purpose holds on this Mac:
+
+- Adding a use-case namespace to `shikigami-core` fails `just kernel-fitness` with a message
+  that names the declaration and pack routes (M1).
+- A flow lives in a pack and runs from a distribution. `packs/flow-pack-examples` owns
+  at-risk-customer, `shikigami-examples-agent-run` ran it on a real issue text, and the stock
+  executables refuse its manifest before opening a session (M2).
+- A pack and a distribution live in another repository. `shikigami-operator-packs` recorded
+  HEAD observations of real checkouts with no change here (M3).
+
+What the plan got right. Proving the shape on the watchdog first paid off before any
+subsystem moved: the first-drafted `PackFlow.run` could not have hosted the `Observe`
+interpreter, and the kernel knew the watchdog by name in three places. Two of those are now
+declaration data or run context. Splitting bodies into a sublibrary makes ADR-13 a compiler
+error instead of a review rule.
+
+What differed from the plan.
+
+- The registry could not be threaded as one value everywhere. `BehaviorEnv` carries a task
+  lookup function, because the registry module depends on it (Decision Log).
+- Five labels left the AgentRun declaration, not one, and every label of the moved body took
+  the pack's prefix.
+- The label inventory needs PostgreSQL, because keiro has no store-free interpreter of its
+  workflow effect. IR-61 asks for one, together with pack-declared workflow fragments.
+- The qualification fixture named the moved flow and moved with it.
+- The external repository's commands set the database inside the shell (FRIC-82).
+
+What remains for later plans.
+
+- EP-6 moves the watchdog, the initiative and practice review. It inherits the probe's list
+  of kernel modules for `pack-sdk`, the two by-name watchdog branches left in
+  `runFlowDefinition`, the `shikigami-watchdog-v1` gate (which needs `patch` in `flow-sdk`),
+  the eight use-case members of `FlowEffects`, and the open `DecisionLabel`.
+- A worker composed with packs does not exist yet. Until EP-6 creates one, the durable
+  approval scenario of plan 79 cannot be qualified, and pack flows run from the one-off
+  command only.
+- The development database holds three parked agent runs. They cannot meet the removed
+  labels, but the user should confirm they are abandoned before EP-11's baseline gate.
+- `shikigami-operator-packs` is unregistered and unpushed. Whether to keep it, register it
+  with Mori and give it a development shell of its own is the user's call.
 
 
 ## Context and Orientation
@@ -1166,3 +1235,7 @@ added `Error StoreError` to `PackFlow.run`, `workflowName` to `FlowRunContext` a
 `FlowDef.decisionMode`. Five labels left the AgentRun declaration instead of one, the
 qualification fixture agent moved with the flow, and the pack's label inventory is derived
 from a real keiro journal. IR-61 is filed with keiro.
+
+Revision note (2026-11-16, M3 implementation): M3 is complete and the plan is done. The
+external repository's commands set the database inside the development shell (FRIC-82), and
+Outcomes & Retrospective is filled.
