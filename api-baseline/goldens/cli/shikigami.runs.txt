@@ -1,0 +1,10 @@
+Usage: shikigami runs COMMAND
+
+  Inspect an agent run across its keiro workflow and its kioku session
+
+Available options:
+  -h,--help                Show this help text
+
+Available commands:
+  show                     Show one run's workflow instance and its kioku
+                           session together

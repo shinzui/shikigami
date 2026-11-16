@@ -1,0 +1,10 @@
+Usage: shikigami executions COMMAND
+
+  Inspect accepted execution progress without replay payloads
+
+Available options:
+  -h,--help                Show this help text
+
+Available commands:
+  inspect                  Show bounded operations, actual attempts, pending
+                           receipts and resource holds

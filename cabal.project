@@ -8,6 +8,7 @@ packages:
   shikigami-workers
   packs/flow-pack-examples
   packs/examples-distribution
+  tools/api-baseline
 
 -- keiro-dsl is the build-time specification toolchain, not a library this
 -- service links against. Listing it here makes `cabal run keiro-dsl -- ...`

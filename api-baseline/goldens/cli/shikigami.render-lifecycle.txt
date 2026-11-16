@@ -1,0 +1,6 @@
+Usage: shikigami render-lifecycle FILE
+
+  Render a Flow agent lifecycle as Mermaid
+
+Available options:
+  -h,--help                Show this help text

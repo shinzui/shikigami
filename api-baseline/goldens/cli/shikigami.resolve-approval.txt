@@ -1,0 +1,9 @@
+Usage: shikigami resolve-approval TOKEN (--approve | --reject REASON)
+
+  Approve or reject one pending human approval token
+
+Available options:
+  TOKEN                    Opaque approval token from the human-visible ask
+  --approve                Approve the pending request
+  --reject REASON          Reject the pending request with a reason
+  -h,--help                Show this help text

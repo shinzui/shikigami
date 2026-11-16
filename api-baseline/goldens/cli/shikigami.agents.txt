@@ -1,0 +1,12 @@
+Usage: shikigami agents COMMAND
+
+  Inspect the declared agents this deployment has loaded
+
+Available options:
+  -h,--help                Show this help text
+
+Available commands:
+  list                     List every declared agent, including manifests that
+                           failed to load
+  sync                     Persist agent load state and reconcile
+                           principal-keyed durable state

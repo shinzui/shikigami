@@ -1,0 +1,11 @@
+Usage: shikigami grants COMMAND
+
+  Inspect and change per-agent sink permission grants (C11)
+
+Available options:
+  -h,--help                Show this help text
+
+Available commands:
+  list                     List sink grants, most-significant page first
+  grant                    Grant an agent a sink kind
+  revoke                   Revoke an agent's sink kind

@@ -1,0 +1,79 @@
+Usage: shikigami [COMMAND | [--database-url URL] [--json] [--force] 
+                   [--allow-schema-drift] COMMAND] [--config PATH] 
+                 [--set KEY=VALUE] 
+                 [--explain-config | --explain-config-json | --check-config | 
+                   --describe-config | --describe-config-json] [--version]
+
+  shikigami declared-agent runtime: administrative commands
+
+Available options:
+  --database-url URL       PostgreSQL URI or keyword/value string; defaults to
+                           KEIRO_OPS_DATABASE_URL, DATABASE_URL, then libpq PG*
+                           variables
+  --json                   Emit machine-readable JSON
+  --force                  Apply a mutating command after its preview
+  --allow-schema-drift     Allow a mutating command despite a failed schema
+                           agreement check
+  -h,--help                Show this help text
+  -h,--help                Show this help text
+  --version                Show version
+
+Configuration
+  --config PATH            Read configuration from PATH
+  --set KEY=VALUE          Override one configuration key
+
+Diagnostics
+  --explain-config         Explain the resolved configuration as text
+  --explain-config-json    Explain the resolved configuration as JSON
+  --check-config           Validate configuration and exit
+  --describe-config        Print the static configuration schema
+  --describe-config-json   Print the static configuration schema as JSON
+
+Available commands:
+  validate                 Parse and validate an agent manifest (.dhall)
+  render-lifecycle         Render a Flow agent lifecycle as Mermaid
+  flows                    List every composed flow with its pack, default-model
+                           requirement and decision slots
+  enqueue-run              Enqueue an addressed run job for a named agent
+  resolve-approval         Approve or reject one pending human approval token
+  publish-fixture          Publish one Activity Envelope (JSON) onto the
+                           activity stream with keiro-* headers
+  stub-kawa                Run the kawa ingest doorway stub, optionally
+                           republishing to a topic
+  stub-kanmon              Run the authenticated Kanmon channel-egress stub
+  danwa-spike              Spike the danwa HTTP client by posting a human
+                           message and agent reply
+  grants                   Inspect and change per-agent sink permission grants
+                           (C11)
+  agents                   Inspect the declared agents this deployment has
+                           loaded
+  runs                     Inspect an agent run across its keiro workflow and
+                           its kioku session
+  resources                Inspect a durable execution resource root
+  executions               Inspect accepted execution progress without replay
+                           payloads
+  workers                  Inspect continuing workers and issue scoped,
+                           explicitly keyed commands
+  objectives               Create, inspect and update authoritative objectives
+                           as the configured operator
+  mandates                 Explicitly admit, inspect, update or cancel finite
+                           recurring authority
+  watchdog                 Inspect watchdog coverage, overdue sweeps and
+                           advisory findings
+  proposals                Read proposals, candidates and admissions, and
+                           install or revoke standing policies
+  record                   Read the action record of authority decisions and
+                           effects
+  wf                       Inspect and operate durable workflows
+  timer                    Inspect and operate durable timers
+  outbox                   Inspect and operate the transactional outbox
+  inbox                    Inspect and operate the integration-event inbox
+  pgmq                     Inspect and operate Keiro PGMQ queues
+  projection               Inspect and operate projection dedup state
+  shard                    Inspect and operate sharded-subscription ownership
+  snapshot                 Inspect and operate advisory snapshots
+  stream                   Inspect and operate Kiroku streams
+  replay-audit             Audit candidate-code replay against configured
+                           targets
+  rebuild                  Inspect and operate the mounted projection catalog
+  aggregate                Inspect mounted aggregates

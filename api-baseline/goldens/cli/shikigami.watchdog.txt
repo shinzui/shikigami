@@ -1,0 +1,12 @@
+Usage: shikigami watchdog COMMAND
+
+  Inspect watchdog coverage, overdue sweeps and advisory findings
+
+Available options:
+  -h,--help                Show this help text
+
+Available commands:
+  inspect                  Show latest completion, separate latest attempt and
+                           coverage
+  episodes                 Page scoped advisory episodes
+  findings                 Page findings for one scoped episode

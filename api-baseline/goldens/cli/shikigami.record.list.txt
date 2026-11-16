@@ -1,0 +1,12 @@
+Usage: shikigami record list [--run WORKFLOW-ID] [--refusals] [--kind PREFIX] 
+                             [--limit N] [--json]
+
+  Print the most recent matching record events, oldest first
+
+Available options:
+  --run WORKFLOW-ID        only events of this run
+  --refusals               only authority decisions that did not allow
+  --kind PREFIX            only kinds starting with PREFIX, e.g. authority.
+  --limit N                most recent N events (1-1000, default 50)
+  --json                   print JSON Lines
+  -h,--help                Show this help text

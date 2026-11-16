@@ -1,0 +1,4373 @@
+{
+  "components": {
+    "schemas": {
+      "AdaptiveDecisionView": {
+        "properties": {
+          "changes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "checkpointRevision": {
+            "type": "integer"
+          },
+          "expectedBenefit": {
+            "type": "string"
+          },
+          "friction": {
+            "type": "string"
+          },
+          "laterEvidence": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string"
+          },
+          "rationale": {
+            "type": "string"
+          },
+          "validator": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "operationId",
+          "checkpointRevision",
+          "validator",
+          "rationale",
+          "expectedBenefit",
+          "laterEvidence",
+          "changes"
+        ],
+        "type": "object"
+      },
+      "AdaptiveObservationView": {
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string"
+          },
+          "refusal": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "operationId",
+          "kind",
+          "revision",
+          "status"
+        ],
+        "type": "object"
+      },
+      "AdaptiveView": {
+        "properties": {
+          "decisions": {
+            "items": {
+              "$ref": "#/components/schemas/AdaptiveDecisionView"
+            },
+            "type": "array"
+          },
+          "graph": {
+            "items": {
+              "$ref": "#/components/schemas/PlacementView"
+            },
+            "type": "array"
+          },
+          "next": {
+            "maximum": 9223372036854775807,
+            "minimum": -9223372036854775808,
+            "type": "integer"
+          },
+          "observations": {
+            "items": {
+              "$ref": "#/components/schemas/AdaptiveObservationView"
+            },
+            "type": "array"
+          },
+          "resources": {
+            "items": {
+              "$ref": "#/components/schemas/ResourceView"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "graph",
+          "decisions",
+          "resources",
+          "observations"
+        ],
+        "type": "object"
+      },
+      "AgentRunAccepted": {
+        "properties": {
+          "acceptedAt": {
+            "$ref": "#/components/schemas/UTCTime"
+          },
+          "agentName": {
+            "type": "string"
+          },
+          "idempotencyKey": {
+            "type": "string"
+          },
+          "runId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "runId",
+          "agentName",
+          "idempotencyKey",
+          "status",
+          "acceptedAt"
+        ],
+        "type": "object"
+      },
+      "AgentRunRequest": {
+        "properties": {
+          "idempotencyKey": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "objective": {
+            "properties": {
+              "assignmentId": {
+                "properties": {
+                  "value": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "value"
+                ],
+                "type": "object"
+              },
+              "objectiveId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "objectiveId",
+              "assignmentId"
+            ],
+            "type": "object"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "type": "object"
+          }
+        },
+        "required": [
+          "idempotencyKey",
+          "payload"
+        ],
+        "type": "object"
+      },
+      "AgentRunStatus": {
+        "properties": {
+          "acceptedAt": {
+            "$ref": "#/components/schemas/UTCTime"
+          },
+          "agentName": {
+            "type": "string"
+          },
+          "completedAt": {
+            "$ref": "#/components/schemas/UTCTime"
+          },
+          "failure": {
+            "$ref": "#/components/schemas/RunFailureView"
+          },
+          "runId": {
+            "type": "string"
+          },
+          "sessionId": {
+            "type": "string"
+          },
+          "startedAt": {
+            "$ref": "#/components/schemas/UTCTime"
+          },
+          "status": {
+            "enum": [
+              "accepted",
+              "running",
+              "succeeded",
+              "failed",
+              "cancelled"
+            ],
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "trigger": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "runId",
+          "agentName",
+          "status"
+        ],
+        "type": "object"
+      },
+      "AgentView": {
+        "properties": {
+          "behavior": {
+            "type": "string"
+          },
+          "delegates": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "description": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "lifecycle": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "principalId": {
+            "type": "string"
+          },
+          "runnable": {
+            "type": "boolean"
+          },
+          "sinks": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "trigger": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "description",
+          "enabled",
+          "trigger",
+          "behavior",
+          "sinks",
+          "delegates",
+          "lifecycle",
+          "runnable"
+        ],
+        "type": "object"
+      },
+      "AnyValue": {
+        "additionalProperties": true
+      },
+      "AssignmentView": {
+        "properties": {
+          "assignmentId": {
+            "type": "string"
+          },
+          "cutoff": {
+            "$ref": "#/components/schemas/UTCTime"
+          },
+          "owner": {
+            "type": "string"
+          },
+          "ownerEpoch": {
+            "type": "integer"
+          },
+          "revision": {
+            "type": "integer"
+          },
+          "rootId": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "assignmentId",
+          "owner",
+          "state",
+          "revision",
+          "ownerEpoch"
+        ],
+        "type": "object"
+      },
+      "BindingView": {
+        "properties": {
+          "binding": {
+            "$ref": "#/components/schemas/TrackerRecordPreview"
+          },
+          "deliveryState": {
+            "type": "string"
+          },
+          "lastSuccessfulObservation": {
+            "$ref": "#/components/schemas/UTCTime"
+          },
+          "localInstructions": {
+            "$ref": "#/components/schemas/TrackerRecordPreview"
+          },
+          "localRevision": {
+            "type": "integer"
+          },
+          "localStatus": {
+            "type": "string"
+          },
+          "objectiveId": {
+            "type": "string"
+          },
+          "pendingProposals": {
+            "maximum": 9223372036854775807,
+            "minimum": -9223372036854775808,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "objectiveId",
+          "localRevision",
+          "localStatus",
+          "localInstructions",
+          "binding",
+          "pendingProposals"
+        ],
+        "type": "object"
+      },
+      "Connection_AgentView": {
+        "properties": {
+          "edges": {
+            "items": {
+              "$ref": "#/components/schemas/Edge_AgentView"
+            },
+            "type": "array"
+          },
+          "pageInfo": {
+            "$ref": "#/components/schemas/PageInfo"
+          }
+        },
+        "required": [
+          "edges",
+          "pageInfo"
+        ],
+        "type": "object"
+      },
+      "Connection_RecordView": {
+        "properties": {
+          "edges": {
+            "items": {
+              "$ref": "#/components/schemas/Edge_RecordView"
+            },
+            "type": "array"
+          },
+          "pageInfo": {
+            "$ref": "#/components/schemas/PageInfo"
+          }
+        },
+        "required": [
+          "edges",
+          "pageInfo"
+        ],
+        "type": "object"
+      },
+      "Connection_RunRequestView": {
+        "properties": {
+          "edges": {
+            "items": {
+              "$ref": "#/components/schemas/Edge_RunRequestView"
+            },
+            "type": "array"
+          },
+          "pageInfo": {
+            "$ref": "#/components/schemas/PageInfo"
+          }
+        },
+        "required": [
+          "edges",
+          "pageInfo"
+        ],
+        "type": "object"
+      },
+      "CriterionView": {
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "journeyRequired": {
+            "type": "boolean"
+          },
+          "key": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "description",
+          "kind",
+          "journeyRequired"
+        ],
+        "type": "object"
+      },
+      "Cursor": {
+        "description": "opaque pagination cursor",
+        "format": "base64url",
+        "type": "string"
+      },
+      "Edge_AgentView": {
+        "properties": {
+          "cursor": {
+            "$ref": "#/components/schemas/Cursor"
+          },
+          "node": {
+            "$ref": "#/components/schemas/AgentView"
+          }
+        },
+        "required": [
+          "node",
+          "cursor"
+        ],
+        "type": "object"
+      },
+      "Edge_RecordView": {
+        "properties": {
+          "cursor": {
+            "$ref": "#/components/schemas/Cursor"
+          },
+          "node": {
+            "$ref": "#/components/schemas/TrackerRecordPreview"
+          }
+        },
+        "required": [
+          "node",
+          "cursor"
+        ],
+        "type": "object"
+      },
+      "Edge_RunRequestView": {
+        "properties": {
+          "cursor": {
+            "$ref": "#/components/schemas/Cursor"
+          },
+          "node": {
+            "$ref": "#/components/schemas/RunRequestView"
+          }
+        },
+        "required": [
+          "node",
+          "cursor"
+        ],
+        "type": "object"
+      },
+      "EvidenceView": {
+        "properties": {
+          "artifact": {
+            "type": "string"
+          },
+          "assignmentId": {
+            "type": "string"
+          },
+          "criterion": {
+            "type": "string"
+          },
+          "disposition": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          },
+          "recordedBy": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "key",
+          "assignmentId",
+          "criterion",
+          "artifact",
+          "disposition",
+          "recordedBy",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "HistoryPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/HistoryView"
+            },
+            "type": "array"
+          },
+          "next": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "HistoryView": {
+        "properties": {
+          "actor": {
+            "$ref": "#/components/schemas/PrincipalView"
+          },
+          "command": {
+            "type": "string"
+          },
+          "receipt": {
+            "$ref": "#/components/schemas/ReceiptView"
+          }
+        },
+        "required": [
+          "receipt",
+          "actor",
+          "command"
+        ],
+        "type": "object"
+      },
+      "ObjectiveCommand": {
+        "additionalProperties": false,
+        "properties": {
+          "command": {
+            "oneOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "contents": {
+                    "type": "string"
+                  },
+                  "tag": {
+                    "const": "ReviseInstructions"
+                  }
+                },
+                "required": [
+                  "tag",
+                  "contents"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "contents": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "description": {
+                          "type": "string"
+                        },
+                        "journeyRequired": {
+                          "type": "boolean"
+                        },
+                        "key": {
+                          "type": "string"
+                        },
+                        "kind": {
+                          "enum": [
+                            "Automatic",
+                            "HumanVerifiable"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "key",
+                        "description",
+                        "kind",
+                        "journeyRequired"
+                      ],
+                      "type": "object"
+                    },
+                    "type": "array"
+                  },
+                  "tag": {
+                    "const": "ReviseCriteria"
+                  }
+                },
+                "required": [
+                  "tag",
+                  "contents"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "contents": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "assignmentId": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "value": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "value"
+                          ],
+                          "type": "object"
+                        },
+                        "cutoff": {
+                          "oneOf": [
+                            {
+                              "type": "null"
+                            },
+                            {
+                              "format": "date-time",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "dependencies": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "value": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "value"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "instructions": {
+                          "type": "string"
+                        },
+                        "owner": {
+                          "oneOf": [
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "kind": {
+                                  "const": "verified"
+                                },
+                                "principalId": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "principalId"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "agentName": {
+                                  "type": "string"
+                                },
+                                "kind": {
+                                  "const": "compatibility"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "agentName"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "kind": {
+                                  "const": "unresolved-legacy"
+                                }
+                              },
+                              "required": [
+                                "kind"
+                              ],
+                              "type": "object"
+                            }
+                          ]
+                        },
+                        "rootId": {
+                          "oneOf": [
+                            {
+                              "type": "null"
+                            },
+                            {
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "sessionId": {
+                          "oneOf": [
+                            {
+                              "type": "null"
+                            },
+                            {
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "state": {
+                          "enum": [
+                            "Pending",
+                            "Working",
+                            "Done",
+                            "Withdrawn"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "assignmentId",
+                        "instructions",
+                        "dependencies",
+                        "owner",
+                        "state",
+                        "sessionId",
+                        "rootId",
+                        "cutoff"
+                      ],
+                      "type": "object"
+                    },
+                    "type": "array"
+                  },
+                  "tag": {
+                    "const": "SetAssignments"
+                  }
+                },
+                "required": [
+                  "tag",
+                  "contents"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "contents": {
+                    "maxItems": 4,
+                    "minItems": 4,
+                    "prefixItems": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "value": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "value"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "enum": [
+                          "Pending",
+                          "Working",
+                          "Done",
+                          "Withdrawn"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      },
+                      {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      }
+                    ],
+                    "type": "array"
+                  },
+                  "tag": {
+                    "const": "RecordProgress"
+                  }
+                },
+                "required": [
+                  "tag",
+                  "contents"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "contents": {
+                    "maxItems": 2,
+                    "minItems": 2,
+                    "prefixItems": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "value": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "value"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "oneOf": [
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "criterion": {
+                                "type": "string"
+                              },
+                              "journey": {
+                                "type": "boolean"
+                              },
+                              "key": {
+                                "type": "string"
+                              },
+                              "result": {
+                                "oneOf": [
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "artifact": {
+                                        "type": "string"
+                                      },
+                                      "receipt": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "assignmentId": {
+                                            "type": "string"
+                                          },
+                                          "cursor": {
+                                            "minimum": 0,
+                                            "type": "integer"
+                                          },
+                                          "disposition": {
+                                            "enum": [
+                                              "AssignmentSucceeded",
+                                              "AssignmentFailed",
+                                              "AssignmentCancelled"
+                                            ],
+                                            "type": "string"
+                                          },
+                                          "fingerprint": {
+                                            "type": "string"
+                                          },
+                                          "format": {
+                                            "const": 1,
+                                            "type": "integer"
+                                          },
+                                          "operationId": {
+                                            "type": "string"
+                                          },
+                                          "output": {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "bytes": {
+                                                "minimum": 0,
+                                                "type": "integer"
+                                              },
+                                              "digest": {
+                                                "type": "string"
+                                              },
+                                              "payloadId": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "payloadId",
+                                              "digest",
+                                              "bytes"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          "sessionId": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "format",
+                                          "sessionId",
+                                          "assignmentId",
+                                          "operationId",
+                                          "fingerprint",
+                                          "disposition",
+                                          "output",
+                                          "cursor"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "tag": {
+                                        "const": "WorkerResult"
+                                      }
+                                    },
+                                    "required": [
+                                      "tag",
+                                      "receipt",
+                                      "artifact"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "artifact": {
+                                        "type": "string"
+                                      },
+                                      "digest": {
+                                        "type": "string"
+                                      },
+                                      "executionId": {
+                                        "type": "string"
+                                      },
+                                      "runId": {
+                                        "type": "string"
+                                      },
+                                      "tag": {
+                                        "const": "RetainedResult"
+                                      }
+                                    },
+                                    "required": [
+                                      "tag",
+                                      "runId",
+                                      "executionId",
+                                      "digest",
+                                      "artifact"
+                                    ],
+                                    "type": "object"
+                                  }
+                                ]
+                              },
+                              "tag": {
+                                "const": "ResultEvidence"
+                              }
+                            },
+                            "required": [
+                              "tag",
+                              "key",
+                              "criterion",
+                              "result",
+                              "journey"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "artifact": {
+                                "type": "string"
+                              },
+                              "criterion": {
+                                "type": "string"
+                              },
+                              "journey": {
+                                "type": "boolean"
+                              },
+                              "key": {
+                                "type": "string"
+                              },
+                              "statement": {
+                                "type": "string"
+                              },
+                              "tag": {
+                                "const": "Attestation"
+                              }
+                            },
+                            "required": [
+                              "tag",
+                              "key",
+                              "criterion",
+                              "artifact",
+                              "statement",
+                              "journey"
+                            ],
+                            "type": "object"
+                          }
+                        ]
+                      }
+                    ],
+                    "type": "array"
+                  },
+                  "tag": {
+                    "const": "RecordEvidence"
+                  }
+                },
+                "required": [
+                  "tag",
+                  "contents"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "contents": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "tag": {
+                    "const": "SetNextAction"
+                  }
+                },
+                "required": [
+                  "tag",
+                  "contents"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "contents": {
+                    "type": "boolean"
+                  },
+                  "tag": {
+                    "const": "SetBlocked"
+                  }
+                },
+                "required": [
+                  "tag",
+                  "contents"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "contents": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "artifacts": {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      },
+                      "checks": {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      },
+                      "criteriaRevision": {
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "instructionsRevision": {
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "limitations": {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      },
+                      "objectiveRevision": {
+                        "minimum": 0,
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "objectiveRevision",
+                      "instructionsRevision",
+                      "criteriaRevision",
+                      "artifacts",
+                      "checks",
+                      "limitations"
+                    ],
+                    "type": "object"
+                  },
+                  "tag": {
+                    "const": "ProposeCompletion"
+                  }
+                },
+                "required": [
+                  "tag",
+                  "contents"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "tag": {
+                    "const": "AcceptCompletion"
+                  }
+                },
+                "required": [
+                  "tag"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "tag": {
+                    "const": "CancelObjective"
+                  }
+                },
+                "required": [
+                  "tag"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "contents": {
+                    "maxItems": 2,
+                    "minItems": 2,
+                    "prefixItems": [
+                      {
+                        "oneOf": [
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "contents": {
+                                "type": "string"
+                              },
+                              "tag": {
+                                "const": "VerifiedCaller"
+                              }
+                            },
+                            "required": [
+                              "tag",
+                              "contents"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "contents": {
+                                "type": "string"
+                              },
+                              "tag": {
+                                "const": "LocalOperator"
+                              }
+                            },
+                            "required": [
+                              "tag",
+                              "contents"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "contents": {
+                                "oneOf": [
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "kind": {
+                                        "const": "verified"
+                                      },
+                                      "principalId": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "principalId"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "agentName": {
+                                        "type": "string"
+                                      },
+                                      "kind": {
+                                        "const": "compatibility"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "agentName"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "kind": {
+                                        "const": "unresolved-legacy"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind"
+                                    ],
+                                    "type": "object"
+                                  }
+                                ]
+                              },
+                              "tag": {
+                                "const": "RecordedAgent"
+                              }
+                            },
+                            "required": [
+                              "tag",
+                              "contents"
+                            ],
+                            "type": "object"
+                          }
+                        ]
+                      },
+                      {
+                        "items": {
+                          "enum": [
+                            "Owner",
+                            "Coordinator",
+                            "Worker",
+                            "Reader",
+                            "Completer"
+                          ],
+                          "type": "string"
+                        },
+                        "type": "array"
+                      }
+                    ],
+                    "type": "array"
+                  },
+                  "tag": {
+                    "const": "GrantMember"
+                  }
+                },
+                "required": [
+                  "tag",
+                  "contents"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "contents": {
+                    "oneOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "contents": {
+                            "type": "string"
+                          },
+                          "tag": {
+                            "const": "VerifiedCaller"
+                          }
+                        },
+                        "required": [
+                          "tag",
+                          "contents"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "contents": {
+                            "type": "string"
+                          },
+                          "tag": {
+                            "const": "LocalOperator"
+                          }
+                        },
+                        "required": [
+                          "tag",
+                          "contents"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "contents": {
+                            "oneOf": [
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "kind": {
+                                    "const": "verified"
+                                  },
+                                  "principalId": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "principalId"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "agentName": {
+                                    "type": "string"
+                                  },
+                                  "kind": {
+                                    "const": "compatibility"
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "agentName"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "kind": {
+                                    "const": "unresolved-legacy"
+                                  }
+                                },
+                                "required": [
+                                  "kind"
+                                ],
+                                "type": "object"
+                              }
+                            ]
+                          },
+                          "tag": {
+                            "const": "RecordedAgent"
+                          }
+                        },
+                        "required": [
+                          "tag",
+                          "contents"
+                        ],
+                        "type": "object"
+                      }
+                    ]
+                  },
+                  "tag": {
+                    "const": "RevokeMember"
+                  }
+                },
+                "required": [
+                  "tag",
+                  "contents"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "contents": {
+                    "type": "string"
+                  },
+                  "tag": {
+                    "const": "BindConversation"
+                  }
+                },
+                "required": [
+                  "tag",
+                  "contents"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "contents": {
+                    "oneOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "contents": {
+                            "type": "string"
+                          },
+                          "tag": {
+                            "const": "ReiIntention"
+                          }
+                        },
+                        "required": [
+                          "tag",
+                          "contents"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "contents": {
+                            "type": "string"
+                          },
+                          "tag": {
+                            "const": "ExecPlan"
+                          }
+                        },
+                        "required": [
+                          "tag",
+                          "contents"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "contents": {
+                            "type": "string"
+                          },
+                          "tag": {
+                            "const": "ProtocolTask"
+                          }
+                        },
+                        "required": [
+                          "tag",
+                          "contents"
+                        ],
+                        "type": "object"
+                      }
+                    ]
+                  },
+                  "tag": {
+                    "const": "LinkExternal"
+                  }
+                },
+                "required": [
+                  "tag",
+                  "contents"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "expectedRevision": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "format": {
+            "const": 1,
+            "type": "integer"
+          },
+          "operationKey": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "format",
+          "operationKey",
+          "expectedRevision",
+          "command"
+        ],
+        "type": "object"
+      },
+      "ObjectiveCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "format": {
+            "const": 1,
+            "type": "integer"
+          },
+          "operationKey": {
+            "type": "string"
+          },
+          "request": {
+            "additionalProperties": false,
+            "properties": {
+              "criteria": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "description": {
+                      "type": "string"
+                    },
+                    "journeyRequired": {
+                      "type": "boolean"
+                    },
+                    "key": {
+                      "type": "string"
+                    },
+                    "kind": {
+                      "enum": [
+                        "Automatic",
+                        "HumanVerifiable"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "key",
+                    "description",
+                    "kind",
+                    "journeyRequired"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "external": {
+                "items": {
+                  "oneOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "contents": {
+                          "type": "string"
+                        },
+                        "tag": {
+                          "const": "ReiIntention"
+                        }
+                      },
+                      "required": [
+                        "tag",
+                        "contents"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "contents": {
+                          "type": "string"
+                        },
+                        "tag": {
+                          "const": "ExecPlan"
+                        }
+                      },
+                      "required": [
+                        "tag",
+                        "contents"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "contents": {
+                          "type": "string"
+                        },
+                        "tag": {
+                          "const": "ProtocolTask"
+                        }
+                      },
+                      "required": [
+                        "tag",
+                        "contents"
+                      ],
+                      "type": "object"
+                    }
+                  ]
+                },
+                "type": "array"
+              },
+              "goal": {
+                "type": "string"
+              },
+              "instructions": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "title",
+              "goal",
+              "instructions",
+              "criteria",
+              "external"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "format",
+          "operationKey",
+          "request"
+        ],
+        "type": "object"
+      },
+      "ObjectivePage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ObjectiveView"
+            },
+            "type": "array"
+          },
+          "next": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "ObjectiveView": {
+        "properties": {
+          "adaptive": {
+            "$ref": "#/components/schemas/AdaptiveView"
+          },
+          "assignmentCount": {
+            "maximum": 9223372036854775807,
+            "minimum": -9223372036854775808,
+            "type": "integer"
+          },
+          "assignments": {
+            "items": {
+              "$ref": "#/components/schemas/AssignmentView"
+            },
+            "type": "array"
+          },
+          "criteria": {
+            "items": {
+              "$ref": "#/components/schemas/CriterionView"
+            },
+            "type": "array"
+          },
+          "criteriaRevision": {
+            "type": "integer"
+          },
+          "evidence": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceView"
+            },
+            "type": "array"
+          },
+          "evidenceCount": {
+            "maximum": 9223372036854775807,
+            "minimum": -9223372036854775808,
+            "type": "integer"
+          },
+          "goal": {
+            "type": "string"
+          },
+          "instructionsRevision": {
+            "type": "integer"
+          },
+          "next": {
+            "maximum": 9223372036854775807,
+            "minimum": -9223372036854775808,
+            "type": "integer"
+          },
+          "nextActions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "objectiveId": {
+            "type": "string"
+          },
+          "reportedResults": {
+            "items": {
+              "$ref": "#/components/schemas/ReportedResultView"
+            },
+            "type": "array"
+          },
+          "revision": {
+            "type": "integer"
+          },
+          "status": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "unresolvedCount": {
+            "maximum": 9223372036854775807,
+            "minimum": -9223372036854775808,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "objectiveId",
+          "title",
+          "goal",
+          "status",
+          "revision",
+          "instructionsRevision",
+          "criteriaRevision",
+          "assignmentCount",
+          "evidenceCount",
+          "unresolvedCount",
+          "criteria",
+          "assignments",
+          "evidence",
+          "reportedResults",
+          "nextActions"
+        ],
+        "type": "object"
+      },
+      "OperationView": {
+        "properties": {
+          "failure": {
+            "type": "string"
+          },
+          "operationKey": {
+            "type": "string"
+          },
+          "receiptDigest": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "operationKey",
+          "state",
+          "receiptDigest"
+        ],
+        "type": "object"
+      },
+      "PageInfo": {
+        "properties": {
+          "endCursor": {
+            "$ref": "#/components/schemas/Cursor"
+          },
+          "hasNextPage": {
+            "type": "boolean"
+          },
+          "hasPreviousPage": {
+            "type": "boolean"
+          },
+          "startCursor": {
+            "$ref": "#/components/schemas/Cursor"
+          }
+        },
+        "required": [
+          "hasNextPage",
+          "hasPreviousPage"
+        ],
+        "type": "object"
+      },
+      "PlacementView": {
+        "properties": {
+          "assignmentId": {
+            "type": "string"
+          },
+          "dependencies": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "parent": {
+            "type": "string"
+          },
+          "sessionId": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "assignmentId",
+          "target",
+          "dependencies"
+        ],
+        "type": "object"
+      },
+      "PrincipalView": {
+        "properties": {
+          "identity": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "identity"
+        ],
+        "type": "object"
+      },
+      "ProbeStatus": {
+        "properties": {
+          "check": {
+            "type": "string"
+          },
+          "failingSince": {
+            "$ref": "#/components/schemas/UTCTime"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "check"
+        ],
+        "type": "object"
+      },
+      "ProblemDetails": {
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "retryable": {
+            "type": "boolean"
+          },
+          "status": {
+            "maximum": 9223372036854775807,
+            "minimum": -9223372036854775808,
+            "type": "integer"
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "status",
+          "detail",
+          "code",
+          "retryable"
+        ],
+        "type": "object"
+      },
+      "ReceiptView": {
+        "properties": {
+          "fingerprint": {
+            "type": "string"
+          },
+          "objectiveId": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string"
+          },
+          "payloadDigest": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "objectiveId",
+          "operationId",
+          "fingerprint",
+          "revision",
+          "payloadDigest"
+        ],
+        "type": "object"
+      },
+      "RelayPageError": {
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "parameter": {
+            "type": "string"
+          },
+          "retryable": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "retryable"
+        ],
+        "type": "object"
+      },
+      "ReportedResultView": {
+        "properties": {
+          "artifacts": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "assignmentId": {
+            "type": "string"
+          },
+          "digest": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "assignmentId",
+          "operationId",
+          "digest",
+          "artifacts"
+        ],
+        "type": "object"
+      },
+      "ResourceView": {
+        "properties": {
+          "rootId": {
+            "type": "string"
+          },
+          "state": {
+            "properties": {
+              "active": {
+                "maximum": 9223372036854775807,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "activeLimit": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "cancelled": {
+                "type": "boolean"
+              },
+              "envelope": {
+                "properties": {
+                  "cutoff": {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  "limits": {
+                    "additionalProperties": {
+                      "oneOf": [
+                        {
+                          "properties": {
+                            "tag": {
+                              "enum": [
+                                "ExplicitlyUnbounded"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "tag"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "contents": {
+                              "maximum": 9223372036854775807,
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "tag": {
+                              "enum": [
+                                "Limited"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "tag",
+                            "contents"
+                          ],
+                          "type": "object"
+                        }
+                      ]
+                    },
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "limits",
+                  "cutoff"
+                ],
+                "type": "object"
+              },
+              "known": {
+                "additionalProperties": {
+                  "maximum": 9223372036854775807,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              "overage": {
+                "type": "boolean"
+              },
+              "revision": {
+                "maximum": 9223372036854775807,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "unknown": {
+                "maximum": 9223372036854775807,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "usage": {
+                "properties": {
+                  "held": {
+                    "additionalProperties": {
+                      "maximum": 9223372036854775807,
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "type": "object"
+                  },
+                  "settled": {
+                    "additionalProperties": {
+                      "maximum": 9223372036854775807,
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "settled",
+                  "held"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "envelope",
+              "revision",
+              "cancelled",
+              "activeLimit",
+              "overage",
+              "active",
+              "unknown",
+              "known",
+              "usage"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "rootId",
+          "state"
+        ],
+        "type": "object"
+      },
+      "RunFailureView": {
+        "properties": {
+          "kind": {
+            "enum": [
+              "refused",
+              "dead_lettered",
+              "behavior_failed",
+              "workflow_failed"
+            ],
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "reason"
+        ],
+        "type": "object"
+      },
+      "RunRequestView": {
+        "properties": {
+          "acceptedAt": {
+            "$ref": "#/components/schemas/UTCTime"
+          },
+          "disposition": {
+            "type": "string"
+          },
+          "idempotencyKey": {
+            "type": "string"
+          },
+          "requestedBy": {
+            "type": "string"
+          },
+          "runId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "runId",
+          "idempotencyKey",
+          "acceptedAt",
+          "requestedBy",
+          "disposition"
+        ],
+        "type": "object"
+      },
+      "TrackerCommand": {
+        "additionalProperties": false,
+        "properties": {
+          "format": {
+            "enum": [
+              1
+            ],
+            "type": "integer"
+          },
+          "operationKey": {
+            "maxLength": 256,
+            "type": "string"
+          },
+          "request": {
+            "additionalProperties": false,
+            "properties": {
+              "contents": {},
+              "tag": {
+                "enum": [
+                  "RunCommand",
+                  "Observe",
+                  "Reconcile",
+                  "Verify"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "tag",
+              "contents"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "format",
+          "operationKey",
+          "request"
+        ],
+        "type": "object"
+      },
+      "TrackerRecordPreview": {
+        "additionalProperties": false,
+        "properties": {
+          "digest": {
+            "type": "string"
+          },
+          "identity": {
+            "type": "string"
+          },
+          "preview": {},
+          "truncated": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "identity",
+          "digest",
+          "preview",
+          "truncated"
+        ],
+        "type": "object"
+      },
+      "UTCTime": {
+        "example": "2016-07-22T00:00:00Z",
+        "format": "yyyy-mm-ddThh:MM:ssZ",
+        "type": "string"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "scheme": "bearer",
+        "type": "http"
+      }
+    }
+  },
+  "info": {
+    "description": "The public HTTP API of the Shikigami declared-agent runtime.",
+    "title": "Shikigami",
+    "version": "0.1.0.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/agents": {
+      "get": {
+        "operationId": "getAgents",
+        "parameters": [
+          {
+            "description": "Forward page size (0..200). Defaults to 50 when neither 'first' nor 'last' is given. Cannot be combined with 'last' or 'before'.",
+            "in": "query",
+            "name": "first",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Opaque cursor: return items after this position (forward pagination).",
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "format": "base64url",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Backward page size (0..200). Cannot be combined with 'first' or 'after'.",
+            "in": "query",
+            "name": "last",
+            "required": false,
+            "schema": {
+              "maximum": 200,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Opaque cursor: return items before this position (backward pagination).",
+            "in": "query",
+            "name": "before",
+            "required": false,
+            "schema": {
+              "format": "base64url",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Connection_AgentView"
+                }
+              },
+              "application/json;charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/Connection_AgentView"
+                }
+              }
+            },
+            "description": "A page of declared agents"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RelayPageError"
+                }
+              },
+              "application/json;charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/RelayPageError"
+                }
+              }
+            },
+            "description": "Invalid pagination cursor or size"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer credential"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "The lifecycle directory is unavailable"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/agents/{agentName}": {
+      "get": {
+        "operationId": "getAgentsByAgentName",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agentName",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentView"
+                }
+              },
+              "application/json;charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentView"
+                }
+              }
+            },
+            "description": "The declared agent"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer credential"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "`agentName` or No such agent"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "The lifecycle directory is unavailable"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/agents/{agentName}/runs": {
+      "get": {
+        "operationId": "getAgentsByAgentNameRuns",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agentName",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Forward page size (0..200). Defaults to 50 when neither 'first' nor 'last' is given. Cannot be combined with 'last' or 'before'.",
+            "in": "query",
+            "name": "first",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Opaque cursor: return items after this position (forward pagination).",
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "format": "base64url",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Backward page size (0..200). Cannot be combined with 'first' or 'after'.",
+            "in": "query",
+            "name": "last",
+            "required": false,
+            "schema": {
+              "maximum": 200,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Opaque cursor: return items before this position (backward pagination).",
+            "in": "query",
+            "name": "before",
+            "required": false,
+            "schema": {
+              "format": "base64url",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Connection_RunRequestView"
+                }
+              },
+              "application/json;charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/Connection_RunRequestView"
+                }
+              }
+            },
+            "description": "A page of accepted run requests"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RelayPageError"
+                }
+              },
+              "application/json;charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/RelayPageError"
+                }
+              }
+            },
+            "description": "Invalid pagination cursor or size"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer credential"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "`agentName` or Agent not found"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Store unavailable"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "post": {
+        "operationId": "postAgentsByAgentNameRuns",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agentName",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json;charset=utf-8": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentRunRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentRunAccepted"
+                }
+              },
+              "application/json;charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentRunAccepted"
+                }
+              }
+            },
+            "description": "Run already accepted",
+            "headers": {
+              "Location": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentRunAccepted"
+                }
+              },
+              "application/json;charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentRunAccepted"
+                }
+              }
+            },
+            "description": "Run accepted",
+            "headers": {
+              "Location": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Invalid request body or `body`"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer credential"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "`agentName` or Agent not found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Agent not runnable\n\nIdempotency key conflict"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Payload too large"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Store or directory unavailable"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/agents/{agentName}/runs/{runId}": {
+      "get": {
+        "operationId": "getAgentsByAgentNameRunsByRunId",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agentName",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "runId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentRunStatus"
+                }
+              },
+              "application/json;charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentRunStatus"
+                }
+              }
+            },
+            "description": "The run lifecycle"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer credential"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "`agentName` or `runId` or Agent not found\n\nRun not found"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Stored history invalid"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Store unavailable"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/health/live": {
+      "get": {
+        "operationId": "getHealthLive",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProbeStatus"
+                }
+              },
+              "application/json;charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProbeStatus"
+                }
+              }
+            },
+            "description": "Probe passed"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProbeStatus"
+                }
+              },
+              "application/json;charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProbeStatus"
+                }
+              }
+            },
+            "description": "Probe failed"
+          }
+        }
+      }
+    },
+    "/health/ready": {
+      "get": {
+        "operationId": "getHealthReady",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProbeStatus"
+                }
+              },
+              "application/json;charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProbeStatus"
+                }
+              }
+            },
+            "description": "Probe passed"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProbeStatus"
+                }
+              },
+              "application/json;charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProbeStatus"
+                }
+              }
+            },
+            "description": "Probe failed"
+          }
+        }
+      }
+    },
+    "/objectives": {
+      "get": {
+        "operationId": "getObjectives",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "maximum": 9223372036854775807,
+              "minimum": -9223372036854775808,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ObjectivePage"
+                }
+              },
+              "application/json;charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/ObjectivePage"
+                }
+              }
+            },
+            "description": "Listed"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "ListInvalid or `limit` or `after`"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer credential"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "ListDenied"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "ListMissing"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "ListConflict"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "ListTooLarge"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "ListUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "post": {
+        "operationId": "postObjectives",
+        "requestBody": {
+          "content": {
+            "application/json;charset=utf-8": {
+              "schema": {
+                "$ref": "#/components/schemas/ObjectiveCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReceiptView"
+                }
+              },
+              "application/json;charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReceiptView"
+                }
+              }
+            },
+            "description": "Replayed"
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReceiptView"
+                }
+              },
+              "application/json;charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReceiptView"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "CreateInvalid or `body`"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer credential"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "CreateDenied"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "CreateMissing"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "CreateConflict"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "CreateTooLarge"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "CreateUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/objectives/{objectiveId}": {
+      "get": {
+        "operationId": "getObjectivesByObjectiveId",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "objectiveId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "maximum": 9223372036854775807,
+              "minimum": -9223372036854775808,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "maximum": 9223372036854775807,
+              "minimum": -9223372036854775808,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ObjectiveView"
+                }
+              },
+              "application/json;charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/ObjectiveView"
+                }
+              }
+            },
+            "description": "Found"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "ReadInvalid or `limit` or `after`"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer credential"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "ReadDenied"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "`objectiveId` or ReadMissing"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "ReadConflict"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "ReadTooLarge"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "ReadUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/objectives/{objectiveId}/commands": {
+      "post": {
+        "operationId": "postObjectivesByObjectiveIdCommands",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "objectiveId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json;charset=utf-8": {
+              "schema": {
+                "$ref": "#/components/schemas/ObjectiveCommand"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReceiptView"
+                }
+              },
+              "application/json;charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReceiptView"
+                }
+              }
+            },
+            "description": "CommandAccepted"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "CommandInvalid or `body`"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer credential"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "CommandDenied"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "`objectiveId` or CommandMissing"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "CommandConflict"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "CommandTooLarge"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "CommandUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/objectives/{objectiveId}/history": {
+      "get": {
+        "operationId": "getObjectivesByObjectiveIdHistory",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "objectiveId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "maximum": 9223372036854775807,
+              "minimum": -9223372036854775808,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HistoryPage"
+                }
+              },
+              "application/json;charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/HistoryPage"
+                }
+              }
+            },
+            "description": "HistoryFound"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "HistoryInvalid or `limit` or `after`"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer credential"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "HistoryDenied"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "`objectiveId` or HistoryMissing"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "HistoryConflict"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "HistoryTooLarge"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "HistoryUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/objectives/{objectiveId}/trackers": {
+      "get": {
+        "operationId": "getObjectivesByObjectiveIdTrackers",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "objectiveId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Forward page size (0..100). Defaults to 20 when neither 'first' nor 'last' is given. Cannot be combined with 'last' or 'before'.",
+            "in": "query",
+            "name": "first",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Opaque cursor: return items after this position (forward pagination).",
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "format": "base64url",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Backward page size (0..100). Cannot be combined with 'first' or 'after'.",
+            "in": "query",
+            "name": "last",
+            "required": false,
+            "schema": {
+              "maximum": 100,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Opaque cursor: return items before this position (backward pagination).",
+            "in": "query",
+            "name": "before",
+            "required": false,
+            "schema": {
+              "format": "base64url",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Connection_RecordView"
+                }
+              },
+              "application/json;charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/Connection_RecordView"
+                }
+              }
+            },
+            "description": "PageOk"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RelayPageError"
+                }
+              },
+              "application/json;charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/RelayPageError"
+                }
+              }
+            },
+            "description": "PageInvalid"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer credential"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "`objectiveId` or PageMissing"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "PageTooLarge"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "PageUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/objectives/{objectiveId}/trackers/commands": {
+      "post": {
+        "operationId": "postObjectivesByObjectiveIdTrackersCommands",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "objectiveId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json;charset=utf-8": {
+              "schema": {
+                "$ref": "#/components/schemas/TrackerCommand"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationView"
+                }
+              },
+              "application/json;charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationView"
+                }
+              }
+            },
+            "description": "Ok"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationView"
+                }
+              },
+              "application/json;charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationView"
+                }
+              }
+            },
+            "description": "Accepted"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Invalid or `body`"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer credential"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Denied"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "`objectiveId` or Missing"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "TooLarge"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "NotAvailable"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/objectives/{objectiveId}/trackers/operations/{operationKey}": {
+      "get": {
+        "operationId": "getObjectivesByObjectiveIdTrackersOperationsByOperationKey",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "objectiveId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "operationKey",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationView"
+                }
+              },
+              "application/json;charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationView"
+                }
+              }
+            },
+            "description": "Ok"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationView"
+                }
+              },
+              "application/json;charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationView"
+                }
+              }
+            },
+            "description": "Accepted"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Invalid"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer credential"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Denied"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "`objectiveId` or `operationKey` or Missing"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "TooLarge"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "NotAvailable"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/objectives/{objectiveId}/trackers/{bindingId}": {
+      "get": {
+        "operationId": "getObjectivesByObjectiveIdTrackersByBindingId",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "objectiveId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "bindingId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BindingView"
+                }
+              },
+              "application/json;charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/BindingView"
+                }
+              }
+            },
+            "description": "Ok"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BindingView"
+                }
+              },
+              "application/json;charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/BindingView"
+                }
+              }
+            },
+            "description": "Accepted"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Invalid"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer credential"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Denied"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "`objectiveId` or `bindingId` or Missing"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "TooLarge"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "NotAvailable"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/objectives/{objectiveId}/trackers/{bindingId}/deliveries": {
+      "get": {
+        "operationId": "getObjectivesByObjectiveIdTrackersByBindingIdDeliveries",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "objectiveId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "bindingId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Forward page size (0..100). Defaults to 20 when neither 'first' nor 'last' is given. Cannot be combined with 'last' or 'before'.",
+            "in": "query",
+            "name": "first",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Opaque cursor: return items after this position (forward pagination).",
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "format": "base64url",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Backward page size (0..100). Cannot be combined with 'first' or 'after'.",
+            "in": "query",
+            "name": "last",
+            "required": false,
+            "schema": {
+              "maximum": 100,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Opaque cursor: return items before this position (backward pagination).",
+            "in": "query",
+            "name": "before",
+            "required": false,
+            "schema": {
+              "format": "base64url",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Connection_RecordView"
+                }
+              },
+              "application/json;charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/Connection_RecordView"
+                }
+              }
+            },
+            "description": "PageOk"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RelayPageError"
+                }
+              },
+              "application/json;charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/RelayPageError"
+                }
+              }
+            },
+            "description": "PageInvalid"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer credential"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "`objectiveId` or `bindingId` or PageMissing"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "PageTooLarge"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "PageUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/objectives/{objectiveId}/trackers/{bindingId}/observations": {
+      "get": {
+        "operationId": "getObjectivesByObjectiveIdTrackersByBindingIdObservations",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "objectiveId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "bindingId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Forward page size (0..100). Defaults to 20 when neither 'first' nor 'last' is given. Cannot be combined with 'last' or 'before'.",
+            "in": "query",
+            "name": "first",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Opaque cursor: return items after this position (forward pagination).",
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "format": "base64url",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Backward page size (0..100). Cannot be combined with 'first' or 'after'.",
+            "in": "query",
+            "name": "last",
+            "required": false,
+            "schema": {
+              "maximum": 100,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Opaque cursor: return items before this position (backward pagination).",
+            "in": "query",
+            "name": "before",
+            "required": false,
+            "schema": {
+              "format": "base64url",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Connection_RecordView"
+                }
+              },
+              "application/json;charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/Connection_RecordView"
+                }
+              }
+            },
+            "description": "PageOk"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RelayPageError"
+                }
+              },
+              "application/json;charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/RelayPageError"
+                }
+              }
+            },
+            "description": "PageInvalid"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer credential"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "`objectiveId` or `bindingId` or PageMissing"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "PageTooLarge"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "PageUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/objectives/{objectiveId}/trackers/{bindingId}/proposals": {
+      "get": {
+        "operationId": "getObjectivesByObjectiveIdTrackersByBindingIdProposals",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "objectiveId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "bindingId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Forward page size (0..100). Defaults to 20 when neither 'first' nor 'last' is given. Cannot be combined with 'last' or 'before'.",
+            "in": "query",
+            "name": "first",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Opaque cursor: return items after this position (forward pagination).",
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "format": "base64url",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Backward page size (0..100). Cannot be combined with 'first' or 'after'.",
+            "in": "query",
+            "name": "last",
+            "required": false,
+            "schema": {
+              "maximum": 100,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Opaque cursor: return items before this position (backward pagination).",
+            "in": "query",
+            "name": "before",
+            "required": false,
+            "schema": {
+              "format": "base64url",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Connection_RecordView"
+                }
+              },
+              "application/json;charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/Connection_RecordView"
+                }
+              }
+            },
+            "description": "PageOk"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RelayPageError"
+                }
+              },
+              "application/json;charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/RelayPageError"
+                }
+              }
+            },
+            "description": "PageInvalid"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer credential"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "`objectiveId` or `bindingId` or PageMissing"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "PageTooLarge"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "PageUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/openapi": {
+      "get": {
+        "operationId": "getOpenapi",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json;charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnyValue"
+                }
+              }
+            },
+            "description": ""
+          }
+        }
+      }
+    }
+  }
+}

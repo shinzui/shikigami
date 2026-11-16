@@ -1,0 +1,14 @@
+Usage: shikigami objectives COMMAND
+
+  Create, inspect and update authoritative objectives as the configured operator
+
+Available options:
+  -h,--help                Show this help text
+
+Available commands:
+  trackers                 Inspect tracker proposals and receipts or submit
+                           closed operator commands
+  create                   Create or replay an objective
+  inspect                  Read objective metadata
+  history                  Page through attributed command receipts
+  command                  Submit a closed command at an expected revision

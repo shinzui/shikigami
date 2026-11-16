@@ -13,6 +13,7 @@ refinements; design text is not implementation evidence.
 | Recover Skill operations or inspect resource use | [Durable execution](operations/durable-execution.md), [resource accounting](operations/execution-resources.md), [Baikai execution](operations/baikai-execution.md) |
 | Let an agent propose work nobody asked for | [Operating unrequested work](operations/unrequested-work.md), [what a person sees](user/unrequested-work.md) |
 | Change durable code safely | [Workflow versioning](workflow-versioning.md), [typed-decision authoring](shikumi-flow-decisions.md) |
+| Change a public surface deliberately | [API baseline](architecture/api-baseline.md): the surface inventory, stability levels and `just api-baseline` |
 | Choose the next delivery lane | [Roadmap](roadmap.md), [MasterPlans](masterplans/), [ExecPlans](plans/) |
 | Inspect adaptive delivery requirements | [Use case](use-cases/adaptive-autonomous-delivery.md), [theme](use-cases/themes/autonomous-work.md) |
 | Use the visual guides | [Onboarding](artifacts/shikigami-engineer-onboarding.html), [roadmap](artifacts/roadmap.html), [adaptive delivery](artifacts/adaptive-autonomous-objectives.html) |

@@ -1,0 +1,13 @@
+Usage: shikigami mandates COMMAND
+
+  Explicitly admit, inspect, update or cancel finite recurring authority
+
+Available options:
+  -h,--help                Show this help text
+
+Available commands:
+  create                   Admit an explicit recurring mandate
+  inspect                  Inspect recurrence, checkpoint, owner and unresolved
+                           work
+  update                   Authorize a schedule revision
+  cancel                   Close new admission and retain accepted work

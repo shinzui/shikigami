@@ -1,0 +1,6 @@
+Usage: shikigami validate FILE
+
+  Parse and validate an agent manifest (.dhall)
+
+Available options:
+  -h,--help                Show this help text

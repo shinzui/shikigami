@@ -1,0 +1,22 @@
+Usage: shikigami workers COMMAND
+
+  Inspect continuing workers and issue scoped, explicitly keyed commands
+
+Available options:
+  -h,--help                Show this help text
+
+Available commands:
+  inspect                  Show bounded session, assignment and handoff metadata
+  send                     Queue a follow-up; requires an authoritative
+                           objective provider
+  interrupt                Request interruption of one exact active assignment
+  cancel                   Close an idle worker with no queued or unresolved
+                           work
+  transfer                 Request transfer; requires real workspace and
+                           objective ownership providers
+  reconcile                Reconcile the retained transfer without replacing its
+                           operation
+  reconcile-checkpoint     Explicitly revalidate a definitively rejected
+                           checkpoint against the named revisions
+  integrate                Integrate retained events through the authoritative
+                           checkpoint owner

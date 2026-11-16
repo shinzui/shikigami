@@ -1,0 +1,82 @@
+cabal-version: 3.4
+name: api-baseline
+version: 0.1.0.0
+synopsis: Checks Shikigami's public surfaces against a pinned inventory
+description:
+  The inventory api-baseline/surfaces.dhall names every public surface, its
+  owner, its stability level and the check that pins it. This tool runs the
+  checks and reports drift. See docs/architecture/api-baseline.md.
+
+license: BSD-3-Clause
+build-type: Simple
+
+common common
+  default-language: GHC2024
+  default-extensions:
+    BlockArguments
+    DeriveAnyClass
+    DuplicateRecordFields
+    NoFieldSelectors
+    OverloadedRecordDot
+    OverloadedStrings
+
+  ghc-options:
+    -Wall
+    -Werror=missing-fields
+    -Wcompat
+    -Wincomplete-record-updates
+    -Wincomplete-uni-patterns
+    -Wredundant-constraints
+
+library
+  import: common
+  hs-source-dirs: src
+  exposed-modules:
+    ApiBaseline.Check.CliHelp
+    ApiBaseline.Check.DhallSchema
+    ApiBaseline.Check.ExportList
+    ApiBaseline.Check.JournalCodec
+    ApiBaseline.Check.KeiroGate
+    ApiBaseline.Check.OpenApi
+    ApiBaseline.Exposure
+    ApiBaseline.Inventory
+    ApiBaseline.Run
+    ApiBaseline.Types
+
+  build-depends:
+    aeson,
+    base,
+    bytestring,
+    containers,
+    dhall,
+    directory,
+    filepath,
+    process,
+    shikigami-api,
+    shikigami-core,
+    text,
+
+executable api-baseline
+  import: common
+  hs-source-dirs: app
+  main-is: Main.hs
+  build-depends:
+    api-baseline,
+    base,
+    optparse-applicative,
+    text,
+
+test-suite api-baseline-test
+  import: common
+  type: exitcode-stdio-1.0
+  hs-source-dirs: test
+  main-is: Main.hs
+  build-depends:
+    aeson,
+    api-baseline,
+    base,
+    bytestring,
+    containers,
+    tasty,
+    tasty-hunit,
+    text,

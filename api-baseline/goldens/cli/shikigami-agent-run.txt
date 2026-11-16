@@ -1,0 +1,37 @@
+Usage: shikigami-agent-run --agent NAME|FILE [--from-activity FILE] 
+                           [--workspace DIR|mori://…] 
+                           [--stdin | --payload JSON|-] [--no-confirm] 
+                           [--resume WORKFLOW_ID] [--config PATH] 
+                           [--set KEY=VALUE] 
+                           [--explain-config | --explain-config-json | 
+                             --check-config | --describe-config | 
+                             --describe-config-json] [--version]
+
+  Run an agent with the durable workflow and kioku memory lifecycle
+
+Available options:
+  --agent NAME|FILE        Agent name (agents/<name>.dhall) or manifest path
+  --from-activity FILE     Record an activity.v1 envelope as a memory instead of
+                           running
+  --workspace DIR|mori://… Repository for requested capability overlays: a
+                           checkout path or a Mori identity
+  --stdin                  Read JSON payload from stdin (up to 4 MiB)
+  --payload JSON|-         JSON payload, or - to read stdin
+  --no-confirm             Never ask to grant a declaration; use only stored or
+                           file grants
+  --resume WORKFLOW_ID     Continue an interrupted run of this agent from its
+                           journal; an in-flight coding agent is reattached,
+                           never relaunched
+  -h,--help                Show this help text
+  --version                Show version
+
+Configuration
+  --config PATH            Read configuration from PATH
+  --set KEY=VALUE          Override one configuration key
+
+Diagnostics
+  --explain-config         Explain the resolved configuration as text
+  --explain-config-json    Explain the resolved configuration as JSON
+  --check-config           Validate configuration and exit
+  --describe-config        Print the static configuration schema
+  --describe-config-json   Print the static configuration schema as JSON

@@ -1,0 +1,7 @@
+Usage: shikigami flows 
+
+  List every composed flow with its pack, default-model requirement and decision
+  slots
+
+Available options:
+  -h,--help                Show this help text

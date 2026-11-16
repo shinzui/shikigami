@@ -1,0 +1,9 @@
+Usage: shikigami runs show WORKFLOW_NAME WORKFLOW_ID [--json]
+
+  Show one run's workflow instance and its kioku session together
+
+Available options:
+  WORKFLOW_NAME            such as shikigami.agent-run
+  WORKFLOW_ID              the run job's idempotency key
+  --json                   Emit machine-readable JSON
+  -h,--help                Show this help text

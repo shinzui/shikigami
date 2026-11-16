@@ -1,0 +1,10 @@
+Usage: shikigami resources COMMAND
+
+  Inspect a durable execution resource root
+
+Available options:
+  -h,--help                Show this help text
+
+Available commands:
+  inspect                  Show limits, held and unknown usage, cutoff and
+                           refusal categories

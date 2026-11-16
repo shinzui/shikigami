@@ -1,0 +1,10 @@
+Usage: shikigami record COMMAND
+
+  Read the action record of authority decisions and effects
+
+Available options:
+  -h,--help                Show this help text
+
+Available commands:
+  list                     Print the most recent matching record events, oldest
+                           first

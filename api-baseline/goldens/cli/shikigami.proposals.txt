@@ -1,0 +1,19 @@
+Usage: shikigami proposals COMMAND
+
+  Read proposals, candidates and admissions, and install or revoke standing
+  policies
+
+Available options:
+  -h,--help                Show this help text
+
+Available commands:
+  policy                   Install, revoke and list standing policies as the
+                           configured operator
+  list                     Page through proposals
+  inspect                  Show observer and policy usage with exhaustion
+                           explicit
+  candidates               Page through an observer's recorded candidates
+  admissions               Page through admissions pinned to their policy
+                           digests
+  prune                    Delete terminal skips older than an instant, a batch
+                           at a time

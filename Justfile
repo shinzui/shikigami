@@ -281,6 +281,16 @@ haskell-conventions:
     python3 tools/style/check_haskell.py
     python3 -m unittest discover -s tools/style -v
 
+# Check every registered public surface against its pinned baseline
+# (docs/architecture/api-baseline.md). Build the checked executables first:
+# cabal build api-baseline shikigami shikigami-agent-run shikigami-core
+api-baseline *args:
+    cabal run -v0 api-baseline -- check api-baseline/surfaces.dhall {{args}}
+
+# Re-pin one surface after a deliberate, reviewed change.
+api-baseline-pin surface:
+    cabal run -v0 api-baseline -- pin api-baseline/surfaces.dhall {{surface}}
+
 # The kernel fitness check (docs/adr/0129): every top-level shikigami-core
 # namespace is classified in tools/style/module-ownership.json, the leaving
 # groups are frozen, and packages under packs/ depend only on the SDK.
