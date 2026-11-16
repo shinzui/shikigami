@@ -92,7 +92,7 @@ this Mac through the same operator verbs as before (`watchdog inspect`, `proposa
 
 ## Progress
 
-- [ ] M1: Classification confirmed against the code and recorded in this plan, baseline
+- [x] M1 (2026-11-16): Classification confirmed against the code and recorded in this plan, baseline
   measured, pre-release facts rechecked, and the `Deterministic` arm deleted from
   `shikigami-core`, `schema/Agent.dhall`, the server, tests, manifests and docs. A real Skill
   run on a checkout under `/Users/shinzui/Keikaku/bokuno/` still succeeds. This milestone is
@@ -106,6 +106,17 @@ this Mac through the same operator verbs as before (`watchdog inspect`, `proposa
     answers `no stored grant for this declaration; run it once in a terminal to confirm it`.
     An agent must not answer that prompt for the operator. Run it once in a terminal with
     `behavior.provider=openai` and tick this box.
+  - Accepted 2026-11-16. The operator ran the command above with
+    `behavior.provider=openai` and `behavior.model=gpt-5.4-mini` and confirmed the authority
+    prompt. Run `3b61386e-49df-53a2-9532-f9f3b3dab7d0` opened a worktree of
+    `mori://shinzui/fsrs-hs` from `a53bcfe`, and its report
+    (`~/.local/state/shikigami/reports/local-maintainer/3b61386e-49df-53a2-9532-f9f3b3dab7d0-0.md`)
+    begins "`src/` implements the FSRS spaced-repetition library" and ends "I did not change
+    any files, and I did not run any command rules; none were approved for this run. No commit
+    was made." The command printed `local-operator: record 8 approved, 0 refused`, and
+    `shikigami-local ledger --run 3b61386e-…` shows `authority.granted`, `workspace.opened`,
+    the `workspace.read` decisions and one `emit_output local.report`. The fsrs-hs checkout
+    is clean and still at `a53bcfe`.
   - Evidence so far. The plan's acceptance search
     `rg -n 'Deterministic \{|Behavior\.Deterministic|< Deterministic' --glob '!docs/plans/**' --glob '!docs/masterplans/**'`
     matches only `docs/evidence/keiro-0.22/domain-declarations.json`, a retained record of an
