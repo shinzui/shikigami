@@ -22,6 +22,11 @@ provenance:
       at: 2026-11-15T15:08:44Z
       mode: "update"
       note: "Two-step freeze: declaration baseline then kernel baseline (user decision 2026-11-15)"
+    - model: "claude-fable-5-2"
+      harness: "claude-code"
+      at: 2026-11-16T05:08:52Z
+      mode: "implement"
+      note: "M1: surface inventory, api-baseline tool with six checks, eight surfaces pinned in report mode, exposure measurement"
 ---
 
 # Freeze the v1 API baseline with a surface inventory and compatibility checks
@@ -70,10 +75,32 @@ It owns that plan's fourth acceptance test, "Baseline", and its "Public surfaces
 
 ## Progress
 
-- [ ] M1 (can start now): the inventory `api-baseline/surfaces.dhall` and the Haskell tool
+- [x] M1 (2026-11-16): the inventory `api-baseline/surfaces.dhall` and the Haskell tool
   `api-baseline` exist. `just api-baseline` reports on today's surfaces without failing, a
   deliberate edit to `schema/Agent.dhall` shows up as drift in the report and fails under
   `--enforce`, and the exposed-module measurement is recorded.
+  - Evidence, commit `b068bf0d`. `just api-baseline` prints
+    `api-baseline: 8 surfaces, 8 report-only, 0 enforcing` and eight `clean` lines
+    (`agent-declaration`, `agent-journal-codec`, `cli-shikigami-agent-run`, `http-api`,
+    `durable-wire`, `cli-shikigami`, `flow-sdk`, `pack-sdk`) in about 17 seconds, keiro gate
+    included, and exits 0.
+  - With `delegationBudget : Optional Natural` renamed to `delegationLimit` in
+    `schema/Agent.dhall`, the report shows `agent-declaration  provisional  BREAKING` with the
+    hash change and, for each of the three corpus files, `no longer loads:` followed by
+    `Error: Expression doesn't match annotation` and `{ - delegationLimit : …`, then the rule,
+    the provisional policy and `just api-baseline-pin agent-declaration`. The run exits 0.
+    `just api-baseline --enforce --only agent-declaration` exits 1. After restoring the file
+    both surfaces are `clean` again. `agent-journal-codec` reports `BREAKING` for the same
+    edit, because it cannot load the declarations it compares.
+  - `cabal test api-baseline-test` passes 39 tests on synthetic input: every `OpenApiChange`
+    rule, a removed and an added export, a removed constructor, a removed option and a removed
+    subcommand, a corpus file that fails to load, a journal golden that no longer decodes, and
+    that `verdict` never fails a `Report` surface.
+  - `api-baseline exposure` prints
+    `exposure: 388 exposed, 239 needed by a consumer, 149 exposed but unneeded`.
+  - The package-architecture and kernel-boundary groups of `shikigami-core-test` pass (17
+    tests), `just haskell-conventions` passes, `nix/qualification/cohort.json` is unchanged and
+    `.#packages.aarch64-darwin.shikigami-worker.drvPath` evaluates.
 - [ ] M2 (first freeze, the declaration baseline): the agent declaration, its journal codec,
   the playbook format, the operator files, the `local.report` helper and the stock
   local-work commands are registered by their owners, pinned and enforcing. A deliberate
@@ -102,10 +129,63 @@ It owns that plan's fourth acceptance test, "Baseline", and its "Public surfaces
   Evidence: `awk 'NR>=39 && NR<404' shikigami-core/shikigami-core.cabal | grep -c
   'Shikigami\.'` prints 357. A hand-maintained census drifts, which is why this plan measures
   with a tool.
+- Observation (M1): the core exposes 388 modules, and 149 of them have no consumer.
+  Evidence: `cabal run -v0 api-baseline -- exposure` on 2026-11-16 printed
+  `exposure: 388 exposed, 239 needed by a consumer, 149 exposed but unneeded`. The count was
+  357 on 2026-11-15; MasterPlan 22's kernel work added the rest. A consumer here is a sibling
+  package or its tests, the core's `inspection` and `local-host` sublibraries, `packs/`,
+  `tools/`, `tests/` and the keiro conformance package. The core's own tests are not
+  consumers, because M3 gives them the private sublibrary.
+- Observation (M1): EP-5 had shipped, so its two SDK entries were registered now, in report
+  mode with `freeze = Kernel`, and the inventory starts with eight surfaces instead of six.
+  Their pins are `api-baseline/goldens/exports/flow-sdk.txt` and `pack-sdk.txt`, 167 names
+  between them, counting constructors and fields.
+- Observation (M1): the `shikigami` command has no `playbook` verbs, so there is no
+  declaration-baseline entry for them. A playbook is run by `shikigami-agent-run` and
+  `shikigami-local`. `cli-shikigami` pins the top-level help and 18 admin verbs, all in the
+  kernel baseline.
+- Observation (M1): the whole report takes about 17 seconds, because `just keiro-gate HEAD`
+  finds an unchanged tree. `--only <surface>` runs one check when the gate is not wanted.
 
 
 ## Decision Log
 
+- Decision: Export lists are read as names from GHC interface files, with constructors and
+  fields as `Type.member`. Hoogle text is not adopted.
+  Rationale: the bounded prototype was a two-module scratch package with a facade that only
+  re-exports. `cabal haddock --haddock-hoogle` listed the re-exported names under the facade
+  module with their signatures, so Hoogle does see same-package re-exports. Adopting it for
+  the core needs documentation built for the whole dependency closure: the same command on
+  `shikigami-core` had built documentation for 257 dependencies and had not reached the core
+  when the scratch package had already answered the question, and it was stopped. An
+  interface file exists after any build and also lists names re-exported from other packages
+  (`Eff`, `step`), which the SDK facades do. Signatures can be reconsidered in M3 if a type
+  change behind an unchanged name proves to be a real gap.
+  Date: 2026-11-16
+- Decision: `DhallSchema` decides only whether each corpus file still loads; whether it loads
+  to the same value is decided by `JournalCodec`, whose golden is the declaration's JSON.
+  Rationale: the plan gave both checks a stored golden of the loaded value. One golden per
+  declaration is enough, and the journal encoding is the one that must survive. The schema
+  entry needs no artifact beyond its hash.
+  Date: 2026-11-16
+- Decision: A schema's pinned hash stays a field of the inventory entry, and `pin` rewrites
+  that one string in `surfaces.dhall`. Everything else `pin` writes is a file under
+  `api-baseline/goldens/` or `api-baseline/frozen/`.
+  Rationale: the plan's `Surface` type carries the hash inline, and a reviewer sees a schema
+  change as one changed line beside the entry's rule. `pin` never edits `stability` or `rule`.
+  Date: 2026-11-16
+- Decision: A check that cannot run exits 2 and is never reported as clean. `check` also
+  takes `--only <surface>`, repeatable.
+  Rationale: an executable that is not built, a missing interface file or an empty corpus
+  would otherwise read as "no findings". Exit 1 stays reserved for a finding on an enforcing
+  surface. `--only` keeps the demonstration and a pin review fast.
+  Date: 2026-11-16
+- Decision: The M1 corpus is three real stock declarations that name no Kikan output and no
+  moved flow: `repo-inventory`, `local-maintainer` and `coding-agent-example`, copied from
+  `agents/` with only the schema import path changed. M2 fills the corpus.
+  Rationale: the plan's example named `triage-note`, which declares a Kizashi sink and is
+  excluded from the first freeze by this plan's own rule.
+  Date: 2026-11-16
 - Decision: The inventory is a Dhall file at `api-baseline/surfaces.dhall`, typed by
   `api-baseline/Surface.dhall`, with the frozen artifacts beside it under
   `api-baseline/frozen/` and the declaration corpus under `api-baseline/corpus/`.
@@ -722,3 +802,7 @@ Revision note (2026-11-15): the initial body was drafted under MasterPlan 22.
 Revision note (2026-11-15, user decision): the baseline freezes in two steps. M2 is now the
 declaration baseline and M4 the kernel baseline, each inventory entry names its freeze, and
 the first freeze's corpus excludes declarations that a later plan moves.
+
+Revision note (2026-11-16, M1 implementation): M1 is complete. Eight surfaces are registered,
+including EP-5's two SDK components. Export lists come from interface files after a Hoogle
+prototype, a check that cannot run exits 2, and the exposure measurement is recorded.

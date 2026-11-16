@@ -398,7 +398,7 @@ rule.
 | EP-8 | Give the kernel its own action, record, output, approval and trigger contracts with local adapters | [docs/plans/133-give-the-kernel-its-own-action-record-output-approval-and-trigger-contracts-with-local-adapters.md](../plans/133-give-the-kernel-its-own-action-record-output-approval-and-trigger-contracts-with-local-adapters.md) | EP-1 (for M2 and M3) | None | In Progress |
 | EP-9 | Declare and run a routine agent with one file and one command | [docs/plans/134-declare-and-run-a-routine-agent-with-one-file-and-one-command.md](../plans/134-declare-and-run-a-routine-agent-with-one-file-and-one-command.md) | EP-1; EP-8 M2; EP-2 M2b (for the scheduled milestone) | EP-3 | Complete |
 | EP-10 | Move the Kikan service bindings out of shikigami-core and compose a Kikan distribution | [docs/plans/135-move-the-kikan-service-bindings-out-of-shikigami-core-and-compose-a-kikan-distribution.md](../plans/135-move-the-kikan-service-bindings-out-of-shikigami-core-and-compose-a-kikan-distribution.md) | EP-5, EP-8 | EP-6 | Not Started |
-| EP-11 | Freeze the v1 API baseline with a surface inventory and compatibility checks | [docs/plans/136-freeze-the-v1-api-baseline-with-a-surface-inventory-and-compatibility-checks.md](../plans/136-freeze-the-v1-api-baseline-with-a-surface-inventory-and-compatibility-checks.md) | EP-1 to EP-4, EP-8, EP-9; EP-6 M1; EP-7 M3 (for M2); EP-5, EP-6, EP-10 (for M3 and M4) | None | Not Started |
+| EP-11 | Freeze the v1 API baseline with a surface inventory and compatibility checks | [docs/plans/136-freeze-the-v1-api-baseline-with-a-surface-inventory-and-compatibility-checks.md](../plans/136-freeze-the-v1-api-baseline-with-a-surface-inventory-and-compatibility-checks.md) | EP-1 to EP-4, EP-8, EP-9; EP-6 M1; EP-7 M3 (for M2); EP-5, EP-6, EP-10 (for M3 and M4) | None | In Progress |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their EP- prefix.
@@ -941,7 +941,11 @@ channel, the workflow name, and a flow's decision mode as declaration data), and
 workflow fragments. EP-5 is complete: M3 built a pack and a distribution in the separate local
 repository `shikigami-operator-packs` (intended URI `mori://shinzui/shikigami-operator-packs`)
 against this checkout and ran its `repository-ledger` flow over real checkouts with no change
-here. EP-6 can start. Stage 1 (the pilot) ends at
+here. EP-6 can start. EP-11 M1 is accepted on 2026-11-16: `api-baseline/surfaces.dhall`
+registers eight surfaces in report mode (the agent declaration and its journal codec, two
+commands, the HTTP API, the durable wire and the two SDK components), `just api-baseline`
+checks them against their pins, and `docs/architecture/api-baseline.md` states the stability
+policy. The core exposes 388 modules, of which 149 have no consumer. Stage 1 (the pilot) ends at
 the declaration baseline, and stage 2 at the kernel baseline.
 
 - [ ] Architectural acceptance: the keiro modernization campaign runs for real on at least
