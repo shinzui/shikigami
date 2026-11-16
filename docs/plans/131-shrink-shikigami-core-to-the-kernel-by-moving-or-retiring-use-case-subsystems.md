@@ -331,6 +331,12 @@ this Mac through the same operator verbs as before (`watchdog inspect`, `proposa
 
 ## Surprises & Discoveries
 
+- Observation (M5): `just keiro-gate HEAD~1` reports the one expected finding for `f7d25186`.
+  Evidence:
+  `BREAKING: AgentRun workflow-patch shikigami-watchdog-v1: patch id existed in the old spec but was removed; the differ cannot prove that no workflow generation still replays its journaled branch [WorkflowPatchRemoved]`,
+  then `replay-neutral: stored-data replay is unchanged by this diff`. The recipe stops at the
+  diff; `cabal test keiro-shikigami-conformance` run by itself passes. The development
+  database has `patch:shikigami-watchdog-v1|completed|27` and no other watchdog row.
 - Observation (M4): a worker executed every run twice whenever a step took longer than a
   second, and the proposing flow does not survive it.
   Evidence: the first real transcript run logged `flow.selected` twice, a second apart. The
