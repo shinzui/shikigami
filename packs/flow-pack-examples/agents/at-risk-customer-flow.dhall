@@ -5,7 +5,7 @@
 -- on timeout. Sinks are empty because the flow emits its alert/escalation through
 -- the transactional outbox at the exact mid-run lifecycle points.
 
-let Schema = ../../schema/Agent.dhall
+let Schema = ../../../schema/Agent.dhall
 
 let Agent = Schema.Agent
 

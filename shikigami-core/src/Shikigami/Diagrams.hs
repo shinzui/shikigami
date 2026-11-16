@@ -7,7 +7,6 @@ import Keiki.Core (HsPred, SymTransducer)
 import Keiki.Render.Inspector (EdgeInspectorOptions (..), defaultEdgeInspectorOptions, renderEdgeInspector)
 import Keiki.Render.Mermaid (toMermaid, toMermaidAtlas)
 import Shikigami.ExecutionLifecycle.Generated.Transducer (executionLifecycleTransducer)
-import Shikigami.Flow.Lifecycle.AtRiskCustomer (atRiskCustomerLifecycle)
 import Shikigami.MandateLifecycle.Generated.Transducer (mandateLifecycleTransducer)
 import Shikigami.ObjectiveLifecycle.Generated.Transducer (objectiveLifecycleTransducer)
 import Shikigami.RunEvidence.Generated.Transducer (runEvidenceTransducer)
@@ -22,8 +21,7 @@ domainAtlas =
         ("Worker session lifecycle", toMermaid workerSessionLifecycleTransducer),
         ("Objective lifecycle", toMermaid objectiveLifecycleTransducer),
         ("Mandate lifecycle", toMermaid mandateLifecycleTransducer),
-        ("Run evidence", toMermaid runEvidenceTransducer),
-        ("At-risk customer (diagram only)", toMermaid atRiskCustomerLifecycle)
+        ("Run evidence", toMermaid runEvidenceTransducer)
       ]
 
 domainEdgeInspectors :: Text
@@ -34,8 +32,7 @@ domainEdgeInspectors =
       inspect "Worker session lifecycle" workerSessionLifecycleTransducer,
       inspect "Objective lifecycle" objectiveLifecycleTransducer,
       inspect "Mandate lifecycle" mandateLifecycleTransducer,
-      inspect "Run evidence" runEvidenceTransducer,
-      inspect "At-risk customer (diagram only)" atRiskCustomerLifecycle
+      inspect "Run evidence" runEvidenceTransducer
     ]
 
 inspect :: (Bounded s, Enum s, Show s) => Text -> SymTransducer (HsPred rs ci) rs s ci co -> Text

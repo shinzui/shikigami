@@ -47,9 +47,9 @@ import Shikigami.Behavior.Run (newBehaviorEnv)
 import Shikigami.Coordination.Capability qualified as Adaptive
 import Shikigami.Directory (disabledDirectoryHandle)
 import Shikigami.Duration (parseDuration)
+import Shikigami.Fixture.AcknowledgementFlow (acknowledgementFlow, acknowledgementFlowName, fixtureFlowRegistry)
 import Shikigami.Flow (FlowDef (..), FlowEffects, FlowRuntime (..))
 import Shikigami.Flow.Acknowledgement (Ack (..), ackFromDecision, runAcknowledgement)
-import Shikigami.Flow.AtRiskCustomer (atRiskCustomerFlow)
 import Shikigami.Flow.Builtin (builtinFlowRegistry)
 import Shikigami.Flow.Capability
   ( MemoryEnv (..),
@@ -100,10 +100,12 @@ tests databaseFixture =
     "FlowLifecycle"
     [ -- No FlowRuntime is constructed here any more, and that is the assertion:
       -- asking which flows exist no longer requires the machinery for running one.
-      testCase "flow registry resolves at-risk-customer and misses unknown flows" do
-        case lookupFlow builtinFlowRegistry (declarationCoordinate ("at-risk-customer")) of
-          Just entry -> assertEqual "registered flow name" (declarationCoordinate "at-risk-customer") entry.flow.definition.name
-          Nothing -> assertFailure "expected at-risk-customer flow to be registered"
+      testCase "flow registry resolves a composed flow and misses unknown flows" do
+        case lookupFlow fixtureFlowRegistry acknowledgementFlowName of
+          Just entry -> assertEqual "registered flow name" acknowledgementFlowName entry.flow.definition.name
+          Nothing -> assertFailure "expected the fixture flow to be registered"
+        -- A flow of a pack this executable was not composed with is unknown to it.
+        assertBool "the builtin pack alone does not know the fixture flow" (null (lookupFlow builtinFlowRegistry acknowledgementFlowName))
         case lookupFlow builtinFlowRegistry (declarationCoordinate ("unknown-flow")) of
           Nothing -> pure ()
           Just entry -> assertFailure ("expected unknown lookup to miss, got " <> show entry.flow.definition),
@@ -119,12 +121,16 @@ tests databaseFixture =
       testCase "a Flow behavior naming an unregistered flow is a declaration error" do
         assertEqual
           "unknown flow is refused, and the message names what is registered"
-          ["unknown flow no-such-flow; registered flows: run-declared-tool, watchdog-sweep, propose-work, adaptive-delivery, objective-example, shikumi-decision-example, shikumi-judgment-example, at-risk-customer, delegation-proof, architecture-practice-router, opentelemetry-practice-review"]
+          ["unknown flow no-such-flow; registered flows: run-declared-tool, watchdog-sweep, propose-work, adaptive-delivery, objective-example, shikumi-decision-example, shikumi-judgment-example, delegation-proof, architecture-practice-router, opentelemetry-practice-review"]
           (flowDeclarationErrors builtinFlowRegistry (flowBehaviorAgent (Flow {name = declarationCoordinate ("no-such-flow")})))
         assertEqual
           "a registered flow is accepted"
           []
-          (flowDeclarationErrors builtinFlowRegistry (flowBehaviorAgent (Flow {name = declarationCoordinate ("at-risk-customer")})))
+          (flowDeclarationErrors fixtureFlowRegistry (flowBehaviorAgent (Flow {name = acknowledgementFlowName})))
+        assertEqual
+          "the same declaration is refused where the flow's pack is not composed"
+          1
+          (length (flowDeclarationErrors builtinFlowRegistry (flowBehaviorAgent (Flow {name = acknowledgementFlowName}))))
         assertEqual
           "a non-flow behavior is not this check's business"
           []
@@ -660,7 +666,7 @@ withAtRiskFlow databaseFixture action =
               { approval = approvalEnv aidRef session,
                 acknowledgementDeadline = (either (error . show) id (parseDuration (secondsToNominalDiffTime 1)))
               }
-      action appEnv runtime aidRef SpikeFlow {name = declarationCoordinate "at-risk-customer", run = atRiskCustomerFlow}
+      action appEnv runtime aidRef SpikeFlow {name = acknowledgementFlowName, run = acknowledgementFlow}
 
 approvalEnv :: IORef (Maybe AwakeableId) -> SessionId -> Approval.ApprovalEnv
 approvalEnv aidRef currentSession =
@@ -688,7 +694,7 @@ fireDueApprovalTimer appEnv = do
 -- Counted by scope rather than by session because this harness builds its
 -- 'MemoryEnv' with @sessionId = Nothing@ (see 'runFlowBody'), so there is no
 -- session to count under. The content compared against is what
--- @Shikigami.Flow.AtRiskCustomer@'s acknowledged note puts in its @summary@
+-- @Shikigami.Fixture.AcknowledgementFlow@'s acknowledged note puts in its @summary@
 -- field, which @Shikigami.Agent.Run.renderLearning@ stores verbatim.
 acknowledgedMemoryCount :: AppEnv -> IO Int
 acknowledgedMemoryCount appEnv =

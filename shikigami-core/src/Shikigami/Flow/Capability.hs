@@ -3,12 +3,12 @@
 
 module Shikigami.Flow.Capability
   ( Activity,
-    Memory,
+    Memory (..),
     MemoryEnv (..),
     MemoryQuery (..),
     RememberOptions (..),
     MemoryPriority (..),
-    Sink,
+    Sink (..),
     SinkEnv (..),
     currentActivity,
     defaultRememberOptions,

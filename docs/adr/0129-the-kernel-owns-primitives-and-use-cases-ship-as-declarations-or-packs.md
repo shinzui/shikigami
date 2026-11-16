@@ -52,7 +52,13 @@ declaration under `agents/` (a skill or a playbook) or as a *flow pack* outside 
 * **A pack flow is a body plus a pack-owned interpreter.** Only the interpreter may use IO; the
   body reaches the world through capabilities, as
   [ADR-13](0013-flow-bodies-reach-the-world-only-through-capabilities.md) requires of every
-  body.
+  body. The interpreter is given `IOE`, `Store`, the store's error channel and a read view of
+  the run (`FlowRunContext`); it never receives the job or the kernel's composition record.
+* **A flow's behavior under the kernel is declaration data.** The kernel does not know a flow
+  by name. A flow declares its decision mode (`StrictDecisions` or `AdvisoryDecisions`) in its
+  `FlowDef`, and the kernel selects the decision interpreter and the optional-slot rule from
+  that value. The representative check against the watchdog (plan 130, M2) added this rule;
+  the watchdog's remaining by-name branches leave the kernel with the watchdog (EP-6).
 * **Executables compose registries.** Stock role packages compose only the builtin pack and
   never depend on a pack. A *distribution* package, which has executables and no library,
   composes role packages and packs. The check refuses a stock stanza that names a pack.
@@ -60,7 +66,10 @@ declaration under `agents/` (a skill or a playbook) or as a *flow pack* outside 
   prefix and leave the core keiro specification with the flow, together with its `patch`
   gates. `just keiro-diff` cannot see pack labels; until keiro can declare workflow fragments
   from separate packages, each pack ships a golden inventory of its labels in its own tests,
-  and runs are drained before a flow moves (the ADR-27 pre-release exception).
+  and runs are drained before a flow moves (the ADR-27 pre-release exception). The inventory
+  is derived from a real keiro journal, because keiro has no store-free interpreter of its
+  workflow effect. Both gaps are raised with keiro as
+  `mori://shinzui/keiro/okf/improvement-requests/concepts/IR-61`.
 
 
 ## Alternatives rejected

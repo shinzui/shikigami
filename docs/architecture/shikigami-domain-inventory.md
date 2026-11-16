@@ -23,7 +23,7 @@ Paths in this section are relative to `shikigami-core/src/`.
 | `shikigami.worker-session` | `domain/shikigami/continuing-worker.keiro`; `Shikigami/WorkerSession/Workflow.hs`; generated ContinuingWorker runtime | Session suites cover one assignment per generation, durable idle wakes, original governed child mappings, missing-input repair and retained result acknowledgement after handoff. |
 | `shikigami.adaptive-delivery` | `domain/shikigami/adaptive-delivery.keiro`; `Shikigami/Coordination/Workflow.hs`; generated AdaptiveDelivery runtime | AdaptiveWorkflowSpec covers accepted typed decisions, finding-driven follow-up, pinned local descendants, direct work, model escalation and retained same-session handoff. WorkflowInputSpec preserves atomic fresh ingestion and historical patch branches. |
 | Workflow options | `Shikigami/Workflow/Versioning.hs` | One options constructor derives active patches from generated declarations. Preserve it even with an empty patch set; retain synthetic old/new workflow tests. |
-| Flow capabilities | `Shikigami/Flow/Capability.hs`, `Shikigami/Flow/Routing.hs`, `Shikigami/Flow/AtRiskCustomer.hs` | Journaled memory, routing decisions, approvals and sink labels execute within agent-run. The model-driven router is a Flow capability, not a Keiro process/router node. |
+| Flow capabilities | `Shikigami/Flow/Capability.hs`, `Shikigami/Flow/Routing.hs`, `Shikigami/Flow/Pack.hs` | Journaled memory, routing decisions, approvals and sink labels execute within agent-run. The model-driven router is a Flow capability, not a Keiro process/router node. |
 
 RunJob retains `AgentName`, `RunKey`, `DelegationDepth`, parent `SessionId` and
 `WorkflowId` values through orchestration. Its generated transport adapter renders
@@ -125,8 +125,8 @@ five names. Bounded resume stops on zero durable advances and
 exports all summary fields. Generated facts describe the current static workflow
 bodies; the synthetic versioning test preserves future patch-gate coverage.
 
-`Shikigami/Flow/Lifecycle/AtRiskCustomer.hs` is a diagram-only Keiki transducer
-with no emitted events. Its durable execution state belongs to the workflow journal.
+`FlowPack/Examples/Lifecycle/AtRiskCustomer.hs`, in `packs/flow-pack-examples`, is a
+diagram-only Keiki transducer with no emitted events. Its durable execution state belongs to the workflow journal.
 It does not become an aggregate merely because RunEvidence is now an aggregate.
 
 ## Evidence lifecycle and queries

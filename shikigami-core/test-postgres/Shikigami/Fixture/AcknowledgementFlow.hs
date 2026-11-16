@@ -1,9 +1,22 @@
 {-# LANGUAGE DataKinds #-}
 
-module Shikigami.Flow.AtRiskCustomer
+-- | A test-local flow that parks for an acknowledgement.
+--
+-- The durable flow tests exercise kernel machinery: acknowledgement parks and
+-- their deadlines, journaled recalls and writes, sink emission through the
+-- outbox. They need a flow to carry them, and a core test may not depend on a
+-- flow pack. This body is that vehicle. It began as a copy of the
+-- at-risk-customer teaching flow, which now lives in
+-- @packs/flow-pack-examples@; the two are free to diverge.
+--
+-- Its labels are test-local and appear in no workflow specification.
+module Shikigami.Fixture.AcknowledgementFlow
   ( RiskVerdict (..),
     RiskLevel (..),
-    atRiskCustomerFlow,
+    acknowledgementFlow,
+    acknowledgementFlowName,
+    fixturePack,
+    fixtureFlowRegistry,
     classifyRisk,
   )
 where
@@ -24,9 +37,13 @@ import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Approval (ApprovalChannel (ViaDanwa), ApprovalRequest (..))
 import Shikigami.Agent.Decl (Priority (High, Urgent), RecipientFrom (AreaOwner), SignalType (Alert), Sink (..))
 import Shikigami.Agent.DeclarationValue
+import Shikigami.Flow (DecisionMode (..), FlowDef (..), LifecycleDiagram (..))
 import Shikigami.Flow.Acknowledgement (Ack (..), Acknowledgement, awaitAck)
+import Shikigami.Flow.Builtin (builtinPack)
 import Shikigami.Flow.Capability (Activity, Memory, MemoryQuery (..), currentActivity, emitSignal, recall, remember)
 import Shikigami.Flow.Capability qualified as Capability
+import Shikigami.Flow.Pack (FlowPack (..), FlowRegistry, composeFlowRegistry, kernelCapabilityFlow, parseFlowPackName)
+import Shikigami.RuntimePolicy (DefaultModelRequirement (..))
 
 data RiskLevel = HighRisk | LowRisk deriving stock (Eq, Show)
 
@@ -48,17 +65,40 @@ data RiskVerdict = RiskVerdict
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
--- Lifecycle correspondence checked by @Shikigami.FlowLifecycleSpec@: a low
--- verdict is @ClassifyLowRisk@; a high verdict begins with @ClassifyHighRisk@;
--- an acknowledged wait adds @Acknowledge@; and a timeout adds
--- @DeadlineExpired@. The concrete declined result is not in the illustrative
--- transducer's command alphabet, so the conformance claim deliberately covers
--- only the three sequences that transducer models.
-atRiskCustomerFlow ::
+acknowledgementFlowName :: DeclarationCoordinate "flow"
+acknowledgementFlowName = declarationCoordinate "acknowledgement-fixture"
+
+-- | One pack holding the fixture flow, for tests that run it through the real
+-- agent-run workflow.
+fixturePack :: FlowPack
+fixturePack =
+  FlowPack
+    { name = either (error . show) id (parseFlowPackName "fixture"),
+      flows =
+        [ kernelCapabilityFlow
+            FlowDef
+              { name = acknowledgementFlowName,
+                lifecycle = LifecycleDiagram "stateDiagram-v2\n [*] --> Classified\n Classified --> AwaitingAck\n AwaitingAck --> [*]" [],
+                decisionSlots = [],
+                requiresDefaultModel = DefaultModelRequired,
+                decisionMode = StrictDecisions
+              }
+            acknowledgementFlow
+        ],
+      decisionPrograms = [],
+      retainedCodecs = [],
+      tasks = []
+    }
+
+-- | The builtin pack and the fixture pack, as a distribution would compose them.
+fixtureFlowRegistry :: FlowRegistry
+fixtureFlowRegistry = either (error . show) id (composeFlowRegistry [builtinPack, fixturePack])
+
+acknowledgementFlow ::
   (Workflow :> es, Memory :> es, Capability.Sink :> es, Activity :> es, Acknowledgement :> es) =>
   Value ->
   Eff es Value
-atRiskCustomerFlow payload = do
+acknowledgementFlow payload = do
   activity <- currentActivity
   prior <- recall (declarationCoordinate "risk-history") (riskQuery activity)
   verdict <- step (StepName "classify") (pure (classifyRisk activity prior payload))

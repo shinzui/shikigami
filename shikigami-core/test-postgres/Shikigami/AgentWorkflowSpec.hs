@@ -119,10 +119,10 @@ import Shikigami.Execution.ResourcesStore qualified as Resources
 import Shikigami.Execution.SelectionRuntime (assignmentIdFor)
 import Shikigami.Execution.Transcript qualified as Replay
 import Shikigami.ExecutionSelectionWorkflowSpec qualified as ExecutionFixture
+import Shikigami.Fixture.AcknowledgementFlow (acknowledgementFlowName, fixtureFlowRegistry)
 import Shikigami.Fixture.ExecutionIdentity (fixtureRootId)
 import Shikigami.Fixture.KawaStub (kawaDoorwayApplication)
 import Shikigami.Fixture.SinkHttp (testSinkHttp, testSinkHttpFor)
-import Shikigami.Flow.Builtin (builtinFlowRegistry)
 import Shikigami.Flow.Decision qualified as FlowDecision
 import Shikigami.Flow.Initiative qualified as FlowInitiative
 import Shikigami.Flow.Observe qualified as FlowObserve
@@ -2001,7 +2001,7 @@ testDepsWithAgents appEnv behaviorEnv hooks agentDecls =
     { appEnv,
       behaviorEnv,
       decisions = FlowDecision.emptyDecisionServices,
-      flows = builtinFlowRegistry,
+      flows = fixtureFlowRegistry,
       actionAuthority = allowAllForTests,
       capabilities = CapabilityProvider.emptyCapabilityRuntime,
       coordination = Nothing,
@@ -2044,7 +2044,7 @@ testDepsWithApprovalAndDeadline appEnv behaviorEnv hooks approval deadline =
     { appEnv,
       behaviorEnv,
       decisions = FlowDecision.emptyDecisionServices,
-      flows = builtinFlowRegistry,
+      flows = fixtureFlowRegistry,
       actionAuthority = allowAllForTests,
       capabilities = CapabilityProvider.emptyCapabilityRuntime,
       coordination = Nothing,
@@ -2779,7 +2779,7 @@ flowDecl =
     { name = fixtureAgentName "at-risk-customer",
       description = "workflow flow test agent",
       trigger = Event {eventType = declarationCoordinate ("test")},
-      behavior = Flow {name = declarationCoordinate ("at-risk-customer")},
+      behavior = Flow {name = acknowledgementFlowName},
       sinks = [],
       delegates = map fixtureAgentName [],
       delegationBudget = Nothing,
@@ -3283,7 +3283,7 @@ flowMemoryJob =
 
 -- | Seed the at-risk-customer agent's memory with an escalation on this
 -- subject, the way an earlier run of the flow would have
--- ('Shikigami.Flow.AtRiskCustomer.escalatedNote' is worded the same).
+-- (the fixture flow's @escalatedNote@ is worded the same).
 recordPriorEscalation :: AppEnv -> Text -> IO ()
 recordPriorEscalation appEnv ticket = do
   mid <- genMemoryId

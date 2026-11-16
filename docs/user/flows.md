@@ -1,7 +1,7 @@
 ---
 type: "Guide"
 title: "Flows"
-description: "Implement, register, and inspect durable lifecycle-backed Flow behaviors."
+description: "Implement durable Flow behaviors in a flow pack, compose them into an executable, and inspect them."
 docId: "DOC-6"
 tags: ["flows", "workflows"]
 generated:
@@ -24,8 +24,9 @@ Dhall still declares the agent:
 behavior = Schema.Behavior.Flow { name = "at-risk-customer" }
 ```
 
-The string names a compiled Haskell `FlowDef` in `Shikigami.Flow.flowRegistry`. The Dhall
-file owns identity, trigger shape, and any ordinary post-run sinks. The Haskell flow owns
+The string names a compiled Haskell flow that the executable was composed with. A flow
+ships in a *flow pack*, a library outside `shikigami-core`; see [Flow packs](#flow-packs).
+The Dhall file owns identity, trigger shape, and any ordinary post-run sinks. The Haskell flow owns
 control flow: journaled steps, waits, mid-run sink emissions, memory writes, and timeout or
 acknowledgement branches.
 
@@ -71,155 +72,209 @@ myFlow payload = do
       pure (toJSON verdict)
 ```
 
-`FlowEffects` is defined in `Shikigami.Flow`. It includes `Workflow`, `Memory`,
-`Sink`, `Activity`, `Acknowledgement`, `Delegate`, `Routing`, `Decision`, and the practice-review
-capabilities. It exposes neither `IOE` nor `Store`: external effects go through
-capability interpreters, which own their journal and authorization boundaries.
-A named `step` in a flow body can checkpoint a pure result.
+`FlowEffects` is the kernel's capability row. It includes `Workflow`, `Memory`, `Sink`,
+`Activity`, `Acknowledgement`, `Delegate`, `Routing` and `Decision`. It exposes neither
+`IOE` nor `Store`: external effects go through capability interpreters, which own their
+journal and authorization boundaries. A named `step` in a flow body can checkpoint a pure
+result.
 
-Memory and sink calls take explicit stable labels. Their resulting journal names
-are durable identifiers. Follow [Workflow versioning](../workflow-versioning.md)
-when adding or changing a flow, including its `domain/` declaration and gate checks.
+Memory and sink calls take explicit stable labels. Their resulting journal names are
+durable identifiers, and a pack owns the ones its flows journal: every label starts with
+the pack's name, and the pack pins them in a golden file. Follow
+[Workflow versioning](../workflow-versioning.md) before changing one.
 
-## Minimal Haskell example
+## Flow packs
 
-To add a new flow, create a Haskell module under `shikigami-core/src/Shikigami/Flow/`,
-expose it in `shikigami-core.cabal`, register it in `Shikigami.Flow.flowRegistry`, then
-point a Dhall manifest at the registered name.
+A flow pack is an ordinary Cabal library package that exports one `FlowPack` value. It
+depends on two small public components of `shikigami-core` and on no other Shikigami
+component:
 
-Example module (using the package's GHC2024 and `OverloadedRecordDot` settings):
+| Component | Module | Who may import it |
+| --- | --- | --- |
+| `shikigami-core:flow-sdk` | `Shikigami.Flow.Sdk`, `Shikigami.Flow.Sdk.Program` | A flow body and the pack value |
+| `shikigami-core:pack-sdk` | `Shikigami.Pack.Sdk` | A pack's interpreter only |
+
+You never edit `shikigami-core` to add a flow. `just kernel-fitness` fails the build if a
+use case is added there, and its message points back to this section.
+
+The pack in this repository is `packs/flow-pack-examples`, which owns the
+`at-risk-customer` flow. Its layout is the layout of every pack:
+
+```text
+packs/flow-pack-examples/
+  flow-pack-examples.cabal
+  bodies/FlowPack/Examples/Body/AtRiskCustomer.hs    the flow body
+  src/FlowPack/Examples.hs                           examplesPack :: FlowPack
+  src/FlowPack/Examples/Lifecycle/AtRiskCustomer.hs  the keiki lifecycle
+  agents/at-risk-customer-flow.dhall                 the agent that names the flow
+  test/Main.hs  test/golden/labels.txt               tests and the label inventory
+```
+
+Three rules shape it, and the fitness check enforces each:
+
+- **Bodies are a separate sublibrary.** `library bodies` depends on
+  `shikigami-core:flow-sdk` alone. GHC exposes only the modules of components a library
+  depends on, so a body cannot import `IOE` or the store. Adding `import Effectful (IOE)`
+  to a body fails the build with "member of the hidden package".
+- **The pack library depends on the SDK only.** It may add `shikigami-core:pack-sdk`, which
+  is where an interpreter finds `IOE`, `Store` and the run's read view. It holds no
+  executable.
+- **Packs and distributions are not named `shikigami-*`.** A pack is `flow-pack-<name>`
+  with modules under `FlowPack.<Name>`.
+
+### The pack value
+
+A body that needs kernel capabilities alone is wrapped with `kernelCapabilityFlow`:
 
 ```haskell
-module Shikigami.Flow.OwnerReminder
-  ( ownerReminderFlow,
-  )
-where
+module FlowPack.Examples (examplesPack) where
 
-import Data.Aeson (Value (..), object, (.=))
-import Data.Aeson.KeyMap qualified as KeyMap
-import Data.Text (Text)
-import Data.Text qualified as Text
-import Effectful (Eff, (:>))
-import Keiro.Workflow (StepName (..), Workflow, step)
-import Shikigami.Activity (ActivityEnvelope (..))
-import Shikigami.Agent.Decl qualified as Agent
-import Shikigami.Flow.Capability
-  ( Activity,
-    Memory,
-    MemoryQuery (..),
-    currentActivity,
-    emitSignal,
-    recall,
-    remember,
-  )
+import FlowPack.Examples.Body.AtRiskCustomer (atRiskCustomerFlow, atRiskCustomerFlowName)
+import Shikigami.Flow.Sdk
 
-import Shikigami.Flow.Capability qualified as Capability
+examplesPack :: FlowPack
+examplesPack =
+  FlowPack
+    { name = either (error . show) id (parseFlowPackName "examples"),
+      flows = [kernelCapabilityFlow atRiskCustomerDefinition atRiskCustomerFlow],
+      decisionPrograms = [],
+      retainedCodecs = [],
+      tasks = []
+    }
 
-ownerReminderFlow ::
-  (Workflow :> es, Memory :> es, Capability.Sink :> es, Activity :> es) =>
-  Value ->
-  Eff es Value
-ownerReminderFlow payload = do
-  activity <- currentActivity
-  prior <- recall "history" (MemoryQuery "recent owner reminder")
-  missing <- step (StepName "check-owner") (pure (missingOwner payload))
-  if not missing
-    then
-      pure
-        ( object
-            [ "status" .= ("ok" :: Text),
-              "priorReminderCount" .= length prior
-            ]
-        )
-    else do
-      let output =
-            object
-              [ "status" .= ("reminder-sent" :: Text),
-                "activityId" .= activity.activityId
-              ]
-      _ <- emitSignal "owner-reminder" ownerReminderSignal output
-      _ <- remember "owner-reminder" output
-      pure output
-
-missingOwner :: Value -> Bool
-missingOwner = \case
-  Object fields ->
-    case KeyMap.lookup "owner" fields of
-      Just (String owner) -> Text.null (Text.strip owner)
-      _ -> True
-  _ -> True
-
-ownerReminderSignal :: Agent.Sink
-ownerReminderSignal =
-  Agent.KizashiSignal
-    { Agent.source = "shinzui/shikigami",
-      Agent.signalType = Agent.Reminder,
-      Agent.priority = Agent.Normal,
-      Agent.importance = 50,
-      Agent.recipientFrom = Agent.AreaOwner,
-      Agent.defaultRecipient = Just "role_area_owner",
-      Agent.intentTemplate = "Assign an owner to the unowned item.",
-      Agent.extraContextTags = ["flow:owner-reminder"]
+atRiskCustomerDefinition :: FlowDef
+atRiskCustomerDefinition =
+  FlowDef
+    { name = atRiskCustomerFlowName,
+      lifecycle = LifecycleDiagram {mermaid = atRiskCustomerMermaid, validationWarnings = []},
+      decisionSlots = [],
+      requiresDefaultModel = DefaultModelRequired,
+      decisionMode = StrictDecisions
     }
 ```
 
-Then register it:
+Every `FlowDef` declares its decision slots, whether it needs the process's default model,
+and its decision mode. `StrictDecisions` holds a declaration to every slot. An
+`AdvisoryDecisions` flow treats a decision as an optional opinion: a slot whose models the
+declaration does not list is left out, and a decision that cannot be made is reported to
+the body instead of failing the run. See [Typed decisions in Flows](typed-decisions.md)
+and the [registration guide](../shikumi-flow-decisions.md) for programs, retained codecs
+and labels.
+
+### A pack with a capability of its own
+
+A flow that needs something the kernel does not provide defines its own capability. The
+effect and its operations live in `bodies`, and the body is typed
+`(FlowEffects es, Mine :> es) => Value -> Eff es Value`. The interpreter lives in the pack
+library and is the only place the pack may perform IO:
 
 ```haskell
-import Shikigami.Flow.OwnerReminder (ownerReminderFlow)
-
-flowRegistry :: [FlowDef]
-flowRegistry =
-  [ FlowDef
-      { name = "at-risk-customer",
-        decisionSlots = [],
-        requiresDefaultModel = True,
-        lifecycle = atRiskCustomerLifecycleDiagram,
-        run = atRiskCustomerFlow
-      },
-    FlowDef
-      { name = "owner-reminder",
-        decisionSlots = [],
-        requiresDefaultModel = True,
-        lifecycle =
-          LifecycleDiagram
-            { mermaid =
-                "stateDiagram-v2\n    [*] --> Observed\n    Observed --> Complete\n    Complete --> [*]\n",
-              validationWarnings = []
-            },
-        run = ownerReminderFlow
-      }
-  ]
+myFlow :: MyRuntime -> PackFlow
+myFlow runtime =
+  PackFlow
+    { definition = myDefinition,
+      run = \context payload -> runMine runtime context (myBody payload)
+    }
 ```
 
-For production flows, prefer a real keiki lifecycle module like
-`Shikigami.Flow.Lifecycle.AtRiskCustomer` instead of hand-written Mermaid text. The registry
-only needs the `LifecycleDiagram`, but keiki gives validation as well as rendering.
+`run` receives a `FlowRunContext`: the agent declaration, the resolved identity, the
+session, the workflow name and run id, the triggering activity, and the directory. The
+kernel installs its own interpreters around `run` and never names the pack's capability.
+Journal every external effect of an interpreter under a `step` whose label starts with the
+pack's name.
+
+### Composing a pack into an executable
+
+Stock executables compose the builtin pack and nothing else. A *distribution* is a package
+of executables whose `main` passes packs to a role's entry point.
+`packs/examples-distribution` is the whole of one:
+
+```haskell
+main :: IO ()
+main = runRole (agentRunRoleInfoWith [examplesPack])   -- shikigami-examples-agent-run
+
+main :: IO ()
+main = runAdminWith [examplesPack]                      -- shikigami-examples
+```
+
+The entry points are `agentRunRoleInfoWith` (`Shikigami.Agent.Command`),
+`workerRoleInfoWith` (`Shikigami.Workers.Command`) and `runAdminWith`
+(`Shikigami.Server.Command`). Composition happens once at process start. Two packs with the
+same name, flow name or task name refuse the start and name both owners, and a successful
+start logs `flow.registry.composed` with each pack and its flows.
+
+List what an executable was composed with, and run the flow:
+
+```sh
+cabal run shikigami-examples -- flows
+cabal run shikigami-examples-agent-run -- \
+  --agent packs/flow-pack-examples/agents/at-risk-customer-flow.dhall \
+  --payload '{"text":"we are going to cancel our plan"}'
+```
+
+```text
+builtin   watchdog-sweep     default-model=optional  slots=drift
+examples  at-risk-customer   default-model=required  slots=-
+{"event":"flow.selected","agent":"at-risk-customer","flow":"at-risk-customer","pack":"examples",...}
+```
+
+The stock `shikigami-agent-run` refuses the same manifest before it opens a session, and
+names the flows it has:
+
+```text
+agent-run: unknown flow at-risk-customer; registered flows: run-declared-tool, watchdog-sweep, ...
+```
+
+`shikigami validate` and the worker's boot check make the same refusal, so a manifest
+naming a flow of a pack the executable lacks never becomes a failed run per trigger.
+
+### The label inventory
+
+`just keiro-gate` checks the core workflow specification and cannot yet see a label a pack
+journals. Each pack therefore ships `test/golden/labels.txt`, the sorted list of every
+durable label its flows journal, and a test that derives the list by running each branch
+of each flow and compares. For the examples pack:
+
+```text
+emit-signal-examples-alert
+emit-signal-examples-escalate
+examples-classify
+flow-examples-await-ack
+recall-examples-risk-history
+remember-examples-acknowledged
+remember-examples-declined
+remember-examples-escalated
+```
+
+A label is either the pack's own (`examples-classify`) or a kernel capability prefix
+followed by the pack's key (`recall-examples-risk-history`). Changing the file is a change
+to a durable contract; treat it as [Workflow versioning](../workflow-versioning.md) treats
+a step rename.
 
 The matching Dhall manifest is small because the behavior body is compiled Haskell:
 
 ```dhall
-let Schema = ../../schema/Agent.dhall
+let Schema = ../../../schema/Agent.dhall
 
 in  Schema.Agent::{
-    , name = "owner-reminder"
-    , description = "Remind the area owner when an item has no owner."
+    , name = "at-risk-customer"
     , trigger =
         Schema.Trigger.Stream
           { match =
               { verb = None Text
               , source = None Text
-              , subjectType = Some "item"
-              , verbs = [ "item.observed" ]
+              , subjectType = Some "ticket"
+              , verbs = [ "ticket.received" ]
               }
           }
-    , behavior = Schema.Behavior.Flow { name = "owner-reminder" }
+    , behavior = Schema.Behavior.Flow { name = "at-risk-customer" }
     , sinks = [] : List Schema.Sink
     }
 ```
 
-That is the intended split: Haskell expresses "check, journal, maybe emit, remember"; Dhall
-expresses "this agent runs that compiled flow when this trigger matches."
+Use an empty `sinks` list when the flow emits all side effects at lifecycle points with
+`emitSignal`. Keep ordinary sinks in Dhall when the final returned JSON should be dispatched
+after the flow completes.
 
 ## Combinators
 
@@ -257,59 +312,13 @@ This is the point where Flow goes beyond Dhall: Dhall can name an agent, but it 
 express "suspend this run for 15 minutes, resume on either a human answer or timer, then
 choose a different branch."
 
-## Registering a flow
-
-Add the flow body and register it in `Shikigami.Flow.flowRegistry`:
-
-```haskell
-flowRegistry :: [FlowDef]
-flowRegistry =
-  [ FlowDef
-      { name = "my-flow"
-      , decisionSlots = []
-      , requiresDefaultModel = True
-      , lifecycle = myLifecycleDiagram
-      , run = myFlow
-      }
-  ]
-```
-
-The registry is a plain list. `FlowRuntime` supplies the approval environment and
-acknowledgement deadline to the interpreter; flow bodies do not close over those
-deployment values. Extend the existing registry instead of replacing its entries.
-
-Every `FlowDef` declares `decisionSlots` and `requiresDefaultModel`. The examples
-above keep the existing default-model admission check and have no decision slots.
-A decision-only Flow can set `requiresDefaultModel = False`; its finite slot
-inventory instead admits all selected model bindings before the first decision.
-Flows using Routing or PracticeReview keep the default-model check. See
-[Typed decisions in Flows](typed-decisions.md) and the
-[registration guide](../shikumi-flow-decisions.md) for static labels, program
-registration, retained codecs, and patch requirements.
-
-Then declare the agent in Dhall:
-
-```dhall
-let Schema = ../../schema/Agent.dhall
-
-in  Schema.Agent::{
-    , name = "my-flow-agent"
-    , trigger = Schema.Trigger.Stream { match = ... }
-    , behavior = Schema.Behavior.Flow { name = "my-flow" }
-    , sinks = [] : List Schema.Sink
-    }
-```
-
-Use an empty `sinks` list when the flow emits all side effects at lifecycle points with
-`emitSignal`. Keep ordinary sinks in Dhall when the final returned JSON should be dispatched
-after the flow completes.
-
 ## Lifecycle diagrams
 
-Each registered flow can expose a keiki lifecycle diagram. Render it with:
+Each flow carries a lifecycle diagram. Render it with an admin command composed with the
+flow's pack:
 
 ```sh
-cabal run shikigami -- render-lifecycle agents/detectors/at-risk-customer-flow.dhall
+cabal run shikigami-examples -- render-lifecycle packs/flow-pack-examples/agents/at-risk-customer-flow.dhall
 ```
 
 The `at-risk-customer` diagram is:
@@ -332,7 +341,7 @@ be caught before the flow ships.
 
 ## Delivered Flow guides
 
-These registered Flows have dedicated setup or operating guidance:
+These flows of the builtin pack have dedicated setup or operating guidance:
 
 | Flow | Guide | Admission boundary |
 | --- | --- | --- |
@@ -347,10 +356,11 @@ acceptance; autonomous funding and dispatch require a matching standing policy.
 
 ## At-risk customer
 
-The first registered flow is `at-risk-customer`, declared at:
+The teaching flow is `at-risk-customer`, owned by `packs/flow-pack-examples` and declared
+at:
 
 ```sh
-agents/detectors/at-risk-customer-flow.dhall
+packs/flow-pack-examples/agents/at-risk-customer-flow.dhall
 ```
 
 It classifies incoming ticket activity. Low-risk input returns a low-risk result and emits
@@ -360,5 +370,7 @@ either records the acknowledgement branch or escalates after the configured dead
 Validate the manifest with:
 
 ```sh
-cabal run shikigami -- validate agents/detectors/at-risk-customer-flow.dhall
+cabal run shikigami-examples -- validate packs/flow-pack-examples/agents/at-risk-customer-flow.dhall
 ```
+
+The stock `shikigami validate` refuses it, because the stock command composes no pack.

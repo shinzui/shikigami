@@ -6,6 +6,8 @@ packages:
   shikigami-migrations
   shikigami-server
   shikigami-workers
+  packs/flow-pack-examples
+  packs/examples-distribution
 
 -- keiro-dsl is the build-time specification toolchain, not a library this
 -- service links against. Listing it here makes `cabal run keiro-dsl -- ...`

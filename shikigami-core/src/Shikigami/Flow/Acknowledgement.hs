@@ -3,7 +3,7 @@
 
 module Shikigami.Flow.Acknowledgement
   ( Ack (..),
-    Acknowledgement,
+    Acknowledgement (..),
     ackFromDecision,
     awaitAck,
     awaitAckWithin,

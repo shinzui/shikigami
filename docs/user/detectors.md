@@ -21,7 +21,7 @@ executable examples and declarations for behavior that is not implemented yet.
 | --- | --- |
 | [stalled-intention.dhall](../../agents/detectors/stalled-intention.dhall) | Parses, but the runner rejects its `Deterministic` arm with `UnsupportedBehavior`. |
 | [at-risk-customer.dhall](../../agents/detectors/at-risk-customer.dhall) | Parses, but its `at-risk-customer` task is absent from the program registry and fails with `UnknownTask`. |
-| [at-risk-customer-flow.dhall](../../agents/detectors/at-risk-customer-flow.dhall) | Names the registered durable `at-risk-customer` Flow, with classification, alert, acknowledgement, and timeout branches. |
+| [at-risk-customer-flow.dhall](../../packs/flow-pack-examples/agents/at-risk-customer-flow.dhall) | Names the durable `at-risk-customer` Flow of the examples [flow pack](flows.md#flow-packs), with classification, alert, acknowledgement, and timeout branches. Run it with `shikigami-examples-agent-run`; the stock executables do not have the flow. |
 
 The program declaration's `preferEnrichment`, `grounding`, and `enabledBy` fields
 are not interpreted by the dispatcher. Setting `TOMOSHIBI_ENABLE_LLM_DETECTORS`

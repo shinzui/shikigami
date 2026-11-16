@@ -1,7 +1,7 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE QualifiedDo #-}
 
-module Shikigami.Flow.Lifecycle.AtRiskCustomer
+module FlowPack.Examples.Lifecycle.AtRiskCustomer
   ( AtRiskCustomerCommand (..),
     AtRiskCustomerLifecycle,
     AtRiskCustomerState (..),

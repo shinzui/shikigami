@@ -142,17 +142,3 @@ stateDiagram-v2
     RunEvidenceIncomplete --> [*]
     RunEvidenceFailed --> [*]
 ```
-
-## At-risk customer (diagram only)
-
-```mermaid
-stateDiagram-v2
-    [*] --> Observed
-    Observed --> SettledLow : ClassifyLowRisk / ε<br/>u: (keep)<br/>g: ClassifyLowRisk
-    Observed --> AwaitingAck : ClassifyHighRisk / ε<br/>u: (keep)<br/>g: ClassifyHighRisk
-    AwaitingAck --> Acknowledged : Acknowledge / ε<br/>u: (keep)<br/>g: Acknowledge
-    AwaitingAck --> Escalated : DeadlineExpired / ε<br/>u: (keep)<br/>g: DeadlineExpired
-    SettledLow --> [*]
-    Acknowledged --> [*]
-    Escalated --> [*]
-```

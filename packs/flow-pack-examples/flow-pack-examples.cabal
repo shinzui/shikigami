@@ -1,0 +1,96 @@
+cabal-version: 3.4
+name: flow-pack-examples
+version: 0.1.0.0
+synopsis: The Shikigami teaching flows, as a flow pack
+description:
+  A flow pack is an ordinary library that depends on the two SDK components
+  of shikigami-core and exports one FlowPack value. This one owns the
+  at-risk-customer flow. See docs/user/flows.md.
+
+license: BSD-3-Clause
+build-type: Simple
+extra-source-files: test/golden/labels.txt
+
+common common
+  default-language: GHC2024
+  default-extensions:
+    BlockArguments
+    DeriveAnyClass
+    DuplicateRecordFields
+    MultilineStrings
+    NoFieldSelectors
+    OverloadedLabels
+    OverloadedRecordDot
+    OverloadedStrings
+
+  ghc-options:
+    -Wall
+    -Werror=missing-fields
+    -Wcompat
+    -Widentities
+    -Wincomplete-record-updates
+    -Wincomplete-uni-patterns
+    -Wpartial-fields
+    -Wredundant-constraints
+
+-- Flow bodies. This component depends on shikigami-core:flow-sdk and on no
+-- other Shikigami component, so a body cannot import IOE or the store: the
+-- compiler enforces that a flow reaches the world only through capabilities.
+library bodies
+  import: common
+  visibility: private
+  hs-source-dirs: bodies
+  exposed-modules: FlowPack.Examples.Body.AtRiskCustomer
+  build-depends:
+    aeson,
+    base,
+    kioku-api,
+    shikigami-core:flow-sdk,
+    text,
+
+-- The pack value and whatever its interpreters need. It may depend on the
+-- two SDK components and on no other Shikigami component.
+library
+  import: common
+  hs-source-dirs: src
+  exposed-modules:
+    FlowPack.Examples
+    FlowPack.Examples.Lifecycle.AtRiskCustomer
+
+  build-depends:
+    base,
+    flow-pack-examples:bodies,
+    keiki,
+    shikigami-core:flow-sdk,
+    shikigami-core:pack-sdk,
+    text,
+
+test-suite flow-pack-examples-test
+  import: common
+  type: exitcode-stdio-1.0
+  hs-source-dirs: test
+  main-is: Main.hs
+  ghc-options:
+    -threaded
+    -rtsopts
+    -with-rtsopts=-N
+
+  build-depends:
+    aeson,
+    base,
+    containers,
+    effectful-core,
+    filepath,
+    flow-pack-examples,
+    flow-pack-examples:bodies,
+    keiki,
+    keiro,
+    kioku-api,
+    kiroku-store,
+    shibuya-core,
+    shikigami-core,
+    shikigami-migrations:test-support,
+    tasty,
+    tasty-hunit,
+    text,
+    time,

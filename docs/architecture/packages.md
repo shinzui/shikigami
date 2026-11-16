@@ -91,6 +91,47 @@ test suites in any package may depend on the public `shikigami-migrations:test-s
 sublibrary; production libraries may not.
 
 
+## Flow packs
+
+[ADR 0129](../adr/0129-the-kernel-owns-primitives-and-use-cases-ship-as-declarations-or-packs.md)
+moves the extension point out of `shikigami-core`. A use case that needs Haskell ships as a
+*flow pack*, and a *distribution* composes packs into executables. Neither is one of the seven
+packages, and neither takes the `shikigami-` prefix. They live under `packs/` or in another
+repository. [Flows](../user/flows.md#flow-packs) walks through writing one.
+
+`shikigami-core` exposes two public sublibraries for them, both re-exporting facade modules
+of the main library:
+
+| Component | Re-exports | Imported by |
+| --- | --- | --- |
+| `shikigami-core:flow-sdk` | `Shikigami.Flow.Sdk`, `Shikigami.Flow.Sdk.Program` | flow bodies and the pack value |
+| `shikigami-core:pack-sdk` | `Shikigami.Pack.Sdk` | a pack's interpreter |
+
+The legal arrows are:
+
+```text
+pack bodies sublibrary -> shikigami-core:flow-sdk
+pack library           -> shikigami-core:flow-sdk, shikigami-core:pack-sdk, its own bodies
+distribution           -> packs, and the role packages whose entry points it calls
+```
+
+None of the seven packages may depend on a pack or a distribution. A pack holds a library, a
+`bodies` sublibrary and a test suite, and no executable. A distribution holds executables and
+no library; each `main` passes its packs to `agentRunRoleInfoWith`, `workerRoleInfoWith` or
+`runAdminWith`. A pack's test suite may depend on `shikigami-core` and on
+`shikigami-migrations:test-support`; its libraries may not.
+
+The stock executables compose only the builtin pack (`Shikigami.Flow.Builtin`), the flows
+still compiled into the core, so the frozen Nix closure of
+[ADR-39](../adr/0039-deployment-roles-share-a-frozen-cabal-source-closure.md) and the light
+one-off package of ADR-3 are unchanged. `packs/flow-pack-examples` and
+`packs/examples-distribution` are the first pair.
+
+`just kernel-fitness` enforces these arrows, pins both stanzas' `reexported-modules` and each
+facade's export list (`shikigami-core/test/golden/sdk/`), and refuses a new use-case namespace
+in the core.
+
+
 ## Optional administrative serving component
 
 Plan 106 and [ADR-71](../adr/0071-first-release-inspection-is-an-isolated-administrative-runtime.md)

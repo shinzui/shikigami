@@ -1,0 +1,38 @@
+cabal-version: 3.4
+name: examples-distribution
+version: 0.1.0.0
+synopsis: Shikigami executables composed with the examples flow pack
+description:
+  A distribution holds executables and no library. Each main passes flow
+  packs to a role's entry point; nothing else distinguishes it from the
+  stock executable of that role. See docs/user/flows.md.
+
+license: BSD-3-Clause
+build-type: Simple
+
+common common
+  default-language: GHC2024
+  ghc-options:
+    -Wall
+    -Wcompat
+    -threaded
+    -rtsopts
+    -with-rtsopts=-N
+
+executable shikigami-examples-agent-run
+  import: common
+  hs-source-dirs: app/agent-run
+  main-is: Main.hs
+  build-depends:
+    base,
+    flow-pack-examples,
+    shikigami-agent,
+
+executable shikigami-examples
+  import: common
+  hs-source-dirs: app/admin
+  main-is: Main.hs
+  build-depends:
+    base,
+    flow-pack-examples,
+    shikigami-server,

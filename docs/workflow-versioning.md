@@ -98,6 +98,17 @@ JSON admission under the unused first-release policy. No old invalid-value
 reader is introduced, and native helper references do not certify opaque data.
 
 
+[ADR 0129](adr/0129-the-kernel-owns-primitives-and-use-cases-ship-as-declarations-or-packs.md)
+moves the at-risk-customer teaching flow into `packs/flow-pack-examples` (plan 130, M2). A pack
+owns its labels, so `step classify`, `step recall-risk-history`, `step remember-acknowledged`,
+`step remember-declined` and `step remember-escalated` leave the AgentRun declaration, and the
+moved body journals `examples-`prefixed labels pinned by the pack's golden inventory. The five
+removals are intentional under this unused first-release exception; the retained native finding
+is in plan 130. No journal in the development database has ever recorded `classify`. A pack's
+labels are outside `just keiro-gate` until keiro can declare workflow fragments from separate
+packages (`mori://shinzui/keiro/okf/improvement-requests/concepts/IR-61`).
+
+
 ## What a durable workflow is, and why editing one is not like editing ordinary code
 
 Shikigami runs each agent run and each Danwa conversation as a **durable

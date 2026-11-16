@@ -8,7 +8,6 @@
 module Shikigami.Flow.Builtin
   ( builtinPack,
     builtinFlowRegistry,
-    atRiskCustomerLifecycleDiagram,
   )
 where
 
@@ -30,11 +29,9 @@ import Shikigami.Coordination.Decision (adaptiveSlots)
 import Shikigami.DeclaredTool.Workflow qualified as DeclaredToolWorkflow
 import Shikigami.Flow (DecisionMode (..), FlowDef (..), FlowEffects, LifecycleDiagram (..))
 import Shikigami.Flow.AdaptiveDelivery (adaptiveDelivery)
-import Shikigami.Flow.AtRiskCustomer (atRiskCustomerFlow)
 import Shikigami.Flow.DeclaredTool qualified as DeclaredTool
 import Shikigami.Flow.Delegate qualified as Delegate
 import Shikigami.Flow.Initiative (proposeWork, proposeWorkFlowName, proposeWorkSlots)
-import Shikigami.Flow.Lifecycle.AtRiskCustomer (atRiskCustomerMermaid, atRiskCustomerValidationWarnings)
 import Shikigami.Flow.ObjectiveExample (objectiveExample)
 import Shikigami.Flow.OpenTelemetryPracticeReview
   ( opentelemetryPracticeReviewFlow,
@@ -50,13 +47,6 @@ import Shikigami.Program.Decision.Registry (builtinDecisionPrograms, builtinReta
 import Shikigami.Program.Registry (programRegistry)
 import Shikigami.Router.Decision (RouteDecision (..), RouteOutcome (..), RouteSelection (..))
 import Shikigami.RuntimePolicy
-
-atRiskCustomerLifecycleDiagram :: LifecycleDiagram
-atRiskCustomerLifecycleDiagram =
-  LifecycleDiagram
-    { mermaid = atRiskCustomerMermaid,
-      validationWarnings = Text.pack . show <$> atRiskCustomerValidationWarnings
-    }
 
 -- | The one pack the stock roles compose.
 builtinPack :: FlowPack
@@ -134,15 +124,6 @@ builtinFlows =
           lifecycle = LifecycleDiagram "flowchart LR\n Ticket --> Judgment --> Result" []
         }
       shikumiJudgmentExample,
-    kernelCapabilityFlow
-      FlowDef
-        { name = declarationCoordinate "at-risk-customer",
-          decisionSlots = [],
-          requiresDefaultModel = DefaultModelRequired,
-          decisionMode = StrictDecisions,
-          lifecycle = atRiskCustomerLifecycleDiagram
-        }
-      atRiskCustomerFlow,
     kernelCapabilityFlow
       FlowDef
         { name = declarationCoordinate "delegation-proof",

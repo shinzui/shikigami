@@ -41,7 +41,6 @@ import Shikigami.Behavior.Error (RunError (..))
 import Shikigami.Behavior.Input (BehaviorInput (..), memoryContentText, triggerOnly)
 import Shikigami.Behavior.Run (defaultToolTurnLimit, newBehaviorEnv, runBehavior, runProgramTask)
 import Shikigami.Behavior.Skill (SkillDir (..), runSkillWith)
-import Shikigami.Flow.AtRiskCustomer (RiskLevel (..), RiskVerdict (..), classifyRisk)
 import Shikigami.Memory.Scope (agentScope)
 import Shikigami.Program.Registry (codeResearcherTask, webResearcherTask)
 import Shikigami.Program.Runtime (newProgramRuntime)
@@ -59,58 +58,8 @@ tests =
     "behavior input"
     [ skillContextTests,
       programArgumentTests,
-      recallQueryTests,
-      classificationTests
+      recallQueryTests
     ]
-
--- ── Memory that changes a decision ──────────────────────────────────────────
-
--- | The at-risk-customer flow is the repository's teaching example, and it
--- recalled prior memories and then discarded them (@classifyRisk activity
--- _prior input@). These are the pure half of the proof that it no longer does;
--- the durable half is in "Shikigami.AgentWorkflowSpec".
-classificationTests :: TestTree
-classificationTests =
-  testGroup
-    "a recalled escalation changes the at-risk verdict"
-    [ testCase "a calm message about a previously escalated subject is high risk" do
-        let verdict = classifyRisk (activityFor "tkt_42") [escalationMemory "tkt_42"] calmPayload
-        (.level) verdict @?= HighRisk
-        (.rationale) verdict @?= "prior escalation on this subject: customer relationship at risk",
-      testCase "the same message with nothing recalled is unchanged" do
-        let verdict = classifyRisk (activityFor "tkt_42") [] calmPayload
-        (.level) verdict @?= LowRisk
-        (.rationale) verdict @?= "no high-risk signal detected",
-      -- Memory about a different customer is not evidence about this one.
-      testCase "an escalation on another subject does not carry over" do
-        let verdict = classifyRisk (activityFor "tkt_42") [escalationMemory "tkt_99"] calmPayload
-        (.level) verdict @?= LowRisk,
-      testCase "a memory that merely mentions the subject is not an escalation" do
-        let remembered = memoryWith "tkt_42 asked about invoicing"
-            verdict = classifyRisk (activityFor "tkt_42") [remembered] calmPayload
-        (.level) verdict @?= LowRisk
-    ]
-
-calmPayload :: Value
-calmPayload = object ["text" .= ("customer says thanks, all good" :: Text)]
-
-activityFor :: Text -> ActivityEnvelope
-activityFor ticket =
-  ActivityEnvelope
-    { activityId = activityCoordinate ("act_" <> ticket),
-      occurredAt = activityCoordinate ("2026-07-15T12:00:00Z"),
-      source = activityCoordinate ("shinzui/shikigami"),
-      actor = Actor {kind = either (error . show) id (parseActorKind ("human")), id = activityCoordinate ("someone"), session = fmap activityCoordinate (Nothing)},
-      subject = Subject {kind = activityCoordinate ("ticket"), subjectId = activityCoordinate (ticket)},
-      verb = activityCoordinate ("ticket.updated"),
-      payload = object [],
-      contextRefs = [],
-      idempotencyKey = activityCoordinate ("act_" <> ticket)
-    }
-
-escalationMemory :: Text -> MemoryRecord
-escalationMemory ticket =
-  memoryWith (ticket <> " escalated after acknowledgement timeout")
 
 -- ── What a run recalls against ──────────────────────────────────────────────
 

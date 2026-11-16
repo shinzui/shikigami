@@ -186,7 +186,6 @@ library
     Shikigami.Flow
     Shikigami.Flow.Acknowledgement
     Shikigami.Flow.AdaptiveDelivery
-    Shikigami.Flow.AtRiskCustomer
     Shikigami.Flow.Builtin
     Shikigami.Flow.Capability
     Shikigami.Flow.CodingAgent
@@ -194,7 +193,6 @@ library
     Shikigami.Flow.DeclaredTool
     Shikigami.Flow.Delegate
     Shikigami.Flow.Initiative
-    Shikigami.Flow.Lifecycle.AtRiskCustomer
     Shikigami.Flow.ObjectiveExample
     Shikigami.Flow.Objectives
     Shikigami.Flow.Observe
@@ -865,6 +863,7 @@ test-suite shikigami-core-postgres-test
     Shikigami.ExecutionResourcesSpec
     Shikigami.ExecutionSelectionWorkflowSpec
     Shikigami.ExecutionTranscriptSpec
+    Shikigami.Fixture.AcknowledgementFlow
     Shikigami.Fixture.ExecutionIdentity
     Shikigami.Fixture.KawaStub
     Shikigami.Fixture.SinkHttp
