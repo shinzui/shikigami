@@ -705,6 +705,7 @@ test-suite shikigami-core-test
     Shikigami.InitiativeValueSpec
     Shikigami.KanmonClientSpec
     Shikigami.KeiroSpecificationSpec
+    Shikigami.KernelBoundarySpec
     Shikigami.LocalHostSpec
     Shikigami.LocalOperatorSpec
     Shikigami.LogSpec

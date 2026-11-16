@@ -281,6 +281,12 @@ haskell-conventions:
     python3 tools/style/check_haskell.py
     python3 -m unittest discover -s tools/style -v
 
+# The kernel fitness check (docs/adr/0129): every top-level shikigami-core
+# namespace is classified in tools/style/module-ownership.json, the leaving
+# groups are frozen, and packages under packs/ depend only on the SDK.
+kernel-fitness:
+    cabal test shikigami-core-test --test-options='-p "kernel boundary"'
+
 # Heni is installed separately; run this recipe inside the development shell.
 mutation-tests heni output:
     cabal build shikigami-core-test

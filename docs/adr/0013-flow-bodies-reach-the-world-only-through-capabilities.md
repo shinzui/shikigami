@@ -139,3 +139,6 @@ change. The deprecation warning is tolerated meanwhile.
   declaring a new memory label costs.
 * `docs/improvement-requests/key-agent-continuity-by-meibo-principal.md` — IR-9,
   which owns the move off Kioku's deprecated write wrappers.
+* Amended by [ADR 0129](0129-the-kernel-owns-primitives-and-use-cases-ship-as-declarations-or-packs.md)
+  (2026-11-16) — a pack flow is a body that depends on `shikigami-core:flow-sdk` alone plus a
+  pack-owned interpreter, the only part that may use IO.

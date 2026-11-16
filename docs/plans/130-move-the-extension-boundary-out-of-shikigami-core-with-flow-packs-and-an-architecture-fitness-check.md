@@ -27,6 +27,11 @@ provenance:
       at: 2026-11-15T15:01:14Z
       mode: "update"
       note: "Adaptive-delivery coordinator stays in the kernel (user decision 2026-11-15)"
+    - model: "claude-opus-5-5"
+      harness: "claude-code"
+      at: 2026-11-16T03:48:14Z
+      mode: "implement"
+      note: "M1: kernel fitness check, kernel policy in module-ownership.json, ADR 0129"
 ---
 
 # Move the extension boundary out of shikigami-core with flow packs and an architecture fitness check
@@ -77,11 +82,20 @@ again.
 
 ## Progress
 
-- [ ] M1. Kernel fitness check. `tools/style/module-ownership.json` gains a closed `kernel`
+- [x] M1 (2026-11-16). Kernel fitness check. `tools/style/module-ownership.json` gains a closed `kernel`
   section that classifies every top-level `shikigami-core` namespace as `kernel`, `flow-pack`
   or `kikan-binding` and freezes the modules of non-kernel namespaces. `PackageArchitectureSpec` fails
   on the planted `Shikigami.Campaign` namespace and passes after its removal. The new ADR is
   written.
+  - Evidence: 72 namespaces (68 kernel; Initiative, PracticeReview and Watchdog `flow-pack`;
+    DanwaConversation `kikan-binding`) and 57 frozen modules. `just kernel-fitness` runs the six
+    `kernel boundary` tests in `shikigami-core/test/Shikigami/KernelBoundarySpec.hs`. With
+    `shikigami-core/src/Shikigami/Campaign/Plan.hs` planted it exits 1 and prints
+    "shikigami-core/src/Shikigami/Campaign/Plan.hs: Shikigami.Campaign is not a kernel
+    namespace." followed by the declaration and pack routes; after removing the file it exits 0.
+    The empty `Id` and `Store` directories are gone. ADR
+    [0129](../adr/0129-the-kernel-owns-primitives-and-use-cases-ship-as-declarations-or-packs.md)
+    is written and amends ADR-75 and ADR-13.
 - [ ] M2. The pack API, both SDK components and the first in-repository pack. Flows (a body
   plus a pack-owned interpreter), decision programs and ShikumiProgram tasks are composed at
   executable start. The representative check passes first: the watchdog flow body compiles in
@@ -131,7 +145,29 @@ again.
   modules. The two SDK components are the first reviewed surface.
 
 
+- Observation: Ten namespaces were added to the core after this plan was drafted, all by
+  MasterPlan 22's kernel work: Authority, CodingAgent, CodingAgentStep, DeclaredTool,
+  DeclaredToolStep, Output, Playbook, Process, Record and Trust. They are classified `kernel`.
+  The plan's list also named an `Action` root, which no longer exists (the action vocabulary is
+  `Shikigami.Authority`, ADR 0123), so the Kikan-En authorizer modules frozen here are
+  `Shikigami.Authority.KikanEn{,.Config,.Settings}`.
+  Evidence: `ls shikigami-core/src/Shikigami` on 2026-11-16.
+- Observation: Two Kikan modules are mixed and cannot be frozen whole: `Shikigami.Directory`
+  holds the Meibo directory source and `Shikigami.Sink.Authorization` builds the Kikan-En
+  authorizer. EP-10 must split them; ADR 0129 records it.
+
 ## Decision Log
+
+- Decision: The fitness check is its own test module, `Shikigami.KernelBoundarySpec`, which
+  reuses the `.cabal` parser that `PackageArchitectureSpec` now exports, instead of a group
+  inside that module. Beyond the plan's violations it reports `UnreviewedKernelRoot` (the
+  consistency assertion against `domainRoots` and the composition roots) and
+  `PackWithoutTests`, and `EmptyNamespace` applies to every status so the closed map stays
+  exact. The policy also records `sourceRoot`, and ADR 0129 takes the next free number (0123 is
+  the kernel action vocabulary).
+  Rationale: the rules are a pure function tested on synthetic inputs; a separate module keeps
+  `PackageArchitectureSpec` about the seven packages.
+  Date: 2026-11-16
 
 - Decision: Stock role packages never depend on a pack. Each role library gains a
   `...With :: [FlowPack] -> ...` entry point. Only a *distribution* package composes packs: it
@@ -392,7 +428,7 @@ join a frozen group; nothing moves in M1.
 ```json
 "kernel": {
   "package": "shikigami-core",
-  "decision": "docs/adr/0123-the-kernel-owns-primitives-and-use-cases-ship-as-declarations-or-packs.md",
+  "decision": "docs/adr/0129-the-kernel-owns-primitives-and-use-cases-ship-as-declarations-or-packs.md",
   "namespaces": { "Agent": "kernel", "Mandate": "kernel", "Watchdog": "flow-pack", "DanwaConversation": "kikan-binding" },
   "frozenModules": ["Shikigami.Flow.AtRiskCustomer", "Shikigami.Watchdog.Sweep", "Shikigami.Sink.KawaClient"],
   "sdkModules": {
@@ -461,7 +497,7 @@ depend on both a role package and a pack. Fifth, no package under `packs/` is na
 or is a composition root, so the two lists cannot drift apart. Add a
 `just kernel-fitness` recipe that runs the group.
 
-Also in M1, write the ADR, `docs/adr/0123-the-kernel-owns-primitives-and-use-cases-ship-as-declarations-or-packs.md`.
+Also in M1, write the ADR, `docs/adr/0129-the-kernel-owns-primitives-and-use-cases-ship-as-declarations-or-packs.md`.
 Use the next unused number if another MasterPlan 22 child has taken 0123. It states that the
 kernel owns primitives; that use cases ship as declarations or out-of-core packs; that a pack
 depends only on `flow-sdk` and `pack-sdk`; that a pack flow is a body plus a pack-owned

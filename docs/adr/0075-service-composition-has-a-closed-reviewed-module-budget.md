@@ -122,6 +122,10 @@ add arbitrary composition behavior.
 
 ## References
 
+* Amended by [ADR 0129](0129-the-kernel-owns-primitives-and-use-cases-ship-as-declarations-or-packs.md)
+  (2026-11-16) — the `kernel` section of `module-ownership.json` classifies every
+  `shikigami-core` namespace and freezes the leaving ones, a second check beside this budget.
+
 [Package architecture](../architecture/packages.md),
 [ADR-3](0003-a-seventh-package-keeps-one-off-agent-runs-light.md),
 [ADR-32](0032-the-migration-cli-keeps-a-dedicated-configuration-boundary.md),

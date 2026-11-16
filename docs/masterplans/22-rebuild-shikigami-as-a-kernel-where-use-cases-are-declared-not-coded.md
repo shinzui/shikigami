@@ -387,7 +387,7 @@ rule.
 | EP-2 | Run Claude Code and Codex as durable harness workers inside agent runs | [docs/plans/127-run-claude-code-and-codex-as-durable-harness-workers-inside-agent-runs.md](../plans/127-run-claude-code-and-codex-as-durable-harness-workers-inside-agent-runs.md) | EP-1 | None | Complete |
 | EP-3 | Let agents declare CLI tools and MCP servers with authority attached to the declaration | [docs/plans/128-let-agents-declare-cli-tools-and-mcp-servers-with-authority-attached-to-the-declaration.md](../plans/128-let-agents-declare-cli-tools-and-mcp-servers-with-authority-attached-to-the-declaration.md) | EP-1; EP-2 M1 (for M3); EP-2 M2 (for M4) | None | Complete |
 | EP-4 | Execute Dhall-declared playbooks with fan-out, approval gates, and learning capture | [docs/plans/129-execute-dhall-declared-playbooks-with-fan-out-approval-gates-and-learning-capture.md](../plans/129-execute-dhall-declared-playbooks-with-fan-out-approval-gates-and-learning-capture.md) | EP-2; EP-8 M2 (for M2); EP-3 M4 (for M4) | EP-3 | Complete |
-| EP-5 | Move the extension boundary out of shikigami-core with flow packs and an architecture fitness check | [docs/plans/130-move-the-extension-boundary-out-of-shikigami-core-with-flow-packs-and-an-architecture-fitness-check.md](../plans/130-move-the-extension-boundary-out-of-shikigami-core-with-flow-packs-and-an-architecture-fitness-check.md) | None | None | Not Started |
+| EP-5 | Move the extension boundary out of shikigami-core with flow packs and an architecture fitness check | [docs/plans/130-move-the-extension-boundary-out-of-shikigami-core-with-flow-packs-and-an-architecture-fitness-check.md](../plans/130-move-the-extension-boundary-out-of-shikigami-core-with-flow-packs-and-an-architecture-fitness-check.md) | None | None | In Progress |
 | EP-6 | Shrink shikigami-core to the kernel by moving or retiring use-case subsystems | [docs/plans/131-shrink-shikigami-core-to-the-kernel-by-moving-or-retiring-use-case-subsystems.md](../plans/131-shrink-shikigami-core-to-the-kernel-by-moving-or-retiring-use-case-subsystems.md) | EP-5 | None | Not Started |
 | EP-7 | Modernize the keiro services with a declared campaign playbook | [docs/plans/132-modernize-the-keiro-services-with-a-declared-campaign-playbook.md](../plans/132-modernize-the-keiro-services-with-a-declared-campaign-playbook.md) | EP-3, EP-4 | EP-5 | In Progress |
 | EP-8 | Give the kernel its own action, record, output, approval and trigger contracts with local adapters | [docs/plans/133-give-the-kernel-its-own-action-record-output-approval-and-trigger-contracts-with-local-adapters.md](../plans/133-give-the-kernel-its-own-action-record-output-approval-and-trigger-contracts-with-local-adapters.md) | EP-1 (for M2 and M3) | None | In Progress |
@@ -924,7 +924,8 @@ untested behavior was checked in minutes with a fixture bundle (`build-repair`),
 and fixed two kernel defects (FRIC-78, FRIC-79). EP-7 M2's acceptance (a full gated pilot)
 is not met, and the campaign's shape needs fewer gates and steps before koyomi. EP-9 is complete: a routine agent is one short file, `shikigami-local
 run` runs it with one confirmation, and `shikigami-local up` runs scheduled ones locally (the
-worker still composes local-operator ports only for coding agents; Surprises). Stage 1 (the pilot) ends at
+worker still composes local-operator ports only for coding agents; Surprises). EP-5 M1 is accepted (ADR 0129): the kernel fitness check classifies every core namespace,
+freezes the leaving groups and steers a new use-case namespace to a declaration or a pack. Stage 1 (the pilot) ends at
 the declaration baseline, and stage 2 at the kernel baseline.
 
 - [ ] Architectural acceptance: the keiro modernization campaign runs for real on at least

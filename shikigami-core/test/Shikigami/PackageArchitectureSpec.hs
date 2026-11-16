@@ -19,7 +19,18 @@
 -- The parser fails loudly rather than silently returning nothing: a package whose
 -- library stanza yields no dependencies at all is treated as a parse failure,
 -- because "no forbidden dependencies found" would otherwise be trivially true.
-module Shikigami.PackageArchitectureSpec (tests) where
+module Shikigami.PackageArchitectureSpec
+  ( tests,
+    Stanza (..),
+    parseStanzas,
+    cabalFieldEntries,
+    haskellSources,
+    expectedPackages,
+    forbiddenInLightPackages,
+    cabalPathIn,
+    repositoryRoot,
+  )
+where
 
 import Control.Lens ((&), (.~))
 import Control.Monad (filterM)
