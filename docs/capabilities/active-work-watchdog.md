@@ -44,12 +44,16 @@ cites accepted metadata. Independent per-tick roots fund its decisions even when
 observed roots are stopped. Trusted associations choose notice destinations.
 
 Scoped read-only commands page the ledger and report overdue completions. An
-independent worker sampler exports completion age; fixed-tag counters report
-runtime sweep, finding and refusal callbacks.
+independent worker sampler exports completion age as the pack gauge `sweep.age` on
+`shikigami.pack.gauges`; sweep, finding and refusal events are counted on
+`shikigami.pack.events` with `pack=watchdog`.
 
 ## Adopt
 
-Follow the [operations guide](../operations/watchdog.md) and
+The capability ships as the flow pack `packs/flow-pack-watchdog` and runs from the
+`kikan-shikigami` distribution (`kikan-shikigami-scheduler`, `kikan-shikigami-worker`,
+`kikan-shikigami watchdog`); the stock executables do not offer it and refuse the `watchdog`
+key. Follow the [operations guide](../operations/watchdog.md) and
 [notice guide](../user/watchdog.md). Configure the verified principal, schedule,
 observation scope/windows, operator allowance, model binding and sink/action grants.
 

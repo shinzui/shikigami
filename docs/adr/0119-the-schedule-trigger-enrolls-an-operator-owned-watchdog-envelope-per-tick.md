@@ -38,3 +38,10 @@ retain their existing behavior. Stream, event, delegated and one-off watchdog in
 not gain this schedule allowance. Deploy the resource owner and accounting support before
 enabling the schedule and its operator configuration; actual provider attempts remain
 conservatively accounted under [ADR 0051](0051-resource-roots-own-conservative-reservations-and-actual-attempts.md).
+
+Code ownership (2026-11-16, [ADR 0130](0130-use-case-subsystems-leave-the-kernel-by-recorded-disposition.md)):
+the scheduler no longer knows the watchdog. A pack's schedule hook answers a due tick with an
+allowance or a refusal, and the kernel's `enrollScheduledRootTx` (`Shikigami.Trigger.Enrollment`)
+enrolls the root and publishes the job in one transaction, as this record requires. The
+watchdog pack supplies the hook and the `watchdog` setting; a stock scheduler refuses the key.
+The allowance rules above are unchanged.

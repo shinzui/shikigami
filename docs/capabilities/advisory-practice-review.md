@@ -34,7 +34,7 @@ The registered specialist obtains evidence through bounded capability ports, rec
 
 ## Adopt
 
-The capability ships as the flow pack `packs/flow-pack-practice-review` and runs from the `kikan-shikigami` distribution; the stock executables do not offer it. Use the architecture-practice router and reviewer declarations under the pack's `agents/`, provision their sanctioned profile and permissions, and follow [Architecture-practice reviews](../user/architecture-practice-reviews.md). Fixture ports exercise the complete-evidence branches.
+The capability ships as the flow pack `packs/flow-pack-practice-review` and runs from the `kikan-shikigami` distribution; the stock executables do not offer it. Use the architecture-practice router and reviewer declarations under the pack's `agents/`, provision their sanctioned profile (no operator command provisions one yet, FRIC-85) and permissions, and follow [Architecture-practice reviews](../user/architecture-practice-reviews.md). Fixture ports exercise the complete-evidence branches.
 
 Builds on [CAP-4: Durable agent runs and Flows](durable-agent-flows.md), [CAP-8: Governed routing and delegation](governed-routing-and-delegation.md), [CAP-9: Authorized sink delivery and outbox](authorized-sink-outbox.md), [CAP-13: Sanctioned execution profile pinning](sanctioned-execution-profiles.md).
 

@@ -42,7 +42,7 @@ By default the proposal parks on the durable approval child with its own expiry.
 
 ## Adopt
 
-The capability ships as the flow pack `packs/flow-pack-initiative` and runs from the `kikan-shikigami` distribution; the stock executables do not offer it. Add an observer allowance, promote `packs/flow-pack-initiative/agents/proposer.dhall`, and follow [Operating unrequested work](../operations/unrequested-work.md). [Unrequested work](../user/unrequested-work.md) is what a person sees. `shikigami proposals` lists proposals, candidates and admissions, shows usage with exhaustion explicit, prunes old skips, and installs, revokes and lists standing policies.
+The capability ships as the flow pack `packs/flow-pack-initiative` and runs from the `kikan-shikigami` distribution; the stock executables do not offer it. Add an observer allowance, promote `packs/flow-pack-initiative/agents/proposer.dhall`, and follow [Operating unrequested work](../operations/unrequested-work.md). [Unrequested work](../user/unrequested-work.md) is what a person sees. `kikan-shikigami proposals` lists proposals, candidates and admissions, shows usage with exhaustion explicit, prunes old skips, and installs, revokes and lists standing policies.
 
 Builds on [CAP-2: Durable trigger intake](durable-trigger-intake.md) and [CAP-3: Program and Skill execution](program-and-skill-execution.md).
 

@@ -8,16 +8,16 @@ okf_version: "0.2"
 
 # Capability
 
-- [Independent active-work watchdog](active-work-watchdog.md) - Observe retained active work with bounded read authority and deliver coalesced quiet-work and cited drift advisories.
+- [Independent active-work watchdog](active-work-watchdog.md) - Observe retained active work with bounded read authority and deliver coalesced quiet-work and cited drift advisories. Owned by the flow pack `flow-pack-watchdog`; runs from the `kikan-shikigami` distribution.
 - [Addressed durable conversations](addressed-conversations.md) - Consume addressed messages, preserve conversation turns, and rotate a durable workflow generation after every reply.
-- [Advisory practice-review orchestration](advisory-practice-review.md) - Run a registered advisory review flow with pinned evidence contracts, validated verdicts, review memory, and deduplicated attention.
+- [Advisory practice-review orchestration](advisory-practice-review.md) - Run a registered advisory review flow with pinned evidence contracts, validated verdicts, review memory, and deduplicated attention. Owned by the flow pack `flow-pack-practice-review`; runs from the `kikan-shikigami` distribution.
 - [Agent memory and sessions](agent-memory-and-sessions.md) - Recall prior agent learnings and record session outcomes with configurable automatic memory policy.
 - [Governed assignment execution selection](assignment-execution-selection.md) - Admit and retain exact provider, model and option bindings for whole assignments.
 - [Authorized sink delivery and outbox](authorized-sink-outbox.md) - Dispatch declared external outputs with permission checks, durable intents, retry classification, and delivery receipts.
 - [Continuing worker session primitives](continuing-worker-primitives.md) - Retain ordered assignments, results and event cursors and admit scoped worker control with conditional ownership.
 - [Database migrations and bootstrap](database-migrations-and-bootstrap.md) - Apply a dependency-ordered database plan, reconcile memory read models, and refuse incompatible migration history at runtime startup.
 - [Declared-agent HTTP catalog](declared-agent-http-catalog.md) - Discover boot-loaded declarations and current lifecycle admission through authenticated HTTP, Relay pages, and a typed client.
-- [Durable agent runs and Flows](durable-agent-flows.md) - Resume agent lifecycles and compiled Haskell Flows from journaled steps after suspension or restart.
+- [Durable agent runs and Flows](durable-agent-flows.md) - Resume agent lifecycles and compiled Haskell Flows from journaled steps after suspension or restart. Kernel; use-case Flows ship in flow packs.
 - [Durable human approval](durable-human-approval.md) - Park workflow work for an approval answer or deadline and suppress protected output on rejection or timeout.
 - [Durable trigger intake](durable-trigger-intake.md) - Turn cron ticks, matching activity envelopes, and addressed integration events into durable run jobs.
 - [Exact external-action authorization](exact-action-authorization.md) - Require a verified authorization decision immediately before acquiring providers, calling tools, or delivering protected sinks.
@@ -38,5 +38,5 @@ okf_version: "0.2"
 - [Sanctioned execution profile pinning](sanctioned-execution-profiles.md) - Resolve an immutable execution policy before a run and retain its exact provider, model, and option constraints on replay.
 - [Typed agent declarations](typed-agent-declarations.md) - Load typed Dhall manifests with identity, behavior, triggers, sinks, memory, delegation, and overlay policy.
 - [Governed typed decisions in durable Flows](typed-flow-decisions.md) - Pin typed programs and admitted model aliases, journal validated outcomes, and retain actual-attempt evidence across retries and restart.
-- [Unrequested work proposals](unrequested-work-proposals.md) - Observe activity under an allowance, propose actionable work through durable human acceptance, and admit bounded objectives only under an explicit, revocable standing policy.
+- [Unrequested work proposals](unrequested-work-proposals.md) - Observe activity under an allowance, propose actionable work through durable human acceptance, and admit bounded objectives only under an explicit, revocable standing policy. Owned by the flow pack `flow-pack-initiative`; runs from the `kikan-shikigami` distribution.
 - [Worker operations and telemetry](worker-operations-and-telemetry.md) - Operate supervised background roles with bounded recovery, configuration diagnostics, runtime inspection, and exported run metrics.

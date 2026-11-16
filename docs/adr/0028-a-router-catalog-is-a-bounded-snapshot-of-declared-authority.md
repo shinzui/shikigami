@@ -87,6 +87,13 @@ a different catalog version. A future live Meibo client may implement the same d
 contract, but it must provide truthful `meibo-client` attribution and preserve complete-snapshot
 publication.
 
+Code ownership (2026-11-16, [ADR 0130](0130-use-case-subsystems-leave-the-kernel-by-recorded-disposition.md)):
+the catalog, selection limit and `Flow.Routing` are kernel primitives and stay in
+`shikigami-core`, because every delegating agent uses them. The `architecture-practice-router`
+flow that first used them is use-case code and lives in `packs/flow-pack-practice-review`; its
+route site is an open, checked value (`practice-review-architecture-practice`), not a kernel
+enumeration. This decision is unchanged.
+
 
 ## References
 

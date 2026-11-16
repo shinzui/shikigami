@@ -141,11 +141,19 @@ pack's own library may not. The stock
 executables run kernel behaviors and declared agents only; a use case that ships as a pack
 runs from the distribution.
 
-The stock executables compose only the builtin pack (`Shikigami.Flow.Builtin`), the flows
-still compiled into the core, so the frozen Nix closure of
+The stock executables compose only the builtin pack (`Shikigami.Flow.Builtin`), which holds
+the two flows that are kernel primitives, `run-declared-tool` and `adaptive-delivery`, so the
+frozen Nix closure of
 [ADR-39](../adr/0039-deployment-roles-share-a-frozen-cabal-source-closure.md) and the light
-one-off package of ADR-3 are unchanged. `packs/flow-pack-examples` and
-`packs/examples-distribution` were the first pair.
+one-off package of ADR-3 are unchanged. The Nix role packages in `flake.module.nix` are built
+from the stock executables and therefore offer none of the packs below; the distribution has
+no Nix role package yet. `packs/flow-pack-examples` and `packs/examples-distribution` were the
+first pair.
+
+[ADR 0130](../adr/0130-use-case-subsystems-leave-the-kernel-by-recorded-disposition.md)
+records which subsystems left the core and which stayed. Router, recurring mandates and the
+adaptive-delivery coordinator are kernel; the watchdog, unrequested-work proposals, practice
+review and the teaching flows are the four packs in the table below.
 
 | Pack | Flows | Setting | Tables it owns |
 | --- | --- | --- | --- |

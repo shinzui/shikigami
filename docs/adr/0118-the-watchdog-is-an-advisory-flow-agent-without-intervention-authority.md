@@ -42,3 +42,13 @@ AgentRun declares `shikigami-watchdog-v1`; historical journals install an unavai
 interpreter with no watchdog or Drift application labels. Roll forward across this patch.
 Readiness and liveness probes retain their existing meanings. Operators use existing
 objective and worker commands when a finding warrants intervention.
+
+Code ownership (2026-11-16, [ADR 0130](0130-use-case-subsystems-leave-the-kernel-by-recorded-disposition.md)):
+the watchdog is `packs/flow-pack-watchdog` and runs from the `kikan-shikigami` distribution.
+`Observe` left the kernel's `FlowEffects`; the sweep is a pack flow whose interpreter the pack
+installs, and the kernel runner no longer names it. `shikigami-watchdog-v1` and the watchdog's
+labels left `domain/shikigami/agent-run.keiro` under the pre-release exception, and the pack's
+labels (`watchdog-*`, `decision-*-watchdog-drift`) are pinned by its golden inventory. The
+`shikigami.watchdog.*` instruments became events on `shikigami.pack.events` and the
+`sweep.age` gauge on `shikigami.pack.gauges`. The decision is unchanged: the pack still has no
+intervention authority.

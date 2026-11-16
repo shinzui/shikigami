@@ -94,12 +94,16 @@ component:
 | `shikigami-core:flow-sdk` | `Shikigami.Flow.Sdk`, `Shikigami.Flow.Sdk.Program` | A flow body and the pack value |
 | `shikigami-core:pack-sdk` | `Shikigami.Pack.Sdk` | A pack's interpreter only |
 
-You never edit `shikigami-core` to add a flow. `just kernel-fitness` fails the build if a
-use case is added there, and its message points back to this section.
+You never edit `shikigami-core` to add a flow: a new flow goes in a pack's `flows`, not in
+a kernel registry. `just kernel-fitness` fails the build if a use case is added to the core,
+and its message points back to this section. Only a genuine kernel primitive joins the
+builtin pack (`Shikigami.Flow.Builtin`), and that needs an ADR; today it holds
+`run-declared-tool` and `adaptive-delivery`.
 
-The pack in this repository is `packs/flow-pack-examples`. It owns the teaching flows:
+This repository has four packs: `packs/flow-pack-examples` (the teaching flows
 `at-risk-customer`, `objective-example`, `shikumi-decision-example`,
-`shikumi-judgment-example` and `delegation-proof`. The walk-through below follows
+`shikumi-judgment-example` and `delegation-proof`), `packs/flow-pack-practice-review`,
+`packs/flow-pack-initiative` and `packs/flow-pack-watchdog`. The walk-through below follows
 `at-risk-customer`. Its layout is the layout of every pack:
 
 ```text
@@ -316,8 +320,9 @@ main :: IO ()
 main = runAdminWith [examplesPack]                      -- shikigami-examples
 ```
 
-`packs/kikan-shikigami` is the distribution for organizational use: a worker, the admin
-command and the one-off command, all composed from one list of packs.
+`packs/kikan-shikigami` is the distribution for organizational use: the worker, scheduler,
+stream consumer, admin command and one-off command, all composed from one list of all four
+packs.
 
 The entry points are `agentRunRoleInfoWith` (`Shikigami.Agent.Command`),
 `workerRoleInfoWith` and `consumeStreamRoleInfoWith` (`Shikigami.Workers.Command`) and
@@ -335,8 +340,10 @@ cabal run shikigami-examples-agent-run -- \
 ```
 
 ```text
-builtin   watchdog-sweep     default-model=optional  slots=drift
-examples  at-risk-customer   default-model=required  slots=-
+builtin   run-declared-tool         default-model=optional  slots=-
+builtin   adaptive-delivery         default-model=optional  slots=adapt
+examples  at-risk-customer          default-model=required  slots=-
+...
 {"event":"flow.selected","agent":"at-risk-customer","flow":"at-risk-customer","pack":"examples",...}
 ```
 
@@ -344,7 +351,7 @@ The stock `shikigami-agent-run` refuses the same manifest before it opens a sess
 names the flows it has:
 
 ```text
-agent-run: unknown flow at-risk-customer; registered flows: run-declared-tool, watchdog-sweep, ...
+agent-run: unknown flow at-risk-customer; registered flows: run-declared-tool, adaptive-delivery
 ```
 
 `shikigami validate` and the worker's boot check make the same refusal, so a manifest
@@ -463,14 +470,16 @@ be caught before the flow ships.
 
 ## Delivered Flow guides
 
-These flows of the builtin pack have dedicated setup or operating guidance:
+These flows have dedicated setup or operating guidance. A flow owned by a pack runs only
+from an executable composed with that pack, such as the `kikan-shikigami` distribution's:
 
-| Flow | Guide | Admission boundary |
-| --- | --- | --- |
-| `shikumi-decision-example` | [Typed decisions](typed-decisions.md) | Admitted model aliases and per-decision permissions |
-| `adaptive-delivery` | [Finite adaptive delivery](adaptive-delivery.md) | Objective/assignment association, finite root and cutoff, permitted worker catalog |
-| `propose-work` | [Unrequested work](unrequested-work.md) | Verified observer, bounded source allowance, human acceptance or standing policy |
-| `watchdog-sweep` | [Watchdog notices](watchdog.md) | Scheduled verified principal, bounded observation scope and independent allowance |
+| Flow | Owner | Guide | Admission boundary |
+| --- | --- | --- | --- |
+| `adaptive-delivery` | kernel (builtin) | [Finite adaptive delivery](adaptive-delivery.md) | Objective/assignment association, finite root and cutoff, permitted worker catalog |
+| `shikumi-decision-example` | `flow-pack-examples` | [Typed decisions](typed-decisions.md) | Admitted model aliases and per-decision permissions |
+| `architecture-practice-router`, `opentelemetry-practice-review` | `flow-pack-practice-review` | [Architecture-practice reviews](architecture-practice-reviews.md) | Declared delegation catalog, sanctioned profile, pinned evidence |
+| `propose-work` | `flow-pack-initiative` | [Unrequested work](unrequested-work.md) | Verified observer, bounded source allowance, human acceptance or standing policy |
+| `watchdog-sweep` | `flow-pack-watchdog` | [Watchdog notices](watchdog.md) | Scheduled verified principal, bounded observation scope and independent allowance |
 
 The watchdog observes work and emits advisory findings. It cannot intervene in an
 objective or grant a recurring mandate. The proposer may create an objective after

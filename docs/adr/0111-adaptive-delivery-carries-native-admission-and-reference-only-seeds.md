@@ -95,6 +95,14 @@ A second mutable assignment/resource graph would diverge from existing owners.
 These alternatives are rejected. Repository artifact/live-trial qualification
 remains Plan 86's responsibility.
 
+Code ownership (2026-11-16, [ADR 0130](0130-use-case-subsystems-leave-the-kernel-by-recorded-disposition.md)):
+the coordinator, its capability, `adaptive-delivery` and the `Adaptive` program are kernel
+primitives and stay in `shikigami-core`, in the builtin pack the stock executables compose.
+The `CoordinatorImportsBinding` rule of `just kernel-fitness` refuses any coordinator import
+of a Kikan binding. A pack may fund and launch a coordinator run (the initiative pack's
+standing policies do), but it does not own one. No stock executable can yet give a run the
+resource root that adaptive admission requires (FRIC-88).
+
 ## Producer and descendant qualification
 
 New pinned scopes and session admissions carry the admitted declaration catalog.
