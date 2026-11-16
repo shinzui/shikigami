@@ -37,6 +37,11 @@ provenance:
       at: 2026-11-15T15:08:44Z
       mode: "update"
       note: "M1 precedes the first freeze; later milestones leave frozen declaration surfaces alone (user decision 2026-11-15)"
+    - model: "claude-fable-5-2"
+      harness: "claude-code"
+      at: 2026-11-16T05:28:34Z
+      mode: "implement"
+      note: "M1: retire Deterministic and five unused items; real-model run awaits operator confirmation"
 ---
 
 # Shrink shikigami-core to the kernel by moving or retiring use-case subsystems
@@ -105,6 +110,14 @@ this Mac through the same operator verbs as before (`watchdog inspect`, `proposa
     `reply: stub-skill: instructions acknowledged; no model was called` and exit 0.
     `just migrate` applied `shikigami/0051-drop-detector-suppression-table` and
     `to_regclass('shikigami.fired')` is null; the table held 0 rows before.
+  - Commit `2965ac6e`. Suites: shikigami-core-test 963, shikigami-core-postgres-test 688,
+    shikigami-agent-test 42, shikigami-server-test 113, shikigami-workers-test 354 (one known
+    flake, FRIC-76, green alone), flow-pack-examples-test 13, api-baseline-test 39 and both
+    migration suites. `just keiro-gate HEAD~1` reports no finding and
+    `replay-neutral: stored-data replay is unchanged by this diff`; `just api-baseline` is
+    clean on all eight surfaces after the re-pin. The wire fixture
+    `shikigami-core/test/fixtures/wire/agent-decl-v1.json` lost its `enabledBy` key; the old
+    bytes still decode, because the decoder ignores an unknown key.
 - [ ] M2: Flow decision, routing and slot vocabularies are open, checked values rather than
   closed kernel enumerations. The example flows run from `flow-pack-examples`. The
   `kikan-shikigami` distribution exists, and its worker runs `objective-example`, which
@@ -1035,3 +1048,6 @@ gate replaced the first-deployment fallback.
 Revision note (2026-11-15, user decision): the adaptive-delivery coordinator stays in the
 kernel because it has no Kikan service dependency. M6 became a confirmation milestone, no
 `flow-pack-adaptive-delivery` is created, and the `workflows` pack field was dropped.
+
+Revision note (2026-11-16, M1 implementation): M1's removals are implemented and committed.
+The real-model Skill run remains open because it needs the operator's confirmation.

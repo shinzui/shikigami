@@ -150,6 +150,12 @@ It owns that plan's fourth acceptance test, "Baseline", and its "Public surfaces
 
 ## Decision Log
 
+- Decision: `cli-shikigami` was re-pinned on 2026-11-16 after `shikigami danwa-spike` was
+  removed, the first breaking finding the inventory recorded.
+  Rationale: the removal is an approved removal of plan 131 (M1), whose Decision Log holds the
+  reason. The surface is provisional and report-only, so the policy asks for this entry and
+  the re-pin in the same commit (`2965ac6e`).
+  Date: 2026-11-16
 - Decision: Export lists are read as names from GHC interface files, with constructors and
   fields as `Type.member`. Hoogle text is not adopted.
   Rationale: the bounded prototype was a two-module scratch package with a facade that only
