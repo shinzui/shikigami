@@ -2,6 +2,12 @@
 
 ## 2026-11-16
 
+* **Addition**: FRIC-85 records detour tooling friction with mori://shinzui/shikigami: No operator command provisions a sanctioned execution profile, so the shipped reviewer manifest cannot run on a fresh database
+
+
+* **Addition**: FRIC-84 records detour interface friction with mori://shinzui/shikigami: The router prompt did not say a selection's expertise is an array, so the first real routing call was undecodable
+
+
 * **Addition**: FRIC-83 records detour environment friction with mori://shinzui/shikigami: A worker given a scratch database in its config file attached to the development database
 
 

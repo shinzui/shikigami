@@ -42,6 +42,11 @@ provenance:
       at: 2026-11-16T05:28:34Z
       mode: "implement"
       note: "M1: retire Deterministic and five unused items; real-model run awaits operator confirmation"
+    - model: "claude-fable-5-2"
+      harness: "claude-code"
+      at: 2026-11-16T15:53:56Z
+      mode: "implement"
+      note: "M3: practice review and its router move to flow-pack-practice-review; pack settings, RunModel and seven FlowRunContext fields; real before/after review run"
 ---
 
 # Shrink shikigami-core to the kernel by moving or retiring use-case subsystems
@@ -151,9 +156,66 @@ this Mac through the same operator verbs as before (`watchdog inspect`, `proposa
     shikigami-agent-test 42, shikigami-server-test 113, shikigami-workers-test 354 (FRIC-76
     flake only), flow-pack-examples-test 14, api-baseline-test 39, conformance.
     `just kernel-fitness` passes with three packages under `packs/`.
-- [ ] M3: `PracticeReview` and the `architecture-practice-router` flow run from
+- [x] M3 (2026-11-16): `PracticeReview` and the `architecture-practice-router` flow run from
   `flow-pack-practice-review`. A real review trigger for a local repository produces the
   same outcome as before the move.
+  - Evidence, commits `60938b9a` (the router prompt fix the baseline needed) and `abac7d83`
+    (the move). Both runs sent the same version-1 `target-change` trigger for
+    `mori://shinzui/fsrs-hs` at head `a53bcfe618346e3d4500e8f572507390ad44bad5` (before
+    `15e5608e52d693b9334d964d6f13b1083a35cbbd`), with the practice reference
+    `mori://shinzui/haskell-jitsurei` at `8dffca23bcfbc2ed641dd593521abd55d84c7bb9`, to
+    `architecture-practice-router`, each on its own isolated database
+    (`shikigami_ep6_m3_before`, `shikigami_ep6_m3_after`) with `behavior.provider=openai`,
+    `behavior.model=gpt-5.4-mini` and the repository's loopback fixture authorizer. The router
+    made one real model call in each.
+  - Before, stock `shikigami-worker` built at `60938b9a`: the router journaled
+    `route-catalog-architecture-practice` and `route-decision-architecture-practice`
+    (`"outcome":"matched"`, `opentelemetry-practice-reviewer`), then one child. The child
+    journaled `practice-review-reserve-identity`, `practice-review-recall`,
+    `practice-review-evidence`, `practice-review-remember-provisional` and
+    `emit-signal:review-history`, and both runs completed. Verdict: `classification:
+    unresolved`, owner `{"principals":["architecture-council"],"role":"triage-owner"}`, action
+    `Restore revision-pinned evidence access and re-run this advisory review`, and three
+    claims of the form `ReadFailed (RepositoryId "mori://shinzui/fsrs-hs") (Just
+    "a53bcfe6…") (Just "docs/adr") (ContentPlaneUnavailable "practice-review content plane is
+    unavailable") True`. One row in `shikigami.practice_review_identities`.
+  - After, `kikan-shikigami-worker` built at `abac7d83`: the worker logged
+    `flow.registry.composed` with pack `practice-review` holding
+    `architecture-practice-router` and `opentelemetry-practice-review`, and both `flow.selected`
+    lines carry `"pack":"practice-review"`. The router journaled
+    `route-catalog-practice-review-architecture-practice` and
+    `route-decision-practice-review-architecture-practice`, then one child. The child
+    journaled the same four `practice-review-*` steps and
+    `emit-signal:practice-review-history`. Same verdict, same owner, same action and the same
+    three claims; the `practice-review-evidence` step's journaled value is byte-identical to
+    the baseline's, and the history emission has the same outcome (`DeniedOutcome "agent
+    'opentelemetry-practice-reviewer' has no grant for KawaDigest"`). One identity row.
+  - The other half. The stock `shikigami-worker` on the same directory logged
+    `worker.agents.undeployable` for both manifests (`unknown flow
+    architecture-practice-router; registered flows: run-declared-tool, watchdog-sweep,
+    propose-work, adaptive-delivery`) and exited `refusing to start; 2 agent declaration(s)
+    name a behavior this build cannot run`. With the pack's key in its file, `shikigami-worker
+    --check-config` answered `practice_review.attention_recipients: unknown key in file source
+    config.json (YAML)`. `kikan-shikigami-worker --explain-config` shows the key from the file
+    and from `SHIKIGAMI_PRACTICE_REVIEW_ATTENTION_RECIPIENTS`, and refuses
+    `team=nobody` with the old expectation text. `kikan-shikigami flows` lists both flows under
+    `practice-review`; the stock `shikigami flows` lists neither.
+  - Two limits of the real runs, both on the before and the after side alike. The reviewer
+    manifest was run from a copy without `sanctionedProfile`, because no operator command
+    provisions a profile (FRIC-85). Attention was not reserved, because the history emission
+    was not enqueued: without a grant it is denied, and with a grant the fixture authority
+    refuses a compatibility identity (`agent principal must start with agent_`). The atomic
+    attention reservation is covered by the pack's `atomic attention` tests and by the real
+    `AgentRun` test in `OrchestrationSpec`, on PostgreSQL.
+  - Suites at `abac7d83`: shikigami-core-test 931, shikigami-core-postgres-test 657,
+    flow-pack-practice-review-test 79, shikigami-agent-test 42, shikigami-server-test 113,
+    shikigami-workers-test 354 (FRIC-76 flake only, green alone), flow-pack-examples-test 14,
+    api-baseline-test 39, conformance. `just kernel-fitness` 7 pass with four packages under
+    `packs/`; `just api-baseline` clean on all eight surfaces after re-pinning `flow-sdk` and
+    `pack-sdk`; `just haskell-conventions` passes; `tests/types/opaque-values.py` and
+    `tests/types/revision-domains.py` pass. Measured core after M3: 457 modules, 78,436 lines,
+    72 top-level namespaces, 29 modules importing `Watchdog`, `Initiative` or
+    `PracticeReview` (none imports `PracticeReview`). `FlowEffects` holds 15 capabilities.
 - [ ] M4: `Initiative` runs from `flow-pack-initiative` through a kernel stream-intake
   hook. A real transcript excerpt produces an approval request, and accepting it creates an
   objective.
@@ -171,6 +233,44 @@ this Mac through the same operator verbs as before (`watchdog inspect`, `proposa
 
 ## Surprises & Discoveries
 
+- Observation (M3): the router had never routed with a real model, and could not.
+  Evidence: the first baseline run journaled a correct match and failed on every resume
+  with `RoutingDecisionDecodeFailed "parsing [] failed, expected Array, but encountered
+  String"`: the model wrote `"expertise": "opentelemetry"`. The system prompt named the
+  field and not its shape. Commit `60938b9a` states the shape; the baseline was rebuilt from
+  that commit, so the before and after builds share the fix (FRIC-84).
+- Observation (M3): `just keiro-gate HEAD~1` reports the one expected finding for `abac7d83`.
+  Evidence:
+  `BREAKING: AgentRun workflow-body AgentRun: workflow body labels, kinds, result types, or order changed without a new patch guard; wrap a cross-cutting change in patch, or rename the replay label for one changed step [WorkflowBodyChanged]`,
+  then `replay-neutral: stored-data replay is unchanged by this diff`. The specification diff
+  is exactly ten deleted lines: `route-catalog-architecture-practice`,
+  `route-decision-architecture-practice` and the eight `practice-review-*` steps. No kernel
+  label moved. The conformance suite passes.
+- Observation (M3): four labels the moved flows wrote did not start with the pack's name.
+  Evidence: the baseline journal shows `emit-signal:review-history`; the route site was
+  `architecture-practice`; the delegation key was `architecture-practice-<agent>`. They are
+  now `practice-review-history`, `practice-review-resolution-history`,
+  `practice-review-architecture-practice` and `practice-review-<agent>`. The eight
+  interpreter labels already had the prefix and kept their bytes.
+- Observation (M3): the examples pack's golden inventory writes the signal labels with a
+  hyphen (`emit-signal-examples-alert`), and the kernel journals a colon
+  (`emit-signal:<key>`).
+  Evidence: `packs/flow-pack-examples/test/Main.hs` records the label itself in
+  `recordingSink`; the M3 real run journaled `emit-signal:practice-review-history`. The
+  practice-review inventory is read back from a real journal, so it has the colon. The
+  examples inventory is left as it is and should be corrected when keiro IR-61 lets it run
+  the kernel's interpreter.
+- Observation (M3): two checks were already red before this milestone.
+  Evidence: `tests/types/revision-domains.py` imported
+  `Shikigami.Program.Decision.Examples`, which left the core in `9e73c8ba`; it now imports
+  `Shikigami.Program.Decision.Confidence` and passes. `just capabilities-validate` fails in
+  `tools/check-capabilities.py` on `docs/capabilities/exact-action-authorization.md`, which
+  links `shikigami-core/src/Shikigami/Action/Authorization.hs`, removed by `3c9ba841`. That
+  page belongs to EP-8 and is not changed here.
+- Observation (M3): the reviewer manifest's sanctioned profile cannot be provisioned by an
+  operator.
+  Evidence: `shikigami --help` has no profile command and only test fixtures write profile
+  rows (FRIC-85). The real runs used a copy of the manifest without the field.
 - Observation (M2): a first worker start attached to the development database and resumed
   its parked runs (FRIC-83). No external effect followed.
   Evidence: the development shell exports `PG_CONNECTION_STRING`, which overrides
@@ -279,6 +379,100 @@ this Mac through the same operator verbs as before (`watchdog inspect`, `proposa
 
 ## Decision Log
 
+- Decision (M3): Recheck of the pre-release facts before the move. `git tag --list` is
+  empty, MasterPlan 22 records no end of the exception, and the development database holds
+  66 completed `shikigami.agent-run` instances and one non-terminal one, `7a28975f`, which
+  already fails to resume on a journal older than the current codecs and awaits the user's
+  decision. M3 proceeded.
+  Rationale: no stored step uses a removed label (`select count(*) from
+  keiro.keiro_workflow_steps where step_name like 'practice-review-%' or step_name like
+  'route-%-architecture-practice'` returns 0), so the move cannot change what any stored run
+  replays, `7a28975f` included.
+  Date: 2026-11-16
+- Decision (M3): `FlowRunContext` gains seven fields: `requestIdentity`, `parentRunId`,
+  `parentSession`, `model`, `settings`, `app` and `grants`.
+  Rationale: these are what the kernel's runner handed the practice-review interpreters from
+  the job and its dependency record. The review lineage needs the delegating run and session;
+  the attention intent is attributed to the identity the job carried, which is not always the
+  resolved one; memory and the identity receipts run through `AppEnv`; the attention sink
+  intent is checked against the grant source. Each is a read of the run, so the context stays
+  plain data built outside every step.
+  Date: 2026-11-16
+- Decision (M3): A pack reaches a model through `RunModel`, one operation
+  `completeJsonObject :: Text -> Text -> IO (Either Text Text)`, and not through
+  `BehaviorEnv`.
+  Rationale: the evaluator needed one JSON-object completion from the model the sanctioned
+  profile allowed. Exporting `Shikigami.Behavior.{Run, Compatibility}` would have put the
+  provider registry, options and the tool loop in the pack SDK and made baikai a dependency
+  of every pack that asks a model anything. The kernel builds the port from the run's active
+  behavior environment, so a pack cannot leave the allowed call tuple. The compatibility
+  refusal is now bounded to 512 characters like the provider failure; nothing else about the
+  evaluator's outcomes changed.
+  Date: 2026-11-16
+- Decision (M3): `PackSetting` carries text, and differs from the plan's sketch.
+  Rationale: the sketch was a key and a `Value -> Either Text ()` validator. The loader is
+  Settei, so a setting also needs its environment variable, a description, an expectation a
+  refusal can print without the value, and a named default rule for `--explain-config`. The
+  value crosses as validated text and the pack decodes it with the parser its validator ran,
+  so the kernel never names a pack type. `PackSetting` lives in the new kernel module
+  `Shikigami.Pack.Setting`, below `Shikigami.App.Config`, and `Shikigami.Flow.Pack`
+  re-exports it. `RoleInfo` gains `packSettings`; `runAppConfigWith`, `appConfigRunWith`,
+  `resolveAppConfigWith`, `appConfigWith`, `appConfigSchemaWith`, `declaredKeysWith` and
+  `environmentBindingsWith` are the composed forms of the existing entry points. A duplicate
+  key across packs is `DuplicateSettingKey` at composition and a refused start at
+  configuration, whichever a process reaches first.
+  Date: 2026-11-16
+- Decision (M3): The runtime's recipient map is a closed choice, `RecipientsFromSettings |
+  FixedRecipients AttentionRecipientMap`.
+  Rationale: a pack value is built before configuration is read, so the production runtime
+  cannot close over the map. It reads the validated setting from the run context; a test
+  fixes one. `practiceReviewPack` is the production value and `practiceReviewPackWith` takes
+  a runtime.
+  Date: 2026-11-16
+- Decision (M3): Final SDK additions for this subsystem. `flow-sdk` re-exports
+  `Shikigami.Agent.Principal`, `Shikigami.Flow.Routing`, `Shikigami.FormatVersion`,
+  `Shikigami.Prelude` and `Shikigami.Repository`, and the `Shikigami.Flow.Sdk` facade adds
+  `SinkResult (..)`, `SinkOutcome (..)`, `SinkMessageId` and `parseSinkSession`. `pack-sdk`
+  re-exports `Shikigami.Activity`, `Shikigami.Agent.{Decl, RunJob}`, `Shikigami.App`,
+  `Shikigami.Directory`, `Shikigami.Memory.{Access, Scope}`, `Shikigami.Sink` with
+  `Shikigami.Sink.{Delivery, Intent}`, and `Shikigami.Trigger.{Enqueue, RequestKey}`, and the
+  `Shikigami.Pack.Sdk` facade adds `RunModel (..)`, `PackSetting (..)`, `PackSettings` and
+  `packSettingValue`.
+  Rationale: each is imported by moved code. A body could not read the result of `emitSignal`
+  until `SinkResult` joined the facade. `Shikigami.Behavior.*`, `Shikigami.Decision.Contract`
+  in `pack-sdk` (already in `flow-sdk`) and `Shikigami.Sink.{Coordinate, Types}` from the
+  candidate list were not needed. `Shikigami.Flow.Routing` and `Shikigami.Sink.Intent` are
+  whole kernel modules that export interpreters and SQL beside the few names a pack uses;
+  they join the curation work already recorded for the freeze (plan 136, M3). EP-8's output
+  port had not landed, so attention delivery uses the `Shikigami.Sink.*` modules.
+  Date: 2026-11-16
+- Decision (M3): The pack's `bodies` sublibrary holds the review vocabulary as well as the
+  flow bodies, and four kernel modules were split to make that possible.
+  Rationale: a body is typed against the capabilities and names the review types, so both
+  must build on `flow-sdk` alone. `Capability` became the effects (`bodies`) and `Runtime`
+  (interpreters); `Memory` became the effect and envelope and `Memory.Store`; `Authorization`
+  kept the envelope and its pure validation and lost `ResolutionIntake`; `IdentityStore` lost
+  the reference type to `IdentityRef`. `ReviewIdentityRef` keeps a private constructor: the
+  store mints one through `mkReviewIdentityRef`, which runs the check the journal decoder
+  runs, and reads it through `reviewIdentityBinding`. `Evidence` moved whole; its reader is a
+  record of `IO` functions a body cannot run without `IOE`.
+  Date: 2026-11-16
+- Decision (M3): The kernel keeps test-local copies of what its own tests used from the
+  subsystem: `routerFixtureFlow` in `Shikigami.Fixture.ExamplePack`, with the old route site
+  and delegation keys, and the manifests `router-policy.dhall` and
+  `specialist-expertise.dhall` under `shikigami-core/test/fixtures/agents/`.
+  Rationale: `RouterWorkflowSpec` drives the kernel's routing and batch delegation end to
+  end, and `AgentLoaderSpec` decodes the `routing` and `expertise` declaration fields. Both
+  are kernel behavior, and a core test may not depend on a pack. The pack's `PackSpec` loads
+  the shipped manifests.
+  Date: 2026-11-16
+- Decision (M3): The pack's label inventory is read from the journal of the runs that take
+  every branch of the review flow, in `OrchestrationSpec`, plus the two route labels derived
+  from the route site with the newly exported `Routing.routeStepNames`.
+  Rationale: the runs already exist and use the real kernel sink interpreter, so the twelve
+  labels are the bytes a deployment journals. A second walk with recording interpreters, as
+  the examples pack does, would have restated the kernel's naming by hand.
+  Date: 2026-11-16
 - Decision (M2): A decision site is the slot's existing checked label
   (`DecisionSite = DecisionSlotLabel`), and `FlowDef` keeps EP-5's `decisionMode` with no
   separate `SlotPolicy`.
@@ -1160,6 +1354,10 @@ kernel because it has no Kikan service dependency. M6 became a confirmation mile
 
 Revision note (2026-11-16, M1 implementation): M1's removals are implemented and committed.
 The real-model Skill run remains open because it needs the operator's confirmation.
+
+Revision note (2026-11-16, M3 implementation): M3 is complete. The pack owns a setting and
+five capabilities, `FlowRunContext` and both SDKs grew by the recorded lists, and the first
+real routing call exposed a prompt defect fixed in `60938b9a`.
 
 Revision note (2026-11-16, M2 implementation): M2 is complete. Decision sites reuse the slot
 label, the structured-judgments patch is removed, kernel tests keep fixture copies of the

@@ -41,6 +41,11 @@ provenance:
       at: 2026-11-16T04:42:50Z
       mode: "update"
       note: "EP-5 M2 accepted: packs composed at start, SDK components, first pack, IR-61"
+    - model: "claude-fable-5-2"
+      harness: "claude-code"
+      at: 2026-11-16T15:53:56Z
+      mode: "implement"
+      note: "EP-6 M3 accepted"
 ---
 
 # Rebuild Shikigami as a kernel where use cases are declared, not coded
@@ -954,8 +959,13 @@ needs the operator's local-operator confirmation and is still open. EP-6 M2 is a
 example flows and their programs moved to `flow-pack-examples`, and the `kikan-shikigami`
 distribution's worker created a real objective from `objective-example` while the stock
 worker refused the manifest. `flow-sdk` now re-exports whole kernel modules (758 names),
-which needs curating before the kernel freeze. Stage 1 (the pilot) ends at
-the declaration baseline, and stage 2 at the kernel baseline.
+which needs curating before the kernel freeze. EP-6 M3 is accepted on 2026-11-16
+(`abac7d83`): practice review and its router run from `flow-pack-practice-review`, a pack
+owns a configuration setting for the first time (`FlowPack.settings`), and a pack interpreter
+reaches the run's model, stores and grants through `FlowRunContext`. A real review trigger
+for fsrs-hs produced the same `unresolved` verdict before and after the move, and the first
+real routing call exposed and fixed a router prompt defect (`60938b9a`, FRIC-84). Stage 1
+(the pilot) ends at the declaration baseline, and stage 2 at the kernel baseline.
 
 - [ ] Architectural acceptance: the keiro modernization campaign runs for real on at least
   two of the user's repositories with no change to `shikigami-core` in the commits that

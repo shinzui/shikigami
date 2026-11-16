@@ -108,6 +108,17 @@ splits them.
 This record amends ADR-75 (the kernel section is a second check beside the root budget) and
 ADR-13 (a pack flow's body and interpreter are split across the SDK components).
 
+The first pack with interpreters of its own (practice review, plan 131 M3) extended the
+boundary in three ways, each with that consumer. A pack owns its configuration settings: it
+lists `PackSetting` values in `FlowPack.settings`, an executable composed with the pack
+accepts and validates those keys, and a stock executable still refuses them as unknown, so
+the configuration surface stays closed per composition. `FlowRunContext` carries what an
+interpreter reads of its run beyond the declaration and identity: the job's own identity, the
+delegating run, the validated pack settings, the kernel's stores and the grant source. And a
+pack reaches a model only through `RunModel`, one JSON-object completion the kernel builds
+from the run's behavior environment after its sanctioned profile narrowed it; no pack holds
+a provider or a registry.
+
 
 ## References
 
