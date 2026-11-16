@@ -167,7 +167,6 @@ import Shikigami.Flow.CodingAgent qualified as FlowCodingAgent
 import Shikigami.Flow.Decision qualified as FlowDecision
 import Shikigami.Flow.DeclaredTool qualified as FlowDeclaredTool
 import Shikigami.Flow.Delegate qualified as FlowDelegate
-import Shikigami.Flow.Initiative qualified as FlowInitiative
 import Shikigami.Flow.Objectives qualified as FlowObjectives
 import Shikigami.Flow.Observe qualified as FlowObserve
 import Shikigami.Flow.Pack qualified as FlowPack
@@ -192,6 +191,7 @@ import Shikigami.Playbook.Run (PlaybookAgent (..), runPlaybook)
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.Program.DecisionRunner (DecisionAbort (..))
 import Shikigami.Program.DecisionRunner qualified as DecisionRunner
+import Shikigami.Repository (RepositoryId)
 import Shikigami.RuntimePolicy (DefaultModelRequirement (DefaultModelOptional), defaultModelRequired)
 import Shikigami.Sink (DanwaConfig, DeliveryGuard (..), GrantSource, KanmonConfig, KawaConfig, KizashiConfig, ReiConfig, SinkContext (..), SinkOutcome (..), SinkResult (..), dispatch, sinkKindOf)
 import Shikigami.Sink.Delivery qualified as Delivery
@@ -239,9 +239,12 @@ data AgentRunDeps = AgentRunDeps
     -- | No production scope/provider is selected until IR-11/IR-13 deliver it.
     coordination :: !(Maybe WorkerCapability.CoordinationHost),
     objectives :: !(Maybe Objectives.ObjectiveRuntime),
-    -- | Observer allowances and the repositories a proposal may be offered. Only
-    -- what a run's @initiative-open@ step journals crosses a journal boundary.
-    initiatives :: !FlowInitiative.InitiativeSeed,
+    -- | A composed pack's bounded counter, by pack name. The worker backs it
+    -- with the process metrics; a one-off run and a test count nothing.
+    packMetrics :: !(FlowPack.FlowPackName -> FlowPack.PackMetrics),
+    -- | The repositories of the operator's workspace catalog, by identity. A
+    -- pack flow may offer them to a model; their source locators stay private.
+    workspaceCatalog :: ![RepositoryId],
     observe :: !FlowObserve.ObserveSeed,
     agents :: ![AgentDecl],
     kizashi :: !KizashiConfig,
@@ -1229,7 +1232,7 @@ runBehaviorStep deps activeBehaviorEnv resolvedProfile approvalPolicyForRun reco
       admitted <- step (StepName "playbook-admission") (liftIO (pinPlaybook (Text.unpack bundle)))
       case admitted of
         Left problems -> pure (Left (Text.intercalate "; " problems))
-        Right pinned -> runFlowDefinition deps activeBehaviorEnv resolvedProfile approvalPolicyForRun recordedIdentity sid decl job (playbookFlow PlaybookAgent {provider, access, model, effort} pinned)
+        Right pinned -> runFlowDefinition deps activeBehaviorEnv resolvedProfile approvalPolicyForRun recordedIdentity sid decl job Nothing (playbookFlow PlaybookAgent {provider, access, model, effort} pinned)
     _
       | not (null ((.delegates) decl)) -> Right <$> runDeclaredSupervisor deps decl sid job
       | otherwise ->
@@ -1254,7 +1257,7 @@ runFlowBehavior deps activeBehaviorEnv resolvedProfile approvalPolicyForRun reco
     Nothing -> pure (Left ("unknown flow " <> declarationCoordinateText flowName))
     Just entry -> do
       Log.logInfo deps.logger "flow.selected" ["agent" .= agentNameText decl.name, "flow" .= declarationCoordinateText flowName, "pack" .= FlowPack.flowPackNameText entry.pack, "run_id" .= runCorrelationId (jobIdempotencyKey job)]
-      runFlowDefinition deps activeBehaviorEnv resolvedProfile approvalPolicyForRun recordedIdentity sid decl job entry.flow
+      runFlowDefinition deps activeBehaviorEnv resolvedProfile approvalPolicyForRun recordedIdentity sid decl job (Just entry.pack) entry.flow
 
 -- | A pinned playbook bundle as a flow body.
 playbookFlow :: PlaybookAgent -> Playbook.PinnedPlaybook -> FlowPack.PackFlow
@@ -1278,9 +1281,11 @@ runFlowDefinition ::
   SessionId ->
   AgentDecl ->
   RunJob ->
+  -- | The pack that owns the flow; 'Nothing' for a flow the kernel builds.
+  Maybe FlowPack.FlowPackName ->
   FlowPack.PackFlow ->
   Eff (Workflow : AppEffects) (Either Text Value)
-runFlowDefinition deps activeBehaviorEnv resolvedProfile approvalPolicyForRun recordedIdentity sid decl job FlowPack.PackFlow {FlowPack.definition = flow, FlowPack.run = runFlow} = do
+runFlowDefinition deps activeBehaviorEnv resolvedProfile approvalPolicyForRun recordedIdentity sid decl job owner FlowPack.PackFlow {FlowPack.definition = flow, FlowPack.run = runFlow} = do
   (flowWorkflowName, childWorkflowId) <- currentWorkflow
   -- The read view a pack's interpreter is given. It is plain data built
   -- outside every step, so it adds nothing to the journal.
@@ -1302,7 +1307,10 @@ runFlowDefinition deps activeBehaviorEnv resolvedProfile approvalPolicyForRun re
             FlowPack.model = FlowPack.runModel activeBehaviorEnv,
             FlowPack.settings = deps.packSettings,
             FlowPack.app = deps.appEnv,
-            FlowPack.grants = depsGrants deps
+            FlowPack.grants = depsGrants deps,
+            FlowPack.metrics = maybe FlowPack.noPackMetrics deps.packMetrics owner,
+            FlowPack.repositories = deps.workspaceCatalog,
+            FlowPack.objectiveSettings = maybe Objective.defaultObjectiveSettings (.settings) deps.objectives
           }
   let coordinator = WorkerCapability.CoordinatorRun childWorkflowId job.identity sid job.executionRootId job.executionPermissions
   coordinationPolicy <- step (StepName "worker-coordination-policy") (liftIO (FlowWorkers.resolveCoordinationPolicy deps.coordination deps.actionAuthority coordinator))
@@ -1322,25 +1330,7 @@ runFlowDefinition deps activeBehaviorEnv resolvedProfile approvalPolicyForRun re
       else pure (Right Nothing)
   (watchdogNativeName, watchdogNativeRun) <- Workflow.currentWorkflow
   useWatchdog <- Workflow.patch (Workflow.PatchId "shikigami-watchdog-v1")
-  useInitiative <- Workflow.patch (Workflow.PatchId "shikigami-initiative-v1")
-  useAdmission <- Workflow.patch (Workflow.PatchId "shikigami-initiative-admission-v1")
-  let initiativeInterpreter :: (Workflow :> es, Store :> es, IOE :> es) => Eff (FlowInitiative.Initiative : es) a -> Eff es a
-      initiativeInterpreter
-        | useInitiative =
-            FlowInitiative.runInitiative
-              FlowInitiative.InitiativeRuntime
-                { seed = deps.initiatives,
-                  identity = job.identity,
-                  activity = activityFromJob job,
-                  agent = decl.name,
-                  run = childWorkflowId,
-                  admission = if useAdmission then FlowInitiative.AdmissionPresent else FlowInitiative.AdmissionAbsent,
-                  directory = depsDirectory deps,
-                  declarations = deps.agents,
-                  objectiveSettings = maybe Objective.defaultObjectiveSettings (.settings) deps.objectives
-                }
-        | otherwise = FlowInitiative.unavailableInitiative
-      observeInterpreter action
+  let observeInterpreter action
         | useWatchdog = FlowObserve.runObserve (FlowObserve.ObserveRuntime deps.observe job.identity (Watchdog.SweepOrigin watchdogNativeName watchdogNativeRun (runJobOccurredAt job) job.identity) (WatchdogFlow.driftAlias `elem` decl.decisionModels && job.executionRootId /= Nothing)) action
         | otherwise = FlowObserve.unavailableObserve action
       inventory = if (not useWatchdog || not (FlowObserve.observeAvailable deps.observe)) && flow.name == WatchdogFlow.watchdogFlowName then [] else Flow.flowDecisionSlotsFor decl flow
@@ -1378,7 +1368,6 @@ runFlowDefinition deps activeBehaviorEnv resolvedProfile approvalPolicyForRun re
           . Adaptive.runAdaptiveDelivery (adaptiveRuntime deps) coordinator resolvedProfile (Harness.narrowHarnessPolicy deps.harness decl.harness)
           . FlowObjectives.runObjectives deps.objectives objectivePolicy
           . observeInterpreter
-          . initiativeInterpreter
           . FlowRouting.runRouting routingEnv
           . decisionInterpreter
           . acknowledgementInterpreter

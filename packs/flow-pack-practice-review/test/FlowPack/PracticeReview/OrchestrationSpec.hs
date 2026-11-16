@@ -152,9 +152,8 @@ import Shikigami.Execution.Policy.Types qualified as Harness
 import Shikigami.Flow.Builtin (builtinPack)
 import Shikigami.Flow.Capability (SinkEnv (..), runSink)
 import Shikigami.Flow.Decision qualified as FlowDecision
-import Shikigami.Flow.Initiative qualified as FlowInitiative
 import Shikigami.Flow.Observe qualified as FlowObserve
-import Shikigami.Flow.Pack (composeFlowRegistry, runModel)
+import Shikigami.Flow.Pack (composeFlowRegistry, noPackMetrics, runModel)
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
@@ -739,7 +738,8 @@ specialistAgentRunDeps appEnv behaviorEnv practiceReview =
       AgentWorkflow.capabilities = CapabilityProvider.emptyCapabilityRuntime,
       AgentWorkflow.coordination = Nothing,
       AgentWorkflow.objectives = Nothing,
-      AgentWorkflow.initiatives = FlowInitiative.disabledInitiatives,
+      AgentWorkflow.packMetrics = const noPackMetrics,
+      AgentWorkflow.workspaceCatalog = [],
       AgentWorkflow.observe = FlowObserve.disabledObserve,
       AgentWorkflow.workspace = Nothing,
       AgentWorkflow.agents = [reviewerDecl],

@@ -8,10 +8,13 @@ Shikigami.Pack.Sdk FlowRunContext.directory
 Shikigami.Pack.Sdk FlowRunContext.executionRoot
 Shikigami.Pack.Sdk FlowRunContext.grants
 Shikigami.Pack.Sdk FlowRunContext.identity
+Shikigami.Pack.Sdk FlowRunContext.metrics
 Shikigami.Pack.Sdk FlowRunContext.model
+Shikigami.Pack.Sdk FlowRunContext.objectiveSettings
 Shikigami.Pack.Sdk FlowRunContext.occurredAt
 Shikigami.Pack.Sdk FlowRunContext.parentRunId
 Shikigami.Pack.Sdk FlowRunContext.parentSession
+Shikigami.Pack.Sdk FlowRunContext.repositories
 Shikigami.Pack.Sdk FlowRunContext.requestIdentity
 Shikigami.Pack.Sdk FlowRunContext.runId
 Shikigami.Pack.Sdk FlowRunContext.session

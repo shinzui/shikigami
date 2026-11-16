@@ -230,8 +230,10 @@ no permission.
 
 The example flows' labels belong to the examples pack and are pinned by its
 golden inventory. The `shikigami-structured-judgments-v1` patch was removed under
-the first-release exception (plan 131, M2). Propose is guarded by
-`shikigami-initiative-v1`. The static labels and
+the first-release exception (plan 131, M2). The two initiative patches,
+`shikigami-initiative-v1` and `shikigami-initiative-admission-v1`, were removed the same
+way (plan 131, M4): the proposing flow's steps are its own, its decision site is
+`initiative-propose`, and no gate guards them. The static labels and
 envelope contracts are recorded in [workflow versioning](workflow-versioning.md).
 Each slot may run once per generation. Repeating a slot is refused. Unbounded
 decision loops need a rotating workflow with `restoreSeed` and `continueAsNew`.
@@ -295,7 +297,7 @@ snapshots, and child/sink deduplication.
 ## Assessing observed text
 
 `Shikigami.Program.Decision.Initiative` registers `shikigami.initiative-assessment`
-under the alias `propose` (the `Propose` label). It differs from the other programs
+under the alias `propose`, at the decision site `initiative-propose`. It differs from the other programs
 in two ways worth copying when a decision reads text nobody addressed to the agent.
 
 Its output selects by index. `AssessmentOutput` has no repository, principal,

@@ -11,8 +11,6 @@ module Shikigami.Flow.Decision
     decisionSlot,
     decisionStepNames,
     decide,
-    proposeStep,
-    proposeAlias,
     decisionCatalog,
     validateDecisionRoute,
     refuseDecision,
@@ -65,7 +63,6 @@ import Shikigami.Execution.Transcript (ExecutionError (ExecutionStorageUnavailab
 import Shikigami.Flow.Routing (RoutingRuntime (..))
 import Shikigami.Log.Correlation (runCorrelationId)
 import Shikigami.Program.Decision
-import Shikigami.Program.Decision.Initiative (AssessmentInput, AssessmentOutput, assessmentProgram)
 import Shikigami.Program.Decision.Registry (decisionCodecs, decisionPrograms)
 import Shikigami.Program.DecisionRunner
 import Shikigami.Program.Runtime (ProgramRuntime)
@@ -115,13 +112,6 @@ decisionStepNames site =
 -- the only site the accepted-work interpreter serves.
 adaptiveSite :: DecisionSite
 adaptiveSite = decisionSite "adapt"
-
-proposeStep :: DecisionStep AssessmentInput AssessmentOutput
-proposeStep = decisionStep (decisionSite "propose") RootAccountedCall (programRef assessmentProgram)
-
--- | The alias a proposing agent's declaration lists in @decisionModels@.
-proposeAlias :: ModelAlias
-proposeAlias = modelAliasFromNonEmpty ('p' :| "ropose")
 
 data DecisionServices = DecisionServices
   { catalog :: !ModelCatalog,

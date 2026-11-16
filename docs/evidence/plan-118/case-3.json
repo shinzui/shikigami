@@ -7,8 +7,8 @@
     "rootMatchesPerObjectiveEnvelope": true,
     "status": "admitted",
     "steps": [
-        "decision-prepare-propose",
-        "decision-result-propose",
+        "decision-prepare-initiative-propose",
+        "decision-result-initiative-propose",
         "emit-signal-initiative-admitted",
         "initiative-admit",
         "initiative-fund",

@@ -16,9 +16,7 @@ module Shikigami.Telemetry.Metrics
     recordQueueDepth,
     recordConsumerRecord,
     recordStreamDisposition,
-    recordInitiativeProposal,
-    recordInitiativeAdmission,
-    recordInitiativeRefusal,
+    recordPackEvent,
     recordWatchdogSweep,
     recordWatchdogFinding,
     recordWatchdogRefusal,
@@ -61,13 +59,11 @@ data ShikigamiMetrics = ShikigamiMetrics
     queueDepth :: !(Gauge Int64),
     consumerRecords :: !(Counter Int64),
     streamDispositions :: !(Counter Int64),
-    initiativeProposals :: !(Counter Int64),
-    initiativeAdmissions :: !(Counter Int64),
+    packEvents :: !(Counter Int64),
     watchdogSweeps :: !(Counter Int64),
     watchdogFindings :: !(Counter Int64),
     watchdogRefusals :: !(Counter Int64),
     watchdogSweepAge :: !(Gauge Int64),
-    initiativeRefusals :: !(Counter Int64),
     recordEvents :: !(Counter Int64)
   }
 
@@ -93,15 +89,13 @@ newShikigamiMetrics meter = liftIO do
   queueDepth <- meterCreateGaugeInt64 meter "shikigami.queue.depth" (Just "{job}") (Just "Total run jobs queued or in flight.") defaultAdvisoryParameters
   consumerRecords <- counter "shikigami.consumer.records" "Kafka records delivered to a Shikigami processor."
   streamDispositions <- counter "shikigami.stream.dispositions" "Matched stream records a flow pack's hook evaluated or skipped, by pack and verdict."
-  initiativeProposals <- counter "shikigami.initiatives.proposals" "Unrequested proposals recorded or resolved, by status."
-  initiativeAdmissions <- counter "shikigami.initiatives.admissions" "Admission stages reached under standing policies."
-  initiativeRefusals <- counter "shikigami.initiatives.refusals" "Attention, creation and admission refusals, by kind."
+  packEvents <- counter "shikigami.pack.events" "Events a flow pack's interpreter counted, by pack and event."
   watchdogSweeps <- counter "shikigami.watchdog.sweeps" "Watchdog attempts by outcome; runtime callbacks are at least once."
   watchdogFindings <- counter "shikigami.watchdog.findings" "Watchdog notices by detection kind."
   watchdogRefusals <- counter "shikigami.watchdog.refusals" "Watchdog observation and delivery refusals."
   recordEvents <- meterCreateCounterInt64 meter "shikigami.record.events" (Just "{event}") (Just "Action record events by kind and decision; append_failed counts refused unrecorded actions.") defaultAdvisoryParameters
   watchdogSweepAge <- meterCreateGaugeInt64 meter "shikigami.watchdog.sweep.age" (Just "s") (Just "Database-clock age of the last completed scoped sweep; absent before completion.") defaultAdvisoryParameters
-  pure ShikigamiMetrics {watchdogSweeps, watchdogFindings, watchdogRefusals, watchdogSweepAge, runsStarted, runsCompleted, runsFailed, runsRetried, runsDeadLettered, queueDepth, consumerRecords, streamDispositions, initiativeProposals, initiativeAdmissions, initiativeRefusals, recordEvents}
+  pure ShikigamiMetrics {watchdogSweeps, watchdogFindings, watchdogRefusals, watchdogSweepAge, runsStarted, runsCompleted, runsFailed, runsRetried, runsDeadLettered, queueDepth, consumerRecords, streamDispositions, packEvents, recordEvents}
   where
     counter name description =
       meterCreateCounterInt64 meter name (Just "{run}") (Just description) defaultAdvisoryParameters
@@ -141,17 +135,12 @@ recordStreamDisposition :: (MonadIO m) => ShikigamiMetrics -> Text -> Text -> Ma
 recordStreamDisposition metrics pack verdict reason =
   liftIO (counterAdd metrics.streamDispositions 1 (attributes (attr "pack" pack <> attr "verdict" verdict <> maybe mempty (attr "skip.reason") reason)))
 
-recordInitiativeProposal :: (MonadIO m) => ShikigamiMetrics -> Text -> m ()
-recordInitiativeProposal metrics status =
-  liftIO (counterAdd metrics.initiativeProposals 1 (attributes (attr "status" status)))
-
-recordInitiativeAdmission :: (MonadIO m) => ShikigamiMetrics -> Text -> m ()
-recordInitiativeAdmission metrics stage =
-  liftIO (counterAdd metrics.initiativeAdmissions 1 (attributes (attr "stage" stage)))
-
-recordInitiativeRefusal :: (MonadIO m) => ShikigamiMetrics -> Text -> m ()
-recordInitiativeRefusal metrics kind =
-  liftIO (counterAdd metrics.initiativeRefusals 1 (attributes (attr "refusal.kind" kind)))
+-- | One event a pack's interpreter counted. The pack supplies the event name
+-- and bounded attributes; the instrument and the @pack@ attribute are the
+-- kernel's.
+recordPackEvent :: (MonadIO m) => ShikigamiMetrics -> Text -> Text -> [(Text, Text)] -> m ()
+recordPackEvent metrics pack event extra =
+  liftIO (counterAdd metrics.packEvents 1 (attributes (attr "pack" pack <> attr "event" event <> foldMap (uncurry attr) extra)))
 
 recordRun :: (MonadIO m) => Counter Int64 -> Text -> Text -> Maybe Text -> m ()
 recordRun instrument agent trigger outcome =

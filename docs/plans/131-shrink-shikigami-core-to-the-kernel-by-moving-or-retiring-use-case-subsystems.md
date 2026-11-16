@@ -238,11 +238,21 @@ this Mac through the same operator verbs as before (`watchdog inspect`, `proposa
     the admin command mounts pack verbs after its own and refuses a repeated name. The
     `shikigami proposals` commands, options and help are unchanged; `proposals` now follows
     `record` in the command list.
-  - Remaining, in the order planned: a pack metrics port for the three remaining
-    `shikigami.initiatives.*` counters; the workspace catalog and objective settings in
-    `FlowRunContext`; the `initiatives` setting as a `PackSetting`; then the move itself, with
-    the two patch blocks and their labels leaving `domain/shikigami/agent-run.keiro`, the
-    `kikan-shikigami-consume-stream` executable, and the real transcript run.
+  - A fifth step puts Initiative in pack form inside the core. Its flow is a `PackFlow`
+    (`Shikigami.Flow.Initiative.proposeWorkFlow`) whose interpreter builds its runtime from
+    `FlowRunContext`. `Initiative` leaves `FlowEffects` (14 capabilities remain),
+    `initiatives` leaves `AgentRunDeps`, the `shikigami-initiative-v1` and
+    `shikigami-initiative-admission-v1` patch blocks with their fifteen labels leave
+    `domain/shikigami/agent-run.keiro`, and both `Workflow.patch` evaluations leave the
+    runner. The decision site is `initiative-propose`. The kernel counts a pack's events on
+    one instrument, `shikigami.pack.events`, through `FlowRunContext.metrics`.
+  - Remaining: the move itself. `Initiative/*`, `Flow/Initiative`,
+    `Program/Decision/Initiative` and the `proposals` verb go to
+    `packs/flow-pack-initiative` with their tests; `coreUseCaseSettings` loses `initiatives`;
+    the builtin pack loses the flow, the hook and the assessment program; the SDK gains the
+    kernel modules the moved code imports; `kikan-shikigami-consume-stream` is added; the
+    pack gets its golden label inventory; and the real transcript run is made.
+
 - [ ] M5: `Watchdog` runs from `flow-pack-watchdog` through a kernel schedule-allowance
   hook. A scheduled sweep observes a real local run and `kikan-shikigami watchdog inspect` shows it.
 - [ ] M6: The adaptive-delivery coordinator is confirmed as a kernel primitive and stays in
@@ -257,6 +267,20 @@ this Mac through the same operator verbs as before (`watchdog inspect`, `proposa
 
 ## Surprises & Discoveries
 
+- Observation (M4): `just keiro-gate HEAD~1` reports two findings for the commit that drops
+  the initiative patch gates, and both are the removed patches.
+  Evidence:
+  `BREAKING: AgentRun workflow-patch shikigami-initiative-v1: patch id existed in the old spec but was removed; the differ cannot prove that no workflow generation still replays its journaled branch [WorkflowPatchRemoved]`
+  and the same line for `shikigami-initiative-admission-v1`, then
+  `replay-neutral: stored-data replay is unchanged by this diff`. The differ reports the
+  removed patch blocks and no separate body finding. The conformance suite passes.
+- Observation (M4): a completed run journals a marker for every active patch, whatever flow
+  it ran.
+  Evidence: `select step_name, status, count(*)` over the development database's
+  `keiro.keiro_workflow_steps` returns `patch:shikigami-initiative-v1|completed|27` and
+  `patch:shikigami-initiative-admission-v1|completed|27` and no other initiative row. A
+  query for label prefixes alone would have read as "54 stored initiative steps"; they are
+  markers on terminal Skill and playbook runs.
 - Observation (M3): the router had never routed with a real model, and could not.
   Evidence: the first baseline run journaled a correct match and failed on every resume
   with `RoutingDecisionDecodeFailed "parsing [] failed, expected Array, but encountered
@@ -403,6 +427,36 @@ this Mac through the same operator verbs as before (`watchdog inspect`, `proposa
 
 ## Decision Log
 
+- Decision (M4): A pack counts on one kernel instrument, `shikigami.pack.events`, through
+  `FlowRunContext.metrics`.
+  Rationale: the kernel's metrics record held four `shikigami.initiatives.*` counters. A pack
+  cannot register an instrument, because the meter belongs to the process, and the kernel may
+  not name a pack's counters. `PackMetrics` is one operation, `count event attributes`; the
+  kernel adds the `pack` attribute. Initiative's four tags become the events `candidate`,
+  `proposal`, `admission` and `refusal`, with the attributes they had. The plan named only the
+  candidate counter; the other three had the same problem. The worker backs the port with the
+  process metrics, and a one-off run or a test counts nothing.
+  Date: 2026-11-16
+- Decision (M4): `FlowRunContext` gains `metrics`, `repositories` and `objectiveSettings`, and
+  `AgentRunDeps` trades `initiatives` for `packMetrics` and `workspaceCatalog`.
+  Rationale: the Initiative seed carried the observer settings, the operator's workspace
+  catalog and four metric callbacks, and the runner read the objective settings for it. The
+  settings now arrive as a pack setting; the catalog is offered by repository identity only,
+  as the worker always derived it, so a source locator still cannot reach a model; the
+  objective settings are what the flow needs to register the coordinator's run with the
+  objective owner.
+  Date: 2026-11-16
+- Decision (M4): The two initiative patch gates are removed, and a one-off run of the
+  proposing flow is no longer forced to observe nothing.
+  Rationale: ADR-27 allows removing an unreleased patch branch. The development database
+  holds no initiative step and no propose decision. It holds 54 patch markers,
+  `patch:shikigami-initiative-v1` and `patch:shikigami-initiative-admission-v1` on each of 27
+  completed agent runs, which are terminal and never replayed; its one non-terminal run,
+  `7a28975f`, carries neither marker. The runner installed a disabled interpreter where the patch was absent and in
+  `shikigami-agent-run`. A pack interpreter reads the composed settings from its context, so
+  a one-off run with an allowance configured now opens a candidate; it still cannot assess
+  one, because the decision is root-accounted and a one-off run has no evaluation root.
+  Date: 2026-11-16
 - Decision (M4): An admin verb is an `optparse-applicative` `ParserInfo (AdminContext -> IO ())`
   with a name, and a verb sees an `AdminContext`, never `AppConfig`.
   Rationale: the plan asked for a named command the admin entry point mounts. The

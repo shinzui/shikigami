@@ -155,11 +155,15 @@ This only deletes `skipped` and `not-actionable` candidates, never an `evaluatin
 
 | Instrument | Attributes |
 | --- | --- |
-| `shikigami.stream.dispositions` | `pack` (`initiative`), `verdict`, `skip.reason` |
-| `shikigami.initiatives.proposals` | `status` |
-| `shikigami.initiatives.admissions` | `stage` |
-| `shikigami.initiatives.refusals` | `refusal.kind` |
+| `shikigami.stream.dispositions` | `pack`, `verdict`, `skip.reason` |
+| `shikigami.pack.events` | `pack`, `event`, and one of `verdict` with `skip.reason`, `status`, `stage`, `refusal.kind` |
 
-No attribute carries an identifier, excerpt or error text. Alert on `refusals` and on
+`shikigami.stream.dispositions` counts what stream intake decided for a matched record:
+`evaluating` or `skipped`. The proposing flow counts on `shikigami.pack.events`, with
+`event` one of `candidate` (a skip or `proposed`, with `verdict` and `skip.reason`),
+`proposal` (`status`), `admission` (`stage`) and `refusal` (`refusal.kind`). They replace
+`shikigami.initiatives.candidates`, `.proposals`, `.admissions` and `.refusals`.
+
+No attribute carries an identifier, excerpt or error text. Alert on `event="refusal"` and on
 `proposals inspect --fail-when-exhausted`. A jump in `shikigami.stream.dispositions` with `skip.reason` of
 `decision-refused` suggests a model answering outside the offered choices.

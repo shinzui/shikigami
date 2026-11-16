@@ -22,15 +22,16 @@ module Shikigami.Flow.Initiative
     InitiativeSeed (..),
     InitiativeHooks (..),
     noInitiativeHooks,
-    disabledInitiatives,
     InitiativeRuntime (..),
-    AdmissionPatch (..),
     RepositoryOption (..),
     runInitiative,
-    unavailableInitiative,
+    initiativeRuntime,
     proposeWork,
+    proposeWorkFlow,
     proposeWorkSlots,
     proposeWorkFlowName,
+    proposeStep,
+    proposeAlias,
   )
 where
 
@@ -58,16 +59,19 @@ import Shikigami.Agent.Principal (AgentIdentity (VerifiedIdentity), AgentPrincip
 import Shikigami.Agent.Run.Key (runKeyWithPrefix)
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (AgentWorkflowRoute), runJobWorkflowId)
 import Shikigami.Decision.Contract (DecisionSlot, failureCode, versionedDigest)
+import Shikigami.Decision.ModelAlias (ModelAlias, modelAliasFromNonEmpty)
 import Shikigami.Directory qualified as Directory
 import Shikigami.Duration (Duration, durationTime, remainingDuration)
 import Shikigami.Execution.Identity (ExecutionRootId)
 import Shikigami.Execution.Resources qualified as Resources
 import Shikigami.Execution.ResourcesStore (allocateRootForWorkflow)
+import Shikigami.Flow (DecisionMode (..), FlowDef (..), LifecycleDiagram (..))
 import Shikigami.Flow.Acknowledgement (Ack (..), Acknowledgement, awaitAckWithin)
 import Shikigami.Flow.Capability (Sink, emitSignalTo)
-import Shikigami.Flow.Decision (Decision, decide, decisionSlot, proposeAlias, proposeStep)
+import Shikigami.Flow.Decision (Decision, DecisionAccounting (..), DecisionStep, decide, decisionSite, decisionSlot, decisionStep)
 import Shikigami.Flow.Objectives (Objectives)
 import Shikigami.Flow.Objectives qualified as Objectives
+import Shikigami.Flow.Pack (FlowRunContext (..), PackFlow (..), PackMetrics (..))
 import Shikigami.Initiative.Ledger qualified as Ledger
 import Shikigami.Initiative.Notice (acceptanceAsk, admissionNotice, noticeSink)
 import Shikigami.Initiative.Policy (Reservation (..))
@@ -93,8 +97,10 @@ import Shikigami.Objective.Types
     Role (Coordinator),
     parseInstructions,
   )
-import Shikigami.Program.Decision.Initiative (Verdict (..), assessmentInput, validateAssessment)
-import Shikigami.Repository (RepositoryId)
+import Shikigami.Program.Decision (programRef)
+import Shikigami.Program.Decision.Initiative (AssessmentInput, AssessmentOutput, Verdict (..), assessmentInput, assessmentProgram, validateAssessment)
+import Shikigami.Repository (RepositoryId, repositoryIdText)
+import Shikigami.RuntimePolicy (DefaultModelRequirement (..))
 import Shikigami.StateRevision (parseRevision)
 import Shikigami.Trigger.Enqueue (addressedRunJob, enqueueRunJobTx)
 
@@ -190,9 +196,6 @@ data InitiativeSeed = InitiativeSeed
     hooks :: !InitiativeHooks
   }
 
-disabledInitiatives :: InitiativeSeed
-disabledInitiatives = InitiativeSeed Nothing [] noInitiativeHooks
-
 data RepositoryOption = RepositoryOption
   { repository :: !RepositoryId,
     description :: !Text
@@ -208,16 +211,42 @@ data InitiativeRuntime = InitiativeRuntime
     activity :: !ActivityEnvelope,
     agent :: !AgentName,
     run :: !WorkflowId,
-    -- | Whether this run's journal is past the admission patch. A policy can only
-    -- narrow or admit where it is.
-    admission :: !AdmissionPatch,
     directory :: !Directory.DirectoryHandle,
     declarations :: ![AgentDecl],
     objectiveSettings :: !ObjectiveSettings
   }
 
-data AdmissionPatch = AdmissionAbsent | AdmissionPresent
-  deriving stock (Eq, Show)
+-- | The runtime of one run, from the kernel's view of it: the validated
+-- allowances, the operator's catalog by identity, and the pack's counter. A
+-- repository's source is a private locator and must not reach a model
+-- provider, so only its identity is offered.
+initiativeRuntime :: FlowRunContext -> InitiativeRuntime
+initiativeRuntime context =
+  InitiativeRuntime
+    { seed =
+        InitiativeSeed
+          { settings = initiativeSettingsFrom context.settings,
+            repositories = [RepositoryOption repository (repositoryIdText repository) | repository <- context.repositories],
+            hooks = countingHooks context.metrics
+          },
+      identity = context.requestIdentity,
+      activity = context.activity,
+      agent = context.agent.name,
+      run = context.runId,
+      directory = context.directory,
+      declarations = context.declarations,
+      objectiveSettings = context.objectiveSettings
+    }
+
+-- | The four bounded tags as events on the pack's counter.
+countingHooks :: PackMetrics -> InitiativeHooks
+countingHooks metrics =
+  InitiativeHooks
+    { onCandidate = \verdict reason -> metrics.count "candidate" (("verdict", verdict) : maybe [] (\skip -> [("skip.reason", skip)]) reason),
+      onProposal = \status -> metrics.count "proposal" [("status", status)],
+      onAdmission = \stage -> metrics.count "admission" [("stage", stage)],
+      onRefusal = \kind -> metrics.count "refusal" [("refusal.kind", kind)]
+    }
 
 -- | What @initiative-open@ retains: the allowance and catalog this run is bound
 -- to, even if the settings change while it is parked for a week.
@@ -340,9 +369,7 @@ admitTx runtime allowance now =
                   Ledger.NotificationsAt _ : _ -> skip NotificationsExhausted observed
                   [] -> do
                     Ledger.markEvaluationStartedTx allowance.principal observed.activity now
-                    covering <- case runtime.admission of
-                      AdmissionAbsent -> pure []
-                      AdmissionPresent -> map Policy.policyFacts <$> Policy.coveringPolicies allowance.principal observed.kind now
+                    covering <- map Policy.policyFacts <$> Policy.coveringPolicies allowance.principal observed.kind now
                     pure (Right (narrowed runtime allowance now covering))
   where
     skip reason observed = do
@@ -521,28 +548,39 @@ resolveStep runtime opened view resolution = do
       pure outcomeOf
     _ -> pure (Left AcceptanceFailed)
 
--- | Installed where the patch is absent and in one-off runs: nothing can observe.
-unavailableInitiative :: (Workflow :> es) => Eff (Initiative : es) a -> Eff es a
-unavailableInitiative = interpret \_ -> \case
-  Open -> do
-    recorded <- step (StepName "initiative-open") (pure noAllowance)
-    pure (Left (either id (const NoObserverAllowance) recorded))
-  RecordSkip _ _ -> pure ()
-  RecordProposal _ _ -> pure (Left NoObserverAllowance)
-  Resolve _ _ _ -> pure (Left AcceptanceFailed)
-  ReserveAdmission _ _ -> pure (HumanPath Nothing)
-  Fund _ _ _ _ -> pure (Left "initiatives are unavailable")
-  Launch _ _ -> pure (Left "initiatives are unavailable")
-  FailAdmission _ _ _ -> pure ()
-
-noAllowance :: Either SkipReason OpenAdmission
-noAllowance = Left NoObserverAllowance
-
 proposeWorkFlowName :: DeclarationCoordinate "flow"
 proposeWorkFlowName = declarationCoordinate "propose-work"
 
 proposeWorkSlots :: [DecisionSlot]
 proposeWorkSlots = [decisionSlot proposeStep [proposeAlias]]
+
+-- | The one decision the flow makes: is this observed excerpt actionable, and
+-- for which repository and action class. It journals
+-- @decision-prepare-initiative-propose@ and @decision-result-initiative-propose@,
+-- and is charged to the run's evaluation root.
+proposeStep :: DecisionStep AssessmentInput AssessmentOutput
+proposeStep = decisionStep (decisionSite "initiative-propose") RootAccountedCall (programRef assessmentProgram)
+
+-- | The alias a proposing agent's declaration lists in @decisionModels@.
+proposeAlias :: ModelAlias
+proposeAlias = modelAliasFromNonEmpty ('p' :| "ropose")
+
+-- | The flow with its interpreter, as a pack contributes it. The interpreter
+-- is the reviewed IO surface: every operation is one journaled
+-- @initiative-*@ step.
+proposeWorkFlow :: PackFlow
+proposeWorkFlow =
+  PackFlow
+    { definition =
+        FlowDef
+          { name = proposeWorkFlowName,
+            decisionSlots = proposeWorkSlots,
+            requiresDefaultModel = DefaultModelOptional,
+            decisionMode = StrictDecisions,
+            lifecycle = LifecycleDiagram "flowchart LR\n Observe --> Prefilter --> Assess --> Propose --> Await --> Accept" []
+          },
+      run = \context payload -> runInitiative (initiativeRuntime context) (proposeWork payload)
+    }
 
 -- | Observe, assess once, propose, and wait for a person. Nothing here funds,
 -- staffs or starts work, and nothing observed can change what is created.

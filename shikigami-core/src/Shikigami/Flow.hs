@@ -26,7 +26,6 @@ import Shikigami.Flow.CodingAgent (CodingAgent)
 import Shikigami.Flow.Decision (Decision)
 import Shikigami.Flow.DeclaredTool (DeclaredTool)
 import Shikigami.Flow.Delegate (Delegate)
-import Shikigami.Flow.Initiative (Initiative)
 import Shikigami.Flow.Objectives (Objectives)
 import Shikigami.Flow.Observe (Observe)
 import Shikigami.Flow.Routing (Routing)
@@ -63,7 +62,6 @@ type FlowEffects es =
     Workers :> es,
     AdaptiveDelivery :> es,
     Objectives :> es,
-    Initiative :> es,
     Observe :> es,
     Routing :> es,
     Decision :> es

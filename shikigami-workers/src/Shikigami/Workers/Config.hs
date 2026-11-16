@@ -66,9 +66,8 @@ import Shikigami.Duration
 import Shikigami.Execution.Capacity (RuntimeLimits)
 import Shikigami.Execution.Policy.Types (HarnessPolicy)
 import Shikigami.Flow.Decision qualified as FlowDecision
-import Shikigami.Flow.Initiative qualified as FlowInitiative
 import Shikigami.Flow.Observe qualified as FlowObserve
-import Shikigami.Flow.Pack (FlowRegistry)
+import Shikigami.Flow.Pack (FlowPackName, FlowRegistry, PackMetrics)
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Health.Worker (Heartbeats, LoopName (DirectoryLoop), LoopStaleness, beat, loopStaleness)
 import Shikigami.Inspection.Consumer (ConsumerInspection)
@@ -79,6 +78,7 @@ import Shikigami.Objective.Types (ObjectiveSettings)
 import Shikigami.Output (emptyOutputRegistry)
 import Shikigami.Pack.Setting (PackSettings)
 import Shikigami.Prelude hiding ((.=))
+import Shikigami.Repository (RepositoryId)
 import Shikigami.RuntimePolicy
 import Shikigami.Sink (DanwaConfig, GrantSource, KanmonConfig, KawaConfig, KizashiConfig, ReiConfig)
 import Shikigami.Sink.GrantStore (withAuthority)
@@ -170,7 +170,8 @@ data WorkerEnv = WorkerEnv
     directory :: !DirectoryHandle,
     directoryRefresher :: !(Maybe (IO ())),
     objectiveSettings :: !ObjectiveSettings,
-    initiatives :: !FlowInitiative.InitiativeSeed,
+    packMetrics :: !(FlowPackName -> PackMetrics),
+    workspaceCatalog :: ![RepositoryId],
     observe :: !FlowObserve.ObserveSeed,
     trackers :: !(Maybe Tracker.TrackerHost),
     -- | The validated settings of the composed flow packs.
@@ -245,7 +246,8 @@ agentRunDeps env =
       AgentWorkflow.workspace = env.workspace,
       AgentWorkflow.coordination = Just (Objectives.coordinationHost env.appEnv env.objectiveSettings env.directory env.actionAuthority env.agents env.delegationBudget env.workspaceTransfers),
       AgentWorkflow.objectives = Just (objectiveRuntime env),
-      AgentWorkflow.initiatives = env.initiatives,
+      AgentWorkflow.packMetrics = env.packMetrics,
+      AgentWorkflow.workspaceCatalog = env.workspaceCatalog,
       AgentWorkflow.observe = env.observe,
       AgentWorkflow.agents = (.agents) env,
       AgentWorkflow.kizashi = (.kizashi) env,

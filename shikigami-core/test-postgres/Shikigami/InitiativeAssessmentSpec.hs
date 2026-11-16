@@ -41,6 +41,7 @@ import Shikigami.Execution.ResourcesStore qualified as Roots
 import Shikigami.Fixture.DecisionExamples (Request (..), TriageResult (..), triageProgram)
 import Shikigami.Fixture.ExamplePack (fixtureDecisionServices)
 import Shikigami.Flow.Decision qualified as Decision
+import Shikigami.Flow.Initiative qualified as FlowInitiative
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Initiative.Intake (Disposition (..), disposition)
 import Shikigami.Initiative.Settings (InitiativeSettings)
@@ -149,7 +150,7 @@ catalog :: ModelCatalog
 catalog =
   either (error . show) id $
     modelCatalog
-      [ either (error . show) id (modelBinding Decision.proposeAlias "1" "propose" "1" (stubModel & #modelId .~ "stub-propose") Options.emptyOptions Nothing),
+      [ either (error . show) id (modelBinding FlowInitiative.proposeAlias "1" "propose" "1" (stubModel & #modelId .~ "stub-propose") Options.emptyOptions Nothing),
         either (error . show) id (modelBinding triageAlias "1" "triage" "1" (stubModel & #modelId .~ "stub-triage") Options.emptyOptions Nothing)
       ]
 
@@ -165,8 +166,8 @@ triageInput = Request {request = "Investigate the checkout"}
 decisionEnv :: Harness -> Maybe ExecutionRootId -> Decision.DecisionEnv
 decisionEnv h root =
   Decision.DecisionEnv
-    { agent = Fixture.routerDecl & #decisionModels .~ [Decision.proposeAlias],
-      inventory = [Decision.decisionSlot Decision.proposeStep [Decision.proposeAlias]],
+    { agent = Fixture.routerDecl & #decisionModels .~ [FlowInitiative.proposeAlias],
+      inventory = [Decision.decisionSlot FlowInitiative.proposeStep [FlowInitiative.proposeAlias]],
       services = h.services,
       runtime = h.runtime.runtime,
       profile = Nothing,
@@ -187,13 +188,13 @@ triageEnv h root =
 
 assessThenStep :: (Decision.Decision :> es, Workflow :> es, IOE :> es) => IO () -> Eff es AssessmentOutput
 assessThenStep crash = do
-  output <- Decision.decide Decision.proposeStep Decision.proposeAlias inputValue
+  output <- Decision.decide FlowInitiative.proposeStep FlowInitiative.proposeAlias inputValue
   _ <- step (StepName "harness-after") (liftIO crash)
   pure output
 
 runHarness :: Harness -> Maybe ExecutionRootId -> Text -> IO (Either StoreError (WorkflowOutcome AssessmentOutput))
 runHarness h root key =
-  runAppIO h.env (runWorkflow (WorkflowName "initiative-assessment-harness") (WorkflowId key) (Decision.runDecision (decisionEnv h root) (Decision.decide Decision.proposeStep Decision.proposeAlias inputValue)))
+  runAppIO h.env (runWorkflow (WorkflowName "initiative-assessment-harness") (WorkflowId key) (Decision.runDecision (decisionEnv h root) (Decision.decide FlowInitiative.proposeStep FlowInitiative.proposeAlias inputValue)))
 
 verdictOf :: (Show failure) => Either failure (WorkflowOutcome AssessmentOutput) -> IO Verdict
 verdictOf = \case

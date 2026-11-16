@@ -35,11 +35,9 @@ import Shikigami.Directory (DirectoryRuntime (..))
 import Shikigami.Duration
 import Shikigami.Execution.Capacity qualified as Capacity
 import Shikigami.Flow.Builtin (builtinPack)
-import Shikigami.Flow.Initiative qualified as FlowInitiative
 import Shikigami.Flow.Observe qualified as FlowObserve
-import Shikigami.Flow.Pack (FlowPack, FlowRegistry, composeFlowRegistryOrExit, decisionServices, flowDeclarationErrors, lookupTask)
+import Shikigami.Flow.Pack (FlowPack, FlowRegistry, PackMetrics (..), composeFlowRegistryOrExit, decisionServices, flowDeclarationErrors, flowPackNameText, lookupTask)
 import Shikigami.Health.Worker (LoopName (OutboxLoop, QueueLoop, TelemetryLoop, TimerLoop), loopStaleAfter, loopStaleness, newHeartbeatsWithStaleness, serveProbesWith)
-import Shikigami.Initiative.Settings (initiativeSettingsFrom)
 import Shikigami.Inspection.Consumer (consumerInspection)
 import Shikigami.Inspection.Store (withObservedStore)
 import Shikigami.Log qualified as Log
@@ -50,13 +48,12 @@ import Shikigami.Objective.Tracker.Store qualified as Tracker
 import Shikigami.Objective.Tracker.Worker (trackerLoopRegistration)
 import Shikigami.Prelude (Text)
 import Shikigami.Record (observedRecord, postgresRecord)
-import Shikigami.Repository (repositoryIdText)
 import Shikigami.Runtime (registerRuntimeCatalog, runtimeConnectionSettings)
 import Shikigami.Sink (DanwaConfig (..), GrantSource (DbGrants), KanmonConfig (..), KawaConfig (..), KizashiConfig (..), ReiConfig (..))
 import Shikigami.Sink.Http (HttpLimits (..), SinkHttp, SinkHttpError, credentialsFromConfig, newSinkHttp)
 import Shikigami.Sink.Permission (sinkKindText)
 import Shikigami.Telemetry (withRunTelemetry)
-import Shikigami.Telemetry.Metrics (ShikigamiMetrics, recordInitiativeAdmission, recordInitiativeProposal, recordInitiativeRefusal, recordStreamDisposition)
+import Shikigami.Telemetry.Metrics (ShikigamiMetrics, recordPackEvent)
 import Shikigami.Telemetry.Sampler (watchdogHooks)
 import Shikigami.Trust.LocalOperator.Approvals (defaultApprovalsPath)
 import Shikigami.Trust.LocalOperator.Grant (defaultStateDirectory)
@@ -248,20 +245,10 @@ runWorkerCmdWith packs resumeBudget config = do
                   directoryRefresher,
                   objectiveSettings = config.objectiveSettings,
                   observe = FlowObserve.ObserveSeed config.watchdog (watchdogHooks shikigamiMetrics),
-                  initiatives =
-                    FlowInitiative.InitiativeSeed
-                      { settings = initiativeSettingsFrom config.packSettings,
-                        -- Identity only: a repository's source is a private locator
-                        -- and must not reach a model provider.
-                        repositories = [FlowInitiative.RepositoryOption entry.identity (repositoryIdText entry.identity) | entry <- maybe [] (.repositories) config.workspaceSettings],
-                        hooks =
-                          FlowInitiative.InitiativeHooks
-                            { onCandidate = recordStreamDisposition shikigamiMetrics "initiative",
-                              onProposal = recordInitiativeProposal shikigamiMetrics,
-                              onAdmission = recordInitiativeAdmission shikigamiMetrics,
-                              onRefusal = recordInitiativeRefusal shikigamiMetrics
-                            }
-                      },
+                  packMetrics = \pack -> PackMetrics (recordPackEvent shikigamiMetrics (flowPackNameText pack)),
+                  -- Identity only: a repository's source is a private locator
+                  -- and must not reach a model provider.
+                  workspaceCatalog = [entry.identity | entry <- maybe [] (.repositories) config.workspaceSettings],
                   trackers,
                   packSettings = config.packSettings
                 }

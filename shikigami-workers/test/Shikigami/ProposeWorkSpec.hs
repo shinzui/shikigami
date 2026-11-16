@@ -22,12 +22,12 @@ import Shikigami.Agent.Approval (ApprovalChannel (..))
 import Shikigami.Agent.Workflow qualified as Agent
 import Shikigami.Duration (durationTime)
 import Shikigami.Fixture.Proposing
-import Shikigami.Flow.Initiative qualified as FlowInitiative
 import Shikigami.Initiative.Notice (nobodyRequested)
 import Shikigami.Initiative.Types (parseProposalId, proposalRefFor)
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
 import Shikigami.Objective.Keys (ObservedSource (..))
 import Shikigami.Objective.Types qualified as Objective
+import Shikigami.Pack.Setting (noPackSettings)
 import Shikigami.Repository (repositoryIdText)
 import Shikigami.Trigger.Consumer (RecordDisposition (..))
 import Test.Tasty (TestTree, testGroup)
@@ -47,7 +47,7 @@ tests fixture =
         row.status @?= "pending"
         field "repository" row.assessment @?= String (repositoryIdText (head repositoryIds))
         steps <- stepNames h job
-        assertBool (show steps) (all (`elem` steps) ["initiative-open", "decision-prepare-propose", "decision-result-propose", "initiative-proposal"])
+        assertBool (show steps) (all (`elem` steps) ["initiative-open", "decision-prepare-initiative-propose", "decision-result-initiative-propose", "initiative-proposal"])
         count h "shikigami.objectives" >>= (@?= 0)
         count h "shikigami.execution_root_origins" >>= (@?= 1),
       testCase "a not-actionable answer records its verdict and proposes nothing" $ withProposing fixture defaultOptions \h -> do
@@ -64,12 +64,12 @@ tests fixture =
         verdicts h >>= (@?= [("act-1", "skipped", Just "decision-refused")])
         proposals h >>= \rows -> length rows @?= 0,
       testCase "a run whose settings grant no allowance journals the refusal and calls no model" $ withProposing fixture defaultOptions \h -> do
-        let withoutAllowance = h {deps = h.deps & #initiatives .~ FlowInitiative.disabledInitiatives} :: Proposing
+        let withoutAllowance = h {deps = h.deps & #packSettings .~ noPackSettings} :: Proposing
         _ <- deliver h "act-1" "thread-1" plainReport
         [(job, outcome)] <- drain withoutAllowance
         assertCompleted outcome
         steps <- stepNames h job
-        assertBool (show steps) ("initiative-open" `elem` steps && "decision-prepare-propose" `notElem` steps)
+        assertBool (show steps) ("initiative-open" `elem` steps && "decision-prepare-initiative-propose" `notElem` steps)
         h.calls >>= (@?= 0)
         verdicts h >>= (@?= [("act-1", "evaluating", Nothing)]),
       testCase "the ask says nobody requested the work, carries its own expiry and no excerpt" $ withProposing fixture defaultOptions \h -> do
@@ -205,7 +205,7 @@ tests fixture =
         [ask] <- h.asks
         ask.channel @?= ViaDanwa
         assertBool "no planted recipient reaches the ask" (not ("#ops" `Text.isInfixOf` ask.message))
-        recorded <- stepValue h job "decision-prepare-propose"
+        recorded <- stepValue h job "decision-prepare-initiative-propose"
         let prepared = field "input" (field "Right" recorded)
         field "excerpt" prepared @?= String planted
         let others = KeyMap.delete "excerpt" (objectFields prepared)
@@ -220,7 +220,7 @@ tests fixture =
         let crashing =
               Agent.defaultAgentRunHooks
                 & #afterStepBody
-                  .~ ( \(StepName name) -> when (name == "decision-result-propose") do
+                  .~ ( \(StepName name) -> when (name == "decision-result-initiative-propose") do
                          stop <- atomicModifyIORef' once (False,)
                          when stop (ioError (userError "worker exits before journaling the decision"))
                      )

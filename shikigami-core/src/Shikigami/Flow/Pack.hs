@@ -30,6 +30,8 @@ module Shikigami.Flow.Pack
     FlowRunContext (..),
     RunModel (..),
     runModel,
+    PackMetrics (..),
+    noPackMetrics,
 
     -- * Admin verbs
     AdminVerb (..),
@@ -107,11 +109,13 @@ import Shikigami.Execution.Identity (ExecutionRootId)
 import Shikigami.Flow (FlowDef (..), FlowEffects, flowDecisionSlotsFor)
 import Shikigami.Flow.Decision (DecisionServices (..), decisionProviders)
 import Shikigami.Log qualified as Log
+import Shikigami.Objective.Types (ObjectiveSettings)
 import Shikigami.Pack.Admin (AdminContext (..), AdminVerb (..))
 import Shikigami.Pack.Setting (PackSetting (..), PackSettings, SettingDefault (..), SettingShape (..), packSettingText, packSettingValue)
 import Shikigami.Program.Decision (ProgramRegistry, ResultCodecRegistry, SomeProgram, SomeResultCodec)
 import Shikigami.Program.Decision qualified as Decision
 import Shikigami.Program.Task (ProgramTask (..))
+import Shikigami.Repository (RepositoryId)
 import Shikigami.Sink (GrantSource)
 import Shikigami.Trigger.Hook (PackDisposition (..), StreamCandidate (..), StreamDisposition (..), StreamEvaluation (..), StreamHook (..), StreamIntake, StreamSkip (..), TriggerHooks (..), noTriggerHooks)
 import System.Exit (exitFailure)
@@ -204,8 +208,27 @@ data FlowRunContext = FlowRunContext
     -- | The kernel's stores, for an interpreter that records memory.
     app :: !AppEnv,
     -- | The grant source a sink intent prepared by the pack is checked against.
-    grants :: !GrantSource
+    grants :: !GrantSource,
+    -- | The pack's counter.
+    metrics :: !PackMetrics,
+    -- | The repositories of the operator's workspace catalog, by identity. A
+    -- repository's source locator is private and is not here.
+    repositories :: ![RepositoryId],
+    -- | Objective enablement and creation grants, for a flow that registers
+    -- a run with the objective owner.
+    objectiveSettings :: !ObjectiveSettings
   }
+
+-- | A pack's bounded counter. An interpreter names an event and gives bounded
+-- attributes; the kernel adds the pack's name and owns the instrument
+-- (@shikigami.pack.events@). Nothing passed here may carry an identifier,
+-- observed text or an error message.
+newtype PackMetrics = PackMetrics
+  { count :: Text -> [(Text, Text)] -> IO ()
+  }
+
+noPackMetrics :: PackMetrics
+noPackMetrics = PackMetrics (\_ _ -> pure ())
 
 -- | The one model call a pack interpreter may make: a system prompt and a
 -- user prompt in, the text of one JSON-object response out. 'Left' carries a

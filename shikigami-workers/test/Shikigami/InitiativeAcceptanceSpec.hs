@@ -373,8 +373,8 @@ tests fixture =
 initiativeSteps :: [Text]
 initiativeSteps =
   [ "initiative-open",
-    "decision-prepare-propose",
-    "decision-result-propose",
+    "decision-prepare-initiative-propose",
+    "decision-result-initiative-propose",
     "initiative-proposal",
     "objectives-initiative-accept",
     "initiative-admit",

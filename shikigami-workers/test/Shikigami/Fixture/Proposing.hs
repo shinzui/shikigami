@@ -107,10 +107,11 @@ import Shikigami.Flow.Builtin (builtinFlowRegistry)
 import Shikigami.Flow.Decision qualified as Decision
 import Shikigami.Flow.Initiative qualified as FlowInitiative
 import Shikigami.Flow.Observe qualified as FlowObserve
+import Shikigami.Flow.Pack (PackMetrics (..))
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Initiative.Intake (streamDisposition)
 import Shikigami.Initiative.Policy qualified as Policy
-import Shikigami.Initiative.Settings (InitiativeSettings)
+import Shikigami.Initiative.Settings (InitiativeSettings, initiativesKey)
 import Shikigami.Initiative.Types (ActionClass (..), SourceKind (..))
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
@@ -119,8 +120,8 @@ import Shikigami.Objective.Command qualified as Command
 import Shikigami.Objective.Runtime qualified as Objectives
 import Shikigami.Objective.Types qualified as Objective
 import Shikigami.Output (emptyOutputRegistry)
-import Shikigami.Pack.Setting (noPackSettings)
-import Shikigami.Repository (RepositoryId, repositoryId)
+import Shikigami.Pack.Setting (noPackSettings, packSettingsFromList)
+import Shikigami.Repository (RepositoryId, repositoryId, repositoryIdText)
 import Shikigami.RunEvidence.Catalog qualified as Catalog
 import Shikigami.RunJobs qualified as RunJobs
 import Shikigami.Sink (GrantSource (StaticGrants), SinkKind (SKizashiSignal), defaultGrantTable)
@@ -254,7 +255,7 @@ withProposing fixture options use = withShikigamiFreshDatabase fixture \connecti
         completing model context callOptions = do
           modifyIORef' counted (+ 1)
           decisionStubProvider.complete model context callOptions
-        binding = either (error . show) id (modelBinding Decision.proposeAlias "1" "propose" "1" (stubModel & #modelId .~ "stub-propose") BaikaiOptions.emptyOptions Nothing)
+        binding = either (error . show) id (modelBinding FlowInitiative.proposeAlias "1" "propose" "1" (stubModel & #modelId .~ "stub-propose") BaikaiOptions.emptyOptions Nothing)
         settings = settingsWith options
         objectiveSettings =
           Objective.defaultObjectiveSettings
@@ -263,7 +264,7 @@ withProposing fixture options use = withShikigamiFreshDatabase fixture \connecti
         objectiveRuntime = Objectives.ObjectiveRuntime env objectiveSettings directory allowAllForTests Nothing
         coordinator = coordinatorDeclaration & #identity .~ Just (IdentityDecl (declarationCoordinate "agent_shikigami_coordinator"))
         deps = proposingDeps env behavior provider binding objectiveRuntime settings repositoryOptions [declaration, coordinator] http directory store.pool recorded (\event -> modifyIORef' seen (event :))
-        repositoryOptions = [FlowInitiative.RepositoryOption identifier "fixture repository" | identifier <- repositoryIds]
+        repositoryOptions = [FlowInitiative.RepositoryOption identifier (repositoryIdText identifier) | identifier <- repositoryIds]
     _ <- either (assertFailure . show) pure =<< ensureRunQueue store.pool
     _ <- either (assertFailure . show) pure =<< runAppIO env Catalog.registerProjectionCatalog
     use
@@ -312,18 +313,10 @@ proposingDeps env behavior provider binding objectiveRuntime settings repository
       coordination = Nothing,
       objectives = Just objectiveRuntime,
       observe = FlowObserve.disabledObserve,
-      initiatives =
-        FlowInitiative.InitiativeSeed
-          { settings = Just settings,
-            repositories = repositoryOptions,
-            hooks =
-              FlowInitiative.InitiativeHooks
-                { onCandidate = \verdict reason -> seen ("candidate", verdict <> maybe "" (":" <>) reason),
-                  onProposal = \status -> seen ("proposal", status),
-                  onAdmission = \stage -> seen ("admission", stage),
-                  onRefusal = \kind -> seen ("refusal", kind)
-                }
-          },
+      -- The proposer's counter, as the worker backs it: the event and its
+      -- bounded attribute values, in the order the interpreter gives them.
+      packMetrics = \_ -> PackMetrics \event attributes -> seen (event, Text.intercalate ":" (map snd attributes)),
+      workspaceCatalog = map (.repository) repositoryOptions,
       agents = declarations,
       kizashi = KizashiConfig "http://localhost:1" (declarationCoordinate "recipient"),
       kawa = KawaConfig "http://localhost:1" (activityCoordinate "fixture"),
@@ -343,7 +336,7 @@ proposingDeps env behavior provider binding objectiveRuntime settings repository
       grants = StaticGrants (Map.insert proposerIdentity (Set.singleton SKizashiSignal) defaultGrantTable),
       directory,
       routing = Routing.RoutingRuntime (\_ -> error "no router") (\_ _ _ -> error "no router"),
-      packSettings = noPackSettings,
+      packSettings = packSettingsFromList [(initiativesKey, Aeson.toJSON settings)],
       deliveryPool = Just pool,
       logger = Log.silentLogger,
       resolveRunProfile = \profile version -> pure (Left (UnknownProfile profile version))

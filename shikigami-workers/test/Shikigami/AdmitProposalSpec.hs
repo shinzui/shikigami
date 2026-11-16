@@ -183,7 +183,7 @@ tests fixture =
         assertCompleted outcome
         [row] <- proposals h
         lookupText "repository" row.assessment @?= Just (repositoryIdText (NonEmpty.head (Policy.policyFacts policy).input.repositories))
-        recorded <- stepValue h job "decision-prepare-propose"
+        recorded <- stepValue h job "decision-prepare-initiative-propose"
         let offered = lookupValue "repositories" (lookupValue "input" (lookupValue "Right" recorded))
         offered @?= Aeson.toJSON [object' 0 (repositoryIdText (NonEmpty.head (Policy.policyFacts policy).input.repositories))]
         [objective] <- objectives h
@@ -195,7 +195,7 @@ tests fixture =
         _ <- installTerms h defaultTerms {actionClasses = [DraftDocumentation]}
         _ <- deliver h "act-1" "thread-1" plainReport
         (job, _) <- single =<< drain h
-        recorded <- stepValue h job "decision-prepare-propose"
+        recorded <- stepValue h job "decision-prepare-initiative-propose"
         let classes = lookupValue "actionClasses" (lookupValue "input" (lookupValue "Right" recorded))
         assertBool (show classes) ("draft-documentation" `Text.isInfixOf` jsonText classes && not ("reproduce-and-diagnose" `Text.isInfixOf` jsonText classes))
         -- The stub still answers reproduce-and-diagnose; the validator refuses it.
@@ -217,8 +217,10 @@ newtype HumanPathFixture = HumanPathFixture (Maybe Text)
 instance Aeson.ToJSON HumanPathFixture where
   toJSON (HumanPathFixture detail) = Aeson.object ["tag" .= ("HumanPath" :: Text), "contents" .= detail]
 
+-- A repository is offered by identity alone: its description is its identity,
+-- as the worker derives it from the operator's catalog.
 object' :: Int -> Text -> Value
-object' position repository = Aeson.object ["index" .= position, "repository" .= repository, "description" .= ("fixture repository" :: Text)]
+object' position repository = Aeson.object ["index" .= position, "repository" .= repository, "description" .= repository]
 
 fields :: Value -> KeyMap.KeyMap Value
 fields = \case

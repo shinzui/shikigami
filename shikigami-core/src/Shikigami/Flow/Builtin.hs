@@ -31,7 +31,7 @@ import Shikigami.Flow (DecisionMode (..), FlowDef (..), FlowEffects, LifecycleDi
 import Shikigami.Flow.AdaptiveDelivery (adaptiveDelivery)
 import Shikigami.Flow.DeclaredTool qualified as DeclaredTool
 import Shikigami.Flow.Delegate qualified as Delegate
-import Shikigami.Flow.Initiative (proposeWork, proposeWorkFlowName, proposeWorkSlots)
+import Shikigami.Flow.Initiative (proposeWorkFlow)
 import Shikigami.Flow.Pack
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Flow.Watchdog (watchdogFlowName, watchdogSlots, watchdogSweep)
@@ -78,15 +78,7 @@ builtinFlows =
     kernelCapabilityFlow
       FlowDef {name = watchdogFlowName, decisionSlots = watchdogSlots, requiresDefaultModel = DefaultModelOptional, decisionMode = AdvisoryDecisions, lifecycle = LifecycleDiagram "flowchart LR\n Grant --> Observe --> Classify --> Record --> Drift --> Deliver --> Close" []}
       watchdogSweep,
-    kernelCapabilityFlow
-      FlowDef
-        { name = proposeWorkFlowName,
-          decisionSlots = proposeWorkSlots,
-          requiresDefaultModel = DefaultModelOptional,
-          decisionMode = StrictDecisions,
-          lifecycle = LifecycleDiagram "flowchart LR\n Observe --> Prefilter --> Assess --> Propose --> Await --> Accept" []
-        }
-      proposeWork,
+    proposeWorkFlow,
     kernelCapabilityFlow
       FlowDef
         { name = declarationCoordinate "adaptive-delivery",

@@ -27,7 +27,8 @@ import Shikigami.Coordination.Decision (adaptiveStep)
 import Shikigami.Decision.Contract
 import Shikigami.Decision.ModelCatalog
 import Shikigami.Fixture.DecisionExamples (parseModelConfidence)
-import Shikigami.Flow.Decision (DecisionAccounting (..), DecisionStep (..), decisionSlot, decisionStepNames, proposeAlias, proposeStep)
+import Shikigami.Flow.Decision (DecisionAccounting (..), DecisionStep (..), decisionSlot, decisionStepNames)
+import Shikigami.Flow.Initiative (proposeAlias, proposeStep)
 import Shikigami.Initiative.Intake (Disposition (..), disposition)
 import Shikigami.Initiative.Settings (InitiativeSettings)
 import Shikigami.Initiative.Types hiding (NotActionable)
@@ -52,9 +53,9 @@ tests =
         proposeStep.accounting @?= RootAccountedCall
         adaptiveStep.accounting @?= UnaccountedCall,
       testCase "the slot has its declared label and step names" do
-        decisionStepNames proposeStep.site @?= (StepName "decision-prepare-propose", StepName "decision-result-propose")
+        decisionStepNames proposeStep.site @?= (StepName "decision-prepare-initiative-propose", StepName "decision-result-initiative-propose")
         modelAliasText proposeAlias @?= "propose"
-        (decisionSlot proposeStep [proposeAlias]).label @?= either (error . show) id (parseDecisionSlotLabel "propose"),
+        (decisionSlot proposeStep [proposeAlias]).label @?= either (error . show) id (parseDecisionSlotLabel "initiative-propose"),
       testCase "the registry resolves the program and retains its result codec" do
         let ref = programRef assessmentProgram
         either (assertFailure . show) (const (pure ())) (lookupProgram decisionPrograms ref)
@@ -165,7 +166,7 @@ assessThroughStub candidate = do
           (runCorrelationId "run-assessment")
           (WorkflowId "workflow-assessment")
           initialDecisionGeneration
-          (either (error . show) id (parseDecisionSlotLabel "propose"))
+          (either (error . show) id (parseDecisionSlotLabel "initiative-propose"))
           (descriptor ref)
           (toJSON input)
           (modelDescriptor binding)

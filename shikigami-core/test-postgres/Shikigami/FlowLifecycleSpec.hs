@@ -73,7 +73,6 @@ import Shikigami.Flow.CodingAgent qualified as FlowCodingAgent
 import Shikigami.Flow.Decision qualified as FlowDecision
 import Shikigami.Flow.DeclaredTool qualified as FlowDeclaredTool
 import Shikigami.Flow.Delegate qualified as FlowDelegate
-import Shikigami.Flow.Initiative qualified as FlowInitiative
 import Shikigami.Flow.Objectives qualified as FlowObjectives
 import Shikigami.Flow.Observe qualified as FlowObserve
 import Shikigami.Flow.Pack (PackFlow (..), RegisteredFlow (..), flowDeclarationErrors, lookupFlow, registeredFlowNames, registeredFlows)
@@ -576,7 +575,6 @@ runFlowBodyUsing decision onAppend appEnv runtime flowAgent SpikeFlow {run} work
             . FlowDeclaredTool.unavailableDeclaredTool
             . FlowObjectives.runObjectives Nothing (Right Nothing)
             . FlowObserve.unavailableObserve
-            . FlowInitiative.unavailableInitiative
             . FlowWorkers.runWorkers Nothing denyAll (CoordinatorRun (WorkflowId "disabled-flow-fixture") (compatibilityIdentity (fixtureAgentName flowAgent)) runtime.approval.currentSession Nothing Nothing) (Right Nothing)
             . Routing.runRouting
               Routing.RoutingEnv

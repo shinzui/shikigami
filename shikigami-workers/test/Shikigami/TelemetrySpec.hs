@@ -25,9 +25,7 @@ import Shikigami.StateRevision (initialRevision)
 import Shikigami.Telemetry.Metrics
   ( newShikigamiMetrics,
     recordConsumerRecord,
-    recordInitiativeAdmission,
-    recordInitiativeProposal,
-    recordInitiativeRefusal,
+    recordPackEvent,
     recordQueueDepth,
     recordRunCompleted,
     recordRunDeadLettered,
@@ -68,9 +66,7 @@ tests fixture =
         recordQueueDepth metrics 3
         recordConsumerRecord metrics "activity.v1"
         recordStreamDisposition metrics "initiative" "skipped" (Just "excerpt-too-short")
-        recordInitiativeProposal metrics "pending"
-        recordInitiativeAdmission metrics "launched"
-        recordInitiativeRefusal metrics "evaluations-exhausted"
+        recordPackEvent metrics "initiative" "proposal" [("status", "pending")]
 
         flushed <- Metric.forceFlushMeterProvider provider Nothing
         assertEqual "provider force-flush" Metric.FlushSuccess flushed
@@ -84,9 +80,7 @@ tests fixture =
             "shikigami.queue.depth",
             "shikigami.consumer.records",
             "shikigami.stream.dispositions",
-            "shikigami.initiatives.proposals",
-            "shikigami.initiatives.admissions",
-            "shikigami.initiatives.refusals"
+            "shikigami.pack.events"
           ]
         void (Metric.shutdownMeterProvider provider Nothing),
       testCase "ledger age exports without a watchdog run and hooks use bounded tags" $ P.withProposing fixture P.defaultOptions \h -> do
