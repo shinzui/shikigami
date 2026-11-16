@@ -1073,7 +1073,22 @@ this Mac through the same operator verbs as before (`watchdog inspect`, `proposa
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Interim, after M5 (2026-11-16); M6's real run and M7 are still open.
+
+- Size of `shikigami-core/src/Shikigami`, by the plan's measurement: 430 modules, 71,888
+  lines and 70 top-level namespaces, with no module importing `Watchdog`, `Initiative` or
+  `PracticeReview`. The baseline recorded at M1 was 83,611 lines, 73 namespaces and 38
+  importing modules.
+- The three moved use cases are 59 modules and 12,798 lines in `packs/`:
+  `flow-pack-practice-review` (16 modules, 5,178 lines), `flow-pack-initiative` (19, 3,978)
+  and `flow-pack-watchdog` (24, 3,642).
+- `domain/shikigami/agent-run.keiro` holds no `watchdog-`, `initiative-`,
+  `practice-review-` or example label. Its two remaining patch blocks are
+  `shikigami-adaptive-delivery-v1` and `shikigami-objective-tracking-v1`, both the kernel's.
+- What real use found that fixtures did not: the router prompt could not be decoded
+  (FRIC-84); no operator command provisions a sanctioned profile (FRIC-85); and a worker
+  executed every slow step twice, which failed the first real proposing run (FRIC-86,
+  fixed in `91da13b5`). Each surfaced on the first real model call of its path.
 
 
 ## Context and Orientation
