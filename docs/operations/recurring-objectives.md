@@ -13,11 +13,15 @@ process is needed.
 
 First obtain an objective, its assignment identifiers and an already admitted
 resource root. Every selected assignment must belong to that root. The root's
-admitted quantities must be finite and its cutoff must cover the mandate expiry.
+admitted active work, model attempts and tokens must be finite, as must every
+other quantity it names except cost, which every real root leaves unbounded; its
+cutoff must cover the mandate expiry. A standing-policy admission's root
+qualifies.
 Creating or editing a mandate never allocates a replacement root or resets usage.
 
 Write a request such as the following to `mandate.json`, replacing the objective,
-root, assignment and expiry with real admitted values. Expiry must be in the
+root, assignment and expiry with real admitted values. An assignment is written as the
+object `{"value": ...}`, as `objectives inspect` reports its `assignmentId`. Expiry must be in the
 future, within one year, and no later than the retained root cutoff.
 
 ```json
@@ -25,7 +29,7 @@ future, within one year, and no later than the retained root cutoff.
   "mandateId": "release-evidence",
   "objectiveId": "<OBJECTIVE>",
   "rootId": "<ROOT>",
-  "scope": ["<ASSIGNMENT>"],
+  "scope": [{"value": "<ASSIGNMENT>"}],
   "sources": ["CurrentObjectiveCheckpoint"],
   "maximumEvents": 1,
   "cadence": {"seconds": 300, "maximumSeconds": 3600},

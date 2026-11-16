@@ -65,6 +65,15 @@ tests fixture =
         void $ right =<< run env (Roots.enrollRoot foreignRoot (R.Envelope Map.empty request.expiresAt))
         run env (Mandates.admitMandate operatorHost (fixtureOperationId "foreign") (request & #rootId .~ foreignRoot)) >>= isRefusal
         count env "shikigami.mandates" >>= (@?= 0),
+      testCase "a root with unbounded tokens refuses without an orphan mandate" $ withMandateFixtureLimits fixture (\dimension -> if dimension == R.Tokens then R.ExplicitlyUnbounded else R.Limited (amount 10000)) \env request _ -> do
+        run env (Mandates.admitMandate operatorHost (fixtureOperationId "unbounded-tokens") request) >>= (@?= Left ObjectiveDenied)
+        count env "shikigami.mandates" >>= (@?= 0),
+      testCase "a root whose cost alone is unbounded funds a mandate and its cycle" $ withMandateFixtureLimits fixture (\dimension -> if dimension == R.CostMicroUsd then R.ExplicitlyUnbounded else R.Limited (amount 10000)) \env request now -> do
+        _ <- admit env request
+        finished <- runCycle env request now
+        assertBool "ongoing mandate stays active" (isNothing finished.stopReason && isJust finished.nextDue)
+        fmap (.rootId) finished.lastCycle @?= Just request.rootId
+        count env "shikigami.mandate_cycles" >>= (@?= 1),
       testCase "schedule edits require fresh current coordination authority and exact version" $ withMandateFixture fixture \env request now -> do
         first <- admit env request
         let update = M.ScheduleUpdate (M.Cadence 2 8) (addUTCTime 100 now)
@@ -218,7 +227,12 @@ tests fixture =
     ]
 
 withMandateFixture :: DatabaseFixture -> (AppEnv -> M.CreateRequest -> UTCTime -> IO a) -> IO a
-withMandateFixture fixture action = withShikigamiFreshDatabase fixture \connection -> do
+withMandateFixture fixture = withMandateFixtureLimits fixture (const (R.Limited (amount 10000)))
+
+-- | The fixture with the supervised root's limit for each dimension chosen by
+-- the caller.
+withMandateFixtureLimits :: DatabaseFixture -> (R.Dimension -> R.Limit) -> (AppEnv -> M.CreateRequest -> UTCTime -> IO a) -> IO a
+withMandateFixtureLimits fixture limitFor action = withShikigamiFreshDatabase fixture \connection -> do
   tracer <- noopTracer
   let env = AppEnv (defaultConnectionSettings connection) tracer Nothing Nothing
   void $ right =<< run env Catalog.registerProjectionCatalog
@@ -227,7 +241,7 @@ withMandateFixture fixture action = withShikigamiFreshDatabase fixture \connecti
       assignment = checked (parseObjectiveAssignmentId "supervised")
       worker = compatibilityIdentity (checked (mkAgentName "worker"))
       request = CreateRequest (checked (parseTitle "ongoing")) (checked (parseGoal "supervise current progress")) (checked (parseInstructions "first instructions")) [Criterion (checked (parseCriterionKey "review")) (checked (parseCriterionDescription "verify current evidence")) HumanVerifiable JourneyOptional] []
-  void $ right =<< run env (Roots.enrollRoot root (R.Envelope (Map.fromList [(dimension, R.Limited (amount 10000)) | dimension <- [minBound .. maxBound]]) (addUTCTime 3600 now)))
+  void $ right =<< run env (Roots.enrollRoot root (R.Envelope (Map.fromList [(dimension, limitFor dimension) | dimension <- [minBound .. maxBound]]) (addUTCTime 3600 now)))
   created <- right =<< run env (Owner.createObjective operatorHost (fixtureOperationId "objective") Nothing request)
   let draft = AssignmentDraft assignment (checked (parseInstructions "current assignment")) [] worker Pending Nothing (Just root) (Just (addUTCTime 3600 now))
   void $ right =<< run env (Owner.executeCommand operatorHost created.objectiveId created.revision (fixtureOperationId "assignment") (SetAssignments [draft]))

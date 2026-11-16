@@ -19,6 +19,7 @@ module Shikigami.Mandate.Store
     loadTx,
     saveCycleTx,
     checkRoot,
+    fundsRecurrence,
     checkScope,
     publishWake,
   )
@@ -155,10 +156,21 @@ checkRoot :: UTCTime -> ExecutionRootId -> UTCTime -> Transaction R.Root
 checkRoot now root expiry = do
   state <- Roots.inspectRootTx root >>= either (const (abort ObjectiveDenied)) pure
   unless (state.cancelled == R.ContinueWork && state.overage == R.NoOverage && now < state.envelope.cutoff && expiry <= state.envelope.cutoff) (abort ObjectiveDenied)
-  -- Absent dimensions deny expenditure. Explicit unbounded spend cannot fund
-  -- recurring work; its time and every admitted quantity must be finite.
-  unless (all (\case R.Limited _ -> True; R.ExplicitlyUnbounded -> False) (Map.elems state.envelope.limits)) (abort ObjectiveDenied)
+  unless (fundsRecurrence state.envelope) (abort ObjectiveDenied)
   pure state
+
+-- | Whether an envelope may fund recurring supervision. Its time is finite by
+-- construction. Active work, model attempts and tokens must be named and
+-- finite, and every other named dimension finite, except cost: no route can
+-- reserve a cost ceiling before a provider call, so every real root leaves
+-- 'R.CostMicroUsd' explicitly unbounded, and the finite attempts and tokens
+-- already bound what recurring work can spend (FRIC-93).
+fundsRecurrence :: R.Envelope -> Bool
+fundsRecurrence envelope =
+  all (\dimension -> maybe False finite (Map.lookup dimension envelope.limits)) [R.ActiveWork, R.ModelAttempts, R.Tokens]
+    && all (\(dimension, limit) -> finite limit || dimension == R.CostMicroUsd) (Map.toList envelope.limits)
+  where
+    finite = \case R.Limited _ -> True; R.ExplicitlyUnbounded -> False
 
 checkScope :: CreateRequest -> Objective -> Transaction ()
 checkScope request goal = do

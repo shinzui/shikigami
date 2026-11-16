@@ -76,6 +76,17 @@ mutation. Broader source/action adapters require explicit trusted composition;
 the recurrence record alone never enables protected effects. Rollout uses additive
 schema/workflow declarations and the normal regeneration and conformance gate.
 
+Amendment (2026-11-16, plan 131 M7): a supervised root may leave `CostMicroUsd`
+explicitly unbounded; active work, model attempts and tokens must be named and
+finite, and every other named dimension finite. As first written, admission
+refused any unbounded limit, but every route that enrolls a real root (the
+one-off run, initiative evaluation and standing-policy admission, the watchdog
+allowance) must leave cost unbounded because no cost ceiling can be reserved
+before a provider call, so no real root could fund a mandate (FRIC-93). The
+finite attempts and tokens bound recurring spend. The rule is
+`Shikigami.Mandate.Store.fundsRecurrence`, applied at creation, schedule update
+and every cycle.
+
 See [Plan 87](../plans/87-supervise-recurring-objectives-from-current-durable-checkpoints.md),
 [operations](../operations/recurring-objectives.md) and
 [native admission](0111-adaptive-delivery-carries-native-admission-and-reference-only-seeds.md).

@@ -74,7 +74,9 @@ An evaluation is one model call, retried at most as `ModelAttempts` allows. The 
 must name `ActiveWork`, `ModelAttempts`, `Tokens` and `CostMicroUsd`, and cost must be
 `unbounded`, because a root admits a model attempt only when all four are named and no
 ceiling can be reserved for cost before a call. A finite `Tokens` limit requires the model
-binding to set a maximum output.
+binding to set a maximum output, and must cover one whole call's ceiling: the binding's
+`max_tokens` plus the model's context window. A smaller limit refuses every call before it
+is sent (`CallLimitExceeded`).
 
 `cutoff` bounds the evaluation, not the wait for a person: acceptance after it still works.
 `evaluationsPerWindow` bounds spend, and is counted when a run opens, so queued work holds
@@ -104,6 +106,9 @@ catalog, a coordinator that is not a loaded, enabled `Flow` or `CoordinatingSkil
 declared identity, an envelope that cannot pay for a model attempt, a total below the
 per-objective amount, or an expiry past `maximumPolicyLifetime` (30 days unless you set it
 beside `observers`).
+
+A recurring mandate on an admitted objective ([recurring objectives](recurring-objectives.md))
+needs its root's `Tokens` to be finite as well; cost stays `unbounded`.
 
 A changed policy is a new policy and a revocation of the old one, so an admission's digest
 always names the exact terms it ran under. Totals are promises rather than measurements:
