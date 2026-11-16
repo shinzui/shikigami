@@ -31,6 +31,11 @@ provenance:
       at: 2026-11-15T15:57:53Z
       mode: "implement"
       note: "EP-8 M1 accepted; registry, Action sketch and cross-plan discoveries updated"
+    - model: "claude-opus-5-5"
+      harness: "claude-code"
+      at: 2026-11-16T03:13:20Z
+      mode: "implement"
+      note: "EP-7 pilot moved to kizashi, stopped and finished by hand; campaign tail validated with build-repair"
 ---
 
 # Rebuild Shikigami as a kernel where use cases are declared, not coded
