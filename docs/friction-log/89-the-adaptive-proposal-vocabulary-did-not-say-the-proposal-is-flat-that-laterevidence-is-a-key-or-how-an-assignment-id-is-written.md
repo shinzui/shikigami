@@ -6,7 +6,7 @@ generated:
   by: "claude-code/claude-fable-5-2"
   at: "2026-11-16T21:27:51Z"
 frictionId: FRIC-89
-status: logged
+status: "resolved"
 impact: detour
 kind: interface
 origin: "mori://shinzui/shikigami"
@@ -16,6 +16,11 @@ plan: "docs/plans/131-shrink-shikigami-core-to-the-kernel-by-moving-or-retiring-
 workaround: "The vocabulary in Shikigami.Coordination.Workflow now states the twelve flat fields, that six are copied from proposalCoordinates, that laterEvidence is one short key, that an assignment id is the object the checkpoint writes, and that evidence comes only from checkpoint.objective.evidence. Three replays and one full run then produced a decision the checkpoint owner accepted."
 tags:
   - "real-use"
+resolution: "Commit 5a30047a states the proposal's flat shape, the laterEvidence key and the assignment id object in the coordinator vocabulary."
+amended:
+  - by: "claude-code/claude-opus-5-5"
+    at: "2026-11-16T22:32:12Z"
+    change: "Triage at plan 131 completion: resolved."
 ---
 # The adaptive proposal vocabulary did not say the proposal is flat, that laterEvidence is a key, or how an assignment id is written
 

@@ -6,7 +6,7 @@ generated:
   by: "claude-code/claude-fable-5-2"
   at: "2026-11-16T21:27:53Z"
 frictionId: FRIC-90
-status: logged
+status: "resolved"
 impact: detour
 kind: interface
 origin: "mori://shinzui/shikigami"
@@ -16,6 +16,11 @@ plan: "docs/plans/131-shrink-shikigami-core-to-the-kernel-by-moving-or-retiring-
 workaround: "The cleanup is removed: startDirectory has already loaded the projection once. CommandSpec now checks that the principal check returns for a known and an unknown principal under a file directory."
 tags:
   - "real-use"
+resolution: "Commit 96bc405c stops the admin principal check from running the directory refresh loop."
+amended:
+  - by: "claude-code/claude-opus-5-5"
+    at: "2026-11-16T22:32:13Z"
+    change: "Triage at plan 131 completion: resolved."
 ---
 # Any admin verb that checks a principal hung forever when a directory was configured
 

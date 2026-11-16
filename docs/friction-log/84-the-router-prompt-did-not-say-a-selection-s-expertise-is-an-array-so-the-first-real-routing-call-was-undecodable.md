@@ -6,7 +6,7 @@ generated:
   by: "claude-code/claude-fable-5-2"
   at: "2026-11-16T15:52:35Z"
 frictionId: FRIC-84
-status: logged
+status: "resolved"
 impact: detour
 kind: interface
 origin: "mori://shinzui/shikigami"
@@ -17,6 +17,11 @@ workaround: "Commit 60938b9a changes the system prompt to say expertise is a non
 tags:
   - "routing"
   - "real-use"
+resolution: "Commit 60938b9a states the selection's expertise is an array in the router prompt; every later real routing call decoded."
+amended:
+  - by: "claude-code/claude-opus-5-5"
+    at: "2026-11-16T22:32:11Z"
+    change: "Triage at plan 131 completion: resolved."
 ---
 # The router prompt did not say a selection's expertise is an array, so the first real routing call was undecodable
 

@@ -47,6 +47,11 @@ provenance:
       at: 2026-11-16T15:53:56Z
       mode: "implement"
       note: "M3: practice review and its router move to flow-pack-practice-review; pack settings, RunModel and seven FlowRunContext fields; real before/after review run"
+    - model: "claude-opus-5-5"
+      harness: "claude-code"
+      at: 2026-11-16T22:30:03Z
+      mode: "implement"
+      note: "M7: dispositions ADR-130, docs, mandate root rule, combined real session"
 ---
 
 # Shrink shikigami-core to the kernel by moving or retiring use-case subsystems
@@ -385,13 +390,118 @@ this Mac through the same operator verbs as before (`watchdog inspect`, `proposa
   - It took four attempts. The first hung in `proposals policy install` (FRIC-90, fixed);
     the second lost its authorizer; the third and fourth decisions were rejected for their
     shape and then their evidence (FRIC-89, fixed).
-- [ ] M7: Kernel namespace list closed, the core specification holds no use-case label,
+- [x] M7 (2026-11-16, mandate on the standing-policy objective; see the Decision Log): Kernel
+  namespace list closed, the core specification holds no use-case label,
   dispositions recorded in ADRs and architecture docs, before/after size reported. All packs
   composed in the `kikan-shikigami` distribution, plus a kernel mandate cycle, run on this Mac
   in one session.
+  - Records (commit `c206bee4`). [ADR-130](../adr/0130-use-case-subsystems-leave-the-kernel-by-recorded-disposition.md)
+    holds the classification, the Router, Mandate and coordinator kernel verdicts, the
+    `Deterministic` retirement, the `pack-sdk` export groups and the stock and Nix
+    consequence. ADR-28, ADR-111, ADR-118 and ADR-119 carry a code-ownership note.
+    `docs/architecture/packages.md`, the capability index and the four pages, and
+    `docs/user/flows.md` name the owning pack; the stale `flows` listing and refusal text in
+    flows.md were replaced with real output. The domain atlas's introduction still named the
+    moved at-risk flow; it is corrected at its generator (`Shikigami.Diagrams`) and
+    regenerated with `just domain-diagrams`.
+  - Checks. `kernel.namespaces` (70 entries) lists no `Watchdog`, `Initiative` or
+    `PracticeReview`; `grep -nE 'watchdog-|initiative-|practice-review-|objectives-example-'
+    domain/shikigami/agent-run.keiro` prints nothing, and the specification's only patch blocks
+    are `shikigami-adaptive-delivery-v1` and `shikigami-objective-tracking-v1`. keiro has not
+    shipped workflow fragments from separate packages (IR-61), so the golden inventories stay.
+  - Kernel changes the session needed. Mandate admission accepts a root whose cost alone is
+    unbounded (`Shikigami.Mandate.Store.fundsRecurrence`, FRIC-93, user decision); ADR-121
+    is amended. The coordinator's vocabulary says `changes` is never empty (FRIC-91). The
+    fixture authorizer admits a fourth principal, `agent_01h000000000000000watchdog`.
+  - Combined real session (2026-11-16), on an isolated database `shikigami_ep6_m7` (dropped
+    afterwards) with the fixture authorizer, a loopback Kizashi stub, the local Kafka broker
+    and OpenAI `gpt-5.4-mini` under the `propose`, `adaptive` and `drift` aliases. One
+    `kikan-shikigami-worker` process (pid 37744), with `kikan-shikigami-scheduler` and
+    `kikan-shikigami-consume-stream`, logged one `flow.registry.composed` with the packs
+    `builtin`, `examples`, `practice-review`, `initiative` and `watchdog`, and selected
+    flows from all five. In that process:
+    - M2: `objective-example` journaled `objectives-examples-create`, `-plan`, `-progress`
+      and `-inspect` for `shikigami_objective_01m7k734rre9ra0r6fvb4231kj` at revisions 0 to 2.
+    - M3: a version-1 `target-change` trigger for `mori://shinzui/fsrs-hs` (`573a64d` to
+      `2627eee`) routed to `opentelemetry-practice-reviewer`; the child journaled the four
+      `practice-review-*` steps and `emit-signal:practice-review-history`, and its verdict is
+      `unresolved` with three claims, owner `architecture-council` (`triage-owner`), action
+      "Restore revision-pinned evidence access and re-run this advisory review", and the
+      history denial `agent 'agent_01h000000000000000reviewer' has no grant for KawaDigest`:
+      the M3 outcome.
+    - M4: a meeting-transcript envelope produced the ask "Unrequested proposal from agent
+      proposer (agent_01h000000000000000coordinator) …"; `kikan-shikigami resolve-approval
+      TOKEN --approve` accepted `shikigami_proposal_01m7k77cddern91n4emrjsa2x5`, which created
+      `shikigami_objective_01m7k77mrre2htcdn87cgeyrt4`.
+    - M6: standing policy `shikigami_standing_policy_01m7k7dt9eeextc72zfwvwfhse` (finite active
+      work, attempts and tokens, unbounded cost) admitted a second transcript, enrolled root
+      `shikigami_execution_root_01m7k7dxf3egvvmxsf6kg6cp1n` and launched `adaptive-delivery`.
+      `objectives inspect shikigami_objective_01m7k7dxesenh9k90w7r2xhatg --json` shows one
+      accepted decision (`AwaitAssignments`, `laterEvidence: combined-check`, validator
+      `shikigami.adaptive-validator/3`). An earlier admission in the same process, under a
+      policy with unbounded tokens, was accepted the same way.
+    - M7: `kikan-shikigami mandates create --operation-key ep6-m7-mandate-s4-create --file
+      mandate.json` on that objective, root and assignment `deliver` admitted mandate
+      `ep6-m7-fsrs-retrievability-s4` (`ContinuingCoordinator`, 60 to 300 seconds).
+      `kikan-shikigami mandates inspect … --json` shows cycle 1 completed on the checkpoint
+      at objective revision 3 with the accepted adaptive decision as owner progress, the
+      shared root, `stopReason` null and `idleCount` 2 after two idle backoffs; one row in
+      `shikigami.mandate_cycles`. The stock `shikigami mandates inspect`, on a configuration
+      without pack keys, returns the identical `mandate` record.
+    - M5: ten `watchdog-sweep` runs, one per minute. `kikan-shikigami watchdog inspect --agents
+      DIR --json` shows the last completed sweep (three subjects, coverage over sessions,
+      executions and objectives), `--grace 60 --fail-when-overdue` exits 0, and `watchdog
+      episodes` lists eleven `stuck-coordinator` episodes on the session's idle objectives.
+    - The other half, in the same session: the stock `shikigami-worker --check-config`
+      refuses `watchdog.*`, the stock `shikigami` refuses `initiatives.observers` and
+      `practice_review.attention_recipients`, and answers `Invalid argument` for `proposals`
+      and `watchdog`; stock `shikigami objectives inspect` reads the M4 objective.
+  - It took four worker starts, each recorded under Surprises: the router needed a directory
+    entry, the first adaptive decision was refused for an empty `changes` (FRIC-91), no root
+    could fund a mandate (FRIC-93), and the harness's observer quota of five evaluations a
+    day ran out. Each restart was on the same database; the evidence above is from the
+    fourth process alone.
 
 
 ## Surprises & Discoveries
+
+- Observation (M7): no real root could fund a recurring mandate (FRIC-93).
+  Evidence: `mandates create` answered `objective command refused: ObjectiveDenied` for a
+  standing-policy root. `Shikigami.Mandate.Store.checkRoot` refused any explicitly unbounded
+  limit, and every route that enrolls a real root requires `CostMicroUsd` to be explicitly
+  unbounded: a policy with a finite cost is refused at install with `per-objective envelope
+  must name ActiveWork, ModelAttempts, Tokens and an unbounded CostMicroUsd`. No fixture
+  showed it, because `MandateStoreSpec` enrolls its root with every dimension finite. Fixed
+  under the user's decision; see the Decision Log.
+- Observation (M7): a finite token limit must cover one whole call's ceiling, which is the
+  call's `max_tokens` plus the model's context window
+  (`Shikigami.Execution.SelectionRuntime.reservation`).
+  Evidence: a policy granting 200,000 tokens admitted an objective whose coordinator then
+  failed `DecisionAbort (DecisionFailure CallLimitExceeded "decision root or execution limits
+  refused actual provider work")` before any provider call. 2,000,000 tokens worked.
+- Observation (M7): the coordinator's model answered "nothing to adapt" with `changes: []`,
+  which validation refuses with the generic `ObjectiveInvalid "invalid adaptive proposal"`
+  (FRIC-91).
+  Evidence: child `e079d1b2-…` journaled `adaptive-validation {"Left": {"tag":
+  "ObjectiveInvalid", "contents": "invalid adaptive proposal"}}`;
+  `Shikigami.Coordination.Validate` line 58 requires a non-empty list. The vocabulary now
+  says so, and the three later real decisions were each one `AwaitAssignments` change.
+- Observation (M7): practice review fails when the same trigger is reviewed again by a new
+  run. This is a defect of the pack, not of the move.
+  Evidence: the second run of the M3 trigger in one database reserved the same review
+  identity, recalled the first run's pending provisional memory and journaled
+  `practice-review-remember-provisional {"Left": {"type": "review_content_conflict", "data":
+  ["kioku_memory_3nvrzzeb0jbketz9d6b8ntcfb8", "record: sessionId differs from the recorded
+  memory"]}}`, failing the child. The provisional memory's identifier is derived from the
+  review identity, and the kernel memory refuses a second session for it. The M3 runs each
+  used a fresh database, so they never repeated a trigger. A trigger for another range
+  completed normally. Not fixed here; it belongs with the practice-review hardening plans
+  60 to 63.
+- Observation (M7): the stock `shikigami` `flows` listing and refusal text in
+  `docs/user/flows.md` and the domain atlas's introduction still described a core that held
+  `watchdog-sweep` and the at-risk flow.
+  Evidence: `shikigami validate` on the at-risk manifest prints `unknown flow
+  at-risk-customer; registered flows: run-declared-tool, adaptive-delivery`.
 
 - Observation (M5): `just keiro-gate HEAD~1` reports the one expected finding for `f7d25186`.
   Evidence:
@@ -573,6 +683,39 @@ this Mac through the same operator verbs as before (`watchdog inspect`, `proposa
 
 
 ## Decision Log
+
+- Decision (M7): A supervised root may leave `CostMicroUsd` explicitly unbounded; active
+  work, model attempts and tokens must be named and finite, and every other named dimension
+  finite.
+  Rationale: FRIC-93. The user chose this on 2026-11-16 over amending M7's acceptance. No
+  route can reserve a cost ceiling before a provider call, so every real root leaves cost
+  unbounded, and the finite attempts and tokens bound what recurring work can spend. The
+  rule is one function, `Shikigami.Mandate.Store.fundsRecurrence`, applied at creation,
+  schedule update and every cycle. It changes an admission check, not a workflow step,
+  label or stored codec. `MandateStoreSpec` gains a refused root with unbounded tokens and an
+  admitted root with unbounded cost whose cycle completes; the second fails on the old rule.
+  ADR-121 is amended.
+  Date: 2026-11-16
+- Decision (M7): The mandate ran on the standing-policy objective, not on the M4 objective
+  the Validation section names.
+  Rationale: a mandate needs an admitted root that owns the supervised assignment. An
+  objective created by accepting a proposal by hand has neither an assignment nor a root,
+  and no stock route gives it one (FRIC-88). A standing-policy admission is the one operator
+  route that creates both, as the M6 decision already found.
+  Date: 2026-11-16
+- Decision (M7): The coordinator's vocabulary says `changes` holds one to 32 changes and that
+  awaiting is exactly one `AwaitAssignments` change.
+  Rationale: FRIC-91. As with FRIC-89, the text is decision input journaled in
+  `decision-prepare-adapt`, not a step, label or codec; the program's signature and
+  descriptor are unchanged.
+  Date: 2026-11-16
+- Decision (M7): The fixture authorizer admits a fourth principal,
+  `agent_01h000000000000000watchdog`.
+  Rationale: the combined session runs four agents with verified identities (proposer,
+  adaptive-delivery, watchdog and objective-example), and a directory binds one principal
+  to one handle. The fixture still mints only short-lived proofs under its public fixture
+  key; `tests/objective-tracking/README.md` names the four.
+  Date: 2026-11-16
 
 - Decision (M6): The acceptance is amended. The real adaptive decision is taken from a
   coordinator funded by a standing policy in the distribution, and a dispatched worker is
@@ -1113,22 +1256,54 @@ this Mac through the same operator verbs as before (`watchdog inspect`, `proposa
 
 ## Outcomes & Retrospective
 
-Interim, after M5 (2026-11-16); M6's real run and M7 are still open.
+Complete (2026-11-16). The watchdog, unrequested-work proposals, practice review and the
+teaching flows run from four flow packs composed by the `kikan-shikigami` distribution; the
+`Deterministic` arm is gone; Router, recurring mandates and the adaptive coordinator stay
+kernel, as [ADR-130](../adr/0130-use-case-subsystems-leave-the-kernel-by-recorded-disposition.md)
+records. Every feature the plan moved ran for real on this Mac, together in one worker
+session with a kernel mandate cycle.
 
-- Size of `shikigami-core/src/Shikigami`, by the plan's measurement: 430 modules, 71,888
-  lines and 70 top-level namespaces, with no module importing `Watchdog`, `Initiative` or
-  `PracticeReview`. The baseline recorded at M1 was 83,611 lines, 73 namespaces and 38
-  importing modules.
-- The three moved use cases are 59 modules and 12,798 lines in `packs/`:
-  `flow-pack-practice-review` (16 modules, 5,178 lines), `flow-pack-initiative` (19, 3,978)
-  and `flow-pack-watchdog` (24, 3,642).
-- `domain/shikigami/agent-run.keiro` holds no `watchdog-`, `initiative-`,
-  `practice-review-` or example label. Its two remaining patch blocks are
-  `shikigami-adaptive-delivery-v1` and `shikigami-objective-tracking-v1`, both the kernel's.
-- What real use found that fixtures did not: the router prompt could not be decoded
-  (FRIC-84); no operator command provisions a sanctioned profile (FRIC-85); and a worker
-  executed every slow step twice, which failed the first real proposing run (FRIC-86,
-  fixed in `91da13b5`). Each surfaced on the first real model call of its path.
+- Size of `shikigami-core/src/Shikigami`, by the measurement in Concrete Steps: 430 modules,
+  71,900 lines and 70 top-level namespaces, with no module importing `Watchdog`,
+  `Initiative` or `PracticeReview`. The baseline at M1 was 469 modules, 83,611 lines, 73
+  namespaces and 38 importing modules (the draft's 437 modules and 78,094 lines in Concrete
+  Steps predate MasterPlan 22's kernel work). The core lost 39 modules, 11,711 lines and 3
+  namespaces, short of the plan's estimate of 13,000 lines, mostly because the kernel grew
+  the pack hooks the moves needed.
+- The packs, counted as every non-test `.hs` file: `flow-pack-examples` 9 modules and 886
+  lines, `flow-pack-practice-review` 18 and 5,184, `flow-pack-initiative` 21 and 4,667,
+  `flow-pack-watchdog` 24 and 3,642; the distribution 6 and 60.
+- `domain/shikigami/agent-run.keiro` holds no use-case label; its two patch blocks are the
+  kernel's. `FlowEffects` lost the use-case capabilities, and `AgentRunDeps` lost
+  `initiatives`, `observe` and `practiceReview`.
+- What real use found that fixtures did not, one finding per path, each on its first real
+  call: the router prompt (FRIC-84), the profile command (FRIC-85), the double execution of
+  slow steps (FRIC-86), the unfundable adaptive run (FRIC-88), the adaptive vocabulary twice
+  (FRIC-89, FRIC-91), the admin hang (FRIC-90) and the unfundable mandate (FRIC-93). The
+  lesson for MasterPlan 22 is that an acceptance run on a real model and a real operator
+  route belongs in each milestone, not at the end.
+- Left open: practice review fails when the same trigger is reviewed again (Surprises);
+  `runConversationWorkflow` is still unleased; the stock executables cannot fund an
+  objective run; and the distribution has no Nix role package.
+
+Friction recorded under this plan, with triage:
+
+- FRIC-83 (development shell overrides `--config` database settings): logged; whether the
+  shell should export them is the operator's call.
+- FRIC-84 (router prompt): resolved by `60938b9a`.
+- FRIC-85 (no command provisions a sanctioned profile): logged; open with the user.
+- FRIC-86 (unleased first drive): logged; the job loop is fixed by `91da13b5`, conversations
+  are not.
+- FRIC-87 (scheduler errors for memory-session timers): logged; 169 such lines in the M7
+  session's scheduler log.
+- FRIC-88 (no stock route funds an objective run): logged; open with the user and plan 86.
+- FRIC-89 (adaptive vocabulary shape): resolved by `5a30047a`.
+- FRIC-90 (admin verbs hung on a directory): resolved by `96bc405c`.
+- FRIC-91 (empty adaptive changes): resolved for the vocabulary in M7; the validator still
+  names no rule.
+- FRIC-92 (mandate guide example): resolved for the guide; the CLI still hides the
+  decoder's message.
+- FRIC-93 (no root can fund a mandate): resolved by `fundsRecurrence`.
 
 
 ## Context and Orientation

@@ -46,6 +46,11 @@ provenance:
       at: 2026-11-16T15:53:56Z
       mode: "implement"
       note: "EP-6 M3 accepted"
+    - model: "claude-opus-5-5"
+      harness: "claude-code"
+      at: 2026-11-16T22:31:55Z
+      mode: "implement"
+      note: "EP-6 complete after M7"
 ---
 
 # Rebuild Shikigami as a kernel where use cases are declared, not coded
@@ -398,7 +403,7 @@ rule.
 | EP-3 | Let agents declare CLI tools and MCP servers with authority attached to the declaration | [docs/plans/128-let-agents-declare-cli-tools-and-mcp-servers-with-authority-attached-to-the-declaration.md](../plans/128-let-agents-declare-cli-tools-and-mcp-servers-with-authority-attached-to-the-declaration.md) | EP-1; EP-2 M1 (for M3); EP-2 M2 (for M4) | None | Complete |
 | EP-4 | Execute Dhall-declared playbooks with fan-out, approval gates, and learning capture | [docs/plans/129-execute-dhall-declared-playbooks-with-fan-out-approval-gates-and-learning-capture.md](../plans/129-execute-dhall-declared-playbooks-with-fan-out-approval-gates-and-learning-capture.md) | EP-2; EP-8 M2 (for M2); EP-3 M4 (for M4) | EP-3 | Complete |
 | EP-5 | Move the extension boundary out of shikigami-core with flow packs and an architecture fitness check | [docs/plans/130-move-the-extension-boundary-out-of-shikigami-core-with-flow-packs-and-an-architecture-fitness-check.md](../plans/130-move-the-extension-boundary-out-of-shikigami-core-with-flow-packs-and-an-architecture-fitness-check.md) | None | None | Complete |
-| EP-6 | Shrink shikigami-core to the kernel by moving or retiring use-case subsystems | [docs/plans/131-shrink-shikigami-core-to-the-kernel-by-moving-or-retiring-use-case-subsystems.md](../plans/131-shrink-shikigami-core-to-the-kernel-by-moving-or-retiring-use-case-subsystems.md) | EP-5 | None | In Progress |
+| EP-6 | Shrink shikigami-core to the kernel by moving or retiring use-case subsystems | [docs/plans/131-shrink-shikigami-core-to-the-kernel-by-moving-or-retiring-use-case-subsystems.md](../plans/131-shrink-shikigami-core-to-the-kernel-by-moving-or-retiring-use-case-subsystems.md) | EP-5 | None | Complete |
 | EP-7 | Modernize the keiro services with a declared campaign playbook | [docs/plans/132-modernize-the-keiro-services-with-a-declared-campaign-playbook.md](../plans/132-modernize-the-keiro-services-with-a-declared-campaign-playbook.md) | EP-3, EP-4 | EP-5 | In Progress |
 | EP-8 | Give the kernel its own action, record, output, approval and trigger contracts with local adapters | [docs/plans/133-give-the-kernel-its-own-action-record-output-approval-and-trigger-contracts-with-local-adapters.md](../plans/133-give-the-kernel-its-own-action-record-output-approval-and-trigger-contracts-with-local-adapters.md) | EP-1 (for M2 and M3) | None | In Progress |
 | EP-9 | Declare and run a routine agent with one file and one command | [docs/plans/134-declare-and-run-a-routine-agent-with-one-file-and-one-command.md](../plans/134-declare-and-run-a-routine-agent-with-one-file-and-one-command.md) | EP-1; EP-8 M2; EP-2 M2b (for the scheduled milestone) | EP-3 | Complete |
@@ -991,7 +996,14 @@ stays in the kernel, a boundary rule checks that it imports no Kikan binding, an
 real adaptive decision was accepted by its checkpoint owner. No stock executable can fund
 an objective run, so the coordinator was launched by a standing policy from the
 distribution (FRIC-88); the real call needed the proposal vocabulary made exact (FRIC-89)
-and an admin verb un-hung (FRIC-90). No worker was dispatched. EP-6 M7 is next. Stage 1 (the pilot) ends at the declaration baseline, and stage 2 at
+and an admin verb un-hung (FRIC-90). No worker was dispatched. EP-6 is complete on 2026-11-16: M7 recorded the dispositions in
+ADR 0130, and one `kikan-shikigami-worker` session ran all four packs and a kernel mandate
+cycle for real. That session found that no real root could fund a mandate, because mandate
+admission refused the unbounded cost every real root carries; by the user's decision a
+supervised root may now leave cost unbounded when its active work, attempts and tokens are
+finite (FRIC-93, ADR-121 amended). The core is 430 modules and 71,900 lines in 70
+namespaces, down from 469, 83,611 and 73 at EP-6 M1. Next in order are EP-8 M3, EP-10 and
+EP-11 M2 to M4. Stage 1 (the pilot) ends at the declaration baseline, and stage 2 at
 the kernel baseline.
 
 - [ ] Architectural acceptance: the keiro modernization campaign runs for real on at least

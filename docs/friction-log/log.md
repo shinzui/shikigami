@@ -2,6 +2,33 @@
 
 ## 2026-11-16
 
+* **Update**: FRIC-93 resolved: Triage at plan 131 completion: resolved.
+
+
+* **Update**: FRIC-92 resolved: Triage at plan 131 completion: resolved for the guide.
+
+
+* **Update**: FRIC-91 resolved: Triage at plan 131 completion: resolved for the vocabulary.
+
+
+* **Update**: FRIC-90 resolved: Triage at plan 131 completion: resolved.
+
+
+* **Update**: FRIC-89 resolved: Triage at plan 131 completion: resolved.
+
+
+* **Update**: FRIC-84 resolved: Triage at plan 131 completion: resolved.
+
+
+* **Addition**: FRIC-93 records blocked interface friction with mori://shinzui/shikigami: No real root can fund a recurring mandate
+
+
+* **Addition**: FRIC-92 records slowdown documentation friction with mori://shinzui/shikigami: The mandate guide's request example does not decode, and the CLI hides why
+
+
+* **Addition**: FRIC-91 records detour interface friction with mori://shinzui/shikigami: Adaptive validation names no rule, and the vocabulary omits that changes must be non-empty
+
+
 * **Addition**: FRIC-90 records detour interface friction with mori://shinzui/shikigami: Any admin verb that checks a principal hung forever when a directory was configured
 
 
