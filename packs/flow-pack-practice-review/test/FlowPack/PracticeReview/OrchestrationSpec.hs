@@ -1,6 +1,6 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 
-module Shikigami.PracticeReviewOrchestrationSpec (tests) where
+module FlowPack.PracticeReview.OrchestrationSpec (tests) where
 
 import Control.Concurrent (forkIO, newEmptyMVar, putMVar, takeMVar)
 import Control.Exception (SomeException, try)
@@ -19,18 +19,108 @@ import Data.Int (Int64)
 import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
 import Data.Text (Text)
+import Data.Text qualified as Text
+import Data.Text.IO qualified as TextIO
 import Data.Time (UTCTime (..), fromGregorian, secondsToNominalDiffTime)
 import Data.Vector qualified as Vector
 import Effectful (liftIO, runEff)
 import Effectful.Error.Static (runErrorNoCallStack)
 import Effectful.Exception qualified as EffException
+import FlowPack.PracticeReview (practiceReviewPackWith)
+import FlowPack.PracticeReview.Attention
+  ( AttentionKey,
+    PracticeReviewAttentionEnv (..),
+    attentionKeyText,
+    deriveAttentionKey,
+    runPracticeReviewAttentionAtomic,
+  )
+import FlowPack.PracticeReview.Authorization
+  ( AuthorizedPracticeReviewResolution (..),
+    AuthorizedResolutionReceipt (authorizationId),
+    ResolutionAuthorityKind (Human),
+    ResolutionAuthorizationError (..),
+    ResolutionSubmissionEvidence (..),
+    ReviewResolutionAuthorizer (..),
+    mkAuthorizedResolutionReceipt,
+    validateAuthorizedPracticeReviewResolution,
+  )
+import FlowPack.PracticeReview.Authorization qualified as ReviewAuth
+import FlowPack.PracticeReview.Body.OpenTelemetryReview (opentelemetryPracticeReviewFlow)
+import FlowPack.PracticeReview.Body.Router (architecturePracticeRouteSite)
+import FlowPack.PracticeReview.Capability
+  ( AttentionRecipientMap,
+    AttentionReservationResult (..),
+    PracticeReviewExecutionContext (..),
+    emptyAttentionRecipientMap,
+    mkAttentionRecipientMap,
+    requestPracticeReviewAttention,
+  )
+import FlowPack.PracticeReview.Evidence
+  ( DependencyPinResolver (..),
+    EvidenceBundle (..),
+    EvidenceReadError (ContentPlaneUnavailable),
+    EvidenceReader (..),
+    EvidenceSource (..),
+  )
+import FlowPack.PracticeReview.EvidenceSpec
+  ( completeDependencyPinResolver,
+    completeEvidenceReader,
+    completeOpenTelemetryReferenceChangeTrigger,
+    completeOpenTelemetryTrigger,
+    completeReferenceRevision,
+  )
+import FlowPack.PracticeReview.Fixture.SinkHttp (testSinkHttp)
+import FlowPack.PracticeReview.Identity (attentionKeyForDigest, newReviewId)
+import FlowPack.PracticeReview.IdentityRef (allocatedReviewId)
+import FlowPack.PracticeReview.IdentityStore qualified as IdentityStore
+import FlowPack.PracticeReview.Memory.Store
+  ( PracticeReviewMemoryEnv (..),
+    runPracticeReviewMemory,
+  )
+import FlowPack.PracticeReview.ResolutionIntake (enqueueAuthorizedPracticeReviewResolution)
+import FlowPack.PracticeReview.Runtime
+  ( AttentionRecipients (..),
+    PracticeReviewRuntime (..),
+    runExecutionContext,
+    runPracticeReviewAttention,
+    runPracticeReviewEvaluator,
+    runPracticeReviewEvidence,
+  )
+import FlowPack.PracticeReview.Types
+  ( ClaimId,
+    ClaimKind (Fact),
+    ContentReference (..),
+    EvidenceItem (..),
+    ExceptionApproval (..),
+    OwnerPrincipal,
+    PracticeAdoptionBinding (..),
+    PracticeKey,
+    PracticeReviewClaim (..),
+    PracticeReviewClassification (..),
+    PracticeReviewResolutionRequest (..),
+    PracticeReviewTrigger (..),
+    PracticeReviewVerdict (..),
+    ResolutionOutcome (..),
+    ReviewId,
+    ReviewLineage (..),
+    parseClaimId,
+    parseOwnerPrincipal,
+    parsePracticeKey,
+    reviewIdText,
+    validateResolutionRequest,
+    validateTrigger,
+    validateVerdict,
+    validatedVerdictValue,
+  )
+import FlowPack.PracticeReview.Types qualified as Review
+import FlowPack.PracticeReview.Types qualified as ReviewValue
 import Hasql.Decoders qualified as Decoders
 import Hasql.Encoders qualified as Encoders
 import Hasql.Pool qualified as Pool
 import Hasql.Session qualified as Session
 import Hasql.Statement (Statement, preparable)
 import Keiro.Outbox (listOutbox)
-import Keiro.Workflow (WorkflowId (..), WorkflowName (..), WorkflowOutcome (..), loadStepIndex, runWorkflowWith)
+import Keiro.Workflow (StepName (..), WorkflowId (..), WorkflowName (..), WorkflowOutcome (..), loadStepIndex, runWorkflowWith)
 import Kioku.Id (SessionId, genSessionId, idText)
 import Kioku.Id qualified as NominalId
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
@@ -59,97 +149,17 @@ import Shikigami.Capability.Provider qualified as CapabilityProvider
 import Shikigami.Directory (disabledDirectoryHandle)
 import Shikigami.Duration (parseDuration)
 import Shikigami.Execution.Policy.Types qualified as Harness
-import Shikigami.Fixture.ExamplePack (exampleFlowRegistry)
-import Shikigami.Fixture.SinkHttp (testSinkHttp)
+import Shikigami.Flow.Builtin (builtinPack)
 import Shikigami.Flow.Capability (SinkEnv (..), runSink)
 import Shikigami.Flow.Decision qualified as FlowDecision
 import Shikigami.Flow.Initiative qualified as FlowInitiative
 import Shikigami.Flow.Observe qualified as FlowObserve
-import Shikigami.Flow.OpenTelemetryPracticeReview (opentelemetryPracticeReviewFlow)
+import Shikigami.Flow.Pack (composeFlowRegistry, runModel)
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Shikigami.Output (emptyOutputRegistry)
-import Shikigami.PracticeReview
-  ( ClaimId,
-    ClaimKind (Fact),
-    ContentReference (..),
-    EvidenceItem (..),
-    ExceptionApproval (..),
-    OwnerPrincipal,
-    PracticeAdoptionBinding (..),
-    PracticeKey,
-    PracticeReviewClaim (..),
-    PracticeReviewClassification (..),
-    PracticeReviewResolutionRequest (..),
-    PracticeReviewTrigger (..),
-    PracticeReviewVerdict (..),
-    ResolutionOutcome (..),
-    ReviewId,
-    ReviewLineage (..),
-    parseClaimId,
-    parseOwnerPrincipal,
-    parsePracticeKey,
-    reviewIdText,
-    validateResolutionRequest,
-    validateTrigger,
-    validateVerdict,
-    validatedVerdictValue,
-  )
-import Shikigami.PracticeReview qualified as Review
-import Shikigami.PracticeReview qualified as ReviewValue
-import Shikigami.PracticeReview.Attention
-  ( AttentionKey,
-    PracticeReviewAttentionEnv (..),
-    attentionKeyText,
-    deriveAttentionKey,
-    runPracticeReviewAttentionAtomic,
-  )
-import Shikigami.PracticeReview.Authorization
-  ( AuthorizedPracticeReviewResolution (..),
-    AuthorizedResolutionReceipt (authorizationId),
-    ResolutionAuthorityKind (Human),
-    ResolutionAuthorizationError (..),
-    ResolutionSubmissionEvidence (..),
-    ReviewResolutionAuthorizer (..),
-    enqueueAuthorizedPracticeReviewResolution,
-    mkAuthorizedResolutionReceipt,
-    validateAuthorizedPracticeReviewResolution,
-  )
-import Shikigami.PracticeReview.Authorization qualified as ReviewAuth
-import Shikigami.PracticeReview.Capability
-  ( AttentionRecipientMap,
-    AttentionReservationResult (..),
-    PracticeReviewExecutionContext (..),
-    PracticeReviewRuntime (..),
-    emptyAttentionRecipientMap,
-    mkAttentionRecipientMap,
-    requestPracticeReviewAttention,
-    runExecutionContext,
-    runPracticeReviewAttention,
-    runPracticeReviewEvaluator,
-    runPracticeReviewEvidence,
-  )
-import Shikigami.PracticeReview.Evidence
-  ( DependencyPinResolver (..),
-    EvidenceBundle (..),
-    EvidenceReadError (ContentPlaneUnavailable),
-    EvidenceReader (..),
-    EvidenceSource (..),
-  )
-import Shikigami.PracticeReview.Identity (attentionKeyForDigest, newReviewId)
-import Shikigami.PracticeReview.IdentityStore qualified as IdentityStore
-import Shikigami.PracticeReview.Memory
-  ( PracticeReviewMemoryEnv (..),
-    runPracticeReviewMemory,
-  )
-import Shikigami.PracticeReviewEvidenceSpec
-  ( completeDependencyPinResolver,
-    completeEvidenceReader,
-    completeOpenTelemetryReferenceChangeTrigger,
-    completeOpenTelemetryTrigger,
-    completeReferenceRevision,
-  )
+import Shikigami.Pack.Setting (noPackSettings)
 import Shikigami.Repository (RepoRef (..), revisionText)
 import Shikigami.RunJobs (decodeRunJob)
 import Shikigami.Sink.Config (DanwaConfig (..), KanmonConfig (..), KawaConfig (..), KizashiConfig (..), ReiConfig (..))
@@ -162,7 +172,7 @@ import Shikigami.Workflow.Versioning (shikigamiWorkflowRunOptions)
 import System.Directory (doesFileExist)
 import System.FilePath ((</>))
 import Test.Tasty (TestTree, testGroup)
-import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
+import Test.Tasty.HUnit (assertBool, assertEqual, assertFailure, testCase, (@?=))
 
 tests :: DatabaseFixture -> TestTree
 tests databaseFixture =
@@ -367,6 +377,27 @@ completeClassificationTests databaseFixture =
         outboxAfterResolutions <- runAppIO appEnv (listOutbox "shinzui/shikigami")
         fmap length outboxAfterResolutions @?= Right (length cases + 1 + length resolutionCases)
 
+        -- The pack's golden label inventory. keiro-diff cannot see a label
+        -- declared outside the core workflow specification, so the runs above,
+        -- which take every branch of the review flow, are read back from the
+        -- journal and compared with test/golden/labels.txt. The router's two
+        -- labels follow from its route site.
+        let inventoryRuns =
+              ["practice-review-complete-" <> label | (label, _, _, _) <- cases]
+                <> ["practice-review-complete-reference-change"]
+                <> ["practice-review-complete-resolution-" <> label | (label, _, _, _) <- resolutionCases]
+            (StepName routeCatalog, StepName routeDecision) = Routing.routeStepNames architecturePracticeRouteSite
+        indexes <- mapM (\run -> runAppIO appEnv (loadStepIndex (WorkflowName "shikigami.practice-review.test") (WorkflowId run) 0)) inventoryRuns
+        journaled <- either (assertFailure . show) (pure . Set.unions . map Map.keysSet) (traverse (either (Left . show) Right) indexes)
+        -- Names beginning with two underscores are keiro's own runtime markers.
+        let labels = Set.toAscList (Set.filter (not . Text.isPrefixOf "__") (Set.insert routeCatalog (Set.insert routeDecision journaled)))
+            kernelPrefixes = ["emit-signal:", "route-catalog-", "route-decision-"]
+            owned label = any (`Text.isPrefixOf` label) ("practice-review-" : map (<> "practice-review-") kernelPrefixes)
+        root <- repositoryRoot
+        golden <- Text.lines <$> TextIO.readFile (root </> "packs" </> "flow-pack-practice-review" </> "test" </> "golden" </> "labels.txt")
+        assertEqual "the pack's durable labels changed; review test/golden/labels.txt" golden labels
+        forM_ labels \label -> assertBool (Text.unpack label <> " is not prefixed with the pack's name") (owned label)
+
 agentRunSpecialistTests :: DatabaseFixture -> TestTree
 agentRunSpecialistTests databaseFixture =
   testCase "real AgentRun installs review patches, recorded lineage, memory, grants, and atomic attention" do
@@ -382,7 +413,7 @@ agentRunSpecialistTests databaseFixture =
         recipients <- expectRight (mkAttentionRecipientMap [("architecture-council", "recipient_triage")])
         let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connectionString, tracer, metrics = Nothing, store = Nothing}
             baseRuntime = incompleteRuntime evidenceCalls evaluatorCalls legacyAttentionCalls
-            runtime = (baseRuntime & #attentionRecipients .~ (recipients))
+            runtime = (baseRuntime & #attentionRecipients .~ FixedRecipients recipients)
             deps = specialistAgentRunDeps appEnv behaviorEnv runtime
             job =
               RunJob
@@ -464,7 +495,7 @@ replayTests databaseFixture =
                       selectedWorkflowId
                       ( runExecutionContext executionContextFixture
                           . runPracticeReviewEvidence True runtime
-                          . runPracticeReviewEvaluator True behaviorEnv runtime
+                          . runPracticeReviewEvaluator True (runModel behaviorEnv) runtime
                           . runPracticeReviewMemory
                             PracticeReviewMemoryEnv
                               { appEnv,
@@ -703,7 +734,7 @@ specialistAgentRunDeps appEnv behaviorEnv practiceReview =
     { AgentWorkflow.appEnv,
       AgentWorkflow.behaviorEnv,
       AgentWorkflow.decisions = FlowDecision.emptyDecisionServices,
-      AgentWorkflow.flows = exampleFlowRegistry,
+      AgentWorkflow.flows = either (error . show) id (composeFlowRegistry [builtinPack, practiceReviewPackWith practiceReview]),
       AgentWorkflow.actionAuthority = allowAllForTests,
       AgentWorkflow.capabilities = CapabilityProvider.emptyCapabilityRuntime,
       AgentWorkflow.coordination = Nothing,
@@ -731,7 +762,7 @@ specialistAgentRunDeps appEnv behaviorEnv practiceReview =
       AgentWorkflow.grants = StaticGrants (Map.singleton (compatibilityIdentity (fixtureAgentName reviewerAgent)) (Set.fromList [SKawaDigest, SKizashiSignal])),
       AgentWorkflow.directory = disabledDirectoryHandle,
       AgentWorkflow.routing = unusedRoutingRuntime,
-      AgentWorkflow.practiceReview,
+      AgentWorkflow.packSettings = noPackSettings,
       AgentWorkflow.deliveryPool = Nothing,
       AgentWorkflow.resolveRunProfile = \profileId version -> pure (Left (UnknownProfile profileId version))
     }
@@ -762,7 +793,7 @@ runPracticeReviewInput appEnv behaviorEnv session runtime workflowId input =
       workflowId
       ( runExecutionContext executionContextFixture
           . runPracticeReviewEvidence True runtime
-          . runPracticeReviewEvaluator True behaviorEnv runtime
+          . runPracticeReviewEvaluator True (runModel behaviorEnv) runtime
           . runPracticeReviewMemory
             PracticeReviewMemoryEnv
               { appEnv,
@@ -801,7 +832,7 @@ completeRuntime evidenceCalls evaluatorCalls attentionCalls proposal =
         modifyIORef' attentionCalls (+ 1)
         let PracticeReviewVerdict {reviewId} = validatedVerdictValue validated
         pure (Right (Reserved (attentionKeyForDigest ("fixture-attention-" <> reviewIdText reviewId)) (sinkMessageId ("outbox-" <> reviewIdText reviewId)))),
-      attentionRecipients = emptyAttentionRecipientMap
+      attentionRecipients = FixedRecipients emptyAttentionRecipientMap
     }
 
 countingEvidenceReader :: IORef Int -> EvidenceReader
@@ -896,7 +927,7 @@ incompleteRuntime evidenceCalls evaluatorCalls attentionCalls =
       attention = \_ -> do
         modifyIORef' attentionCalls (+ 1)
         pure (Right (Reserved (attentionKeyForDigest "fixture-attention") (sinkMessageId "fixture-outbox"))),
-      attentionRecipients = emptyAttentionRecipientMap
+      attentionRecipients = FixedRecipients emptyAttentionRecipientMap
     }
   where
     unavailable :: IO (Either EvidenceReadError value)
@@ -1054,10 +1085,10 @@ expectRight = either (assertFailure . show) pure
 readFixture :: FilePath -> IO ByteString.ByteString
 readFixture name = do
   root <- repositoryRoot
-  ByteString.readFile (root </> "fixtures" </> "practice-review" </> name)
+  ByteString.readFile (root </> "packs" </> "flow-pack-practice-review" </> "fixtures" </> name)
 
 repositoryRoot :: IO FilePath
-repositoryRoot = go [".", ".."]
+repositoryRoot = go [".", "..", "../.."]
   where
     go [] = assertFailure "cannot find cabal.project from the working directory"
     go (candidate : rest) = do
@@ -1093,7 +1124,7 @@ allocatedIdFor :: AppEnv -> PracticeReviewTrigger -> IO ReviewId
 allocatedIdFor app trigger = do
   validated <- expectRight (validateTrigger trigger)
   reference <- IdentityStore.reserveReviewIdentity app (CompatibilityAgent (fixtureAgentName reviewerAgent)) validated (fixturePracticeKey "opentelemetry") (fixtureAgentName reviewerAgent) >>= expectRight
-  pure (IdentityStore.allocatedReviewId reference)
+  pure (allocatedReviewId reference)
 
 ingressTests :: DatabaseFixture -> TestTree
 ingressTests fixture = testCase "practice resolution ingress authorizes the ID-free command before queue publication" do

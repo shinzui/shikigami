@@ -82,8 +82,6 @@ import Shikigami.Flow.Workers qualified as FlowWorkers
 import Shikigami.Memory.Access (shikigamiMemorySpace)
 import Shikigami.Memory.Scope (agentScope)
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
-import Shikigami.PracticeReview.Capability qualified as PracticeReview
-import Shikigami.PracticeReview.Memory qualified as PracticeReviewMemory
 import Shikigami.RuntimePolicy (DefaultModelRequirement (..))
 import Shikigami.Sink.GrantStore (GrantSource (StaticGrants))
 import Shikigami.Sink.Permission (SinkKind (SKizashiSignal), defaultGrantTable)
@@ -121,7 +119,7 @@ tests databaseFixture =
       testCase "a Flow behavior naming an unregistered flow is a declaration error" do
         assertEqual
           "unknown flow is refused, and the message names what is registered"
-          ["unknown flow no-such-flow; registered flows: run-declared-tool, watchdog-sweep, propose-work, adaptive-delivery, architecture-practice-router, opentelemetry-practice-review"]
+          ["unknown flow no-such-flow; registered flows: run-declared-tool, watchdog-sweep, propose-work, adaptive-delivery"]
           (flowDeclarationErrors builtinFlowRegistry (flowBehaviorAgent (Flow {name = declarationCoordinate ("no-such-flow")})))
         assertEqual
           "a registered flow is accepted"
@@ -591,31 +589,11 @@ runFlowBodyUsing decision onAppend appEnv runtime flowAgent SpikeFlow {run} work
                       disabledDirectoryHandle
                 }
             . runAcknowledgement ((.approval) runtime) ((.acknowledgementDeadline) runtime)
-            . PracticeReview.runExecutionContext practiceReviewExecutionContext
-            . PracticeReview.runPracticeReviewEvidence False PracticeReview.unavailablePracticeReviewRuntime
-            . PracticeReview.runPracticeReviewEvaluator False behaviorEnv PracticeReview.unavailablePracticeReviewRuntime
-            . PracticeReviewMemory.runPracticeReviewMemoryUnjournaled practiceReviewMemoryEnv
-            . PracticeReview.runPracticeReviewAttention False PracticeReview.unavailablePracticeReviewRuntime
             $ run input
         )
   where
     flowDecl = flowAgentDecl flowAgent
     memoryEnv = MemoryEnv {appEnv, agent = flowDecl, identity = CompatibilityAgent (fixtureAgentName flowAgent), aliasPool = Nothing, sessionId = Nothing}
-    practiceReviewExecutionContext =
-      PracticeReview.PracticeReviewExecutionContext
-        { PracticeReview.identity = compatibilityIdentity (fixtureAgentName flowAgent),
-          PracticeReview.parentWorkflowId = Nothing,
-          PracticeReview.parentSessionId = Nothing,
-          PracticeReview.childWorkflowId = WorkflowId "flow-test-workflow",
-          PracticeReview.childSessionId = nominalSessionFixture
-        }
-    practiceReviewMemoryEnv =
-      PracticeReviewMemory.PracticeReviewMemoryEnv
-        { PracticeReviewMemory.appEnv = appEnv,
-          PracticeReviewMemory.agent = flowDecl,
-          PracticeReviewMemory.identity = CompatibilityAgent (fixtureAgentName flowAgent),
-          PracticeReviewMemory.sessionId = Nothing
-        }
     delegateEnv =
       FlowDelegate.DelegateEnv
         { FlowDelegate.agent = flowDecl,

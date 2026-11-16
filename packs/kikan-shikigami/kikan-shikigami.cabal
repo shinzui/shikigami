@@ -25,6 +25,7 @@ common common
   build-depends:
     base,
     flow-pack-examples,
+    flow-pack-practice-review,
     shikigami-core:flow-sdk,
 
 executable kikan-shikigami-worker

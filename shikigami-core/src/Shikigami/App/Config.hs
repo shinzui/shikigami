@@ -78,11 +78,14 @@ module Shikigami.App.Config
 
     -- * The declaration
     appConfig,
+    appConfigWith,
     appConfigSchema,
+    appConfigSchemaWith,
     defaultAppConfig,
 
     -- * Environment bindings
     environmentBindings,
+    environmentBindingsWith,
 
     -- * Which binary needs what
     Role (..),
@@ -119,7 +122,6 @@ module Shikigami.App.Config
     approvalRequireOutputsKey,
     approvalDeadlineSecondsKey,
     conversationIdleTimeoutSecondsKey,
-    practiceReviewAttentionRecipientsKey,
     behaviorProviderKey,
     behaviorModelKey,
     behaviorDecisionModelsKey,
@@ -150,6 +152,7 @@ module Shikigami.App.Config
     sinksDanwaAgentParticipantKey,
     sinksReiBaseUrlKey,
     declaredKeys,
+    declaredKeysWith,
     jsonDecoder,
   )
 where
@@ -169,7 +172,7 @@ import Data.Aeson qualified as Aeson
 import Data.Aeson.Key qualified as AesonKey
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Aeson.Types qualified as AesonTypes
-import Data.Bifunctor (first)
+import Data.Bifunctor (bimap, first)
 import Data.ByteString.Lazy qualified as LBS
 import Data.Char (isAlphaNum, isSpace)
 import Data.Generics.Labels ()
@@ -214,12 +217,7 @@ import Shikigami.Initiative.Settings (InitiativeSettings (..))
 import Shikigami.Inspection.Settings (InspectionSettings (..))
 import Shikigami.Objective.Tracker.Config (TrackerSettings, defaultTrackerSettings)
 import Shikigami.Objective.Types (ObjectiveSettings, defaultObjectiveSettings)
-import Shikigami.PracticeReview.Capability
-  ( AttentionRecipientMap,
-    emptyAttentionRecipientMap,
-    parseAttentionRecipientMap,
-    renderAttentionRecipientMap,
-  )
+import Shikigami.Pack.Setting (PackSetting (..), PackSettings, noPackSettings, packSettingsFromList)
 import Shikigami.RuntimePolicy
 import Shikigami.Sink.Permission (SinkKind)
 import Shikigami.Trigger.Schedule (CatchUpPolicy (..))
@@ -478,10 +476,10 @@ data AppConfig = AppConfig
     -- bounded by 'runTimeout'. A conversation that times out is not an error —
     -- the next message opens a fresh epoch chained to the one that closed.
     conversationIdleTimeout :: !(Duration "conversation-idle"),
-    -- | Explicit operational recipients for semantic practice-review owners.
-    -- Empty keeps the fail-closed default: actionable reviews cannot reserve
-    -- attention until an operator maps every owner they expect to encounter.
-    practiceReviewAttentionRecipients :: !AttentionRecipientMap,
+    -- | The validated settings of the flow packs this executable composes
+    -- ('appConfigWith'). Empty in a stock executable, which composes none and
+    -- so refuses a pack's key as unknown.
+    packSettings :: !PackSettings,
     -- | Base URL of the kawa ingest doorway.
     kawaBaseUrl :: !Text,
     -- | Source segment kawa attributes ingested activity to.
@@ -580,7 +578,7 @@ appConfig =
     <*> withDefault approvalChannelSetting (constant "approval-danwa" "Send human approval asks through Danwa" ViaDanwa)
     <*> withDefault approvalDeadlineSecondsSetting (constant "approval-deadline" "Bound approval and acknowledgement waits" (knownDuration (secondsToNominalDiffTime 900)))
     <*> withDefault conversationIdleTimeoutSecondsSetting (constant "conversation-idle-timeout" "End a conversation epoch after half an hour of silence" (knownDuration (secondsToNominalDiffTime 1800)))
-    <*> withDefault practiceReviewAttentionRecipientsSetting (constant "practice-review-attention-unmapped" "Require operators to map every actionable review owner explicitly" emptyAttentionRecipientMap)
+    <*> pure noPackSettings
     <*> withDefault sinksKawaBaseUrlSetting (constant "local-kawa" "The local kawa (or stub-kawa) doorway" "http://localhost:8088")
     <*> withDefault sinksKawaSourceSegmentSetting (constant "kawa-source" "This repository's ingest source segment" (activityCoordinate "shinzui/shikigami"))
     <*> optional kawaTokenSetting
@@ -875,9 +873,33 @@ directorySettingsConfig =
           <*> withDefault directoryRefreshIntervalSecondsSetting (constant "directory-refresh" "Refresh the principal directory every five seconds" (knownDuration (secondsToNominalDiffTime 5)))
       )
 
+-- | The declaration of an executable composed with flow packs: 'appConfig'
+-- plus each pack setting, decoded as text and validated by its pack. A pack
+-- setting always has a default, so composing a pack never makes a key
+-- required. With no setting this is 'appConfig'.
+appConfigWith :: [PackSetting] -> Config AppConfig
+appConfigWith settings =
+  (\config values -> config & #packSettings .~ packSettingsFromList values)
+    <$> appConfig
+    <*> traverse packSettingConfig settings
+
+packSettingConfig :: PackSetting -> Config (Text, Text)
+packSettingConfig setting =
+  (setting.key,)
+    <$> withDefault
+      (publicSettingWithRenderer (stableKey setting.key) setting.description (decoder decodeValue) id)
+      (constant setting.defaultRule setting.defaultReason setting.defaultValue)
+  where
+    decodeValue key raw = case runDecoder textDecoder key raw of
+      Left _ -> Left (decodeFailure key setting.expectation)
+      Right value -> bimap (const (decodeFailure key setting.expectation)) (const value) (setting.validate value)
+
 -- | The static schema, for @--describe-config@ and for tests.
 appConfigSchema :: Schema
-appConfigSchema = describe appConfig
+appConfigSchema = appConfigSchemaWith []
+
+appConfigSchemaWith :: [PackSetting] -> Schema
+appConfigSchemaWith = describe . appConfigWith
 
 -- | What 'appConfig' resolves to when no source supplies anything.
 --
@@ -1176,23 +1198,6 @@ conversationIdleTimeoutSecondsSetting =
     positiveDurationDecoder
     renderDurationSeconds
 
-practiceReviewAttentionRecipientsSetting :: Setting AttentionRecipientMap
-practiceReviewAttentionRecipientsSetting =
-  publicSettingWithRenderer
-    practiceReviewAttentionRecipientsKey
-    "Comma-separated practice-review owner mappings (owner=recipient_id or sorted owner+owner=recipient_id)"
-    (decoder decodeRecipientMap)
-    renderAttentionRecipientMap
-  where
-    decodeRecipientMap key raw =
-      case runDecoder textDecoder key raw of
-        Left _ -> Left (decodeFailure key attentionRecipientMapExpectation)
-        Right value -> first (const (decodeFailure key attentionRecipientMapExpectation)) (parseAttentionRecipientMap value)
-
-attentionRecipientMapExpectation :: Text
-attentionRecipientMapExpectation =
-  "a comma-separated unique map of owner or sorted owner+owner keys to recipient_... ids"
-
 -- | One day is well below @maxBound :: Int@ after conversion to microseconds on
 -- every 64-bit platform supported by this repository's deployment flake, while
 -- still allowing operational budgets far above the defaults.
@@ -1459,9 +1464,6 @@ approvalDeadlineSecondsKey = stableKey "approval.deadline_seconds"
 conversationIdleTimeoutSecondsKey :: Key
 conversationIdleTimeoutSecondsKey = stableKey "conversation.idle_timeout_seconds"
 
-practiceReviewAttentionRecipientsKey :: Key
-practiceReviewAttentionRecipientsKey = stableKey "practice_review.attention_recipients"
-
 sinksKawaBaseUrlKey :: Key
 sinksKawaBaseUrlKey = stableKey "sinks.kawa.base_url"
 
@@ -1541,7 +1543,11 @@ actionCallerIdKey = stableKey "authorization.actions.caller_id"
 -- documentation can be generated from the declaration rather than transcribed
 -- from it.
 declaredKeys :: [Key]
-declaredKeys = fmap schemaSettingKey (schemaPossible appConfigSchema)
+declaredKeys = declaredKeysWith []
+
+-- | The accepted surface of an executable composed with flow packs.
+declaredKeysWith :: [PackSetting] -> [Key]
+declaredKeysWith = fmap schemaSettingKey . schemaPossible . appConfigSchemaWith
 
 -- | Parse a key that is a compile-time constant of this module.
 --
@@ -1571,97 +1577,108 @@ stableKey value = either (\problem -> error (Text.unpack value <> ": invalid con
 -- keys that structurally overlap — fails in tests rather than at process
 -- startup.
 environmentBindings :: Bindings
-environmentBindings =
-  either
-    (error . Text.unpack . renderEnvErrorsText)
-    id
-    ( bindings
-        [ binding (EnvName "PG_CONNECTION_STRING") databaseConnectionStringKey,
-          binding (EnvName "SHIKIGAMI_AGENTS_DIRECTORY") agentsDirectoryKey,
-          binding (EnvName "SHIKIGAMI_AGENTS_STRICT") agentsStrictKey,
-          binding (EnvName "SHIKIGAMI_DIRECTORY_MODE") directoryModeKey,
-          binding (EnvName "SHIKIGAMI_DIRECTORY_FILE_PATH") directoryFilePathKey,
-          binding (EnvName "SHIKIGAMI_DIRECTORY_REFRESH_INTERVAL_SECONDS") directoryRefreshIntervalSecondsKey,
-          binding (EnvName "SHIKIGAMI_DELEGATION_DEFAULT_BUDGET") delegationBudgetKey,
-          binding (EnvName "SHIKIGAMI_SCHEDULER_CATCH_UP") schedulerCatchUpKey,
-          binding (EnvName "SHIKIGAMI_KAFKA_BROKER") kafkaBrokerKey,
-          binding (EnvName "SHIKIGAMI_KAFKA_ACTIVITY_TOPIC") kafkaActivityTopicKey,
-          binding (EnvName "SHIKIGAMI_KAFKA_EVENTS_TOPIC") kafkaEventsTopicKey,
-          binding (EnvName "SHIKIGAMI_KAFKA_STREAM_GROUP") kafkaStreamGroupKey,
-          binding (EnvName "SHIKIGAMI_KAFKA_EVENTS_GROUP") kafkaEventsGroupKey,
-          binding (EnvName "SHIKIGAMI_KAFKA_INCLUDE_AGENT_ACTORS") kafkaIncludeAgentActorsKey,
-          binding (EnvName "SHIKIGAMI_KAFKA_DEAD_LETTER_QUEUE") kafkaDeadLetterQueueKey,
-          binding (EnvName "SHIKIGAMI_HTTP_AUTH_MODE") httpAuthModeKey,
-          binding (EnvName "SHIKIGAMI_HTTP_AUTH_CALLER") httpAuthCallerKey,
-          binding (EnvName "SHIKIGAMI_API_TOKEN") httpAuthTokenKey,
-          binding (EnvName "SHIKIGAMI_INSPECTION") inspectionKey,
-          binding (EnvName "SHIKIGAMI_HTTP_HOST") httpHostKey,
-          binding (EnvName "SHIKIGAMI_HTTP_PORT") httpPortKey,
-          binding (EnvName "SHIKIGAMI_HTTP_REQUEST_MAX_BYTES") httpRequestMaxBytesKey,
-          binding (EnvName "SHIKIGAMI_HTTP_RESPONSE_MAX_BYTES") httpResponseMaxBytesKey,
-          binding (EnvName "SHIKIGAMI_HEALTH_PORT") healthPortKey,
-          binding (EnvName "SHIKIGAMI_RUN_TIMEOUT_SECONDS") workerRunTimeoutSecondsKey,
-          binding (EnvName "SHIKIGAMI_WORKER_CAPACITY") (stableKey "worker.capacity"),
-          binding (EnvName "SHIKIGAMI_APPROVAL_REQUIRE") approvalRequireKey,
-          binding (EnvName "SHIKIGAMI_APPROVAL_CHANNEL") approvalChannelKey,
-          binding (EnvName "SHIKIGAMI_APPROVAL_REQUIRE_OUTPUTS") approvalRequireOutputsKey,
-          binding (EnvName "SHIKIGAMI_APPROVAL_DEADLINE_SECONDS") approvalDeadlineSecondsKey,
-          binding (EnvName "SHIKIGAMI_CONVERSATION_IDLE_TIMEOUT_SECONDS") conversationIdleTimeoutSecondsKey,
-          binding (EnvName "SHIKIGAMI_PRACTICE_REVIEW_ATTENTION_RECIPIENTS") practiceReviewAttentionRecipientsKey,
-          binding (EnvName "SHIKIGAMI_SINKS_KAWA_BASE_URL") sinksKawaBaseUrlKey,
-          binding (EnvName "SHIKIGAMI_SINKS_KAWA_SOURCE_SEGMENT") sinksKawaSourceSegmentKey,
-          binding (EnvName "SHIKIGAMI_SINKS_KIZASHI_BASE_URL") sinksKizashiBaseUrlKey,
-          binding (EnvName "SHIKIGAMI_SINKS_KIZASHI_DEFAULT_RECIPIENT") sinksKizashiDefaultRecipientKey,
-          binding (EnvName "SHIKIGAMI_SINKS_KANMON_BASE_URL") sinksKanmonBaseUrlKey,
-          binding (EnvName "SHIKIGAMI_SINKS_DANWA_BASE_URL") sinksDanwaBaseUrlKey,
-          binding (EnvName "SHIKIGAMI_SINKS_DANWA_AGENT_PARTICIPANT") sinksDanwaAgentParticipantKey,
-          binding (EnvName "SHIKIGAMI_SINKS_REI_BASE_URL") sinksReiBaseUrlKey,
-          binding (EnvName "SHIKIGAMI_KAWA_TOKEN") kawaTokenKey,
-          binding (EnvName "SHIKIGAMI_KIZASHI_TOKEN") kizashiTokenKey,
-          binding (EnvName "SHIKIGAMI_KANMON_TOKEN") kanmonTokenKey,
-          binding (EnvName "SHIKIGAMI_DANWA_TOKEN") danwaTokenKey,
-          binding (EnvName "SHIKIGAMI_BEHAVIOR_PROVIDER") behaviorProviderKey,
-          binding (EnvName "SHIKIGAMI_BEHAVIOR_DECISION_MODELS") behaviorDecisionModelsKey,
-          binding (EnvName "SHIKIGAMI_BEHAVIOR_HARNESS") behaviorHarnessKey,
-          binding (EnvName "SHIKIGAMI_OBJECTIVES") (stableKey "objectives"),
-          binding (EnvName "SHIKIGAMI_OBJECTIVE_TRACKERS") (stableKey "objective_trackers"),
-          binding (EnvName "SHIKIGAMI_WATCHDOG") watchdogKey,
-          binding (EnvName "SHIKIGAMI_INITIATIVES") initiativesKey,
-          binding (EnvName "SHIKIGAMI_WORKSPACES") workspacesKey,
-          binding (EnvName "SHIKIGAMI_WORKSPACE_SUPERVISOR") workspaceSupervisorKey,
-          binding (EnvName "SHIKIGAMI_BEHAVIOR_MODEL") behaviorModelKey,
-          binding (EnvName "ANTHROPIC_API_KEY") anthropicApiKeyKey,
-          binding (EnvName "OPENAI_API_KEY") openaiApiKeyKey,
-          binding (EnvName "TYPESAFE_API_KEY") typesafeApiKeyKey,
-          binding (EnvName "SHIKIGAMI_BEHAVIOR_BASE_URL") (stableKey "behavior.base_url"),
-          binding (EnvName "SHIKIGAMI_BEHAVIOR_OPTIONS_THINKING") (optionKey "thinking"),
-          binding (EnvName "SHIKIGAMI_BEHAVIOR_OPTIONS_MAX_TOKENS") (optionKey "max_tokens"),
-          binding (EnvName "SHIKIGAMI_BEHAVIOR_OPTIONS_TEMPERATURE") (optionKey "temperature"),
-          binding (EnvName "SHIKIGAMI_BEHAVIOR_OPTIONS_TIMEOUT_MS") (optionKey "timeout_ms"),
-          binding (EnvName "SHIKIGAMI_BEHAVIOR_OPTIONS_TOP_P") (optionKey "top_p"),
-          binding (EnvName "SHIKIGAMI_BEHAVIOR_OPTIONS_STOP_SEQUENCES") (optionKey "stop_sequences"),
-          binding (EnvName "SHIKIGAMI_BEHAVIOR_OPTIONS_SEED") (optionKey "seed"),
-          binding (EnvName "SHIKIGAMI_BEHAVIOR_OPTIONS_FREQUENCY_PENALTY") (optionKey "frequency_penalty"),
-          binding (EnvName "SHIKIGAMI_BEHAVIOR_OPTIONS_PRESENCE_PENALTY") (optionKey "presence_penalty"),
-          binding (EnvName "SHIKIGAMI_BEHAVIOR_OPTIONS_CACHE_RETENTION") (optionKey "cache_retention"),
-          binding (EnvName "SHIKIGAMI_BEHAVIOR_OPTIONS_SPEED") (optionKey "speed"),
-          binding (EnvName "SHIKIGAMI_BEHAVIOR_OPTIONS_RESPONSE_FORMAT") (optionKey "response_format"),
-          binding (EnvName "SHIKIGAMI_BEHAVIOR_OPTIONS_TOOL_CHOICE") (optionKey "tool_choice"),
-          binding (EnvName "SHIKIGAMI_BEHAVIOR_OPTIONS_HEADERS") (optionKey "headers"),
-          binding (EnvName "SHIKIGAMI_BEHAVIOR_OPTIONS_METADATA") (optionKey "metadata"),
-          binding (EnvName "SHIKIGAMI_TRUST_TIER") trustTierKey,
-          binding (EnvName "SHIKIGAMI_TRUST_LOCAL_OPERATOR_APPROVALS_FILE") trustApprovalsFileKey,
-          binding (EnvName "SHIKIGAMI_TRUST_LOCAL_OPERATOR_STATE_DIR") trustStateDirectoryKey,
-          binding (EnvName "SHIKIGAMI_ACTION_AUTHORIZATION_MODE") actionAuthorizationModeKey,
-          binding (EnvName "SHIKIGAMI_ACTION_KIKAN_EN_BASE_URL") actionKikanBaseUrlKey,
-          binding (EnvName "SHIKIGAMI_ACTION_SHOMEI_BASE_URL") actionShomeiBaseUrlKey,
-          binding (EnvName "SHIKIGAMI_ACTION_SHOMEI_CLIENT_ID") actionShomeiClientIdKey,
-          binding (EnvName "SHIKIGAMI_ACTION_SHOMEI_CLIENT_SECRET") actionShomeiClientSecretKey,
-          binding (EnvName "SHIKIGAMI_ACTION_EN_ISSUER_PUBLIC_KEYS") actionIssuerPublicKeysKey,
-          binding (EnvName "SHIKIGAMI_ACTION_EN_SCHEMA_HASHES") actionSchemaHashesKey,
-          binding (EnvName "SHIKIGAMI_ACTION_CALLER_ID") actionCallerIdKey
-        ]
-    )
+environmentBindings = either (error . Text.unpack) id (environmentBindingsWith [])
+
+-- | The kernel's bindings plus one per pack setting. A pack variable or key
+-- that collides with another is reported as text, because it is a composition
+-- error an operator of a distribution can meet, not a kernel programming error.
+environmentBindingsWith :: [PackSetting] -> Either Text Bindings
+environmentBindingsWith settings = do
+  packBindings <- traverse packBinding settings
+  first renderEnvErrorsText (bindings (kernelEnvironmentBindings <> packBindings))
+  where
+    packBinding setting =
+      bimap
+        (\problem -> "pack setting " <> setting.key <> ": invalid configuration key: " <> Text.pack (show problem))
+        (binding (EnvName setting.environment))
+        (parseKey setting.key)
+
+kernelEnvironmentBindings :: [EnvBinding]
+kernelEnvironmentBindings =
+  [ binding (EnvName "PG_CONNECTION_STRING") databaseConnectionStringKey,
+    binding (EnvName "SHIKIGAMI_AGENTS_DIRECTORY") agentsDirectoryKey,
+    binding (EnvName "SHIKIGAMI_AGENTS_STRICT") agentsStrictKey,
+    binding (EnvName "SHIKIGAMI_DIRECTORY_MODE") directoryModeKey,
+    binding (EnvName "SHIKIGAMI_DIRECTORY_FILE_PATH") directoryFilePathKey,
+    binding (EnvName "SHIKIGAMI_DIRECTORY_REFRESH_INTERVAL_SECONDS") directoryRefreshIntervalSecondsKey,
+    binding (EnvName "SHIKIGAMI_DELEGATION_DEFAULT_BUDGET") delegationBudgetKey,
+    binding (EnvName "SHIKIGAMI_SCHEDULER_CATCH_UP") schedulerCatchUpKey,
+    binding (EnvName "SHIKIGAMI_KAFKA_BROKER") kafkaBrokerKey,
+    binding (EnvName "SHIKIGAMI_KAFKA_ACTIVITY_TOPIC") kafkaActivityTopicKey,
+    binding (EnvName "SHIKIGAMI_KAFKA_EVENTS_TOPIC") kafkaEventsTopicKey,
+    binding (EnvName "SHIKIGAMI_KAFKA_STREAM_GROUP") kafkaStreamGroupKey,
+    binding (EnvName "SHIKIGAMI_KAFKA_EVENTS_GROUP") kafkaEventsGroupKey,
+    binding (EnvName "SHIKIGAMI_KAFKA_INCLUDE_AGENT_ACTORS") kafkaIncludeAgentActorsKey,
+    binding (EnvName "SHIKIGAMI_KAFKA_DEAD_LETTER_QUEUE") kafkaDeadLetterQueueKey,
+    binding (EnvName "SHIKIGAMI_HTTP_AUTH_MODE") httpAuthModeKey,
+    binding (EnvName "SHIKIGAMI_HTTP_AUTH_CALLER") httpAuthCallerKey,
+    binding (EnvName "SHIKIGAMI_API_TOKEN") httpAuthTokenKey,
+    binding (EnvName "SHIKIGAMI_INSPECTION") inspectionKey,
+    binding (EnvName "SHIKIGAMI_HTTP_HOST") httpHostKey,
+    binding (EnvName "SHIKIGAMI_HTTP_PORT") httpPortKey,
+    binding (EnvName "SHIKIGAMI_HTTP_REQUEST_MAX_BYTES") httpRequestMaxBytesKey,
+    binding (EnvName "SHIKIGAMI_HTTP_RESPONSE_MAX_BYTES") httpResponseMaxBytesKey,
+    binding (EnvName "SHIKIGAMI_HEALTH_PORT") healthPortKey,
+    binding (EnvName "SHIKIGAMI_RUN_TIMEOUT_SECONDS") workerRunTimeoutSecondsKey,
+    binding (EnvName "SHIKIGAMI_WORKER_CAPACITY") (stableKey "worker.capacity"),
+    binding (EnvName "SHIKIGAMI_APPROVAL_REQUIRE") approvalRequireKey,
+    binding (EnvName "SHIKIGAMI_APPROVAL_CHANNEL") approvalChannelKey,
+    binding (EnvName "SHIKIGAMI_APPROVAL_REQUIRE_OUTPUTS") approvalRequireOutputsKey,
+    binding (EnvName "SHIKIGAMI_APPROVAL_DEADLINE_SECONDS") approvalDeadlineSecondsKey,
+    binding (EnvName "SHIKIGAMI_CONVERSATION_IDLE_TIMEOUT_SECONDS") conversationIdleTimeoutSecondsKey,
+    binding (EnvName "SHIKIGAMI_SINKS_KAWA_BASE_URL") sinksKawaBaseUrlKey,
+    binding (EnvName "SHIKIGAMI_SINKS_KAWA_SOURCE_SEGMENT") sinksKawaSourceSegmentKey,
+    binding (EnvName "SHIKIGAMI_SINKS_KIZASHI_BASE_URL") sinksKizashiBaseUrlKey,
+    binding (EnvName "SHIKIGAMI_SINKS_KIZASHI_DEFAULT_RECIPIENT") sinksKizashiDefaultRecipientKey,
+    binding (EnvName "SHIKIGAMI_SINKS_KANMON_BASE_URL") sinksKanmonBaseUrlKey,
+    binding (EnvName "SHIKIGAMI_SINKS_DANWA_BASE_URL") sinksDanwaBaseUrlKey,
+    binding (EnvName "SHIKIGAMI_SINKS_DANWA_AGENT_PARTICIPANT") sinksDanwaAgentParticipantKey,
+    binding (EnvName "SHIKIGAMI_SINKS_REI_BASE_URL") sinksReiBaseUrlKey,
+    binding (EnvName "SHIKIGAMI_KAWA_TOKEN") kawaTokenKey,
+    binding (EnvName "SHIKIGAMI_KIZASHI_TOKEN") kizashiTokenKey,
+    binding (EnvName "SHIKIGAMI_KANMON_TOKEN") kanmonTokenKey,
+    binding (EnvName "SHIKIGAMI_DANWA_TOKEN") danwaTokenKey,
+    binding (EnvName "SHIKIGAMI_BEHAVIOR_PROVIDER") behaviorProviderKey,
+    binding (EnvName "SHIKIGAMI_BEHAVIOR_DECISION_MODELS") behaviorDecisionModelsKey,
+    binding (EnvName "SHIKIGAMI_BEHAVIOR_HARNESS") behaviorHarnessKey,
+    binding (EnvName "SHIKIGAMI_OBJECTIVES") (stableKey "objectives"),
+    binding (EnvName "SHIKIGAMI_OBJECTIVE_TRACKERS") (stableKey "objective_trackers"),
+    binding (EnvName "SHIKIGAMI_WATCHDOG") watchdogKey,
+    binding (EnvName "SHIKIGAMI_INITIATIVES") initiativesKey,
+    binding (EnvName "SHIKIGAMI_WORKSPACES") workspacesKey,
+    binding (EnvName "SHIKIGAMI_WORKSPACE_SUPERVISOR") workspaceSupervisorKey,
+    binding (EnvName "SHIKIGAMI_BEHAVIOR_MODEL") behaviorModelKey,
+    binding (EnvName "ANTHROPIC_API_KEY") anthropicApiKeyKey,
+    binding (EnvName "OPENAI_API_KEY") openaiApiKeyKey,
+    binding (EnvName "TYPESAFE_API_KEY") typesafeApiKeyKey,
+    binding (EnvName "SHIKIGAMI_BEHAVIOR_BASE_URL") (stableKey "behavior.base_url"),
+    binding (EnvName "SHIKIGAMI_BEHAVIOR_OPTIONS_THINKING") (optionKey "thinking"),
+    binding (EnvName "SHIKIGAMI_BEHAVIOR_OPTIONS_MAX_TOKENS") (optionKey "max_tokens"),
+    binding (EnvName "SHIKIGAMI_BEHAVIOR_OPTIONS_TEMPERATURE") (optionKey "temperature"),
+    binding (EnvName "SHIKIGAMI_BEHAVIOR_OPTIONS_TIMEOUT_MS") (optionKey "timeout_ms"),
+    binding (EnvName "SHIKIGAMI_BEHAVIOR_OPTIONS_TOP_P") (optionKey "top_p"),
+    binding (EnvName "SHIKIGAMI_BEHAVIOR_OPTIONS_STOP_SEQUENCES") (optionKey "stop_sequences"),
+    binding (EnvName "SHIKIGAMI_BEHAVIOR_OPTIONS_SEED") (optionKey "seed"),
+    binding (EnvName "SHIKIGAMI_BEHAVIOR_OPTIONS_FREQUENCY_PENALTY") (optionKey "frequency_penalty"),
+    binding (EnvName "SHIKIGAMI_BEHAVIOR_OPTIONS_PRESENCE_PENALTY") (optionKey "presence_penalty"),
+    binding (EnvName "SHIKIGAMI_BEHAVIOR_OPTIONS_CACHE_RETENTION") (optionKey "cache_retention"),
+    binding (EnvName "SHIKIGAMI_BEHAVIOR_OPTIONS_SPEED") (optionKey "speed"),
+    binding (EnvName "SHIKIGAMI_BEHAVIOR_OPTIONS_RESPONSE_FORMAT") (optionKey "response_format"),
+    binding (EnvName "SHIKIGAMI_BEHAVIOR_OPTIONS_TOOL_CHOICE") (optionKey "tool_choice"),
+    binding (EnvName "SHIKIGAMI_BEHAVIOR_OPTIONS_HEADERS") (optionKey "headers"),
+    binding (EnvName "SHIKIGAMI_BEHAVIOR_OPTIONS_METADATA") (optionKey "metadata"),
+    binding (EnvName "SHIKIGAMI_TRUST_TIER") trustTierKey,
+    binding (EnvName "SHIKIGAMI_TRUST_LOCAL_OPERATOR_APPROVALS_FILE") trustApprovalsFileKey,
+    binding (EnvName "SHIKIGAMI_TRUST_LOCAL_OPERATOR_STATE_DIR") trustStateDirectoryKey,
+    binding (EnvName "SHIKIGAMI_ACTION_AUTHORIZATION_MODE") actionAuthorizationModeKey,
+    binding (EnvName "SHIKIGAMI_ACTION_KIKAN_EN_BASE_URL") actionKikanBaseUrlKey,
+    binding (EnvName "SHIKIGAMI_ACTION_SHOMEI_BASE_URL") actionShomeiBaseUrlKey,
+    binding (EnvName "SHIKIGAMI_ACTION_SHOMEI_CLIENT_ID") actionShomeiClientIdKey,
+    binding (EnvName "SHIKIGAMI_ACTION_SHOMEI_CLIENT_SECRET") actionShomeiClientSecretKey,
+    binding (EnvName "SHIKIGAMI_ACTION_EN_ISSUER_PUBLIC_KEYS") actionIssuerPublicKeysKey,
+    binding (EnvName "SHIKIGAMI_ACTION_EN_SCHEMA_HASHES") actionSchemaHashesKey,
+    binding (EnvName "SHIKIGAMI_ACTION_CALLER_ID") actionCallerIdKey
+  ]
 
 -- ── Which binary needs what ─────────────────────────────────────────────────
 

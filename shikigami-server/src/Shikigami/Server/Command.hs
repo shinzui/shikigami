@@ -55,12 +55,12 @@ import Shikigami.App.Config (AppConfig, Role (AdminRole), kafkaActivityTopicKey,
 import Shikigami.App.Config.Load
   ( ConfigOptions (..),
     configOptions,
-    runAppConfig,
+    runAppConfigWith,
     usageExitCode,
   )
 import Shikigami.App.Version (versionOption)
 import Shikigami.Execution.Identity (parseExecutionRootId, parseOperationId)
-import Shikigami.Flow.Pack (FlowPack)
+import Shikigami.Flow.Pack (FlowPack (..))
 import Shikigami.Objective.Tracker.Control.Types (HistoryKind (Proposals, Publications))
 import Shikigami.Server.Command.Agents (runAgentsList, runAgentsSync)
 import Shikigami.Server.Command.EnqueueRun (runEnqueueRun)
@@ -164,12 +164,16 @@ runAdminWith packs = do
     -- A diagnostic with no subcommand is legitimate, and 'runAppConfig' exits
     -- inside it. Reaching the next line therefore means no command was given.
     Nothing -> do
-      _ <- runAppConfig AdminRole options
+      _ <- runAppConfigWith settings AdminRole options
       hPutStrLn stderr "shikigami: no command given; run 'shikigami --help' for the list"
       exitWith (ExitFailure usageExitCode)
     Just (action, sources) -> do
-      config <- runAppConfig AdminRole (options & #namedSources .~ (.namedSources) options <> sources)
+      config <- runAppConfigWith settings AdminRole (options & #namedSources .~ (.namedSources) options <> sources)
       action config
+  where
+    -- The admin command reads the configuration file a composed worker reads,
+    -- so it accepts the same pack settings.
+    settings = concatMap (.settings) packs
 
 -- | Every subcommand, paired with its name.
 --

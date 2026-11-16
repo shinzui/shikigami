@@ -1,6 +1,6 @@
 {-# LANGUAGE RankNTypes #-}
 
-module Shikigami.PracticeReviewMemorySpec (tests) where
+module FlowPack.PracticeReview.MemorySpec (tests) where
 
 import Control.Concurrent (forkFinally)
 import Control.Concurrent.Async (replicateConcurrently)
@@ -17,6 +17,59 @@ import Data.Text qualified as Text
 import Data.Time.Clock (getCurrentTime)
 import Effectful (Eff, IOE, (:>))
 import Effectful qualified
+import FlowPack.PracticeReview.Identity (newResolutionId)
+import FlowPack.PracticeReview.IdentityStore qualified as IdentityStore
+import FlowPack.PracticeReview.Memory
+  ( PracticeReviewChain (..),
+    PracticeReviewChainEntry (..),
+    PracticeReviewMemory,
+    PracticeReviewMemoryEnvelope (..),
+    RecalledPracticeReviews (..),
+    ResolvedPracticeReview (..),
+    ReviewMemoryDiagnostic (..),
+    ReviewMemoryError (..),
+    ReviewRecallContext (..),
+    allocatedReviewId,
+    appliesTo,
+    decodePracticeReviewMemory,
+    encodePracticeReviewMemory,
+    practiceReviewTags,
+    provisionalMemoryId,
+    recallPracticeReviewChain,
+    recallPracticeReviews,
+    reserveReviewIdentity,
+    resolvedMemoryId,
+  )
+import FlowPack.PracticeReview.Memory qualified as ReviewMemory
+import FlowPack.PracticeReview.Memory.Store (PracticeReviewMemoryEnv (..), practiceReviewScope, runPracticeReviewMemory)
+import FlowPack.PracticeReview.Memory.Store qualified as ReviewMemoryStore
+import FlowPack.PracticeReview.Types
+  ( Applicability (..),
+    PracticeKey,
+    PracticeReviewResolution (..),
+    PracticeReviewResolutionRequest (..),
+    PracticeReviewVerdict (..),
+    ProjectRef (..),
+    ResolutionId,
+    ResolutionOutcome (..),
+    ReviewId,
+    ValidatedPracticeReviewResolution,
+    ValidatedPracticeReviewVerdict,
+    parsePracticeKey,
+    parseResolutionId,
+    parseReviewId,
+    resolutionIdText,
+    reviewIdText,
+    validateResolution,
+    validateResolutionRequest,
+    validateTrigger,
+    validateVerdict,
+    validatedResolutionValue,
+    validatedTriggerValue,
+    validatedVerdictValue,
+  )
+import FlowPack.PracticeReview.Types qualified as Review
+import FlowPack.PracticeReview.Types qualified as ReviewValue
 import Hasql.Pool qualified as Pool
 import Hasql.Session qualified as Session
 import Keiro.Workflow
@@ -48,60 +101,6 @@ import Shikigami.Agent.Principal (ResolvedAgentIdentity (CompatibilityAgent))
 import Shikigami.App (AppEnv (..), noopTracer, runAppIO)
 import Shikigami.Memory.Access (agentActor, shikigamiMemorySpace, shikigamiWriteContext)
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
-import Shikigami.PracticeReview
-  ( Applicability (..),
-    PracticeKey,
-    PracticeReviewResolution (..),
-    PracticeReviewResolutionRequest (..),
-    PracticeReviewVerdict (..),
-    ProjectRef (..),
-    ResolutionId,
-    ResolutionOutcome (..),
-    ReviewId,
-    ValidatedPracticeReviewResolution,
-    ValidatedPracticeReviewVerdict,
-    parsePracticeKey,
-    parseResolutionId,
-    parseReviewId,
-    resolutionIdText,
-    reviewIdText,
-    validateResolution,
-    validateResolutionRequest,
-    validateTrigger,
-    validateVerdict,
-    validatedResolutionValue,
-    validatedTriggerValue,
-    validatedVerdictValue,
-  )
-import Shikigami.PracticeReview qualified as Review
-import Shikigami.PracticeReview qualified as ReviewValue
-import Shikigami.PracticeReview.Identity (newResolutionId)
-import Shikigami.PracticeReview.IdentityStore qualified as IdentityStore
-import Shikigami.PracticeReview.Memory
-  ( PracticeReviewChain (..),
-    PracticeReviewChainEntry (..),
-    PracticeReviewMemory,
-    PracticeReviewMemoryEnv (..),
-    PracticeReviewMemoryEnvelope (..),
-    RecalledPracticeReviews (..),
-    ResolvedPracticeReview (..),
-    ReviewMemoryDiagnostic (..),
-    ReviewMemoryError (..),
-    ReviewRecallContext (..),
-    allocatedReviewId,
-    appliesTo,
-    decodePracticeReviewMemory,
-    encodePracticeReviewMemory,
-    practiceReviewScope,
-    practiceReviewTags,
-    provisionalMemoryId,
-    recallPracticeReviewChain,
-    recallPracticeReviews,
-    reserveReviewIdentity,
-    resolvedMemoryId,
-    runPracticeReviewMemory,
-  )
-import Shikigami.PracticeReview.Memory qualified as ReviewMemory
 import Shikigami.Repository (RelativePath, RepositoryId, mkRelativePath, repositoryId, repositoryIdText)
 import Shikigami.Trigger.Schedule (parseCron)
 import System.Directory (doesFileExist)
@@ -761,10 +760,10 @@ readValidatedContracts = do
 readFixture :: FilePath -> IO ByteString.ByteString
 readFixture name = do
   root <- repositoryRoot
-  ByteString.readFile (root </> "fixtures" </> "practice-review" </> name)
+  ByteString.readFile (root </> "packs" </> "flow-pack-practice-review" </> "fixtures" </> name)
 
 repositoryRoot :: IO FilePath
-repositoryRoot = go [".", ".."]
+repositoryRoot = go [".", "..", "../.."]
   where
     go [] = assertFailure "cannot find cabal.project from the working directory"
     go (candidate : rest) = do

@@ -28,7 +28,6 @@ workflow AgentRun
       step adaptive-admission -> AdaptiveAdmissionResolution
       child adaptive-delivery id input via admittedAdaptiveWorkflowId -> AdaptiveDeliveryResult
     }
-    step route-catalog-architecture-practice -> CandidateCatalog
     step playbook-admission -> PlaybookAdmission
     step recall-playbook-learnings -> RecalledLearnings
     step remember-playbook-learnings -> RecordedLearning
@@ -66,15 +65,6 @@ workflow AgentRun
       step emit-signals-watchdog-deliver -> SinkBatchResult
       step watchdog-close -> WatchdogSweepClosed
     }
-    step route-decision-architecture-practice -> RouteDecision
-    step practice-review-reserve-identity -> PracticeReviewIdentityResult
-    step practice-review-remember-provisional -> PracticeReviewMemoryResult
-    step practice-review-resolve -> PracticeReviewResolutionResult
-    step practice-review-recall -> RecalledPracticeReviews
-    step practice-review-chain -> PracticeReviewChain
-    step practice-review-evidence -> EvidenceBundle
-    step practice-review-evaluate -> PracticeReviewEvaluation
-    step practice-review-attention -> AttentionReservationResult
     step dispatch-sinks -> SinkResults
     step resolve-outputs -> ResolvedOutputs
     step deliver-outputs -> OutputReceipts

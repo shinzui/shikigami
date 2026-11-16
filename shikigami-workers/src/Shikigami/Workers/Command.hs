@@ -71,7 +71,7 @@ import Shikigami.App.Config
   )
 import Shikigami.App.Config.Load (withConfigOptions)
 import Shikigami.App.Role (RoleInfo (..), runRole)
-import Shikigami.Flow.Pack (FlowPack)
+import Shikigami.Flow.Pack (FlowPack (..))
 import Shikigami.Workers.Command.Scheduler (runSchedulerCmd)
 import Shikigami.Workers.Command.Worker (runResumeCmd, runWorkerCmd)
 import Shikigami.Workers.Subscription (runConsumeEvents, runConsumeStream)
@@ -104,6 +104,7 @@ workerRoleInfoWith packs =
   RoleInfo
     { binaryName = "shikigami-worker",
       role = WorkerRole,
+      packSettings = concatMap (.settings) packs,
       parserInfo =
         withConfigOptions
           "shikigami-worker"
@@ -126,6 +127,7 @@ schedulerRoleInfo =
   RoleInfo
     { binaryName = "shikigami-scheduler",
       role = SchedulerRole,
+      packSettings = [],
       parserInfo =
         withConfigOptions
           "shikigami-scheduler"
@@ -140,6 +142,7 @@ consumeStreamRoleInfo =
   RoleInfo
     { binaryName = "shikigami-consume-stream",
       role = StreamConsumerRole,
+      packSettings = [],
       parserInfo =
         withConfigOptions
           "shikigami-consume-stream"
@@ -154,6 +157,7 @@ consumeEventsRoleInfo =
   RoleInfo
     { binaryName = "shikigami-consume-events",
       role = EventConsumerRole,
+      packSettings = [],
       parserInfo =
         withConfigOptions
           "shikigami-consume-events"
@@ -307,4 +311,5 @@ workspaceSupervisorRoleInfo =
   RoleInfo
     "shikigami-workspace-supervisor"
     WorkspaceSupervisorRole
+    []
     (withConfigOptions "shikigami-workspace-supervisor" "Supervise governed workspace processes and recover original receipts" (pure runWorkspaceSupervisor) (pure []))

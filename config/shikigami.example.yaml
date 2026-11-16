@@ -112,9 +112,11 @@ behavior:
 #     caller_id: shikigami-worker
 
 # Actionable practice reviews fail closed unless their exact semantic owner (or
-# sorted joint-owner set) maps to one Kizashi recipient id.
-practice_review:
-  attention_recipients: target-team=recipient_target_team,practice-team=recipient_practice_team,triage=recipient_triage,exception-approver=recipient_exception_approver
+# sorted joint-owner set) maps to one Kizashi recipient id. The practice-review
+# flow pack owns this key: the kikan-shikigami executables accept it, and a
+# stock shikigami executable refuses it as unknown, so it stays commented here.
+# practice_review:
+#   attention_recipients: target-team=recipient_target_team,practice-team=recipient_practice_team,triage=recipient_triage,exception-approver=recipient_exception_approver
 
 # credentials:
 #   authorization:

@@ -55,14 +55,17 @@ module Shikigami.App.Config.Load
 
     -- * Loading
     runAppConfig,
+    runAppConfigWith,
     requireDatabaseUrl,
 
     -- * The capturable core
     ConfigRun (..),
     appConfigRun,
+    appConfigRunWith,
     readConfigSources,
     captureEnvironment,
     resolveAppConfig,
+    resolveAppConfigWith,
 
     -- * Exit codes
     usageExitCode,
@@ -84,6 +87,7 @@ import Settei
 import Settei.Env
 import Shikigami.Objective.Tracker.Config (validateTrackerSettings)
 import Shikigami.Objective.Types (validateSettings)
+import Shikigami.Pack.Setting (PackSetting)
 
 -- Imported explicitly: 'SetteiOptions' has fields with the same names as
 -- 'ConfigOptions', and this module wants its own.
@@ -217,13 +221,24 @@ data ConfigRun = ConfigRun
 -- source failure, a resolution failure, or an unmet role requirement all exit
 -- here, before the caller has opened anything.
 runAppConfig :: Role -> ConfigOptions -> IO AppConfig
-runAppConfig role options =
-  case schemaDiagnostic options.diagnosticMode appConfigSchema of
-    Just output -> TextIO.putStr output >> exitWith ExitSuccess
-    Nothing -> do
-      fileSources <- readConfigSources options.configPaths
-      environment <- readEnvironmentSource environmentBindings
-      let run = appConfigRun role options fileSources environment
+runAppConfig = runAppConfigWith []
+
+-- | 'runAppConfig' for an executable composed with flow packs: the packs'
+-- settings join the accepted keys, the environment bindings and the schema
+-- every diagnostic prints (docs/adr/0129). Two settings that claim one key or
+-- one variable refuse to start with the resolution exit code.
+runAppConfigWith :: [PackSetting] -> Role -> ConfigOptions -> IO AppConfig
+runAppConfigWith settings role options =
+  case environmentBindingsWith settings of
+    Left problem -> TextIO.hPutStr IO.stderr problem >> exitWith (ExitFailure resolutionExitCode)
+    Right packBindings -> case schemaDiagnostic options.diagnosticMode (appConfigSchemaWith settings) of
+      Just output -> TextIO.putStr output >> exitWith ExitSuccess
+      Nothing -> do
+        fileSources <- readConfigSources options.configPaths
+        environment <- readEnvironmentSource packBindings
+        finish (appConfigRunWith settings role options fileSources environment)
+  where
+    finish run = do
       TextIO.putStr run.standardOutput
       TextIO.hPutStr IO.stderr run.standardError
       case run.resolved of
@@ -261,13 +276,18 @@ appConfigRun ::
   -- | The environment source.
   Source ->
   ConfigRun
-appConfigRun role options fileSources environment =
-  case schemaDiagnostic ((.diagnosticMode) options) appConfigSchema of
+appConfigRun = appConfigRunWith []
+
+-- | 'appConfigRun' against the declaration of an executable composed with
+-- flow packs.
+appConfigRunWith :: [PackSetting] -> Role -> ConfigOptions -> Either Text [Source] -> Source -> ConfigRun
+appConfigRunWith settings role options fileSources environment =
+  case schemaDiagnostic ((.diagnosticMode) options) (appConfigSchemaWith settings) of
     Just output -> succeeded output ""
     Nothing -> case fileSources of
       Left problem -> failed sourceExitCode problem
       Right files ->
-        let result = resolveAppConfig options files environment
+        let result = resolveAppConfigWith settings options files environment
             warnings = renderWarningsText (warningsOf result)
          in case answerOf result of
               Left problems -> failed resolutionExitCode (renderErrorsText problems <> explainOnFailure options result)
@@ -291,7 +311,10 @@ appConfigRun role options fileSources environment =
 -- Exposed so a test can drive precedence with hand-built sources and no files or
 -- process environment at all.
 resolveAppConfig :: ConfigOptions -> [Source] -> Source -> ResolveResult AppConfig
-resolveAppConfig options files environment =
+resolveAppConfig = resolveAppConfigWith []
+
+resolveAppConfigWith :: [PackSetting] -> ConfigOptions -> [Source] -> Source -> ResolveResult AppConfig
+resolveAppConfigWith settings options files environment =
   resolve
     ResolveOptions {unknownKeyPolicy = RejectUnknownKeys}
     ( files
@@ -299,7 +322,7 @@ resolveAppConfig options files environment =
         <> (.namedSources) options
         <> cliSources "arguments" ((.overrides) options)
     )
-    appConfig
+    (appConfigWith settings)
 
 -- | Provenance is appended to a failure only when it was explicitly asked for.
 --

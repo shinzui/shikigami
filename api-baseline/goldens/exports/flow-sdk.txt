@@ -285,6 +285,7 @@ Shikigami.Flow.Sdk FlowPack.decisionPrograms
 Shikigami.Flow.Sdk FlowPack.flows
 Shikigami.Flow.Sdk FlowPack.name
 Shikigami.Flow.Sdk FlowPack.retainedCodecs
+Shikigami.Flow.Sdk FlowPack.settings
 Shikigami.Flow.Sdk FlowPack.tasks
 Shikigami.Flow.Sdk FlowPackName
 Shikigami.Flow.Sdk FlowPackNameError
@@ -339,6 +340,19 @@ Shikigami.Flow.Sdk Sink.subjectType
 Shikigami.Flow.Sdk Sink.topic
 Shikigami.Flow.Sdk Sink.verb
 Shikigami.Flow.Sdk SinkCapability
+Shikigami.Flow.Sdk SinkMessageId
+Shikigami.Flow.Sdk SinkOutcome
+Shikigami.Flow.Sdk SinkOutcome.AuthorizationFailed
+Shikigami.Flow.Sdk SinkOutcome.Delivered
+Shikigami.Flow.Sdk SinkOutcome.DeniedOutcome
+Shikigami.Flow.Sdk SinkOutcome.Enqueued
+Shikigami.Flow.Sdk SinkOutcome.Failed
+Shikigami.Flow.Sdk SinkOutcome.PermanentFailure
+Shikigami.Flow.Sdk SinkOutcome.SkippedLifecycle
+Shikigami.Flow.Sdk SinkOutcome.Stubbed
+Shikigami.Flow.Sdk SinkResult
+Shikigami.Flow.Sdk SinkResult.kind
+Shikigami.Flow.Sdk SinkResult.outcome
 Shikigami.Flow.Sdk StepName
 Shikigami.Flow.Sdk StepName.unStepName
 Shikigami.Flow.Sdk Subject
@@ -358,6 +372,7 @@ Shikigami.Flow.Sdk flowPackNameText
 Shikigami.Flow.Sdk kernelCapabilityFlow
 Shikigami.Flow.Sdk parseFlowPackName
 Shikigami.Flow.Sdk parseSignalImportance
+Shikigami.Flow.Sdk parseSinkSession
 Shikigami.Flow.Sdk recall
 Shikigami.Flow.Sdk remember
 Shikigami.Flow.Sdk send

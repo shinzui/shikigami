@@ -135,7 +135,7 @@ import Shikigami.Memory.AliasStore qualified as AliasStore
 import Shikigami.Memory.Scope (agentScope, legacyAgentScope)
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Shikigami.Output (emptyOutputRegistry)
-import Shikigami.PracticeReview.Capability qualified as PracticeReviewCapability
+import Shikigami.Pack.Setting (noPackSettings)
 import Shikigami.RunEvidence.Catalog qualified as ExecutionCatalog
 import Shikigami.RunEvidenceSpec (completeScenarioEvidence)
 import Shikigami.RunJobs qualified as RunJobs
@@ -2029,7 +2029,7 @@ testDepsWithAgents appEnv behaviorEnv hooks agentDecls =
       grants = StaticGrants defaultGrantTable,
       directory = disabledDirectoryHandle,
       routing = testRoutingRuntime agentDecls,
-      practiceReview = PracticeReviewCapability.unavailablePracticeReviewRuntime,
+      packSettings = noPackSettings,
       deliveryPool = Nothing,
       resolveRunProfile = \profileId version -> pure (Left (UnknownProfile profileId version))
     }
@@ -2078,7 +2078,7 @@ testDepsWithApprovalAndDeadline appEnv behaviorEnv hooks approval deadline =
       grants = StaticGrants defaultGrantTable,
       directory = disabledDirectoryHandle,
       routing = testRoutingRuntime [decl],
-      practiceReview = PracticeReviewCapability.unavailablePracticeReviewRuntime,
+      packSettings = noPackSettings,
       deliveryPool = Nothing,
       resolveRunProfile = \profileId version -> pure (Left (UnknownProfile profileId version))
     }

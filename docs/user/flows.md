@@ -141,7 +141,8 @@ examplesPack =
       flows = [kernelCapabilityFlow atRiskCustomerDefinition atRiskCustomerFlow],
       decisionPrograms = [],
       retainedCodecs = [],
-      tasks = []
+      tasks = [],
+      settings = []
     }
 
 atRiskCustomerDefinition :: FlowDef
@@ -179,11 +180,63 @@ myFlow runtime =
     }
 ```
 
-`run` receives a `FlowRunContext`: the agent declaration, the resolved identity, the
-session, the workflow name and run id, the triggering activity, and the directory. The
-kernel installs its own interpreters around `run` and never names the pack's capability.
-Journal every external effect of an interpreter under a `step` whose label starts with the
-pack's name.
+`run` receives a `FlowRunContext`: the agent declaration, the resolved identity and the
+identity the job carried, the session, the workflow name and run id, the delegating run and
+session of a governed child, the triggering activity, the directory, the grant source, the
+kernel's stores, the composed packs' validated settings, and the run's model. The kernel
+installs its own interpreters around `run` and never names the pack's capability. Journal
+every external effect of an interpreter under a `step` whose label starts with the pack's
+name.
+
+A pack reaches a model through `context.model`, a `RunModel` with one operation:
+
+```haskell
+completeJsonObject :: Text -> Text -> IO (Either Text Text)   -- system prompt, user prompt
+```
+
+It answers with the text of one JSON-object response, or a rendered refusal. The kernel
+builds it from the run's behavior environment after the sanctioned profile narrowed it, so
+a pack holds no provider, registry or option of its own.
+
+`packs/flow-pack-practice-review` is the worked example: five capabilities in `bodies`,
+their interpreters in the library, and `interpretReview` installing them from the context.
+
+### A setting a pack owns
+
+The configuration surface is closed: an unknown key refuses to start. A pack that needs a
+setting declares it, and only an executable composed with the pack accepts the key.
+
+```haskell
+attentionRecipientsSetting :: PackSetting
+attentionRecipientsSetting =
+  PackSetting
+    { key = "practice_review.attention_recipients",
+      environment = "SHIKIGAMI_PRACTICE_REVIEW_ATTENTION_RECIPIENTS",
+      description = "Comma-separated practice-review owner mappings (...)",
+      expectation = "a comma-separated unique map of owner or sorted owner+owner keys to recipient_... ids",
+      defaultRule = "practice-review-attention-unmapped",
+      defaultReason = "Require operators to map every actionable review owner explicitly",
+      defaultValue = "",
+      validate = void . parseAttentionRecipientMap
+    }
+```
+
+List it in the pack's `settings`. A composed executable then accepts the key from a file,
+`--set` or its environment variable, shows it in `--describe-config` and
+`--explain-config`, and runs `validate` at start: a `Left` refuses to start and prints
+`expectation`. The value reaches an interpreter as validated text,
+`packSettingValue key context.settings`, and the pack decodes it with the parser `validate`
+ran. A setting always has a default, so composing a pack never makes a key required. Two
+packs that declare one key, or a pack key that collides with a kernel key or variable, refuse
+to start.
+
+```text
+$ shikigami-worker --config config.json --check-config          # stock: composes no pack
+practice_review.attention_recipients: unknown key in file source config.json (YAML)
+$ kikan-shikigami-worker --config config.json --explain-config
+practice_review.attention_recipients = "architecture-council=recipient_triage"
+  from file source config.json (YAML)
+```
 
 ### Composing a pack into an executable
 
@@ -205,7 +258,7 @@ command and the one-off command, all composed from one list of packs.
 The entry points are `agentRunRoleInfoWith` (`Shikigami.Agent.Command`),
 `workerRoleInfoWith` (`Shikigami.Workers.Command`) and `runAdminWith`
 (`Shikigami.Server.Command`). Composition happens once at process start. Two packs with the
-same name, flow name or task name refuse the start and name both owners, and a successful
+same name, flow name, task name or setting key refuse the start and name both owners, and a successful
 start logs `flow.registry.composed` with each pack and its flows.
 
 List what an executable was composed with, and run the flow:

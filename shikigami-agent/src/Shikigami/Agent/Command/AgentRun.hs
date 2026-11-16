@@ -69,7 +69,6 @@ import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations (verifyShikigamiMigrations)
 import Shikigami.Output (OutputReceipt (..))
-import Shikigami.PracticeReview.Capability qualified as PracticeReviewCapability
 import Shikigami.Record (KindFilter (..), RecordEvent (..), RecordQuery (..), mkRecordLimit, observedRecord, postgresRecord, readRecord, recordEntry, recordErrorText)
 import Shikigami.Repository (repositoryIdText)
 import Shikigami.Runtime (registerRuntimeCatalog, runtimeConnectionSettings)
@@ -262,7 +261,7 @@ runDurableAgent flows logger store@KirokuStore {pool} appEnv workspace triggerPa
               Routing.routingRuntime
                 (AgentLoadReport [AgentLoaded {path = "<agent-run>", declaration = decl}])
                 disabledDirectoryHandle,
-            AgentWorkflow.practiceReview = PracticeReviewCapability.unavailablePracticeReviewRuntime,
+            AgentWorkflow.packSettings = config.packSettings,
             AgentWorkflow.deliveryPool = Just pool,
             AgentWorkflow.logger = logger,
             AgentWorkflow.resolveRunProfile = \profileId version -> do

@@ -185,12 +185,10 @@ import Shikigami.Objective.Tools qualified as ObjectiveTools
 import Shikigami.Objective.Types qualified as Objective
 import Shikigami.Output (OutputDelivery (..), OutputRegistry, lookupAdapter, resolveOutputs, resolvedOutputList)
 import Shikigami.Output qualified as Output
+import Shikigami.Pack.Setting (PackSettings)
 import Shikigami.Playbook (pinPlaybook)
 import Shikigami.Playbook qualified as Playbook
 import Shikigami.Playbook.Run (PlaybookAgent (..), runPlaybook)
-import Shikigami.PracticeReview.Attention qualified as PracticeReviewAttention
-import Shikigami.PracticeReview.Capability qualified as PracticeReview
-import Shikigami.PracticeReview.Memory qualified as PracticeReviewMemory
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.Program.DecisionRunner (DecisionAbort (..))
 import Shikigami.Program.DecisionRunner qualified as DecisionRunner
@@ -281,10 +279,9 @@ data AgentRunDeps = AgentRunDeps
     -- | Process-local catalog/evaluator seam. Catalog and raw decision values
     -- cross the workflow journal before they can influence delegation.
     routing :: !RoutingRuntime,
-    -- | Process-local content, evaluation, and attention adapters for the
-    -- specialist review Flow. Their outputs cross fixed journal steps before
-    -- they can influence the Flow body.
-    practiceReview :: !PracticeReview.PracticeReviewRuntime,
+    -- | The validated settings of the composed flow packs, handed to a
+    -- pack's interpreter in its run context. Empty when no pack is composed.
+    packSettings :: !PackSettings,
     -- | The Shikigami receipt store used only by the asynchronous publisher.
     -- Production always supplies it; focused workflow tests may opt out because
     -- they never cross the publisher boundary.
@@ -1298,7 +1295,14 @@ runFlowDefinition deps activeBehaviorEnv resolvedProfile approvalPolicyForRun re
             FlowPack.activity = activityFromJob job,
             FlowPack.executionRoot = job.executionRootId,
             FlowPack.directory = depsDirectory deps,
-            FlowPack.declarations = deps.agents
+            FlowPack.declarations = deps.agents,
+            FlowPack.requestIdentity = job.identity,
+            FlowPack.parentRunId = job.parentRunWorkflowId,
+            FlowPack.parentSession = job.parentSessionId,
+            FlowPack.model = FlowPack.runModel activeBehaviorEnv,
+            FlowPack.settings = deps.packSettings,
+            FlowPack.app = deps.appEnv,
+            FlowPack.grants = depsGrants deps
           }
   let coordinator = WorkerCapability.CoordinatorRun childWorkflowId job.identity sid job.executionRootId job.executionPermissions
   coordinationPolicy <- step (StepName "worker-coordination-policy") (liftIO (FlowWorkers.resolveCoordinationPolicy deps.coordination deps.actionAuthority coordinator))
@@ -1341,7 +1345,6 @@ runFlowDefinition deps activeBehaviorEnv resolvedProfile approvalPolicyForRun re
         | otherwise = FlowObserve.unavailableObserve action
       inventory = if (not useWatchdog || not (FlowObserve.observeAvailable deps.observe)) && flow.name == WatchdogFlow.watchdogFlowName then [] else Flow.flowDecisionSlotsFor decl flow
       decisionTimeout = DecisionContract.parseDecisionTimeout (floor (durationTime (depsRunTimeout deps) * 1000000))
-      attentionInterpreter = PracticeReviewAttention.runPracticeReviewAttentionAtomic practiceReviewAttentionEnv
       decisionInterpreter action
         | null inventory = FlowDecision.runDecisionDisabled action
         | Left refusal <- decisionTimeout = EffException.throwIO (DecisionAbort (DecisionContract.decisionFailure DecisionContract.InvalidSlot refusal))
@@ -1379,11 +1382,6 @@ runFlowDefinition deps activeBehaviorEnv resolvedProfile approvalPolicyForRun re
           . FlowRouting.runRouting routingEnv
           . decisionInterpreter
           . acknowledgementInterpreter
-          . PracticeReview.runExecutionContext (practiceReviewExecutionContext childWorkflowId)
-          . PracticeReview.runPracticeReviewEvidence True ((.practiceReview) deps)
-          . PracticeReview.runPracticeReviewEvaluator True activeBehaviorEnv ((.practiceReview) deps)
-          . PracticeReviewMemory.runPracticeReviewMemory practiceReviewMemoryEnv
-          . attentionInterpreter
           $ runFlow runContext ((.triggerPayload) job)
       )
   case attempted of
@@ -1439,32 +1437,6 @@ runFlowDefinition deps activeBehaviorEnv resolvedProfile approvalPolicyForRun re
           FlowCapability.grants = depsGrants deps,
           FlowCapability.directory = depsDirectory deps,
           FlowCapability.identity = (.identity) job
-        }
-    practiceReviewExecutionContext childWorkflowId =
-      PracticeReview.PracticeReviewExecutionContext
-        { PracticeReview.identity = (.identity) job,
-          PracticeReview.parentWorkflowId = (.parentRunWorkflowId) job,
-          PracticeReview.parentSessionId = (.parentSessionId) job,
-          PracticeReview.childWorkflowId = childWorkflowId,
-          PracticeReview.childSessionId = sid
-        }
-    practiceReviewMemoryEnv =
-      PracticeReviewMemory.PracticeReviewMemoryEnv
-        { PracticeReviewMemory.appEnv = (.appEnv) deps,
-          PracticeReviewMemory.agent = decl,
-          PracticeReviewMemory.identity = recordedIdentity,
-          PracticeReviewMemory.sessionId = Just sid
-        }
-    practiceReviewAttentionEnv =
-      PracticeReviewAttention.PracticeReviewAttentionEnv
-        { PracticeReviewAttention.agent = (.agentName) job,
-          PracticeReviewAttention.identity = (.identity) job,
-          PracticeReviewAttention.runId = sid,
-          PracticeReviewAttention.occurredAt = Just (runJobOccurredAt job),
-          PracticeReviewAttention.activity = Just (activityFromJob job),
-          PracticeReviewAttention.grants = depsGrants deps,
-          PracticeReviewAttention.directory = depsDirectory deps,
-          PracticeReviewAttention.recipients = (.attentionRecipients) ((.practiceReview) deps)
         }
 
 activityFromJob :: RunJob -> Activity.ActivityEnvelope

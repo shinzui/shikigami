@@ -1,8 +1,10 @@
 {-# LANGUAGE MultilineStrings #-}
 {-# LANGUAGE TypeFamilies #-}
 
--- | Cross-run semantic attention reservation for actionable practice reviews.
-module Shikigami.PracticeReview.Attention
+-- | Cross-run semantic attention reservation for actionable practice reviews:
+-- the interpreter of 'PracticeReviewAttention'. The reservation, the journal
+-- entry and the sink intent commit in one transaction.
+module FlowPack.PracticeReview.Attention
   ( AttentionKey,
     parseAttentionKey,
     attentionKeyText,
@@ -25,8 +27,30 @@ import Data.Int (Int32)
 import Data.List (sortOn)
 import Data.Set qualified as Set
 import Data.Text qualified as Text
-import Effectful (Eff, IOE, (:>))
-import Effectful.Dispatch.Dynamic (interpret)
+import FlowPack.PracticeReview.Capability
+  ( AttentionRecipient,
+    AttentionRecipientMap,
+    AttentionReservationResult (..),
+    PracticeReviewAttention (RequestPracticeReviewAttention),
+    attentionRecipientText,
+    lookupAttentionRecipient,
+  )
+import FlowPack.PracticeReview.Identity (AttentionKey, attentionKeyForDigest, attentionKeyText, parseAttentionKey)
+import FlowPack.PracticeReview.Types
+  ( Applicability (..),
+    ContentReference (..),
+    EvidenceItem (..),
+    Materiality (..),
+    PracticeReviewClaim (..),
+    PracticeReviewVerdict (..),
+    ProjectRef (..),
+    RecommendedOwner (..),
+    ValidatedPracticeReviewVerdict,
+    ownerPrincipalText,
+    practiceKeyText,
+    reviewIdText,
+    validatedVerdictValue,
+  )
 import Hasql.Decoders qualified as Decoders
 import Hasql.Encoders qualified as Encoders
 import Hasql.Statement (Statement, preparable)
@@ -42,39 +66,15 @@ import Keiro.Workflow
     step,
   )
 import Kioku.Id (SessionId)
-import Kiroku.Store.Effect (Store)
-import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Activity (ActivityEnvelope)
 import Shikigami.Agent.Decl qualified as Agent
 import Shikigami.Agent.Name (AgentName)
 import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.Directory (DirectoryHandle)
-import Shikigami.PracticeReview
-  ( Applicability (..),
-    ContentReference (..),
-    EvidenceItem (..),
-    Materiality (..),
-    PracticeReviewClaim (..),
-    PracticeReviewVerdict (..),
-    ProjectRef (..),
-    RecommendedOwner (..),
-    ValidatedPracticeReviewVerdict,
-    ownerPrincipalText,
-    practiceKeyText,
-    reviewIdText,
-    validatedVerdictValue,
-  )
-import Shikigami.PracticeReview.Capability
-  ( AttentionRecipient,
-    AttentionRecipientMap,
-    AttentionReservationResult (..),
-    PracticeReviewAttention (RequestPracticeReviewAttention),
-    attentionRecipientText,
-    lookupAttentionRecipient,
-  )
-import Shikigami.PracticeReview.Identity (AttentionKey, attentionKeyForDigest, attentionKeyText, parseAttentionKey)
+import Shikigami.Flow.Sdk (Eff, (:>))
+import Shikigami.Pack.Sdk (IOE, Store, interpret, runTransaction)
 import Shikigami.Prelude hiding ((.=))
-import Shikigami.Repository (RepoRef (..), RepositoryId, relativePathText, repositoryId, repositoryIdText, revisionText)
+import Shikigami.Repository (RepoRef (..), relativePathText, repositoryIdText, revisionText)
 import Shikigami.Sink (GrantSource, SinkOutcome (Enqueued), SinkResult (..))
 import Shikigami.Sink.Delivery (sinkMessageId)
 import Shikigami.Sink.Intent
@@ -391,7 +391,7 @@ timeParam = Encoders.param (Encoders.nonNullable Encoders.timestamptz)
 enumText :: (ToJSON value) => value -> Text
 enumText value = case Aeson.toJSON value of
   String rendered -> rendered
-  other -> error ("Shikigami.PracticeReview.Attention: expected enum JSON string, got " <> show other)
+  other -> error ("FlowPack.PracticeReview.Attention: expected enum JSON string, got " <> show other)
 
 normalizeWords :: Text -> Text
 normalizeWords = Text.unwords . Text.words . Text.strip

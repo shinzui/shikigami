@@ -19,7 +19,8 @@ where
 
 import Options.Applicative (ParserInfo, execParser)
 import Shikigami.App.Config (AppConfig, Role)
-import Shikigami.App.Config.Load (ConfigOptions, runAppConfig)
+import Shikigami.App.Config.Load (ConfigOptions, runAppConfigWith)
+import Shikigami.Pack.Setting (PackSetting)
 
 -- | One executable: what it is installed as, which role it plays for the
 -- purpose of required-key checking, and how its command line parses.
@@ -31,6 +32,9 @@ import Shikigami.App.Config.Load (ConfigOptions, runAppConfig)
 data RoleInfo = RoleInfo
   { binaryName :: !String,
     role :: !Role,
+    -- | The settings of the flow packs this executable composes; empty for a
+    -- stock role. They join the accepted configuration keys (docs/adr/0129).
+    packSettings :: ![PackSetting],
     parserInfo :: !(ParserInfo (AppConfig -> IO (), ConfigOptions))
   }
 
@@ -43,5 +47,5 @@ data RoleInfo = RoleInfo
 runRole :: RoleInfo -> IO ()
 runRole info = do
   (action, options) <- execParser ((.parserInfo) info)
-  config <- runAppConfig ((.role) info) options
+  config <- runAppConfigWith info.packSettings info.role options
   action config

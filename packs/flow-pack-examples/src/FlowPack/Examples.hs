@@ -40,7 +40,8 @@ examplesPack =
       -- that keeps reading its committed results after the program retires.
       decisionPrograms = [SomeProgram triageProgram, SomeProgram investigationProgram, SomeProgram judgmentProgram],
       retainedCodecs = [retainedCodec triageProgram, retainedCodec investigationProgram, retainedCodec judgmentProgram],
-      tasks = []
+      tasks = [],
+      settings = []
     }
 
 definition :: Text -> Text -> [DecisionSlot] -> DefaultModelRequirement -> FlowDef

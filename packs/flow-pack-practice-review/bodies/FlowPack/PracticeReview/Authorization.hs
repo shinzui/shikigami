@@ -1,5 +1,7 @@
--- | Ingress authorization proof for explicit practice-review resolution.
-module Shikigami.PracticeReview.Authorization
+-- | Ingress authorization proof for explicit practice-review resolution: the
+-- envelope a resolution run carries and its pure validation. Enqueueing an
+-- authorized resolution is "FlowPack.PracticeReview.ResolutionIntake".
+module FlowPack.PracticeReview.Authorization
   ( ResolutionAuthorityKind (..),
     AuthorizationSchema (..),
     authorizationEnvelopeSchemaVersion,
@@ -15,7 +17,6 @@ module Shikigami.PracticeReview.Authorization
     ResolutionAuthorizationError (..),
     mkAuthorizedResolutionReceipt,
     validateAuthorizedPracticeReviewResolution,
-    enqueueAuthorizedPracticeReviewResolution,
   )
 where
 
@@ -24,28 +25,20 @@ import Data.Aeson qualified as Aeson
 import Data.Aeson.Key qualified as Key
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Aeson.Types (Parser)
-import Data.Bifunctor (first)
 import Data.Bits ((.&.))
 import Data.Set qualified as Set
 import Data.Text qualified as Text
 import Data.UUID qualified as UUID
 import Data.UUID.V5 qualified as UUID.V5
-import Hasql.Pool (Pool)
-import Pgmq (MessageId)
-import Shikigami.Agent.Name (mkAgentName)
-import Shikigami.Agent.Principal (AgentIdentity)
-import Shikigami.Agent.RunJob (RunRouteKind (AgentWorkflowRoute))
-import Shikigami.Decision.Contract (versionedDigest)
-import Shikigami.PracticeReview
+import FlowPack.PracticeReview.Types
   ( OwnerPrincipal,
     PracticeReviewResolutionRequest (..),
     ValidatedResolutionRequest,
     validateResolutionRequest,
     validatedResolutionRequestValue,
   )
+import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Prelude hiding ((.=))
-import Shikigami.Trigger.Enqueue (enqueueAddressedRunWithKey)
-import Shikigami.Trigger.RequestKey qualified as Addressed
 
 data ResolutionAuthorityKind = Human | ApprovedArtifact
   deriving stock (Eq, Show, Generic)
@@ -177,42 +170,6 @@ authorizationIdFor validated authorityKind verifiedSubject sourceReference autho
   ResolutionAuthorizationId (UUID.V5.generateNamed UUID.V5.namespaceURL (nameBytes preimage))
   where
     preimage = versionedDigest "shikigami.practice-review-resolution-authorization/2" (Aeson.object ["request" .= validatedResolutionRequestValue validated, "authorityKind" .= authorityKind, "subject" .= verifiedSubject, "source" .= Text.strip (resolutionSourceText sourceReference), "authorizedAt" .= authorizedAt])
-
-enqueueAuthorizedPracticeReviewResolution ::
-  Pool ->
-  AgentIdentity ->
-  Text ->
-  ReviewResolutionAuthorizer ->
-  PracticeReviewResolutionRequest ->
-  ResolutionSubmissionEvidence ->
-  IO (Either ResolutionAuthorizationError MessageId)
-enqueueAuthorizedPracticeReviewResolution pool identity agent ReviewResolutionAuthorizer {authorize} resolution submission
-  | agent /= "opentelemetry-practice-reviewer" =
-      pure (Left (ResolutionAuthorizerRefused "authorized practice-review resolutions may target only the OpenTelemetry reviewer"))
-  | otherwise =
-      case validateResolutionRequest resolution of
-        Left errors -> pure (Left (ResolutionContractInvalid (Text.pack (show errors))))
-        Right validated ->
-          authorize resolution submission >>= \case
-            Left refusal -> pure (Left refusal)
-            Right receipt ->
-              case validateReceipt validated receipt of
-                Left refusal -> pure (Left refusal)
-                Right () -> do
-                  let envelope =
-                        AuthorizedPracticeReviewResolution
-                          { schemaVersion = authorizationEnvelopeSchemaVersion,
-                            resolution,
-                            authorization = receipt
-                          }
-                      PracticeReviewResolutionRequest {reviewId, idempotencyKey} = validatedResolutionRequestValue validated
-                      key = versionedDigest "shikigami.practice-review-resolution-enqueue/2" (Aeson.object ["reviewId" .= reviewId, "key" .= idempotencyKey])
-                  case (mkAgentName agent, Addressed.parseRequestKey key) of
-                    (Left problem, _) -> pure (Left (ResolutionAuthorizerRefused problem))
-                    (_, Left problem) -> pure (Left (ResolutionAuthorizerRefused problem))
-                    (Right target, Right requestKey) ->
-                      enqueueAddressedRunWithKey pool identity target AgentWorkflowRoute (Aeson.toJSON envelope) requestKey
-                        <&> first (ResolutionEnqueueFailed . Text.pack . show)
 
 authorizationEnvelopeSchemaVersion :: AuthorizationSchema
 authorizationEnvelopeSchemaVersion = AuthorizationV2

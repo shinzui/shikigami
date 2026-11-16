@@ -67,7 +67,7 @@ import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
 import Shikigami.Output (emptyOutputRegistry)
-import Shikigami.PracticeReview.Capability qualified as Practice
+import Shikigami.Pack.Setting (noPackSettings)
 import Shikigami.Prelude ((&), (.~))
 import Shikigami.Repository (RepositoryId, repositoryId, repositoryIdText)
 import Shikigami.RunEvidence.Catalog qualified as Catalog
@@ -387,7 +387,7 @@ withWorkflowAuthority authorizer configure fixture use = Fixture.withFixture fix
             grants = StaticGrants defaultGrantTable,
             directory = disabledDirectoryHandle,
             routing = Routing.RoutingRuntime (\_ -> error "no router") (\_ _ _ -> error "no router"),
-            practiceReview = Practice.unavailablePracticeReviewRuntime,
+            packSettings = noPackSettings,
             deliveryPool = Nothing,
             logger = Log.silentLogger,
             resolveRunProfile = \profile version -> pure (Left (UnknownProfile profile version))

@@ -104,8 +104,12 @@ of the main library:
 
 | Component | Re-exports | Imported by |
 | --- | --- | --- |
-| `shikigami-core:flow-sdk` | `Shikigami.Flow.Sdk`, `Shikigami.Flow.Sdk.Program` | flow bodies and the pack value |
-| `shikigami-core:pack-sdk` | `Shikigami.Pack.Sdk` | a pack's interpreter |
+| `shikigami-core:flow-sdk` | `Shikigami.Flow.Sdk`, `Shikigami.Flow.Sdk.Program`, and the kernel vocabulary a body names | flow bodies and the pack value |
+| `shikigami-core:pack-sdk` | `Shikigami.Pack.Sdk`, and the kernel modules an interpreter calls | a pack's interpreter |
+
+Both stanzas also re-export whole kernel modules. The exact lists are the
+`reexported-modules` of each stanza, pinned in `kernel.sdkModules` of
+`tools/style/module-ownership.json`.
 
 The legal arrows are:
 
@@ -132,6 +136,14 @@ still compiled into the core, so the frozen Nix closure of
 [ADR-39](../adr/0039-deployment-roles-share-a-frozen-cabal-source-closure.md) and the light
 one-off package of ADR-3 are unchanged. `packs/flow-pack-examples` and
 `packs/examples-distribution` were the first pair.
+
+| Pack | Flows | Setting | Tables it owns |
+| --- | --- | --- | --- |
+| `flow-pack-examples` | `at-risk-customer`, `objective-example`, `shikumi-decision-example`, `shikumi-judgment-example`, `delegation-proof` | none | none |
+| `flow-pack-practice-review` | `architecture-practice-router`, `opentelemetry-practice-review` | `practice_review.attention_recipients` | `shikigami.practice_review_attention`, `shikigami.practice_review_attention_reviews` (migration `0012`), `shikigami.practice_review_identities` (`0032`) |
+
+A pack's tables stay in `shikigami-migrations/sql-migrations/`: migrations are one ordered,
+locked chain for one schema, and this table records which pack reads and writes each.
 
 `just kernel-fitness` enforces these arrows, pins both stanzas' `reexported-modules` and each
 facade's export list (`shikigami-core/test/golden/sdk/`), and refuses a new use-case namespace

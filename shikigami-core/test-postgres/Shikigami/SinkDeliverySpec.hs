@@ -83,7 +83,7 @@ import Shikigami.Memory.Access (shikigamiMemorySpace)
 import Shikigami.Memory.Scope (agentScope)
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Shikigami.Output (emptyOutputRegistry)
-import Shikigami.PracticeReview.Capability qualified as PracticeReviewCapability
+import Shikigami.Pack.Setting (noPackSettings)
 import Shikigami.Sink (GrantSource (DbGrants), SinkKind (SChannelEgress), SinkOutcome (AuthorizationFailed, DeniedOutcome, Enqueued, SkippedLifecycle), SinkResult (..))
 import Shikigami.Sink.Config (DanwaConfig (..), KanmonConfig (..), KawaConfig (..), KizashiConfig (..), ReiConfig (..))
 import Shikigami.Sink.Delivery qualified as Delivery
@@ -587,7 +587,7 @@ withFixtureUsingTracer databaseFixture tracer label sinks kizashi danwa use =
                   Routing.routingRuntime
                     (AgentLoadReport [AgentLoaded "sink-test.dhall" declaration])
                     disabledDirectoryHandle,
-                AgentWorkflow.practiceReview = PracticeReviewCapability.unavailablePracticeReviewRuntime,
+                AgentWorkflow.packSettings = noPackSettings,
                 AgentWorkflow.deliveryPool = Just pool,
                 AgentWorkflow.logger = Log.silentLogger,
                 AgentWorkflow.resolveRunProfile = \profileId version -> pure (Left (UnknownProfile profileId version))

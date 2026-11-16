@@ -31,13 +31,6 @@ import Shikigami.Flow.Objectives (Objectives)
 import Shikigami.Flow.Observe (Observe)
 import Shikigami.Flow.Routing (Routing)
 import Shikigami.Flow.Workers (Workers)
-import Shikigami.PracticeReview.Capability
-  ( ExecutionContext,
-    PracticeReviewAttention,
-    PracticeReviewEvaluator,
-    PracticeReviewEvidence,
-  )
-import Shikigami.PracticeReview.Memory (PracticeReviewMemory)
 import Shikigami.RuntimePolicy
 
 -- | Everything a flow body may do, and therefore everything it may not.
@@ -73,12 +66,7 @@ type FlowEffects es =
     Initiative :> es,
     Observe :> es,
     Routing :> es,
-    Decision :> es,
-    ExecutionContext :> es,
-    PracticeReviewEvidence :> es,
-    PracticeReviewEvaluator :> es,
-    PracticeReviewMemory :> es,
-    PracticeReviewAttention :> es
+    Decision :> es
   )
 
 -- | What 'Shikigami.Flow.Acknowledgement.runAcknowledgement' needs to interpret

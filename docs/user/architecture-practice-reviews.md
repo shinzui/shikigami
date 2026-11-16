@@ -19,6 +19,13 @@ history. It requests Kizashi attention only when the verdict needs action.
 The review path has no workspace writer, patch, merge, approval-gate, or repository-block
 capability. A verdict is evidence and advice; it cannot stop a build or change source code.
 
+Both flows ship in the flow pack `packs/flow-pack-practice-review`, and its two manifests
+are under `packs/flow-pack-practice-review/agents/`. Run them from the `kikan-shikigami`
+distribution, which composes the pack: `kikan-shikigami-worker` and the `kikan-shikigami`
+admin command. The stock `shikigami-worker` refuses the manifests at boot with
+`unknown flow architecture-practice-router; registered flows: ...`, and the stock executables
+refuse the `practice_review.attention_recipients` key as unknown.
+
 > **Live-evidence status:** the deployed reader remains fail-closed until
 > `mori://shinzui/kikan/okf/improvement-requests/concepts/IR-5` supplies the released content-plane
 > seam. The current production composition records structured `content-plane-unavailable`
@@ -26,7 +33,19 @@ capability. A verdict is evidence and advice; it cannot stop a build or change s
 
 ## Trigger a review
 
-Producers send the raw trigger to the router. They do not name a specialist or candidate:
+Producers send the raw trigger to the router. They do not name a specialist or candidate.
+From a terminal, with a worker running on the manifests directory:
+
+```bash
+cabal run kikan-shikigami:exe:kikan-shikigami-worker -- --config config.json \
+  --agents packs/flow-pack-practice-review/agents
+cabal run kikan-shikigami:exe:kikan-shikigami -- --config config.json \
+  enqueue-run architecture-practice-router --payload "$(cat trigger.json)"
+```
+
+The router makes one model call to choose the specialist, so the worker needs a real
+`behavior.provider`; under the stub provider the run fails with `RoutingEvaluationFailed`.
+The trigger:
 
 ```json
 {
@@ -144,10 +163,10 @@ fail-closed for actionable reviews; the deployment-wide Kizashi fallback is not 
 Sync the declaration, grant both Flow emissions to the reviewer's recorded principal, and verify:
 
 ```bash
-cabal run shikigami -- agents sync
-cabal run shikigami -- grants grant opentelemetry-practice-reviewer KawaDigest --by operator
-cabal run shikigami -- grants grant opentelemetry-practice-reviewer KizashiSignal --by operator
-cabal run shikigami -- grants list
+cabal run kikan-shikigami:exe:kikan-shikigami -- agents sync
+cabal run kikan-shikigami:exe:kikan-shikigami -- grants grant opentelemetry-practice-reviewer KawaDigest --by operator
+cabal run kikan-shikigami:exe:kikan-shikigami -- grants grant opentelemetry-practice-reviewer KizashiSignal --by operator
+cabal run kikan-shikigami:exe:kikan-shikigami -- grants list
 ```
 
 The reviewer declaration remains sink-free. These grants authorize explicit Flow emissions; they
@@ -184,3 +203,19 @@ cabal run shikigami -- outbox show <outbox-message-id>
 cabal run shikigami -- outbox requeue-stuck
 cabal run shikigami -- outbox maintenance-pass
 ```
+
+The outbox is kernel, so the stock `shikigami` command serves these; `kikan-shikigami` does
+too.
+
+## What a run journals
+
+A router run journals `route-catalog-practice-review-architecture-practice` and
+`route-decision-practice-review-architecture-practice`, then one governed child per selected
+specialist. A review run journals `practice-review-reserve-identity`,
+`practice-review-recall`, `practice-review-evidence`, `practice-review-evaluate` (complete
+evidence only), `practice-review-remember-provisional`,
+`emit-signal:practice-review-history` and, for an actionable verdict whose history was
+enqueued, `practice-review-attention`. A resolution run journals `practice-review-chain`,
+`practice-review-resolve` and `emit-signal:practice-review-resolution-history`. Read them
+with `kikan-shikigami wf journal shikigami.agent-run <run-id>`. The pack pins the full list
+in `packs/flow-pack-practice-review/test/golden/labels.txt`.

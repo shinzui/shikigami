@@ -3,7 +3,7 @@
 -- This module is deliberately independent of an HTTP client, Git, Kioku, and
 -- workflow effects. A production adapter can implement 'EvidenceReader' once
 -- the Mori C16 content plane exists; deterministic tests supply a stub.
-module Shikigami.PracticeReview.Evidence
+module FlowPack.PracticeReview.Evidence
   ( EvidenceReader (..),
     EvidenceReadError (..),
     PinnedProvenance (..),
@@ -55,7 +55,7 @@ import Data.Set qualified as Set
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as TextEncoding
 import Data.Text.Encoding.Error qualified as TextEncodingError
-import Shikigami.PracticeReview
+import FlowPack.PracticeReview.Types
   ( Applicability (..),
     ContentHash,
     ContentReference (..),
@@ -88,8 +88,6 @@ import Shikigami.Repository
     mkRelativePath,
     mkRevision,
     relativePathText,
-    repositoryId,
-    repositoryIdText,
     revisionText,
   )
 

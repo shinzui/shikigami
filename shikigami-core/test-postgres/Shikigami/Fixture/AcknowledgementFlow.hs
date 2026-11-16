@@ -88,7 +88,8 @@ fixturePack =
         ],
       decisionPrograms = [],
       retainedCodecs = [],
-      tasks = []
+      tasks = [],
+      settings = []
     }
 
 -- | The builtin pack, the example fixtures and this fixture pack, as a

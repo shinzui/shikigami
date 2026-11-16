@@ -45,6 +45,8 @@ tests =
           @?= [DuplicateFlowName (declarationCoordinate "shared") (packName "first") (packName "second")]
         refusals [builtinPack, (probePack "probe" []) {tasks = [noopSummaryTask]}]
           @?= [DuplicateTaskName "noop-summary" (packName "builtin") (packName "probe")]
+        refusals [withSetting (probePack "first" []), withSetting (probePack "second" [])]
+          @?= [DuplicateSettingKey "probe.parity" (packName "first") (packName "second")]
         length (refusals [builtinPack, (probePack "probe" ["watchdog-sweep"]) {decisionPrograms = builtinPack.decisionPrograms, retainedCodecs = builtinPack.retainedCodecs}]) @?= 3,
       testCase "flow names keep composition order" do
         registry <- either (assertFailure . show) pure (composeFlowRegistry [probePack "probe" ["one", "two"]])
@@ -56,6 +58,29 @@ tests =
 packName :: Text -> FlowPackName
 packName = either (error . show) id . parseFlowPackName
 
+-- | The same pack, declaring one configuration setting.
+withSetting :: FlowPack -> FlowPack
+withSetting FlowPack {name, flows, decisionPrograms, retainedCodecs, tasks} =
+  FlowPack
+    { name,
+      flows,
+      decisionPrograms,
+      retainedCodecs,
+      tasks,
+      settings =
+        [ PackSetting
+            { key = "probe.parity",
+              environment = "SHIKIGAMI_PROBE_PARITY",
+              description = "Which parity the probe pack prefers",
+              expectation = "the word even or odd",
+              defaultRule = "probe-even",
+              defaultReason = "Even unless an operator says otherwise",
+              defaultValue = "even",
+              validate = const (Right ())
+            }
+        ]
+    }
+
 probePack :: Text -> [Text] -> FlowPack
 probePack name flowNames =
   FlowPack
@@ -63,7 +88,8 @@ probePack name flowNames =
       flows = [kernelCapabilityFlow (definition flowName) (const (pure Null)) | flowName <- flowNames],
       decisionPrograms = [],
       retainedCodecs = [],
-      tasks = []
+      tasks = [],
+      settings = []
     }
   where
     definition flowName =

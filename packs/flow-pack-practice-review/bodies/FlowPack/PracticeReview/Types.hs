@@ -5,7 +5,7 @@
 -- This module deliberately contains no workflow, persistence, model-provider,
 -- or sink behavior. 'Shikigami.Agent.RunJob.RunJob' carries the JSON payload;
 -- the durable review flow will decode and validate it at its own boundary.
-module Shikigami.PracticeReview
+module FlowPack.PracticeReview.Types
   ( practiceReviewSchemaVersion,
     ReviewId,
     parseReviewId,
@@ -101,14 +101,14 @@ import Data.Text qualified as Text
 import Data.Text.Encoding qualified as TextEncoding
 import Data.UUID qualified as UUID
 import Data.UUID.V5 qualified as UUIDv5
+import FlowPack.PracticeReview.Identity
 import Keiro.Workflow.Types (WorkflowId (..))
 import Kioku.Id (SessionId, idText)
 import Shikigami.Agent.Name (AgentName, agentNameText, mkAgentName)
+import Shikigami.Flow.Sdk (parseSinkSession)
 import Shikigami.FormatVersion (FormatVersion (V1))
-import Shikigami.PracticeReview.Identity
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.Repository (RelativePath, RepoRef (..), RepositoryId, Revision, relativePathText, repositoryId, repositoryIdText, revisionText)
-import Shikigami.Sink.Coordinate (parseSinkSession)
 
 -- | The only schema version accepted by the first contract release.
 practiceReviewSchemaVersion :: FormatVersion scope

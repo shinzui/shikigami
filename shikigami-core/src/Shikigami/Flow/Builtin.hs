@@ -32,11 +32,6 @@ import Shikigami.Flow.AdaptiveDelivery (adaptiveDelivery)
 import Shikigami.Flow.DeclaredTool qualified as DeclaredTool
 import Shikigami.Flow.Delegate qualified as Delegate
 import Shikigami.Flow.Initiative (proposeWork, proposeWorkFlowName, proposeWorkSlots)
-import Shikigami.Flow.OpenTelemetryPracticeReview
-  ( opentelemetryPracticeReviewFlow,
-    opentelemetryPracticeReviewFlowName,
-    opentelemetryPracticeReviewMermaid,
-  )
 import Shikigami.Flow.Pack
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Flow.Watchdog (watchdogFlowName, watchdogSlots, watchdogSweep)
@@ -53,7 +48,8 @@ builtinPack =
       flows = builtinFlows,
       decisionPrograms = builtinDecisionPrograms,
       retainedCodecs = builtinRetainedCodecs,
-      tasks = programRegistry
+      tasks = programRegistry,
+      settings = []
     }
 
 -- | The builtin pack alone, composed. It cannot fail for a reviewed build, so
@@ -93,33 +89,7 @@ builtinFlows =
           decisionMode = StrictDecisions,
           lifecycle = LifecycleDiagram "flowchart LR\n Checkpoint --> Decision --> Validate --> Commands --> Findings --> Checkpoint\n Validate --> ExactCompletionProposal" []
         }
-      adaptiveDelivery,
-    kernelCapabilityFlow
-      FlowDef
-        { name = declarationCoordinate "architecture-practice-router",
-          decisionSlots = [],
-          requiresDefaultModel = DefaultModelRequired,
-          decisionMode = StrictDecisions,
-          lifecycle =
-            LifecycleDiagram
-              { mermaid = "flowchart LR\n  Input --> Router --> Specialist",
-                validationWarnings = []
-              }
-        }
-      architecturePracticeRouterFlow,
-    kernelCapabilityFlow
-      FlowDef
-        { name = declarationCoordinate opentelemetryPracticeReviewFlowName,
-          decisionSlots = [],
-          requiresDefaultModel = DefaultModelRequired,
-          decisionMode = StrictDecisions,
-          lifecycle =
-            LifecycleDiagram
-              { mermaid = opentelemetryPracticeReviewMermaid,
-                validationWarnings = []
-              }
-        }
-      opentelemetryPracticeReviewFlow
+      adaptiveDelivery
   ]
 
 -- | Run one of the declaration's tools as a durable step (EP-3 M4). The
@@ -139,37 +109,3 @@ runDeclaredToolFlow payload = case parseMaybe parseStep payload of
       minutes <- fields .:? "deadlineMinutes" .!= 30
       tool <- either (fail . Text.unpack) pure (mkToolName toolText)
       either (fail . Text.unpack) pure (DeclaredToolWorkflow.mkToolStep tool arguments minutes)
-
--- | First registered routing call site.  A matched decision reserves every
--- selection before any child is spawned, then awaits successful results in
--- selection order.  Semantic no-match and ambiguous outcomes spawn nothing;
--- operational and child failures escape the flow.
-architecturePracticeRouterFlow :: (FlowEffects es) => Value -> Eff es Value
-architecturePracticeRouterFlow payload = do
-  Routing.RoutedRoute {catalog, decision = decision@RouteDecision {outcome}} <-
-    Routing.routeWithCatalog (Routing.routeSite "architecture-practice") payload
-  case outcome of
-    Matched selections -> do
-      children <- Delegate.delegateBatch catalog (toRequest <$> selections)
-      results <- traverse Delegate.awaitOne children
-      pure
-        ( Aeson.object
-            [ "decision" .= decision,
-              "results" .= NonEmpty.toList results
-            ]
-        )
-    NoMatch _ -> pure (semanticResult decision)
-    Ambiguous _ _ -> pure (semanticResult decision)
-  where
-    toRequest RouteSelection {agent} =
-      DelegationRequest
-        { key = declarationCoordinate ("architecture-practice-" <> agentNameText agent),
-          target = agent,
-          payload
-        }
-
-    semanticResult decision =
-      Aeson.object
-        [ "decision" .= decision,
-          "results" .= ([] :: [Value])
-        ]

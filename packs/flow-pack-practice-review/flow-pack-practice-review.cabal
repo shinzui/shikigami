@@ -1,0 +1,152 @@
+cabal-version: 3.4
+name: flow-pack-practice-review
+version: 0.1.0.0
+synopsis: Architecture-practice reviews for Shikigami, as a flow pack
+description:
+  The architecture-practice router and the OpenTelemetry specialist review it
+  delegates to: revision-pinned evidence, recalled adjudication, one validated
+  advisory verdict, review memory, Kawa history and a semantic attention
+  reservation. See docs/user/architecture-practice-reviews.md.
+
+license: BSD-3-Clause
+build-type: Simple
+extra-source-files: test/golden/labels.txt
+
+common common
+  default-language: GHC2024
+  default-extensions:
+    BlockArguments
+    DeriveAnyClass
+    DuplicateRecordFields
+    MultilineStrings
+    NoFieldSelectors
+    OverloadedLabels
+    OverloadedRecordDot
+    OverloadedStrings
+
+  ghc-options:
+    -Wall
+    -Werror=missing-fields
+    -Wcompat
+    -Widentities
+    -Wincomplete-record-updates
+    -Wincomplete-uni-patterns
+    -Wpartial-fields
+    -Wredundant-constraints
+
+-- Flow bodies, the capabilities they are written against and the review
+-- vocabulary both sides share. This component depends on
+-- shikigami-core:flow-sdk and on no other Shikigami component, so a body
+-- cannot import IOE or the store.
+library bodies
+  import: common
+  visibility: private
+  hs-source-dirs: bodies
+  exposed-modules:
+    FlowPack.PracticeReview.Authorization
+    FlowPack.PracticeReview.Body.OpenTelemetryReview
+    FlowPack.PracticeReview.Body.Router
+    FlowPack.PracticeReview.Capability
+    FlowPack.PracticeReview.Evidence
+    FlowPack.PracticeReview.Identity
+    FlowPack.PracticeReview.IdentityRef
+    FlowPack.PracticeReview.Memory
+    FlowPack.PracticeReview.Types
+
+  build-depends:
+    aeson,
+    base,
+    bytestring,
+    containers,
+    generic-lens,
+    keiro,
+    kioku-api,
+    mmzk-typeid,
+    shikigami-core:flow-sdk,
+    text,
+    uuid,
+
+-- The pack value and the interpreters of its capabilities. It may depend on
+-- the two SDK components and on no other Shikigami component.
+library
+  import: common
+  hs-source-dirs: src
+  exposed-modules:
+    FlowPack.PracticeReview
+    FlowPack.PracticeReview.Attention
+    FlowPack.PracticeReview.IdentityStore
+    FlowPack.PracticeReview.Memory.Store
+    FlowPack.PracticeReview.ResolutionIntake
+    FlowPack.PracticeReview.Runtime
+    FlowPack.PracticeReview.Settings
+
+  build-depends:
+    aeson,
+    baikai,
+    base,
+    containers,
+    contravariant-extras,
+    flow-pack-practice-review:bodies,
+    generic-lens,
+    hasql,
+    hasql-pool,
+    hasql-transaction,
+    keiro,
+    kioku-api,
+    kioku-core,
+    kiroku-store,
+    pgmq-hasql,
+    shikigami-core:flow-sdk,
+    shikigami-core:pack-sdk,
+    text,
+    time,
+
+test-suite flow-pack-practice-review-test
+  import: common
+  type: exitcode-stdio-1.0
+  hs-source-dirs: test
+  main-is: Main.hs
+  other-modules:
+    FlowPack.PracticeReview.EvidenceSpec
+    FlowPack.PracticeReview.Fixture.SinkHttp
+    FlowPack.PracticeReview.MemorySpec
+    FlowPack.PracticeReview.OrchestrationSpec
+    FlowPack.PracticeReview.PackSpec
+    FlowPack.PracticeReview.TypesSpec
+
+  ghc-options:
+    -threaded
+    -rtsopts
+    -with-rtsopts=-N
+
+  build-depends:
+    aeson,
+    async,
+    base,
+    bytestring,
+    containers,
+    directory,
+    effectful,
+    effectful-core,
+    filepath,
+    flow-pack-practice-review,
+    flow-pack-practice-review:bodies,
+    generic-lens,
+    hasql,
+    hasql-pool,
+    keiro,
+    kioku-api,
+    kioku-core,
+    kiroku-store,
+    lens,
+    pgmq-hasql,
+    settei-env ==0.2.0.0,
+    shibuya-core,
+    shikigami-core,
+    shikigami-migrations:test-support,
+    tasty,
+    tasty-hunit,
+    text,
+    time,
+    uuid,
+    vector,

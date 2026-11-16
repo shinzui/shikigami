@@ -28,8 +28,6 @@ import Shikigami.ObjectiveCheckpointSpec qualified as ObjectiveCheckpointSpec
 import Shikigami.ObjectiveStoreSpec qualified as ObjectiveStoreSpec
 import Shikigami.ObjectiveTrackerStoreSpec qualified as ObjectiveTrackerStoreSpec
 import Shikigami.ObjectiveWorkflowSpec qualified as ObjectiveWorkflowSpec
-import Shikigami.PracticeReviewMemorySpec qualified as PracticeReviewMemorySpec
-import Shikigami.PracticeReviewOrchestrationSpec qualified as PracticeReviewOrchestrationSpec
 import Shikigami.ProfileResolutionSpec qualified as ProfileResolutionSpec
 import Shikigami.RouterWorkflowSpec qualified as RouterWorkflowSpec
 import Shikigami.RunEvidenceSpec qualified as RunEvidenceSpec
@@ -106,8 +104,6 @@ suite = withShikigamiMigratedSuite \databaseFixture ->
           DeclaredToolFlowSpec.tests databaseFixture,
           GrantStoreSpec.tests databaseFixture,
           ActionRecordStoreSpec.tests databaseFixture,
-          PracticeReviewMemorySpec.tests databaseFixture,
-          PracticeReviewOrchestrationSpec.tests databaseFixture,
           ProfileResolutionSpec.tests databaseFixture,
           RouterWorkflowSpec.tests databaseFixture,
           RunEvidenceSpec.tests databaseFixture,

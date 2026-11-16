@@ -77,7 +77,7 @@ import Shikigami.Objective.Runtime qualified as Objectives
 import Shikigami.Objective.Tracker.Store qualified as Tracker
 import Shikigami.Objective.Types (ObjectiveSettings)
 import Shikigami.Output (emptyOutputRegistry)
-import Shikigami.PracticeReview.Capability qualified as PracticeReviewCapability
+import Shikigami.Pack.Setting (PackSettings)
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.RuntimePolicy
 import Shikigami.Sink (DanwaConfig, GrantSource, KanmonConfig, KawaConfig, KizashiConfig, ReiConfig)
@@ -173,7 +173,8 @@ data WorkerEnv = WorkerEnv
     initiatives :: !FlowInitiative.InitiativeSeed,
     observe :: !FlowObserve.ObserveSeed,
     trackers :: !(Maybe Tracker.TrackerHost),
-    practiceReviewAttentionRecipients :: !PracticeReviewCapability.AttentionRecipientMap
+    -- | The validated settings of the composed flow packs.
+    packSettings :: !PackSettings
   }
 
 -- | The process-wide logger. Named rather than used as a bare selector
@@ -266,7 +267,7 @@ agentRunDeps env =
       AgentWorkflow.grants = envGrants env,
       AgentWorkflow.directory = envDirectory env,
       AgentWorkflow.routing = Routing.routingRuntime ((.agentReport) env) (envDirectory env),
-      AgentWorkflow.practiceReview = PracticeReviewCapability.failClosedPracticeReviewRuntime ((.practiceReviewAttentionRecipients) env),
+      AgentWorkflow.packSettings = env.packSettings,
       AgentWorkflow.deliveryPool = Just (envPool env),
       AgentWorkflow.resolveRunProfile = \profileId version -> do
         now <- getCurrentTime

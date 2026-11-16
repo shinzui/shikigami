@@ -5,7 +5,8 @@
 module Packs (packs) where
 
 import FlowPack.Examples (examplesPack)
+import FlowPack.PracticeReview (practiceReviewPack)
 import Shikigami.Flow.Sdk (FlowPack)
 
 packs :: [FlowPack]
-packs = [examplesPack]
+packs = [examplesPack, practiceReviewPack]

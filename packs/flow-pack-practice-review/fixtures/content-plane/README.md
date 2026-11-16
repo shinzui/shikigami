@@ -12,7 +12,7 @@ To inspect a history manually, initialize an empty temporary Git repository and 
 
 ```bash
 git init /tmp/shikigami-target-fixture
-git -C /tmp/shikigami-target-fixture fast-import < fixtures/practice-review/content-plane/target.fast-import
+git -C /tmp/shikigami-target-fixture fast-import < packs/flow-pack-practice-review/fixtures/content-plane/target.fast-import
 git -C /tmp/shikigami-target-fixture show refs/tags/T2:docs/adr/0001.md
 ```
 

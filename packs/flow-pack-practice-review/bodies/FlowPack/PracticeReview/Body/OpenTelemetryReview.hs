@@ -1,5 +1,7 @@
--- | Registered specialist orchestration for OpenTelemetry architecture review.
-module Shikigami.Flow.OpenTelemetryPracticeReview
+-- | The specialist flow for an OpenTelemetry architecture-practice review:
+-- evidence, recall, one validated advisory verdict, review memory, Kawa
+-- history and, for an actionable verdict, one attention reservation.
+module FlowPack.PracticeReview.Body.OpenTelemetryReview
   ( opentelemetryPracticeReviewFlowName,
     opentelemetryPracticeReviewMermaid,
     opentelemetryPracticeReviewFlow,
@@ -13,18 +15,48 @@ import Data.Aeson.Key qualified as Key
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Generics.Labels ()
 import Data.List (find, sortOn)
-import Data.List.NonEmpty (NonEmpty (..))
 import Data.Maybe (listToMaybe)
 import Data.Set qualified as Set
 import Data.Text qualified as Text
-import Effectful (Eff, (:>))
-import Keiro.Workflow.Types (WorkflowId (..))
-import Kioku.Id (MemoryId, idText)
-import Shikigami.Agent.Decl qualified as Agent
-import Shikigami.Agent.DeclarationValue (declarationCoordinate)
-import Shikigami.Agent.Name qualified as AgentName
-import Shikigami.Flow.Capability (Sink, emitSignal)
-import Shikigami.PracticeReview
+import FlowPack.PracticeReview.Authorization
+  ( AuthorizedPracticeReviewResolution,
+    validateAuthorizedPracticeReviewResolution,
+  )
+import FlowPack.PracticeReview.Capability
+  ( ExecutionContext,
+    PracticeReviewAttention,
+    PracticeReviewEvaluator,
+    PracticeReviewEvidence,
+    PracticeReviewExecutionContext (..),
+    acquirePracticeReviewEvidence,
+    evaluatePracticeReview,
+    executionContext,
+    requestPracticeReviewAttention,
+  )
+import FlowPack.PracticeReview.Evidence
+  ( EvidenceBundle (..),
+    EvidenceCompleteness (..),
+    EvidenceProblem,
+    EvidenceSource (..),
+  )
+import FlowPack.PracticeReview.IdentityRef (allocatedReviewId)
+import FlowPack.PracticeReview.Memory
+  ( AdjudicatedPracticeReview (..),
+    PracticeReviewChain (..),
+    PracticeReviewChainEntry (..),
+    PracticeReviewMemory,
+    PracticeReviewMemoryEnvelope (..),
+    RecalledPracticeReviews (..),
+    ResolvedPracticeReview (..),
+    ReviewRecallContext (..),
+    provisionalMemoryId,
+    recallPracticeReviewChain,
+    recallPracticeReviews,
+    rememberProvisional,
+    reserveReviewIdentity,
+    resolveReview,
+  )
+import FlowPack.PracticeReview.Types
   ( ClaimKind (Inference),
     ContentReference (..),
     EvidenceItem (..),
@@ -60,47 +92,11 @@ import Shikigami.PracticeReview
     validatedVerdictValue,
     zeroConfidence,
   )
-import Shikigami.PracticeReview.Authorization
-  ( AuthorizedPracticeReviewResolution,
-    validateAuthorizedPracticeReviewResolution,
-  )
-import Shikigami.PracticeReview.Capability
-  ( ExecutionContext,
-    PracticeReviewAttention,
-    PracticeReviewEvaluator,
-    PracticeReviewEvidence,
-    PracticeReviewExecutionContext (..),
-    acquirePracticeReviewEvidence,
-    evaluatePracticeReview,
-    executionContext,
-    requestPracticeReviewAttention,
-  )
-import Shikigami.PracticeReview.Evidence
-  ( EvidenceBundle (..),
-    EvidenceCompleteness (..),
-    EvidenceProblem,
-    EvidenceSource (..),
-  )
-import Shikigami.PracticeReview.Memory
-  ( AdjudicatedPracticeReview (..),
-    PracticeReviewChain (..),
-    PracticeReviewChainEntry (..),
-    PracticeReviewMemory,
-    PracticeReviewMemoryEnvelope (..),
-    RecalledPracticeReviews (..),
-    ResolvedPracticeReview (..),
-    ReviewRecallContext (..),
-    allocatedReviewId,
-    provisionalMemoryId,
-    recallPracticeReviewChain,
-    recallPracticeReviews,
-    rememberProvisional,
-    reserveReviewIdentity,
-    resolveReview,
-  )
+import Kioku.Id (MemoryId, idText)
+import Shikigami.Agent.Name qualified as AgentName
+import Shikigami.Flow.Sdk (Eff, Sink (..), SinkCapability, SinkOutcome (Enqueued), SinkResult (..), activityCoordinate, declarationCoordinate, emitSignal, (:>))
 import Shikigami.Prelude hiding ((.=))
-import Shikigami.Repository (RepositoryId, repositoryId, repositoryIdText)
-import Shikigami.Sink.Types (SinkOutcome (Enqueued), SinkResult (..))
+import Shikigami.Repository (RepositoryId, repositoryIdText)
 
 opentelemetryPracticeReviewFlowName :: Text
 opentelemetryPracticeReviewFlowName = "opentelemetry-practice-review"
@@ -126,7 +122,7 @@ opentelemetryPracticeReviewFlow ::
     PracticeReviewEvaluator :> es,
     PracticeReviewMemory :> es,
     PracticeReviewAttention :> es,
-    Sink :> es
+    SinkCapability :> es
   ) =>
   Value ->
   Eff es Value
@@ -192,7 +188,7 @@ reviewTrigger ::
     PracticeReviewEvaluator :> es,
     PracticeReviewMemory :> es,
     PracticeReviewAttention :> es,
-    Sink :> es
+    SinkCapability :> es
   ) =>
   ValidatedPracticeReviewTrigger ->
   Eff es Value
@@ -218,7 +214,7 @@ reviewTrigger validatedTrigger = do
   remembered <- rememberProvisional reference (priorActiveMemoryId trigger recalled) validatedVerdict
   memoryId <- either (failFlow . ("practice-review provisional memory failed: " <>) . Text.pack . show) pure remembered
   let verdict = validatedVerdictValue validatedVerdict
-  history <- emitSignal (declarationCoordinate "review-history") reviewHistorySink (reviewHistoryPayload verdict)
+  history <- emitSignal (declarationCoordinate "practice-review-history") reviewHistorySink (reviewHistoryPayload verdict)
   attention <- case (history, actionable verdict) of
     (SinkResult {outcome = Enqueued _}, True) -> Just <$> requestPracticeReviewAttention validatedVerdict
     _ -> pure Nothing
@@ -235,7 +231,7 @@ reviewTrigger validatedTrigger = do
     trigger = validatedTriggerValue validatedTrigger
 
 resolveAuthorized ::
-  (PracticeReviewMemory :> es, Sink :> es) =>
+  (PracticeReviewMemory :> es, SinkCapability :> es) =>
   AuthorizedPracticeReviewResolution ->
   Eff es Value
 resolveAuthorized envelope = do
@@ -251,7 +247,7 @@ resolveAuthorized envelope = do
   resolved <- resolveReview provisionalId validatedResolution
   ResolvedPracticeReview {memoryId, resolution = allocatedResolution} <- either (failFlow . ("practice-review resolution memory failed: " <>) . Text.pack . show) pure resolved
   let resolution = validatedResolutionValue allocatedResolution
-  history <- emitSignal (declarationCoordinate "resolution-history") resolutionHistorySink (resolutionHistoryPayload verdict resolution)
+  history <- emitSignal (declarationCoordinate "practice-review-resolution-history") resolutionHistorySink (resolutionHistoryPayload verdict resolution)
   pure
     ( Aeson.object
         [ "kind" .= ("practice-review-resolution" :: Text),
@@ -398,11 +394,11 @@ citations = fmap (.citation)
 allCitations :: EvidenceBundle -> [EvidenceItem]
 allCitations EvidenceBundle {target, references, upstream} = citations (target <> references <> upstream)
 
-reviewHistorySink :: Agent.Sink
-reviewHistorySink = Agent.KawaDigest {Agent.subjectType = Agent.activityCoordinate "practice-review", Agent.verb = Agent.activityCoordinate "practice-review.completed"}
+reviewHistorySink :: Sink
+reviewHistorySink = KawaDigest {subjectType = activityCoordinate "practice-review", verb = activityCoordinate "practice-review.completed"}
 
-resolutionHistorySink :: Agent.Sink
-resolutionHistorySink = Agent.KawaDigest {Agent.subjectType = Agent.activityCoordinate "practice-review", Agent.verb = Agent.activityCoordinate "practice-review.resolved"}
+resolutionHistorySink :: Sink
+resolutionHistorySink = KawaDigest {subjectType = activityCoordinate "practice-review", verb = activityCoordinate "practice-review.resolved"}
 
 reviewHistoryPayload :: PracticeReviewVerdict -> Value
 reviewHistoryPayload verdict@PracticeReviewVerdict {reviewId, targetEvidence, referenceEvidence, upstreamEvidence} =

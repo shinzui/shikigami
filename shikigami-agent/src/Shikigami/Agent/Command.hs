@@ -44,7 +44,7 @@ import Shikigami.Agent.Payload (payloadArgument)
 import Shikigami.App.Config (Role (..))
 import Shikigami.App.Config.Load (withConfigOptions)
 import Shikigami.App.Role (RoleInfo (..), runRole)
-import Shikigami.Flow.Pack (FlowPack)
+import Shikigami.Flow.Pack (FlowPack (..))
 
 -- | Every one-off executable, in the order they are documented.
 --
@@ -68,6 +68,7 @@ runBehaviorRoleInfo =
   RoleInfo
     { binaryName = "shikigami-run-behavior",
       role = RunBehaviorRole,
+      packSettings = [],
       parserInfo =
         withConfigOptions
           "shikigami-run-behavior"
@@ -98,6 +99,7 @@ agentRunRoleInfoWith packs =
   RoleInfo
     { binaryName = "shikigami-agent-run",
       role = AgentRunRole,
+      packSettings = concatMap (.settings) packs,
       parserInfo =
         withConfigOptions
           "shikigami-agent-run"
@@ -120,6 +122,7 @@ localRoleInfo =
   RoleInfo
     { binaryName = "shikigami-local",
       role = LocalRole,
+      packSettings = [],
       parserInfo =
         withConfigOptions
           "shikigami-local"

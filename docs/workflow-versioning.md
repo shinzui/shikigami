@@ -554,9 +554,12 @@ computed label families; a duplicated line-number census quickly becomes stale.
 The approval child journals `ingest-approval`, `notify`, and its `decision` wait.
 All agent runs use this child. Plan 65 removed the unused pre-release approval
 branch and its patch together. Agent runs also declare profile and
-overlay resolution, routing, practice-review evidence/evaluation/attention, and
-practice-review memory transitions. These are persisted contracts, not optional
-additions to the census.
+overlay resolution. These are persisted contracts, not optional
+additions to the census. Routing and practice-review labels left this
+specification with their flows (plan 131, M3): a routing decision journals
+`route-catalog-<site>` and `route-decision-<site>` for the site its flow
+supplies, and the practice-review pack owns its `practice-review-*` labels in
+`packs/flow-pack-practice-review/test/golden/labels.txt`.
 
 Flow capability families include `recall-<label>`, `remember-<label>`, and
 `emit-signal:<label>`. Child identity comes from the governed delegation/approval
@@ -575,10 +578,13 @@ convention. `runMemory` journals a flow's `recall` and `remember` under the
 caller's label, and the labels every *registered* flow reaches are declared in
 `domain/shikigami/agent-run.keiro` — today `recall-risk-history`,
 `remember-acknowledged`, `remember-declined`, and `remember-escalated`. The first
-router similarly owns the static `route-catalog-architecture-practice` and
-`route-decision-architecture-practice` labels. Under ADR-0027 those two labels
-enter the unreleased v1 body directly: there is no prior durable population to
-preserve and therefore no legacy branch to model. Adding a
+router's labels were `route-catalog-architecture-practice` and
+`route-decision-architecture-practice`; they left the core specification when the
+router moved to the practice-review pack and are now
+`route-catalog-practice-review-architecture-practice` and
+`route-decision-practice-review-architecture-practice`, pinned by that pack's
+golden inventory. ADR-0027 allowed the rename: no durable population used the
+old bytes. Adding a
 labeled memory call to a registered flow therefore also means adding its label
 there and passing `just keiro-gate`.
 

@@ -67,7 +67,7 @@ import Shikigami.Execution.Policy.Types qualified as Harness
 import Shikigami.Initiative.Settings (ObserverAllowance (..))
 import Shikigami.Inspection.Settings qualified as Inspection
 import Shikigami.Objective.Types (ObjectiveService (..), ObjectiveSettings (..), defaultObjectiveSettings, parseOperatorId)
-import Shikigami.PracticeReview.Capability (renderAttentionRecipientMap)
+import Shikigami.Pack.Setting (PackSetting (..), noPackSettings, packSettingValue)
 import Shikigami.RuntimePolicy (ManifestStrictness (..))
 import Shikigami.Sink.Auth (TokenSource (..), credentialToken, matchesBearerHeader, staticTokenSource)
 import Shikigami.Sink.Permission (SinkKind (..))
@@ -169,7 +169,6 @@ surfaceTests =
                 "kafka.include_agent_actors",
                 "objective_trackers",
                 "objectives",
-                "practice_review.attention_recipients",
                 "scheduler.catch_up",
                 "sinks.danwa.agent_participant",
                 "sinks.danwa.base_url",
@@ -261,7 +260,6 @@ surfaceTests =
               ("SHIKIGAMI_KAWA_TOKEN", "credentials.sinks.kawa.token"),
               ("SHIKIGAMI_KANMON_TOKEN", "credentials.sinks.kanmon.token"),
               ("SHIKIGAMI_KIZASHI_TOKEN", "credentials.sinks.kizashi.token"),
-              ("SHIKIGAMI_PRACTICE_REVIEW_ATTENTION_RECIPIENTS", "practice_review.attention_recipients"),
               ("SHIKIGAMI_DANWA_TOKEN", "credentials.sinks.danwa.token"),
               ("SHIKIGAMI_SINKS_DANWA_AGENT_PARTICIPANT", "sinks.danwa.agent_participant"),
               ("SHIKIGAMI_SINKS_DANWA_BASE_URL", "sinks.danwa.base_url"),
@@ -298,7 +296,7 @@ surfaceTests =
         (.approvalRequiredSinks) defaultAppConfig @?= Set.empty
         (.approvalChannel) defaultAppConfig @?= ViaDanwa
         (.approvalDeadline) defaultAppConfig @?= (either (error . show) id (parseDuration (secondsToNominalDiffTime 900)))
-        renderAttentionRecipientMap ((.practiceReviewAttentionRecipients) defaultAppConfig) @?= ""
+        (.packSettings) defaultAppConfig @?= noPackSettings
         (.kafkaBroker) defaultAppConfig @?= "127.0.0.1:9092"
         (.kafkaActivityTopic) defaultAppConfig @?= "activity.v1"
         (.kafkaEventsTopic) defaultAppConfig @?= "danwa.message-addressed.v1"
@@ -545,13 +543,33 @@ strictnessTests =
           (\bad -> (.exitCode) (runWith (optionsWith [] [cliOverride approvalRequireKey bad]) [] []) @?= resolutionExitCode)
           ["KawaDigest,KawaDigest", "KawaDigest,Unknown", ","]
         (.exitCode) (runWith (optionsWith [] [cliOverride approvalChannelKey "email"]) [] []) @?= resolutionExitCode,
-      testCase "practice-review recipients reject noncanonical destinations and duplicate owner sets" do
-        mapM_
-          (\bad -> (.exitCode) (runWith (optionsWith [] [cliOverride practiceReviewAttentionRecipientsKey bad]) [] []) @?= resolutionExitCode)
-          [ "target-owner=recipient:wrong",
-            "target-owner=recipient_one,target-owner=recipient_two",
-            "target-owner+triage=recipient_one,triage+target-owner=recipient_two"
-          ],
+      -- A flow pack owns its settings (docs/adr/0129). The kernel accepts a
+      -- pack's key only in an executable composed with that pack.
+      testCase "a stock executable refuses a pack's key as unknown" do
+        let run = runWith (optionsWith [] [cliOverride probeKey "even"]) [] []
+        run.exitCode @?= resolutionExitCode
+        assertBool (Text.unpack run.standardError) ("probe.parity" `Text.isInfixOf` run.standardError),
+      testCase "a composed executable accepts a pack setting from a flag and from its variable" do
+        fromFlag <- composedOrFail (optionsWith [] [cliOverride probeKey "even"]) []
+        packSettingValue "probe.parity" fromFlag.packSettings @?= Just "even"
+        fromEnvironment <- composedOrFail (optionsWith [] []) [("SHIKIGAMI_PROBE_PARITY", "odd")]
+        packSettingValue "probe.parity" fromEnvironment.packSettings @?= Just "odd",
+      testCase "a pack setting no source supplies takes its declared default" do
+        unset <- composedOrFail (optionsWith [] []) []
+        packSettingValue "probe.parity" unset.packSettings @?= Just "even",
+      testCase "a pack's validator refuses a value at start, naming the expectation and not the value" do
+        let run = composedRun (optionsWith [] [cliOverride probeKey "sideways"]) []
+        run.exitCode @?= resolutionExitCode
+        assertBool (Text.unpack run.standardError) ("the word even or odd" `Text.isInfixOf` run.standardError),
+      testCase "a pack setting appears in the described schema of a composed executable only" do
+        let keysOf settings = fmap renderKey (declaredKeysWith settings)
+        assertBool "composed" ("probe.parity" `elem` keysOf [probeSetting])
+        assertBool "stock" ("probe.parity" `notElem` keysOf []),
+      testCase "two pack settings that claim one key or one variable are refused as text" do
+        either (const (pure ())) (const (assertFailure "a repeated pack key must be refused")) (environmentBindingsWith [probeSetting, probeSetting])
+        either (const (pure ())) (const (assertFailure "a repeated variable must be refused")) (environmentBindingsWith [probeSetting, probeSetting {key = "probe.other"}])
+        either (const (pure ())) (const (assertFailure "a kernel key must be refused")) (environmentBindingsWith [probeSetting {key = "agents.directory"}])
+        either (assertFailure . Text.unpack) (const (pure ())) (environmentBindingsWith [probeSetting]),
       testCase "a malformed winning approval policy does not fall back" do
         let run =
               runWith
@@ -1076,3 +1094,32 @@ watchdogConfigurationTests =
     ]
   where
     document = "{\"principal\":\"agent_watchdog\",\"scope\":\"all\",\"stuckWindowSeconds\":60,\"parkedWindowSeconds\":60,\"coordinatorWindowSeconds\":60,\"subjectsPerSweep\":10}"
+
+-- ── A pack setting, as a composed executable sees it ────────────────────────
+
+probeSetting :: PackSetting
+probeSetting =
+  PackSetting
+    { key = "probe.parity",
+      environment = "SHIKIGAMI_PROBE_PARITY",
+      description = "Which parity the probe pack prefers",
+      expectation = "the word even or odd",
+      defaultRule = "probe-even",
+      defaultReason = "Even unless an operator says otherwise",
+      defaultValue = "even",
+      validate = \value -> if value `elem` ["even", "odd"] then Right () else Left "neither even nor odd"
+    }
+
+probeKey :: Key
+probeKey = either (error . show) id (parseKey "probe.parity")
+
+composedRun :: ConfigOptions -> [(Text, Text)] -> ConfigRun
+composedRun options environment =
+  appConfigRunWith [probeSetting] AdminRole options (Right []) (environmentSource composedBindings (snapshot environment))
+  where
+    composedBindings = either (error . Text.unpack) id (environmentBindingsWith [probeSetting])
+
+composedOrFail :: ConfigOptions -> [(Text, Text)] -> IO AppConfig
+composedOrFail options environment =
+  let run = composedRun options environment
+   in maybe (assertFailure (Text.unpack run.standardError)) pure run.resolved

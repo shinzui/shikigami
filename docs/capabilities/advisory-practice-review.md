@@ -7,8 +7,8 @@ provider: "mori://shinzui/shikigami"
 status: "shipped"
 stability: "experimental"
 since: "unreleased"
-packages: ["shikigami-core", "shikigami-workers", "shikigami-migrations"]
-interface: ["Shikigami.Flow.OpenTelemetryPracticeReview", "Shikigami.PracticeReview", "opentelemetry-practice-review"]
+packages: ["flow-pack-practice-review", "kikan-shikigami", "shikigami-core", "shikigami-migrations"]
+interface: ["FlowPack.PracticeReview", "architecture-practice-router", "opentelemetry-practice-review", "practice_review.attention_recipients"]
 tags: ["advisory-practice-review"]
 generated:
   by: "process:shikigami-capabilities-bootstrap"
@@ -16,11 +16,11 @@ generated:
 requires: ["CAP-4", "CAP-8", "CAP-9", "CAP-13"]
 evidence:
   - kind: test
-    resource: "shikigami-core/test/Shikigami/PracticeReviewSpec.hs"
+    resource: "packs/flow-pack-practice-review/test/FlowPack/PracticeReview/TypesSpec.hs"
     proves: "Pinned revision/path validation and the closed classification/resolution contracts."
   - kind: test
-    resource: "shikigami-core/test-postgres/Shikigami/PracticeReviewOrchestrationSpec.hs"
-    proves: "Complete/incomplete evidence branches, replay, resolution receipts, and concurrent attention reservation."
+    resource: "packs/flow-pack-practice-review/test/FlowPack/PracticeReview/OrchestrationSpec.hs"
+    proves: "Complete/incomplete evidence branches, replay, resolution receipts, concurrent attention reservation, and the golden label inventory."
   - kind: guide
     resource: "docs/user/architecture-practice-reviews.md"
     proves: "Operator setup and the explicit production content-plane limitation."
@@ -34,14 +34,14 @@ The registered specialist obtains evidence through bounded capability ports, rec
 
 ## Adopt
 
-Use the architecture-practice router and reviewer declarations, provision their sanctioned profile and permissions, and follow [Architecture-practice reviews](../user/architecture-practice-reviews.md). Fixture ports exercise the complete-evidence branches.
+The capability ships as the flow pack `packs/flow-pack-practice-review` and runs from the `kikan-shikigami` distribution; the stock executables do not offer it. Use the architecture-practice router and reviewer declarations under the pack's `agents/`, provision their sanctioned profile and permissions, and follow [Architecture-practice reviews](../user/architecture-practice-reviews.md). Fixture ports exercise the complete-evidence branches.
 
 Builds on [CAP-4: Durable agent runs and Flows](durable-agent-flows.md), [CAP-8: Governed routing and delegation](governed-routing-and-delegation.md), [CAP-9: Authorized sink delivery and outbox](authorized-sink-outbox.md), [CAP-13: Sanctioned execution profile pinning](sanctioned-execution-profiles.md).
 
 ## Evidence
 
-- [PracticeReviewSpec.hs](../../shikigami-core/test/Shikigami/PracticeReviewSpec.hs): Pinned revision/path validation and the closed classification/resolution contracts.
-- [PracticeReviewOrchestrationSpec.hs](../../shikigami-core/test-postgres/Shikigami/PracticeReviewOrchestrationSpec.hs): Complete/incomplete evidence branches, replay, resolution receipts, and concurrent attention reservation.
+- [TypesSpec.hs](../../packs/flow-pack-practice-review/test/FlowPack/PracticeReview/TypesSpec.hs): Pinned revision/path validation and the closed classification/resolution contracts.
+- [OrchestrationSpec.hs](../../packs/flow-pack-practice-review/test/FlowPack/PracticeReview/OrchestrationSpec.hs): Complete/incomplete evidence branches, replay, resolution receipts, concurrent attention reservation, and the golden label inventory.
 - [architecture-practice-reviews.md](../../docs/user/architecture-practice-reviews.md): Operator setup and the explicit production content-plane limitation.
 
 ## Limits

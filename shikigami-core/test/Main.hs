@@ -76,8 +76,6 @@ import Shikigami.OutputsSpec qualified as OutputsSpec
 import Shikigami.PackageArchitectureSpec qualified as PackageArchitectureSpec
 import Shikigami.PayloadValueSpec qualified as PayloadValueSpec
 import Shikigami.PlaybookSpec qualified as PlaybookSpec
-import Shikigami.PracticeReviewEvidenceSpec qualified as PracticeReviewEvidenceSpec
-import Shikigami.PracticeReviewSpec qualified as PracticeReviewSpec
 import Shikigami.ProcessLocalSpec qualified as ProcessLocalSpec
 import Shikigami.RecordSpec qualified as RecordSpec
 import Shikigami.RouterCatalogSpec qualified as RouterCatalogSpec
@@ -187,8 +185,6 @@ main =
           PlaybookSpec.tests,
           ProcessLocalSpec.tests,
           CodingAgentSpec.tests,
-          PracticeReviewEvidenceSpec.tests,
-          PracticeReviewSpec.tests,
           RouterCatalogSpec.tests,
           RouterDecisionSpec.tests,
           RouterDeclarationSpec.tests,

@@ -11,6 +11,12 @@ CORE_UNITS = [entry["id"] for entry in PLAN["install-plan"]
               if entry["pkg-name"] == "shikigami-core" and entry.get("component-name") == "lib"]
 assert len(CORE_UNITS) == 1, CORE_UNITS
 CORE_UNIT = CORE_UNITS[0]
+# The practice-review vocabulary lives in its flow pack; its probes compile
+# against the pack's bodies component beside the core.
+REVIEW_UNITS = [entry["id"] for entry in PLAN["install-plan"]
+                if entry["pkg-name"] == "flow-pack-practice-review" and entry.get("component-name") == "lib:bodies"]
+assert len(REVIEW_UNITS) == 1, REVIEW_UNITS
+PACKAGE_FLAGS = ["-package-id", CORE_UNIT, "-package-id", REVIEW_UNITS[0]]
 HEADER = '''{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE OverloadedRecordDot #-}
@@ -22,14 +28,14 @@ import Data.String (fromString)
 import Data.Text (Text)
 import Numeric.Natural (Natural)
 import GHC.Generics (Generic, to)
-import Shikigami.Program.Decision.Examples qualified as Example
+import Shikigami.Program.Decision.Confidence qualified as Example
 import Shikigami.Sink.Permission qualified as Grants
 import Shikigami.Duration qualified as Duration
 import Shikigami.Agent.Approval qualified as Approval
 import Shikigami.Router.Catalog qualified as Catalog
 import Shikigami.Repository qualified as Repository
-import Shikigami.PracticeReview qualified as Review
-import Shikigami.PracticeReview.Evidence qualified as ReviewEvidence
+import FlowPack.PracticeReview.Types qualified as Review
+import FlowPack.PracticeReview.Evidence qualified as ReviewEvidence
 import Shikigami.Agent.Name qualified as Name
 import Shikigami.Agent.ExpertiseKey qualified as Expertise
 import Shikigami.Agent.Delegate.Depth qualified as Depth
@@ -504,7 +510,7 @@ with tempfile.TemporaryDirectory(prefix="shikigami-revision-types-") as director
         source = Path(directory) / "RevisionBoundary.hs"
         source.write_text(HEADER + body)
         result = subprocess.run(["cabal", "exec", "--", "ghc", "-fno-code",
-                                 "-package-id", CORE_UNIT, str(source)],
+                                 *PACKAGE_FLAGS, str(source)],
                                 cwd=ROOT, capture_output=True, text=True, timeout=45)
         assert (result.returncode == 0) == expected, (name, result.stdout, result.stderr)
         if not expected:

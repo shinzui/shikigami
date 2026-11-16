@@ -29,6 +29,9 @@ SignalImportance
 SignalType (..)
 Sink (..)
 SinkCapability
+SinkMessageId
+SinkOutcome (..)
+SinkResult (..)
 StepName (..)
 Subject (..)
 Workflow
@@ -45,6 +48,7 @@ flowPackNameText
 kernelCapabilityFlow
 parseFlowPackName
 parseSignalImportance
+parseSinkSession
 recall
 remember
 send

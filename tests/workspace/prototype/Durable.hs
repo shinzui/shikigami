@@ -65,7 +65,7 @@ import Shikigami.Flow.Observe qualified as Observe
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Log qualified as Log
 import Shikigami.Output (emptyOutputRegistry)
-import Shikigami.PracticeReview.Capability qualified as Practice
+import Shikigami.Pack.Setting (noPackSettings)
 import Shikigami.Prelude ((&), (.~))
 import Shikigami.RunEvidence.Catalog qualified as Catalog
 import Shikigami.Sink (GrantSource (StaticGrants), defaultGrantTable)
@@ -186,7 +186,7 @@ workflowCase configFile prefix stage = do
               grants = StaticGrants defaultGrantTable,
               directory = directory.handle,
               routing = Routing.RoutingRuntime (\_ -> error "no router") (\_ _ _ -> error "no router"),
-              practiceReview = Practice.unavailablePracticeReviewRuntime,
+              packSettings = noPackSettings,
               deliveryPool = Nothing,
               logger = Log.silentLogger,
               resolveRunProfile = \profile version -> pure (Left (UnknownProfile profile version))

@@ -2,7 +2,7 @@
 
 -- | Allocated application identities. Parsing proves prefix, canonical encoding
 -- and UUIDv7 domain, not ownership of a persisted review or resolution.
-module Shikigami.PracticeReview.Identity
+module FlowPack.PracticeReview.Identity
   ( ReviewId,
     parseReviewId,
     reviewIdText,

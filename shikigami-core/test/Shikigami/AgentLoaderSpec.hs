@@ -92,7 +92,7 @@ tests =
         map agentNameText delegates @?= ["web-researcher", "code-researcher"]
         fmap delegationBudgetNatural delegationBudget @?= Just 8,
       testCase "decodes the router policy proof declaration" do
-        decl <- expectLoaded "../agents/proof/architecture-practice-router.dhall"
+        decl <- expectLoaded "test/fixtures/agents/router-policy.dhall"
         case decl of
           AgentDecl {delegates, routing = Just RouterPolicy {maxSelections, minimumConfidence}} -> do
             map agentNameText delegates @?= ["opentelemetry-practice-reviewer", "code-researcher"]
@@ -100,7 +100,7 @@ tests =
             minimumConfidence @?= RoutingMedium
           other -> assertFailure ("unexpected router declaration: " <> show other),
       testCase "decodes the specialist expertise proof declaration" do
-        decl <- expectLoaded "../agents/proof/opentelemetry-practice-reviewer.dhall"
+        decl <- expectLoaded "test/fixtures/agents/specialist-expertise.dhall"
         case decl of
           AgentDecl {expertise = [ExpertiseDecl {key, aliases, evidenceHints}]} -> do
             expertiseKeyText key @?= "opentelemetry"

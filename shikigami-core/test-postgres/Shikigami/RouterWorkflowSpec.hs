@@ -68,7 +68,7 @@ import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Shikigami.Output (emptyOutputRegistry)
-import Shikigami.PracticeReview.Capability qualified as PracticeReviewCapability
+import Shikigami.Pack.Setting (noPackSettings)
 import Shikigami.Router.Catalog
   ( CandidateAvailability (..),
     CandidateCatalog (..),
@@ -375,7 +375,7 @@ routerDeps appEnv behaviorEnv routing agents =
       AgentWorkflow.grants = StaticGrants defaultGrantTable,
       AgentWorkflow.directory = disabledDirectoryHandle,
       AgentWorkflow.routing,
-      AgentWorkflow.practiceReview = PracticeReviewCapability.unavailablePracticeReviewRuntime,
+      AgentWorkflow.packSettings = noPackSettings,
       AgentWorkflow.deliveryPool = Nothing,
       AgentWorkflow.resolveRunProfile = \profileId version -> pure (Left (UnknownProfile profileId version))
     }

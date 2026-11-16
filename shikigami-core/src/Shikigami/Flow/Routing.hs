@@ -11,6 +11,7 @@ module Shikigami.Flow.Routing
   ( Routing,
     RouteSite,
     routeSite,
+    routeStepNames,
     RoutedRoute (..),
     RoutingEnv (..),
     RoutingRuntime (..),
@@ -214,6 +215,8 @@ boundedRationales = Text.intercalate " | " . fmap (boundedText rationaleLimit) .
 boundedText :: Int -> Text -> Text
 boundedText = Text.take
 
+-- | The two journal steps a routing decision at a site writes. A pack's label
+-- inventory derives its route labels from here.
 routeStepNames :: RouteSite -> (StepName, StepName)
 routeStepNames site =
   ( StepName ("route-catalog-" <> declarationCoordinateText site),

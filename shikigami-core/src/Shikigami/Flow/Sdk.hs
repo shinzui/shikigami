@@ -59,6 +59,10 @@ module Shikigami.Flow.Sdk
 
     -- * The declaration vocabulary those capabilities take
     Sink (..),
+    SinkResult (..),
+    SinkOutcome (..),
+    SinkMessageId,
+    parseSinkSession,
     Priority (..),
     SignalType (..),
     RecipientFrom (..),
@@ -89,6 +93,9 @@ import Shikigami.Flow.Capability qualified as Capability
 import Shikigami.Flow.Delegate (Delegate, awaitOne, delegate)
 import Shikigami.Flow.Pack (FlowPack (..), FlowPackName, FlowPackNameError (..), PackFlow (..), flowPackNameText, kernelCapabilityFlow, parseFlowPackName)
 import Shikigami.RuntimePolicy (DefaultModelRequirement (..))
+import Shikigami.Sink.Coordinate (parseSinkSession)
+import Shikigami.Sink.Delivery (SinkMessageId)
+import Shikigami.Sink.Types (SinkOutcome (..), SinkResult (..))
 
 -- | The capability that emits through a declared sink. It is named apart from
 -- the 'Sink' declaration it takes, which a body constructs by its

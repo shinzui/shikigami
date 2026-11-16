@@ -20,12 +20,15 @@ module Shikigami.Fixture.ExamplePack
   )
 where
 
-import Data.Aeson (Value)
+import Data.Aeson (Value, (.=))
+import Data.Aeson qualified as Aeson
 import Data.List.NonEmpty (NonEmpty ((:|)))
+import Data.List.NonEmpty qualified as NonEmpty
 import Data.Text (Text)
 import Effectful (Eff)
 import Shikigami.Agent.DeclarationValue (declarationCoordinate)
-import Shikigami.Agent.Name (agentNameFromNonEmpty)
+import Shikigami.Agent.Delegate (DelegationRequest (..))
+import Shikigami.Agent.Name (agentNameFromNonEmpty, agentNameText)
 import Shikigami.Decision.Contract (DecisionSlot)
 import Shikigami.Decision.ModelCatalog (ModelCatalog)
 import Shikigami.Fixture.DecisionExampleFlow (exampleSlots, shikumiDecisionExample)
@@ -38,7 +41,9 @@ import Shikigami.Flow.Builtin (builtinPack)
 import Shikigami.Flow.Decision (DecisionServices)
 import Shikigami.Flow.Delegate qualified as Delegate
 import Shikigami.Flow.Pack
+import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Program.Decision (ProgramRegistry, ResultCodecRegistry, SomeProgram (..), retainedCodec)
+import Shikigami.Router.Decision (RouteDecision (..), RouteOutcome (..), RouteSelection (..))
 import Shikigami.RuntimePolicy (DefaultModelRequirement (..))
 
 examplesFixturePack :: FlowPack
@@ -49,11 +54,13 @@ examplesFixturePack =
         [ flow "objective-example" [] DefaultModelOptional objectiveExample,
           flow "shikumi-decision-example" exampleSlots DefaultModelOptional shikumiDecisionExample,
           flow "shikumi-judgment-example" judgmentSlots DefaultModelOptional shikumiJudgmentExample,
-          flow "delegation-proof" [] DefaultModelRequired delegationProofFlow
+          flow "delegation-proof" [] DefaultModelRequired delegationProofFlow,
+          flow "architecture-practice-router" [] DefaultModelRequired routerFixtureFlow
         ],
       decisionPrograms = [SomeProgram triageProgram, SomeProgram investigationProgram, SomeProgram judgmentProgram],
       retainedCodecs = [retainedCodec triageProgram, retainedCodec investigationProgram, retainedCodec judgmentProgram],
-      tasks = []
+      tasks = [],
+      settings = []
     }
   where
     flow :: Text -> [DecisionSlot] -> DefaultModelRequirement -> (forall es. (FlowEffects es) => Value -> Eff es Value) -> PackFlow
@@ -67,6 +74,25 @@ examplesFixturePack =
             decisionMode = StrictDecisions
           }
         body
+
+-- | A flow that routes once and delegates to every selection: the kernel's
+-- routing and batch-delegation machinery driven end to end. It began as a
+-- copy of the router that now lives in @packs/flow-pack-practice-review@ and
+-- keeps that flow's original name, route site and delegation keys.
+routerFixtureFlow :: (FlowEffects es) => Value -> Eff es Value
+routerFixtureFlow payload = do
+  Routing.RoutedRoute {catalog, decision = decision@RouteDecision {outcome}} <-
+    Routing.routeWithCatalog (Routing.routeSite "architecture-practice") payload
+  case outcome of
+    Matched selections -> do
+      children <- Delegate.delegateBatch catalog (toRequest <$> selections)
+      results <- traverse Delegate.awaitOne children
+      pure (Aeson.object ["decision" .= decision, "results" .= NonEmpty.toList results])
+    NoMatch _ -> pure (Aeson.object ["decision" .= decision, "results" .= ([] :: [Value])])
+    Ambiguous _ _ -> pure (Aeson.object ["decision" .= decision, "results" .= ([] :: [Value])])
+  where
+    toRequest RouteSelection {agent} =
+      DelegationRequest {key = declarationCoordinate ("architecture-practice-" <> agentNameText agent), target = agent, payload}
 
 -- | A flow that reaches the governed child-run machinery with a static target.
 delegationProofFlow :: (FlowEffects es) => Value -> Eff es Value

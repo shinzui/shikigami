@@ -1,4 +1,4 @@
-module Shikigami.PracticeReviewEvidenceSpec
+module FlowPack.PracticeReview.EvidenceSpec
   ( tests,
     completeDependencyPinResolver,
     completeEvidenceReader,
@@ -17,7 +17,37 @@ import Data.IORef (IORef, modifyIORef', newIORef, readIORef)
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Time (UTCTime (..), fromGregorian, secondsToDiffTime)
-import Shikigami.PracticeReview
+import FlowPack.PracticeReview.Evidence
+  ( DependencyPinResolver (..),
+    EvidenceBundle (..),
+    EvidenceCompleteness (..),
+    EvidenceCursor (..),
+    EvidenceLimits,
+    EvidenceProblem (..),
+    EvidenceQuery,
+    EvidenceReadError (..),
+    EvidenceReader (..),
+    EvidenceSource (..),
+    PageRequest (..),
+    PinnedContent (..),
+    PinnedDiff (..),
+    PinnedDiffView (changedPaths),
+    PinnedMatch (..),
+    PinnedMatchPage (..),
+    PinnedProvenance (..),
+    PinnedTreePage (..),
+    UpstreamSelection (..),
+    acquireEvidence,
+    mkEvidenceLimits,
+    mkRedactionRule,
+    mutableGitRef,
+    mutableGitRefText,
+    summarizeEvidenceBundle,
+    validatePinnedContent,
+    validatePinnedDiff,
+    validatedPinnedDiff,
+  )
+import FlowPack.PracticeReview.Types
   ( Applicability (..),
     ChangedReference (..),
     EvidenceItem (..),
@@ -50,37 +80,7 @@ import Shikigami.PracticeReview
     validateTrigger,
     validatedTriggerValue,
   )
-import Shikigami.PracticeReview qualified as ReviewValue
-import Shikigami.PracticeReview.Evidence
-  ( DependencyPinResolver (..),
-    EvidenceBundle (..),
-    EvidenceCompleteness (..),
-    EvidenceCursor (..),
-    EvidenceLimits,
-    EvidenceProblem (..),
-    EvidenceQuery,
-    EvidenceReadError (..),
-    EvidenceReader (..),
-    EvidenceSource (..),
-    PageRequest (..),
-    PinnedContent (..),
-    PinnedDiff (..),
-    PinnedDiffView (changedPaths),
-    PinnedMatch (..),
-    PinnedMatchPage (..),
-    PinnedProvenance (..),
-    PinnedTreePage (..),
-    UpstreamSelection (..),
-    acquireEvidence,
-    mkEvidenceLimits,
-    mkRedactionRule,
-    mutableGitRef,
-    mutableGitRefText,
-    summarizeEvidenceBundle,
-    validatePinnedContent,
-    validatePinnedDiff,
-    validatedPinnedDiff,
-  )
+import FlowPack.PracticeReview.Types qualified as ReviewValue
 import Shikigami.Repository
   ( RelativePath,
     RepoRef (..),
@@ -660,10 +660,10 @@ readContentPlaneSnapshot relativeFixturePath = do
 readContentPlaneFixture :: FilePath -> IO ByteString
 readContentPlaneFixture relativeFixturePath = do
   root <- repositoryRoot
-  ByteString8.readFile (root </> "fixtures" </> "practice-review" </> "content-plane" </> relativeFixturePath)
+  ByteString8.readFile (root </> "packs" </> "flow-pack-practice-review" </> "fixtures" </> "content-plane" </> relativeFixturePath)
 
 repositoryRoot :: IO FilePath
-repositoryRoot = go [".", ".."]
+repositoryRoot = go [".", "..", "../.."]
   where
     go [] = assertFailure "cannot find cabal.project from the working directory"
     go (candidate : rest) = do

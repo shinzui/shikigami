@@ -262,7 +262,7 @@ runWorkerCmdWith packs resumeBudget config = do
                             }
                       },
                   trackers,
-                  practiceReviewAttentionRecipients = (.practiceReviewAttentionRecipients) config
+                  packSettings = config.packSettings
                 }
         case resumeBudget of
           Just (passes, candidates) -> void (runBoundedResumeWorker passes candidates env)

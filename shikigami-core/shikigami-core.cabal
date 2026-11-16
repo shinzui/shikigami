@@ -195,7 +195,6 @@ library
     Shikigami.Flow.Initiative
     Shikigami.Flow.Objectives
     Shikigami.Flow.Observe
-    Shikigami.Flow.OpenTelemetryPracticeReview
     Shikigami.Flow.Pack
     Shikigami.Flow.Routing
     Shikigami.Flow.Sdk
@@ -300,16 +299,9 @@ library
     Shikigami.Output
     Shikigami.Output.Local
     Shikigami.Pack.Sdk
+    Shikigami.Pack.Setting
     Shikigami.Playbook
     Shikigami.Playbook.Run
-    Shikigami.PracticeReview
-    Shikigami.PracticeReview.Attention
-    Shikigami.PracticeReview.Authorization
-    Shikigami.PracticeReview.Capability
-    Shikigami.PracticeReview.Evidence
-    Shikigami.PracticeReview.Identity
-    Shikigami.PracticeReview.IdentityStore
-    Shikigami.PracticeReview.Memory
     Shikigami.Prelude
     Shikigami.Process.Attempt
     Shikigami.Program.Decision
@@ -634,17 +626,22 @@ library flow-sdk
   reexported-modules:
     Shikigami.Agent.Delegate,
     Shikigami.Agent.Name,
+    Shikigami.Agent.Principal,
     Shikigami.Decision.Contract,
     Shikigami.Flow.Decision,
     Shikigami.Flow.Delegate,
     Shikigami.Flow.Objectives,
+    Shikigami.Flow.Routing,
     Shikigami.Flow.Sdk,
     Shikigami.Flow.Sdk.Program,
+    Shikigami.FormatVersion,
     Shikigami.Objective.Command,
     Shikigami.Objective.Operation,
     Shikigami.Objective.Types,
+    Shikigami.Prelude,
     Shikigami.Program.Decision,
     Shikigami.Program.Decision.Confidence,
+    Shikigami.Repository,
     Shikigami.Router.Decision,
 
 -- The pack SDK: what a pack's interpreter may import in addition. Only a
@@ -658,7 +655,19 @@ library pack-sdk
     shikigami-core,
 
   reexported-modules:
-    Shikigami.Pack.Sdk
+    Shikigami.Activity,
+    Shikigami.Agent.Decl,
+    Shikigami.Agent.RunJob,
+    Shikigami.App,
+    Shikigami.Directory,
+    Shikigami.Memory.Access,
+    Shikigami.Memory.Scope,
+    Shikigami.Pack.Sdk,
+    Shikigami.Sink,
+    Shikigami.Sink.Delivery,
+    Shikigami.Sink.Intent,
+    Shikigami.Trigger.Enqueue,
+    Shikigami.Trigger.RequestKey,
 
 -- Host adapters of the local-operator tier: the process launcher, the
 -- worktree provider and the checkout resolver. The domain library links no
@@ -763,8 +772,6 @@ test-suite shikigami-core-test
     Shikigami.PackageArchitectureSpec
     Shikigami.PayloadValueSpec
     Shikigami.PlaybookSpec
-    Shikigami.PracticeReviewEvidenceSpec
-    Shikigami.PracticeReviewSpec
     Shikigami.ProcessLocalSpec
     Shikigami.RecordSpec
     Shikigami.RouterCatalogSpec
@@ -899,9 +906,6 @@ test-suite shikigami-core-postgres-test
     Shikigami.ObjectiveStoreSpec
     Shikigami.ObjectiveTrackerStoreSpec
     Shikigami.ObjectiveWorkflowSpec
-    Shikigami.PracticeReviewEvidenceSpec
-    Shikigami.PracticeReviewMemorySpec
-    Shikigami.PracticeReviewOrchestrationSpec
     Shikigami.ProfileResolutionSpec
     Shikigami.RouterWorkflowSpec
     Shikigami.RunEvidenceSpec

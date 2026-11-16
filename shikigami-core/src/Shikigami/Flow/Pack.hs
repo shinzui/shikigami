@@ -28,6 +28,13 @@ module Shikigami.Flow.Pack
     PackFlow (..),
     kernelCapabilityFlow,
     FlowRunContext (..),
+    RunModel (..),
+    runModel,
+
+    -- * Pack settings
+    PackSetting (..),
+    PackSettings,
+    packSettingValue,
 
     -- * The composed registry
     FlowRegistry,
@@ -48,9 +55,14 @@ module Shikigami.Flow.Pack
   )
 where
 
+import Baikai.Context (systemUser)
+import Baikai.Response (flattenAssistantBlocks, flattenAssistantText, responseError)
+import Baikai.ResponseFormat (ResponseFormat (JsonObject))
+import Control.Lens ((&), (.~))
 import Data.Aeson (Value, object, (.=))
 import Data.ByteString qualified as ByteString
 import Data.Char (isAsciiLower, isDigit)
+import Data.Generics.Labels ()
 import Data.List (find)
 import Data.List.NonEmpty (NonEmpty)
 import Data.List.NonEmpty qualified as NonEmpty
@@ -67,7 +79,10 @@ import Kiroku.Store.Error (StoreError)
 import Shikigami.Activity (ActivityEnvelope)
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..))
 import Shikigami.Agent.DeclarationValue
-import Shikigami.Agent.Principal (ResolvedAgentIdentity)
+import Shikigami.Agent.Principal (AgentIdentity, ResolvedAgentIdentity)
+import Shikigami.App (AppEnv)
+import Shikigami.Behavior.Compatibility (renderResponseCompatibilityError, validateResponseRequest)
+import Shikigami.Behavior.Run (BehaviorEnv (..), completeBehaviorRequest)
 import Shikigami.Decision.Contract (DecisionFailure)
 import Shikigami.Decision.ModelCatalog (ModelCatalog, slotErrors)
 import Shikigami.Directory (DirectoryHandle)
@@ -75,9 +90,11 @@ import Shikigami.Execution.Identity (ExecutionRootId)
 import Shikigami.Flow (FlowDef (..), FlowEffects, flowDecisionSlotsFor)
 import Shikigami.Flow.Decision (DecisionServices (..), decisionProviders)
 import Shikigami.Log qualified as Log
+import Shikigami.Pack.Setting (PackSetting (..), PackSettings, packSettingValue)
 import Shikigami.Program.Decision (ProgramRegistry, ResultCodecRegistry, SomeProgram, SomeResultCodec)
 import Shikigami.Program.Decision qualified as Decision
 import Shikigami.Program.Task (ProgramTask (..))
+import Shikigami.Sink (GrantSource)
 import System.Exit (exitFailure)
 
 -- | A pack's checked name: lowercase ASCII words joined by @-@, 1 to 64 bytes.
@@ -110,7 +127,11 @@ data FlowPack = FlowPack
     decisionPrograms :: ![SomeProgram],
     -- | Codecs outlive retired programs (ADR-45).
     retainedCodecs :: ![SomeResultCodec],
-    tasks :: ![ProgramTask]
+    tasks :: ![ProgramTask],
+    -- | The configuration keys this pack owns. An executable composed with the
+    -- pack accepts them and hands their validated values to the pack's
+    -- interpreters in 'FlowRunContext'.
+    settings :: ![PackSetting]
   }
 
 -- | A flow body plus the pack-owned interpreter that runs it.
@@ -146,8 +167,44 @@ data FlowRunContext = FlowRunContext
     activity :: !ActivityEnvelope,
     executionRoot :: !(Maybe ExecutionRootId),
     directory :: !DirectoryHandle,
-    declarations :: ![AgentDecl]
+    declarations :: ![AgentDecl],
+    -- | The identity the run job carries, before the kernel resolved it into
+    -- 'identity'. A sink intent a pack prepares is attributed to this one.
+    requestIdentity :: !AgentIdentity,
+    -- | The delegating run and its session, when this run is a governed child.
+    parentRunId :: !(Maybe WorkflowId),
+    parentSession :: !(Maybe SessionId),
+    -- | The run's model, already narrowed by its sanctioned profile.
+    model :: !RunModel,
+    -- | The validated settings of the composed packs.
+    settings :: !PackSettings,
+    -- | The kernel's stores, for an interpreter that records memory.
+    app :: !AppEnv,
+    -- | The grant source a sink intent prepared by the pack is checked against.
+    grants :: !GrantSource
   }
+
+-- | The one model call a pack interpreter may make: a system prompt and a
+-- user prompt in, the text of one JSON-object response out. 'Left' carries a
+-- rendered refusal or provider failure. The kernel builds it from the run's
+-- behavior environment, so a pack reaches no provider, registry or option of
+-- its own and cannot leave the call tuple a sanctioned profile allowed.
+newtype RunModel = RunModel
+  { completeJsonObject :: Text -> Text -> IO (Either Text Text)
+  }
+
+runModel :: BehaviorEnv -> RunModel
+runModel env@BehaviorEnv {model, options} =
+  RunModel \systemPrompt userPrompt -> do
+    let context = systemUser systemPrompt userPrompt
+        structuredOptions = options & #responseFormat .~ Just JsonObject
+    case validateResponseRequest model structuredOptions context of
+      Left refusal -> pure (Left (renderResponseCompatibilityError refusal))
+      Right () -> do
+        response <- completeBehaviorRequest env model context structuredOptions
+        pure case responseError response of
+          Just failure -> Left (Text.pack (show failure))
+          Nothing -> Right (flattenAssistantText (flattenAssistantBlocks response))
 
 data RegisteredFlow = RegisteredFlow
   { pack :: !FlowPackName,
@@ -169,6 +226,7 @@ data FlowRegistryError
   = DuplicatePackName !FlowPackName
   | DuplicateFlowName !(DeclarationCoordinate "flow") !FlowPackName !FlowPackName
   | DuplicateTaskName !Text !FlowPackName !FlowPackName
+  | DuplicateSettingKey !Text !FlowPackName !FlowPackName
   | DecisionProgramsRejected !DecisionFailure
   | ResultCodecsRejected !DecisionFailure
   deriving stock (Eq, Show)
@@ -180,6 +238,8 @@ renderFlowRegistryError = \case
     "flow " <> declarationCoordinateText flow <> " is contributed by both pack " <> flowPackNameText first <> " and pack " <> flowPackNameText second
   DuplicateTaskName task first second ->
     "program task " <> task <> " is contributed by both pack " <> flowPackNameText first <> " and pack " <> flowPackNameText second
+  DuplicateSettingKey key first second ->
+    "setting " <> key <> " is declared by both pack " <> flowPackNameText first <> " and pack " <> flowPackNameText second
   DecisionProgramsRejected failure -> "the composed decision programs were refused: " <> Text.pack (show failure)
   ResultCodecsRejected failure -> "the composed result codecs were refused: " <> Text.pack (show failure)
 
@@ -187,7 +247,7 @@ renderFlowRegistryError = \case
 -- first, so one failed start names everything an operator must fix.
 composeFlowRegistry :: [FlowPack] -> Either (NonEmpty FlowRegistryError) FlowRegistry
 composeFlowRegistry composed =
-  case NonEmpty.nonEmpty (packErrors <> flowErrors <> taskErrors <> programErrors <> codecErrors) of
+  case NonEmpty.nonEmpty (packErrors <> flowErrors <> taskErrors <> settingErrors <> programErrors <> codecErrors) of
     Just errors -> Left errors
     Nothing -> case (programsResult, codecsResult) of
       (Right programs, Right codecs) -> Right FlowRegistry {packs = packNames, entries, taskEntries, programs, codecs}
@@ -200,6 +260,7 @@ composeFlowRegistry composed =
     packErrors = [DuplicatePackName name | (name, _, _) <- repeated [(name, name) | name <- packNames]]
     flowErrors = [DuplicateFlowName name first second | (name, first, second) <- repeated [(entry.flow.definition.name, entry.pack) | entry <- entries]]
     taskErrors = [DuplicateTaskName name first second | (name, first, second) <- repeated [(taskName task, pack) | (pack, task) <- taskEntries]]
+    settingErrors = [DuplicateSettingKey key first second | (key, first, second) <- repeated [(setting.key, pack.name) | pack <- composed, setting <- pack.settings]]
     programsResult = Decision.programRegistry (concatMap (.decisionPrograms) composed)
     codecsResult = Decision.resultCodecRegistry (concatMap (.retainedCodecs) composed)
     programErrors = either (pure . DecisionProgramsRejected) (const []) programsResult

@@ -18,6 +18,12 @@ CORE_UNITS = [entry["id"] for entry in PLAN["install-plan"]
               if entry["pkg-name"] == "shikigami-core" and entry.get("component-name") == "lib"]
 assert len(CORE_UNITS) == 1, CORE_UNITS
 CORE_UNIT = CORE_UNITS[0]
+# The practice-review vocabulary lives in its flow pack; its probes compile
+# against the pack's bodies component beside the core.
+REVIEW_UNITS = [entry["id"] for entry in PLAN["install-plan"]
+                if entry["pkg-name"] == "flow-pack-practice-review" and entry.get("component-name") == "lib:bodies"]
+assert len(REVIEW_UNITS) == 1, REVIEW_UNITS
+PACKAGE_FLAGS = ["-package-id", CORE_UNIT, "-package-id", REVIEW_UNITS[0]]
 HEADER = '''{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE DisambiguateRecordFields #-}
@@ -83,12 +89,12 @@ import Shikigami.Execution.ToolPosition qualified as Position
 import Shikigami.Decision.Contract qualified as Decision
 import Shikigami.Decision.Evidence qualified as DecisionEvidence
 import Shikigami.Log.Correlation qualified as Correlation
-import Shikigami.PracticeReview.Identity qualified as ReviewId
-import Shikigami.PracticeReview.Authorization qualified as ReviewAuth
-import Shikigami.PracticeReview.Capability qualified as ReviewCapability
-import Shikigami.PracticeReview.IdentityStore qualified as ReviewIdentity
-import Shikigami.PracticeReview qualified as Review
-import Shikigami.PracticeReview.Evidence qualified as Evidence
+import FlowPack.PracticeReview.Identity qualified as ReviewId
+import FlowPack.PracticeReview.Authorization qualified as ReviewAuth
+import FlowPack.PracticeReview.Capability qualified as ReviewCapability
+import FlowPack.PracticeReview.IdentityRef qualified as ReviewIdentity
+import FlowPack.PracticeReview.Types qualified as Review
+import FlowPack.PracticeReview.Evidence qualified as Evidence
 import Shikigami.Router.Declaration qualified as Declaration
 import Shikigami.Workspace.Instructions qualified as Instructions
 import Shikigami.WorkerSession.Input qualified as WorkerInput
@@ -503,7 +509,7 @@ with tempfile.TemporaryDirectory(prefix='shikigami-opaque-types-') as directory:
     source = Path(directory) / 'OpaqueBoundary.hs'
     def compile(body):
         source.write_text(HEADER + body)
-        return subprocess.run(['cabal', 'exec', '--', 'ghc', '-fno-code', '-package-id', CORE_UNIT, str(source)], cwd=ROOT, capture_output=True, text=True, timeout=45)
+        return subprocess.run(['cabal', 'exec', '--', 'ghc', '-fno-code', *PACKAGE_FLAGS, str(source)], cwd=ROOT, capture_output=True, text=True, timeout=45)
     result = compile(POSITIVE)
     assert result.returncode == 0, (result.stdout, result.stderr)
     print('opaque boundary: public factories/adapters: passed', flush=True)

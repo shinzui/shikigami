@@ -2,51 +2,29 @@
 
 -- | Owner receipts for logical review requests. A parsed identity or journal
 -- reference is a claim; the stored binding and current creator are rechecked.
-module Shikigami.PracticeReview.IdentityStore
-  ( ReviewIdentityRef,
-    allocatedReviewId,
-    reserveReviewIdentity,
+module FlowPack.PracticeReview.IdentityStore
+  ( reserveReviewIdentity,
     verifyReviewIdentity,
     reserveResolutionIdentity,
   )
 where
 
 import Contravariant.Extras (contrazip3, contrazip5)
-import Data.Aeson (Value, (.:), (.=))
+import Data.Aeson (Value, (.=))
 import Data.Aeson qualified as Aeson
-import Data.Text qualified as Text
+import FlowPack.PracticeReview.Identity (newResolutionId, newReviewId)
+import FlowPack.PracticeReview.IdentityRef (ReviewIdentityBinding (..), ReviewIdentityRef, mkReviewIdentityRef, normalizeSpecialist, reviewIdentityBinding, validReviewRequest)
+import FlowPack.PracticeReview.Types
 import Hasql.Decoders qualified as D
 import Hasql.Encoders qualified as E
 import Hasql.Statement (Statement, preparable)
 import Hasql.Transaction qualified as Tx
 import Kiroku.Store.Transaction (runTransaction)
-import Shikigami.Agent.Name (AgentName, agentNameText, mkAgentName)
+import Shikigami.Agent.Name (AgentName)
 import Shikigami.Agent.Principal (ResolvedAgentIdentity, resolvedIdentity, resolvedIdentityText)
 import Shikigami.App (AppEnv, runAppIO)
 import Shikigami.Decision.Contract (versionedDigest)
-import Shikigami.PracticeReview
-import Shikigami.PracticeReview.Identity (newResolutionId, newReviewId)
 import Shikigami.Prelude hiding ((.=))
-
--- Positional and private: exported accessors cannot be used for record updates.
-data ReviewIdentityRef = ReviewIdentityRef !ReviewId !ValidatedPracticeReviewTrigger !PracticeKey !AgentName
-  deriving stock (Eq, Show)
-
-allocatedReviewId :: ReviewIdentityRef -> ReviewId
-allocatedReviewId (ReviewIdentityRef identifier _ _ _) = identifier
-
-instance ToJSON ReviewIdentityRef where
-  toJSON (ReviewIdentityRef identifier trigger practice specialist) =
-    Aeson.object ["reviewId" .= identifier, "trigger" .= validatedTriggerValue trigger, "practice" .= practice, "specialist" .= specialist]
-
-instance FromJSON ReviewIdentityRef where
-  parseJSON = Aeson.withObject "ReviewIdentityRef" \value -> do
-    identifier <- value .: "reviewId"
-    trigger <- value .: "trigger" >>= either (fail . show) pure . validateTrigger
-    practice <- value .: "practice"
-    specialist <- value .: "specialist"
-    unless (specialist == normalizeSpecialist specialist && validReviewRequest trigger practice specialist) (fail "invalid allocated review request")
-    pure (ReviewIdentityRef identifier trigger practice specialist)
 
 reviewCoordinates :: ResolvedAgentIdentity -> ValidatedPracticeReviewTrigger -> PracticeKey -> AgentName -> (Text, Text, Text, Value)
 reviewCoordinates identity validated practice specialist =
@@ -70,11 +48,12 @@ reserveValidReviewIdentity app identity trigger practice specialist = do
   pure $ do
     raw <- result
     identifier <- parseReviewId raw
-    pure (ReviewIdentityRef identifier trigger practice specialist)
+    mkReviewIdentityRef identifier trigger practice specialist
 
 verifyReviewIdentity :: AppEnv -> ResolvedAgentIdentity -> ReviewIdentityRef -> ValidatedPracticeReviewVerdict -> IO (Either Text ())
-verifyReviewIdentity app identity (ReviewIdentityRef identifier trigger practice specialist) validated = do
-  let (kind, owner, key, binding) = reviewCoordinates identity trigger practice specialist
+verifyReviewIdentity app identity reference validated = do
+  let ReviewIdentityBinding {reviewId = identifier, trigger, practice, specialist} = reviewIdentityBinding reference
+      (kind, owner, key, binding) = reviewCoordinates identity trigger practice specialist
       PracticeReviewTrigger {idempotencyKey, target} = validatedTriggerValue trigger
       PracticeReviewVerdict {reviewId, triggerIdempotencyKey, practice = actualPractice, specialist = actualSpecialist, targetEvidence} = validatedVerdictValue validated
       metadataMatches = reviewId == identifier && triggerIdempotencyKey == idempotencyKey && actualPractice == practice && actualSpecialist == specialist
@@ -146,13 +125,3 @@ selectReviewOwner =
 -- Transport failure must remain retryable and must never become a journaled refusal.
 storeResult :: Either error a -> IO a
 storeResult = either (const (ioError (userError "practice-review identity store unavailable"))) pure
-
-validReviewRequest :: ValidatedPracticeReviewTrigger -> PracticeKey -> AgentName -> Bool
-validReviewRequest validated practice specialist =
-  let PracticeReviewTrigger {adoptions} = validatedTriggerValue validated
-   in not (Text.null (Text.strip (agentNameText specialist))) && any (\PracticeAdoptionBinding {practice = registered} -> registered == practice) adoptions
-
--- This is the review contract's existing named-key normalization, not an agent
--- principal or compatibility-scope derivation.
-normalizeSpecialist :: AgentName -> AgentName
-normalizeSpecialist value = either (const value) id (mkAgentName (Text.toCaseFold (Text.strip (agentNameText value))))

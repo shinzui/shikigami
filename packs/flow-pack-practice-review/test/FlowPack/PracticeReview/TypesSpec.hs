@@ -1,4 +1,4 @@
-module Shikigami.PracticeReviewSpec (tests) where
+module FlowPack.PracticeReview.TypesSpec (tests) where
 
 import Control.Monad (forM_)
 import Data.Aeson (FromJSON (..), ToJSON, Value (..), eitherDecode, eitherDecodeStrict', encode, withObject, (.:), (.:?))
@@ -12,7 +12,9 @@ import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Vector ((!?), (//))
 import Data.Vector qualified as Vector
-import Shikigami.PracticeReview
+import FlowPack.PracticeReview.Capability qualified as Capability
+import FlowPack.PracticeReview.Identity (newResolutionId, newReviewId)
+import FlowPack.PracticeReview.Types
   ( PracticeReviewClassification (..),
     PracticeReviewResolution (..),
     PracticeReviewTrigger,
@@ -27,9 +29,7 @@ import Shikigami.PracticeReview
     validateVerdict,
     validatedTriggerValue,
   )
-import Shikigami.PracticeReview qualified as Review
-import Shikigami.PracticeReview.Capability qualified as Capability
-import Shikigami.PracticeReview.Identity (newResolutionId, newReviewId)
+import FlowPack.PracticeReview.Types qualified as Review
 import Shikigami.Repository
   ( mkRelativePath,
     mkRevision,
@@ -202,13 +202,13 @@ instance FromJSON InvalidFixture where
 readFixture :: FilePath -> IO ByteString.ByteString
 readFixture name = do
   root <- repositoryRoot
-  ByteString.readFile (root </> "fixtures" </> "practice-review" </> name)
+  ByteString.readFile (root </> "packs" </> "flow-pack-practice-review" </> "fixtures" </> name)
 
 readFixtureValue :: FilePath -> IO Value
 readFixtureValue name = readFixture name >>= decodeStrictOrFail
 
 repositoryRoot :: IO FilePath
-repositoryRoot = go [".", ".."]
+repositoryRoot = go [".", "..", "../.."]
   where
     go [] = assertFailure "cannot find cabal.project from the working directory"
     go (candidate : rest) = do

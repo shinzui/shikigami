@@ -118,7 +118,7 @@ import Shikigami.Objective.Command qualified as Command
 import Shikigami.Objective.Runtime qualified as Objectives
 import Shikigami.Objective.Types qualified as Objective
 import Shikigami.Output (emptyOutputRegistry)
-import Shikigami.PracticeReview.Capability qualified as Practice
+import Shikigami.Pack.Setting (noPackSettings)
 import Shikigami.Repository (RepositoryId, repositoryId)
 import Shikigami.RunEvidence.Catalog qualified as Catalog
 import Shikigami.RunJobs qualified as RunJobs
@@ -341,7 +341,7 @@ proposingDeps env behavior provider binding objectiveRuntime settings repository
       grants = StaticGrants (Map.insert proposerIdentity (Set.singleton SKizashiSignal) defaultGrantTable),
       directory,
       routing = Routing.RoutingRuntime (\_ -> error "no router") (\_ _ _ -> error "no router"),
-      practiceReview = Practice.unavailablePracticeReviewRuntime,
+      packSettings = noPackSettings,
       deliveryPool = Just pool,
       logger = Log.silentLogger,
       resolveRunProfile = \profile version -> pure (Left (UnknownProfile profile version))

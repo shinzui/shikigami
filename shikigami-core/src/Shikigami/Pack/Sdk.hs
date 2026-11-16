@@ -12,6 +12,12 @@
 module Shikigami.Pack.Sdk
   ( -- * The run a pack interpreter serves
     FlowRunContext (..),
+    RunModel (..),
+
+    -- * Pack settings
+    PackSetting (..),
+    PackSettings,
+    packSettingValue,
 
     -- * Interpreting a pack capability
     IOE,
@@ -41,5 +47,5 @@ import Effectful.Error.Static (Error)
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Error (StoreError)
 import Kiroku.Store.Transaction (runTransaction, runTransactionNoRetry)
-import Shikigami.Flow.Pack (FlowRunContext (..))
+import Shikigami.Flow.Pack (FlowRunContext (..), PackSetting (..), PackSettings, RunModel (..), packSettingValue)
 import Shikigami.Log (Logger, logDebug, logError, logInfo, logWarn)
