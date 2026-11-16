@@ -27,6 +27,7 @@ import Shikigami.Health.Worker
     serveProbesWith,
     supervisedLoopVerdict,
   )
+import Shikigami.Initiative.Intake (streamDisposition)
 import Shikigami.Inspection.Consumer (consumerInspection)
 import Shikigami.Inspection.Store (withObservedStore)
 import Shikigami.Log qualified as Log
@@ -35,6 +36,7 @@ import Shikigami.Runtime (registerRuntimeCatalog, runtimeConnectionSettings)
 import Shikigami.Telemetry (withRunTelemetry)
 import Shikigami.Trigger.Consumer (EventHit (..), OnSupervisor, StreamConfig (..), StreamHit (..), ensureDeadLetterQueue, subscribeActivityStream, subscribeIntegrationEventStream)
 import Shikigami.Trigger.Enqueue (ensureRunQueue)
+import Shikigami.Trigger.Hook (StreamHook (..), streamIntake)
 import Shikigami.Trigger.Stream (IncludeAgentActors (ExcludeAgentActors, IncludeAgentActors))
 import Shikigami.Workers.Config (directoryLoopRegistration, persistAgentLoadReport, startProcessDirectory)
 
@@ -96,7 +98,8 @@ runConsumeStream config = do
           ((ConsumerLoop, loopStaleAfter ConsumerLoop) : directoryLoopRegistration ((.directorySettings) config))
       DirectoryRuntime {handle = directory, refresher = directoryRefresher} <-
         startProcessDirectory logger registry ((.directorySettings) config)
-      let consumerLoop = subscribeActivityStream logger (consumerSupervisor registry) shikigamiMetrics appEnv directory config.initiativeSettings cfg include agents onHit
+      let intake = streamIntake "initiative" (const True) config.packSettings (StreamHook (\_ -> streamDisposition config.initiativeSettings))
+          consumerLoop = subscribeActivityStream logger (consumerSupervisor registry) shikigamiMetrics appEnv directory intake cfg include agents onHit
           directoryLoops = maybe [] (pure . (DirectoryLoop,)) directoryRefresher
       serveProbesWith
         logger

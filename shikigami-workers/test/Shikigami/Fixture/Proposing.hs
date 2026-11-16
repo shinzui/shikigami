@@ -108,6 +108,7 @@ import Shikigami.Flow.Decision qualified as Decision
 import Shikigami.Flow.Initiative qualified as FlowInitiative
 import Shikigami.Flow.Observe qualified as FlowObserve
 import Shikigami.Flow.Routing qualified as Routing
+import Shikigami.Initiative.Intake (streamDisposition)
 import Shikigami.Initiative.Policy qualified as Policy
 import Shikigami.Initiative.Settings (InitiativeSettings)
 import Shikigami.Initiative.Types (ActionClass (..), SourceKind (..))
@@ -127,6 +128,7 @@ import Shikigami.Sink.Config
 import Shikigami.Sink.Http (HttpLimits (..), SinkHttp, credentialsFromConfig, newSinkHttp)
 import Shikigami.Trigger.Consumer (RecordDisposition, processDecodedActivityObserving)
 import Shikigami.Trigger.Enqueue (ensureRunQueue, runQueueName)
+import Shikigami.Trigger.Hook (StreamHook (..), streamIntake)
 import Shikigami.Trigger.Stream (IncludeAgentActors (ExcludeAgentActors, IncludeAgentActors))
 import Test.Tasty.HUnit (assertFailure)
 
@@ -447,8 +449,8 @@ deliverLifted fixture actor source activity subject body =
     Log.silentLogger
     fixture.env
     fixture.directory
-    (Just fixture.settings)
-    (\verdict reason -> fixture.observe ("candidate", verdict <> maybe "" (":" <>) reason))
+    (streamIntake "initiative" (const True) noPackSettings (StreamHook (\_ -> streamDisposition (Just fixture.settings))))
+    (\_ verdict reason -> fixture.observe ("candidate", verdict <> maybe "" (":" <>) reason))
     IncludeAgentActors
     [fixture.declaration]
     (const (pure ()))
@@ -461,8 +463,8 @@ deliverBy fixture actor source activity subject body =
     Log.silentLogger
     fixture.env
     fixture.directory
-    (Just fixture.settings)
-    (\verdict reason -> fixture.observe ("candidate", verdict <> maybe "" (":" <>) reason))
+    (streamIntake "initiative" (const True) noPackSettings (StreamHook (\_ -> streamDisposition (Just fixture.settings))))
+    (\_ verdict reason -> fixture.observe ("candidate", verdict <> maybe "" (":" <>) reason))
     ExcludeAgentActors
     [fixture.declaration]
     (const (pure ()))

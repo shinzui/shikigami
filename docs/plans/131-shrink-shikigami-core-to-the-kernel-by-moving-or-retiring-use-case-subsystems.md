@@ -219,6 +219,20 @@ this Mac through the same operator verbs as before (`watchdog inspect`, `proposa
 - [ ] M4: `Initiative` runs from `flow-pack-initiative` through a kernel stream-intake
   hook. A real transcript excerpt produces an approval request, and accepting it creates an
   objective.
+  - In progress (2026-11-16). Two kernel steps are landed and Initiative still lives in the
+    core. Commit `a132deeb` gives a pack setting a shape (`TextSetting | JsonSetting`) and an
+    optional default, because `initiatives` is a structured value that is absent when unset.
+    The stream-hook commit that follows adds `Shikigami.Trigger.Hook` and makes
+    `Shikigami.Trigger.Consumer` consult a `StreamIntake` instead of importing the Initiative
+    ledger, settings and types; Initiative answers through it
+    (`Shikigami.Initiative.Intake.streamDisposition`) with no change in behavior.
+  - Remaining, in the order planned: `FlowPack.triggers` and the registry's intake with a
+    `...With` entry point for the stream consumer; `FlowPack.adminVerbs` with a kernel admin
+    context for the `proposals` verbs; a pack metrics port for the three remaining
+    `shikigami.initiatives.*` counters; the workspace catalog and objective settings in
+    `FlowRunContext`; the `initiatives` setting as a `PackSetting`; then the move itself, with
+    the two patch blocks and their labels leaving `domain/shikigami/agent-run.keiro`, the
+    `kikan-shikigami-consume-stream` executable, and the real transcript run.
 - [ ] M5: `Watchdog` runs from `flow-pack-watchdog` through a kernel schedule-allowance
   hook. A scheduled sweep observes a real local run and `kikan-shikigami watchdog inspect` shows it.
 - [ ] M6: The adaptive-delivery coordinator is confirmed as a kernel primitive and stays in
@@ -379,6 +393,32 @@ this Mac through the same operator verbs as before (`watchdog inspect`, `proposa
 
 ## Decision Log
 
+- Decision (M4): The stream hook is pure and answers with transactions, and differs from the
+  plan's sketch.
+  Rationale: the sketch was `StreamHook (StreamCandidate -> IO StreamDisposition)` with
+  `StreamAdmit | StreamSkip`. The consumer commits exactly one durable effect per record in
+  its inbox transaction, and Initiative's skip row, candidate row and already-observed check
+  belong in that transaction with the evaluation root and the run job. An `IO` hook could
+  not put them there. `StreamHook` is `PackSettings -> StreamCandidate -> StreamDisposition`;
+  `StreamSkipped` carries a bounded reason and a `Transaction ()`, and `StreamEvaluated`
+  carries the root's envelope, an `alreadyOwned :: Transaction Bool` and a
+  `record :: WorkflowId -> Transaction ()`. Allocating the evaluation root and enqueueing the
+  run stay kernel code in the consumer. `StreamOrdinary` is the third answer: the pack does
+  not observe for this identity and the record keeps its ordinary job bytes.
+  Date: 2026-11-16
+- Decision (M4): `recordInitiativeCandidate` becomes `recordStreamDisposition`, labelled by
+  pack, and the counter `shikigami.initiatives.candidates` becomes
+  `shikigami.stream.dispositions`. The log event `initiative.skip` becomes
+  `stream.observation.skipped` with a `pack` field.
+  Rationale: the plan asked for the generic metric. The names an operator alerts on change
+  once, before any release; `docs/operations/unrequested-work.md` lists the new one.
+  Date: 2026-11-16
+- Decision (M4): `PackSetting` gains `shape` and `whenAbsent`, and its validator takes JSON.
+  Rationale: M3's setting was text with a default. `initiatives` and `watchdog` are JSON
+  objects that are absent when unset, read as the kernel's structured settings are: a mapping
+  in a YAML file or JSON text in a flag or a variable. The plan's sketch had a `Value`
+  validator; M3 narrowed it to text one setting too early.
+  Date: 2026-11-16
 - Decision (M3): Recheck of the pre-release facts before the move. `git tag --list` is
   empty, MasterPlan 22 records no end of the exception, and the development database holds
   66 completed `shikigami.agent-run` instances and one non-terminal one, `7a28975f`, which

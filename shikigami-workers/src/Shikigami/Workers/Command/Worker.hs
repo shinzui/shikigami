@@ -55,7 +55,7 @@ import Shikigami.Sink (DanwaConfig (..), GrantSource (DbGrants), KanmonConfig (.
 import Shikigami.Sink.Http (HttpLimits (..), SinkHttp, SinkHttpError, credentialsFromConfig, newSinkHttp)
 import Shikigami.Sink.Permission (sinkKindText)
 import Shikigami.Telemetry (withRunTelemetry)
-import Shikigami.Telemetry.Metrics (ShikigamiMetrics, recordInitiativeAdmission, recordInitiativeCandidate, recordInitiativeProposal, recordInitiativeRefusal)
+import Shikigami.Telemetry.Metrics (ShikigamiMetrics, recordInitiativeAdmission, recordInitiativeProposal, recordInitiativeRefusal, recordStreamDisposition)
 import Shikigami.Telemetry.Sampler (watchdogHooks)
 import Shikigami.Trust.LocalOperator.Approvals (defaultApprovalsPath)
 import Shikigami.Trust.LocalOperator.Grant (defaultStateDirectory)
@@ -255,7 +255,7 @@ runWorkerCmdWith packs resumeBudget config = do
                         repositories = [FlowInitiative.RepositoryOption entry.identity (repositoryIdText entry.identity) | entry <- maybe [] (.repositories) config.workspaceSettings],
                         hooks =
                           FlowInitiative.InitiativeHooks
-                            { onCandidate = recordInitiativeCandidate shikigamiMetrics,
+                            { onCandidate = recordStreamDisposition shikigamiMetrics "initiative",
                               onProposal = recordInitiativeProposal shikigamiMetrics,
                               onAdmission = recordInitiativeAdmission shikigamiMetrics,
                               onRefusal = recordInitiativeRefusal shikigamiMetrics

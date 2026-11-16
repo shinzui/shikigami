@@ -93,17 +93,14 @@ import Shikigami.Directory.Store (RunSkip (..), SkipStage (TriggerStage), record
 import Shikigami.Execution.Identity (ExecutionRootId, newExecutionRootId)
 import Shikigami.Execution.Resources qualified as Resources
 import Shikigami.Execution.ResourcesStore (allocateRootForWorkflowTx)
-import Shikigami.Initiative.Intake (Disposition (..), disposition)
-import Shikigami.Initiative.Ledger qualified as Ledger
-import Shikigami.Initiative.Settings (InitiativeSettings, ObserverAllowance (..))
-import Shikigami.Initiative.Types (Candidate, CandidateFacts (..), Observed (..), SkipReason, candidateFacts, skipReasonText)
 import Shikigami.Inspection.Consumer (ConsumerInspection, withConsumerInspection)
 import Shikigami.Integration.ConsumerRuntime (consumerAppConfig, withConsumerApp)
 import Shikigami.Integration.Danwa qualified as Danwa
 import Shikigami.Log qualified as Log
 import Shikigami.Prelude hiding ((.=))
-import Shikigami.Telemetry.Metrics (ShikigamiMetrics, recordConsumerRecord, recordInitiativeCandidate)
+import Shikigami.Telemetry.Metrics (ShikigamiMetrics, recordConsumerRecord, recordStreamDisposition)
 import Shikigami.Trigger.Enqueue (enqueueRunJobTx, envelopeOccurredAt, integrationRunKey, runJobFromEnvelopeWithIdentity)
+import Shikigami.Trigger.Hook (PackDisposition (..), StreamCandidate (..), StreamDisposition (..), StreamEvaluation (..), StreamIntake, StreamSkip (..), noStreamIntake)
 import Shikigami.Trigger.Stream (IncludeAgentActors, matchesStreamWith)
 
 -- | Connection and durable poison-record target for one Kafka subscription.
@@ -181,9 +178,9 @@ data RecordDisposition
 type OnSupervisor = Maybe (Shibuya.Master, Shibuya.ProcessorId) -> IO ()
 
 -- | Subscribe to @activity.v1@ through the serial Shibuya Kafka adapter.
-subscribeActivityStream :: Log.Logger -> OnSupervisor -> ShikigamiMetrics -> AppEnv -> Directory.DirectoryHandle -> Maybe InitiativeSettings -> StreamConfig -> IncludeAgentActors -> [AgentDecl] -> (StreamHit -> IO ()) -> IO ()
-subscribeActivityStream logger onSupervisor metrics appEnv directory initiatives config@StreamConfig {deadLetterQueue} include agents onHit =
-  runSubscription logger onSupervisor "stream" metrics appEnv config $ processActivityRecordWithDirectory logger appEnv directory initiatives (recordInitiativeCandidate metrics) deadLetterQueue include agents onHit
+subscribeActivityStream :: Log.Logger -> OnSupervisor -> ShikigamiMetrics -> AppEnv -> Directory.DirectoryHandle -> StreamIntake -> StreamConfig -> IncludeAgentActors -> [AgentDecl] -> (StreamHit -> IO ()) -> IO ()
+subscribeActivityStream logger onSupervisor metrics appEnv directory intake config@StreamConfig {deadLetterQueue} include agents onHit =
+  runSubscription logger onSupervisor "stream" metrics appEnv config $ processActivityRecordWithDirectory logger appEnv directory intake (recordStreamDisposition metrics) deadLetterQueue include agents onHit
 
 -- | Subscribe to a public integration-event topic through the same durable
 -- acknowledgement boundary.
@@ -335,27 +332,27 @@ processActivityRecord ::
   KafkaInboundRecord ->
   IO RecordDisposition
 processActivityRecord logger appEnv =
-  processActivityRecordWithDirectory logger appEnv Directory.disabledDirectoryHandle Nothing (\_ _ -> pure ())
+  processActivityRecordWithDirectory logger appEnv Directory.disabledDirectoryHandle noStreamIntake (\_ _ _ -> pure ())
 
 processActivityRecordWithDirectory ::
   Log.Logger ->
   AppEnv ->
   Directory.DirectoryHandle ->
-  Maybe InitiativeSettings ->
-  (Text -> Maybe Text -> IO ()) ->
+  StreamIntake ->
+  (Text -> Text -> Maybe Text -> IO ()) ->
   QueueName ->
   IncludeAgentActors ->
   [AgentDecl] ->
   (StreamHit -> IO ()) ->
   KafkaInboundRecord ->
   IO RecordDisposition
-processActivityRecordWithDirectory logger appEnv directory initiatives onObservation queue include agents onHit record =
+processActivityRecordWithDirectory logger appEnv directory intake onObservation queue include agents onHit record =
   case integrationEventFromKafka record of
     Left err -> persistPoison appEnv queue record (Text.pack (show err))
     Right (event, delivery) ->
       case decodeJsonIntegrationEvent event of
         Left err -> persistPoison appEnv queue record (Text.pack (show err))
-        Right activity -> processActivity logger appEnv directory initiatives onObservation include agents onHit event (Just delivery) activity
+        Right activity -> processActivity logger appEnv directory intake onObservation include agents onHit event (Just delivery) activity
 
 -- | Process one raw public integration-event delivery.
 processIntegrationEventRecord ::
@@ -411,25 +408,25 @@ processDecodedActivityWithDirectory ::
   Maybe KafkaDeliveryRef ->
   IO RecordDisposition
 processDecodedActivityWithDirectory logger appEnv directory =
-  processDecodedActivityObserving logger appEnv directory Nothing (\_ _ -> pure ())
+  processDecodedActivityObserving logger appEnv directory noStreamIntake (\_ _ _ -> pure ())
 
 -- | The broker-free entry point with observer allowances in force.
 processDecodedActivityObserving ::
   Log.Logger ->
   AppEnv ->
   Directory.DirectoryHandle ->
-  Maybe InitiativeSettings ->
-  (Text -> Maybe Text -> IO ()) ->
+  StreamIntake ->
+  (Text -> Text -> Maybe Text -> IO ()) ->
   IncludeAgentActors ->
   [AgentDecl] ->
   (StreamHit -> IO ()) ->
   IntegrationEvent ->
   Maybe KafkaDeliveryRef ->
   IO RecordDisposition
-processDecodedActivityObserving logger appEnv directory initiatives onObservation include agents onHit event kafka =
+processDecodedActivityObserving logger appEnv directory intake onObservation include agents onHit event kafka =
   case decodeJsonIntegrationEvent event of
     Left err -> pure (TransientFailure (Text.pack (show err)))
-    Right activity -> processActivity logger appEnv directory initiatives onObservation include agents onHit event kafka activity
+    Right activity -> processActivity logger appEnv directory intake onObservation include agents onHit event kafka activity
 
 -- | When the envelope says it happened, or this moment plus a line saying the
 -- envelope did not say.
@@ -458,8 +455,8 @@ processActivity ::
   Log.Logger ->
   AppEnv ->
   Directory.DirectoryHandle ->
-  Maybe InitiativeSettings ->
-  (Text -> Maybe Text -> IO ()) ->
+  StreamIntake ->
+  (Text -> Text -> Maybe Text -> IO ()) ->
   IncludeAgentActors ->
   [AgentDecl] ->
   (StreamHit -> IO ()) ->
@@ -467,12 +464,12 @@ processActivity ::
   Maybe KafkaDeliveryRef ->
   ActivityEnvelope ->
   IO RecordDisposition
-processActivity logger appEnv directory initiatives onObservation include agents onHit event kafka activity = do
+processActivity logger appEnv directory intake onObservation include agents onHit event kafka activity = do
   -- Resolved before the transaction opens, because deciding it may need a clock
   -- and a log line and the handler runs inside Hasql.
   resolvedOccurredAt <- resolveOccurredAt logger activity
   receivedAt <- getCurrentTime
-  prepared <- prepareActivityHits directory initiatives resolvedOccurredAt receivedAt include agents activity
+  prepared <- prepareActivityHits directory intake resolvedOccurredAt receivedAt include agents activity
   attempt <-
     Exception.try @NotifierStartError $
       runAppIO appEnv $
@@ -525,7 +522,7 @@ processIntegrationEvent logger appEnv directory agents onHit event kafka payload
         runInboxTransaction Nothing PreferIntegrationMessageId event kafka (eventInboxHandler prepared)
   case attempt of
     Left storeStartupError -> pure (TransientFailure (Text.pack (show storeStartupError)))
-    Right result -> classifyInboxResult event (reportCommitted logger "events" (\_ _ -> pure ()) onHit) result
+    Right result -> classifyInboxResult event (reportCommitted logger "events" (\_ _ _ -> pure ()) onHit) result
 
 classifyInboxResult ::
   (Show storeError, Show inboxError) =>
@@ -618,19 +615,22 @@ logDisposition logger prefix = \case
 data PreparedTrigger hit
   = EnqueueTrigger !RunJob !hit
   | SkipTrigger !RunSkip
-  | -- | Pre-filtered out. Records one bounded row and enqueues nothing.
-    SkipObservation !RunJob !AgentPrincipal !UTCTime !(Either (SkipReason, ActivityId) (SkipReason, Observed))
-  | -- | Worth one evaluation: a root, a candidate row and a job become one fact.
-    EvaluateObservation !RunJob !hit !ExecutionRootId !Candidate !Resources.Envelope !UTCTime
+  | -- | The owning pack declined the record. Its bounded record commits and
+    -- nothing is enqueued.
+    SkipObservation !RunJob !Text !StreamSkip
+  | -- | Worth one evaluation: a root, the pack's record and a job become one fact.
+    EvaluateObservation !RunJob !hit !ExecutionRootId !Text !StreamEvaluation
 
 data CommittedTrigger hit
   = EnqueuedTrigger !hit
   | SkippedTrigger !RunSkip
-  | SkippedObservation !Text !Text
-  | -- | A candidate's root, row and job committed with the inbox row.
-    EvaluatingObservation !hit
-  | -- | The observer already holds a row for this activity, delivered under
-    -- another message id: the run it funded is already owned.
+  | -- | (pack, agent, reason)
+    SkippedObservation !Text !Text !Text
+  | -- | A candidate's root, the pack's record and the job committed with the
+    -- inbox row.
+    EvaluatingObservation !Text !hit
+  | -- | The pack already holds this observation, delivered under another
+    -- message id: the run it funded is already owned.
     AlreadyObserved
 
 -- | What the handler established, or why its transaction was condemned.
@@ -642,8 +642,8 @@ data Handled hit = Handled
 handled :: CommittedTrigger hit -> Handled hit
 handled outcome = Handled {outcome, failure = Nothing}
 
-prepareActivityHits :: Directory.DirectoryHandle -> Maybe InitiativeSettings -> UTCTime -> UTCTime -> IncludeAgentActors -> [AgentDecl] -> ActivityEnvelope -> IO [PreparedTrigger StreamHit]
-prepareActivityHits directory initiatives resolvedOccurredAt receivedAt include agents activity =
+prepareActivityHits :: Directory.DirectoryHandle -> StreamIntake -> UTCTime -> UTCTime -> IncludeAgentActors -> [AgentDecl] -> ActivityEnvelope -> IO [PreparedTrigger StreamHit]
+prepareActivityHits directory intake resolvedOccurredAt receivedAt include agents activity =
   traverse
     prepare
     [ agent
@@ -656,18 +656,20 @@ prepareActivityHits directory initiatives resolvedOccurredAt receivedAt include 
       let job = runJobFromEnvelopeWithIdentity resolvedOccurredAt UnresolvedLegacyIdentity agent activity
           hit = StreamHit {agentName = agent ^. #name, envelope = activity}
       admitted <- prepareTrigger directory "stream" agent job hit
-      observing admitted
+      observing agent admitted
 
     -- Applied after identity admission, so a paused agent stays a lifecycle skip
-    -- and an agent without an allowance keeps its exact job bytes.
-    observing = \case
-      prepared@(EnqueueTrigger job hit) -> case disposition initiatives resolvedOccurredAt receivedAt (job ^. #identity) activity of
-        NotObserving -> pure prepared
-        SkipEnvelope allowance reason -> pure (SkipObservation job allowance.principal receivedAt (Left (reason, activity ^. #activityId)))
-        SkipObserved allowance reason observed -> pure (SkipObservation job allowance.principal receivedAt (Right (reason, observed)))
-        Evaluate _ candidate envelope -> do
-          root <- newExecutionRootId
-          pure (EvaluateObservation job hit root candidate envelope receivedAt)
+    -- and an agent no pack observes for keeps its exact job bytes.
+    observing agent = \case
+      prepared@(EnqueueTrigger job hit) ->
+        case intake StreamCandidate {activity, agent, identity = job ^. #identity, occurredAt = resolvedOccurredAt, receivedAt} of
+          Nothing -> pure prepared
+          Just PackDisposition {pack, disposition} -> case disposition of
+            StreamOrdinary -> pure prepared
+            StreamSkipped skip -> pure (SkipObservation job pack skip)
+            StreamEvaluated evaluation -> do
+              root <- newExecutionRootId
+              pure (EvaluateObservation job hit root pack evaluation)
       other -> pure other
 
 -- | Queue sends and lifecycle refusals share the inbox transaction. A broker
@@ -756,37 +758,36 @@ commitTrigger = \case
   SkipTrigger runSkip -> do
     recordRunSkipTx runSkip
     pure (handled (SkippedTrigger runSkip))
-  SkipObservation job observer receivedAt skip -> do
-    Ledger.recordSkipTx observer receivedAt Nothing skip
-    pure (handled (SkippedObservation (agentNameText (job ^. #agentName)) (skipReasonText (either fst fst skip))))
-  EvaluateObservation job hit root candidate envelope receivedAt -> do
-    let facts = candidateFacts candidate
-        workflow = RunJob.runJobWorkflowId job
-    recorded <- Ledger.candidateRecordedTx facts.observer facts.observed.activity
+  SkipObservation job pack skip -> do
+    skip.record
+    pure (handled (SkippedObservation pack (agentNameText (job ^. #agentName)) skip.reason))
+  EvaluateObservation job hit root pack evaluation -> do
+    let workflow = RunJob.runJobWorkflowId job
+    recorded <- evaluation.alreadyOwned
     if recorded
       then pure (handled AlreadyObserved)
       else case resolveAgentIdentity (job ^. #identity) of
         Left reason -> pure (Handled AlreadyObserved (Just reason))
         Right creator ->
-          allocateRootForWorkflowTx root creator (job ^. #agentName) workflow Nothing envelope >>= \case
+          allocateRootForWorkflowTx root creator (job ^. #agentName) workflow Nothing evaluation.envelope >>= \case
             -- The allocation condemned the transaction; report it as a failure so
             -- the offset does not advance past a record nothing was committed for.
             Left refusal -> pure (Handled AlreadyObserved (Just ("evaluation root refused: " <> Text.pack (show refusal))))
             Right allocated -> do
-              Ledger.recordCandidateTx candidate workflow receivedAt
+              evaluation.record workflow
               _ <- enqueueRunJobTx (job & #executionRootId .~ Just allocated)
-              pure (handled (EvaluatingObservation hit))
+              pure (handled (EvaluatingObservation pack hit))
 
-reportCommitted :: Log.Logger -> Text -> (Text -> Maybe Text -> IO ()) -> (hit -> IO ()) -> CommittedTrigger hit -> IO ()
+reportCommitted :: Log.Logger -> Text -> (Text -> Text -> Maybe Text -> IO ()) -> (hit -> IO ()) -> CommittedTrigger hit -> IO ()
 reportCommitted logger prefix onObservation onHit = \case
   EnqueuedTrigger hit -> onHit hit
   AlreadyObserved -> pure ()
-  EvaluatingObservation hit -> do
-    onObservation "evaluating" Nothing
+  EvaluatingObservation pack hit -> do
+    onObservation pack "evaluating" Nothing
     onHit hit
-  SkippedObservation agentName reason -> do
-    onObservation "skipped" (Just reason)
-    Log.logInfo logger "initiative.skip" ["agent" .= agentName, "reason" .= reason]
+  SkippedObservation pack agentName reason -> do
+    onObservation pack "skipped" (Just reason)
+    Log.logInfo logger (prefix <> ".observation.skipped") ["pack" .= pack, "agent" .= agentName, "reason" .= reason]
   SkippedTrigger RunSkip {agentName, principalId, detail, reason, idempotencyKey} ->
     Log.logInfo
       logger

@@ -571,7 +571,7 @@ strictnessTests =
             attempt options environment = appConfigRunWith [structured] AdminRole options (Right []) (environmentSource bindingsFor (snapshot environment))
             valueOf run = maybe (assertFailure (Text.unpack run.standardError)) (pure . packSettingValue "probe.limits" . (.packSettings)) run.resolved
         fromEnvironment <- valueOf (attempt (optionsWith [] []) [("SHIKIGAMI_PROBE_LIMITS", "{\"calls\":3}")])
-        fromEnvironment @?= Just (Aeson.object ["calls" Aeson..= (3 :: Int)])
+        fromEnvironment @?= Just (Aeson.object [("calls", Aeson.Number 3)])
         unset <- valueOf (attempt (optionsWith [] []) [])
         unset @?= Nothing
         (attempt (optionsWith [] []) [("SHIKIGAMI_PROBE_LIMITS", "[1,2]")]).exitCode @?= resolutionExitCode,

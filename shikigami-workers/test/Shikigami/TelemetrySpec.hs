@@ -26,7 +26,6 @@ import Shikigami.Telemetry.Metrics
   ( newShikigamiMetrics,
     recordConsumerRecord,
     recordInitiativeAdmission,
-    recordInitiativeCandidate,
     recordInitiativeProposal,
     recordInitiativeRefusal,
     recordQueueDepth,
@@ -35,6 +34,7 @@ import Shikigami.Telemetry.Metrics
     recordRunFailed,
     recordRunRetried,
     recordRunStarted,
+    recordStreamDisposition,
     recordWatchdogAge,
     shikigamiInstrumentationLibrary,
   )
@@ -67,7 +67,7 @@ tests fixture =
         recordRunDeadLettered metrics "heartbeat" "schedule"
         recordQueueDepth metrics 3
         recordConsumerRecord metrics "activity.v1"
-        recordInitiativeCandidate metrics "skipped" (Just "excerpt-too-short")
+        recordStreamDisposition metrics "initiative" "skipped" (Just "excerpt-too-short")
         recordInitiativeProposal metrics "pending"
         recordInitiativeAdmission metrics "launched"
         recordInitiativeRefusal metrics "evaluations-exhausted"
@@ -83,7 +83,7 @@ tests fixture =
             "shikigami.runs.dead_lettered",
             "shikigami.queue.depth",
             "shikigami.consumer.records",
-            "shikigami.initiatives.candidates",
+            "shikigami.stream.dispositions",
             "shikigami.initiatives.proposals",
             "shikigami.initiatives.admissions",
             "shikigami.initiatives.refusals"

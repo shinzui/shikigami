@@ -15,7 +15,7 @@ module Shikigami.Telemetry.Metrics
     recordRunDeadLettered,
     recordQueueDepth,
     recordConsumerRecord,
-    recordInitiativeCandidate,
+    recordStreamDisposition,
     recordInitiativeProposal,
     recordInitiativeAdmission,
     recordInitiativeRefusal,
@@ -60,7 +60,7 @@ data ShikigamiMetrics = ShikigamiMetrics
     runsDeadLettered :: !(Counter Int64),
     queueDepth :: !(Gauge Int64),
     consumerRecords :: !(Counter Int64),
-    initiativeCandidates :: !(Counter Int64),
+    streamDispositions :: !(Counter Int64),
     initiativeProposals :: !(Counter Int64),
     initiativeAdmissions :: !(Counter Int64),
     watchdogSweeps :: !(Counter Int64),
@@ -92,7 +92,7 @@ newShikigamiMetrics meter = liftIO do
   runsDeadLettered <- counter "shikigami.runs.dead_lettered" "Failed run attempts sent to the dead-letter queue."
   queueDepth <- meterCreateGaugeInt64 meter "shikigami.queue.depth" (Just "{job}") (Just "Total run jobs queued or in flight.") defaultAdvisoryParameters
   consumerRecords <- counter "shikigami.consumer.records" "Kafka records delivered to a Shikigami processor."
-  initiativeCandidates <- counter "shikigami.initiatives.candidates" "Observed activity recorded for an observer, by verdict."
+  streamDispositions <- counter "shikigami.stream.dispositions" "Matched stream records a flow pack's hook evaluated or skipped, by pack and verdict."
   initiativeProposals <- counter "shikigami.initiatives.proposals" "Unrequested proposals recorded or resolved, by status."
   initiativeAdmissions <- counter "shikigami.initiatives.admissions" "Admission stages reached under standing policies."
   initiativeRefusals <- counter "shikigami.initiatives.refusals" "Attention, creation and admission refusals, by kind."
@@ -101,7 +101,7 @@ newShikigamiMetrics meter = liftIO do
   watchdogRefusals <- counter "shikigami.watchdog.refusals" "Watchdog observation and delivery refusals."
   recordEvents <- meterCreateCounterInt64 meter "shikigami.record.events" (Just "{event}") (Just "Action record events by kind and decision; append_failed counts refused unrecorded actions.") defaultAdvisoryParameters
   watchdogSweepAge <- meterCreateGaugeInt64 meter "shikigami.watchdog.sweep.age" (Just "s") (Just "Database-clock age of the last completed scoped sweep; absent before completion.") defaultAdvisoryParameters
-  pure ShikigamiMetrics {watchdogSweeps, watchdogFindings, watchdogRefusals, watchdogSweepAge, runsStarted, runsCompleted, runsFailed, runsRetried, runsDeadLettered, queueDepth, consumerRecords, initiativeCandidates, initiativeProposals, initiativeAdmissions, initiativeRefusals, recordEvents}
+  pure ShikigamiMetrics {watchdogSweeps, watchdogFindings, watchdogRefusals, watchdogSweepAge, runsStarted, runsCompleted, runsFailed, runsRetried, runsDeadLettered, queueDepth, consumerRecords, streamDispositions, initiativeProposals, initiativeAdmissions, initiativeRefusals, recordEvents}
   where
     counter name description =
       meterCreateCounterInt64 meter name (Just "{run}") (Just description) defaultAdvisoryParameters
@@ -135,9 +135,11 @@ recordConsumerRecord metrics topic =
 
 -- | Closed tags only. No proposal, policy or activity identifier, excerpt or error
 -- text belongs on these instruments.
-recordInitiativeCandidate :: (MonadIO m) => ShikigamiMetrics -> Text -> Maybe Text -> m ()
-recordInitiativeCandidate metrics verdict reason =
-  liftIO (counterAdd metrics.initiativeCandidates 1 (attributes (attr "verdict" verdict <> maybe mempty (attr "skip.reason") reason)))
+-- | One matched stream record a pack's hook had a say over. Bounded tags
+-- only: the pack's name, the verdict and the pack's own skip reason.
+recordStreamDisposition :: (MonadIO m) => ShikigamiMetrics -> Text -> Text -> Maybe Text -> m ()
+recordStreamDisposition metrics pack verdict reason =
+  liftIO (counterAdd metrics.streamDispositions 1 (attributes (attr "pack" pack <> attr "verdict" verdict <> maybe mempty (attr "skip.reason") reason)))
 
 recordInitiativeProposal :: (MonadIO m) => ShikigamiMetrics -> Text -> m ()
 recordInitiativeProposal metrics status =

@@ -155,11 +155,11 @@ This only deletes `skipped` and `not-actionable` candidates, never an `evaluatin
 
 | Instrument | Attributes |
 | --- | --- |
-| `shikigami.initiatives.candidates` | `verdict`, `skip.reason` |
+| `shikigami.stream.dispositions` | `pack` (`initiative`), `verdict`, `skip.reason` |
 | `shikigami.initiatives.proposals` | `status` |
 | `shikigami.initiatives.admissions` | `stage` |
 | `shikigami.initiatives.refusals` | `refusal.kind` |
 
 No attribute carries an identifier, excerpt or error text. Alert on `refusals` and on
-`proposals inspect --fail-when-exhausted`. A jump in `candidates` with `skip.reason` of
+`proposals inspect --fail-when-exhausted`. A jump in `shikigami.stream.dispositions` with `skip.reason` of
 `decision-refused` suggests a model answering outside the offered choices.

@@ -3,17 +3,20 @@
 module Shikigami.Initiative.Intake
   ( Disposition (..),
     disposition,
+    streamDisposition,
   )
 where
 
 import Data.Time (UTCTime)
-import Shikigami.Activity (ActivityEnvelope)
+import Shikigami.Activity (ActivityEnvelope (..))
 import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.Execution.Resources (Envelope)
+import Shikigami.Initiative.Ledger qualified as Ledger
 import Shikigami.Initiative.Prefilter (prefilter)
 import Shikigami.Initiative.Settings
 import Shikigami.Initiative.Source (observe)
 import Shikigami.Initiative.Types
+import Shikigami.Trigger.Hook (StreamCandidate (..), StreamDisposition (..), StreamEvaluation (..), StreamSkip (..))
 
 data Disposition
   = -- | No settings, or no allowance for this identity: the agent is not an
@@ -39,3 +42,27 @@ disposition settings occurredAt receivedAt identity envelope = case settings of
       Right observed -> case prefilter allowance observed of
         Left reason -> SkipObserved allowance reason observed
         Right candidate -> Evaluate allowance candidate (evaluationEnvelopeAt receivedAt allowance.evaluation)
+
+-- | 'disposition' as the kernel's stream hook answers it: the same verdict,
+-- with the ledger transactions the consumer commits for it.
+streamDisposition :: Maybe InitiativeSettings -> StreamCandidate -> StreamDisposition
+streamDisposition settings candidate =
+  case disposition settings candidate.occurredAt candidate.receivedAt candidate.identity candidate.activity of
+    NotObserving -> StreamOrdinary
+    SkipEnvelope allowance reason -> skipped allowance (Left (reason, candidate.activity.activityId))
+    SkipObserved allowance reason observed -> skipped allowance (Right (reason, observed))
+    Evaluate _ worthwhile envelope ->
+      let facts = candidateFacts worthwhile
+       in StreamEvaluated
+            StreamEvaluation
+              { envelope,
+                alreadyOwned = Ledger.candidateRecordedTx facts.observer facts.observed.activity,
+                record = \workflow -> Ledger.recordCandidateTx worthwhile workflow candidate.receivedAt
+              }
+  where
+    skipped allowance skip =
+      StreamSkipped
+        StreamSkip
+          { reason = skipReasonText (either fst fst skip),
+            record = Ledger.recordSkipTx allowance.principal candidate.receivedAt Nothing skip
+          }

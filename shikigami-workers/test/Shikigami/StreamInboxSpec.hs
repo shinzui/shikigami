@@ -36,9 +36,11 @@ import Shikigami.Directory.Store qualified as DirectoryStore
 import Shikigami.Execution.Identity (executionRootIdText)
 import Shikigami.Execution.Quantity (parseResourceAmount)
 import Shikigami.Execution.Resources (Dimension (..), Envelope (..), Limit (..))
+import Shikigami.Initiative.Intake (streamDisposition)
 import Shikigami.Initiative.Settings (InitiativeSettings)
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
+import Shikigami.Pack.Setting (noPackSettings)
 import Shikigami.RunJobs qualified as RunJobs
 import Shikigami.Trigger.Consumer
   ( DeadLetterId (..),
@@ -55,6 +57,7 @@ import Shikigami.Trigger.Consumer
     processDecodedIntegrationEvent,
   )
 import Shikigami.Trigger.Enqueue (enqueueAddressedRunWithKey, ensureRunQueue, runQueueName)
+import Shikigami.Trigger.Hook (StreamHook (..), StreamIntake, streamIntake)
 import Shikigami.Trigger.RequestKey qualified as Addressed
 import Shikigami.Trigger.Schedule (parseCron)
 import Shikigami.Trigger.Stream (IncludeAgentActors (ExcludeAgentActors, IncludeAgentActors))
@@ -174,7 +177,7 @@ tests databaseFixture =
           let event = chatEventBy agentActorFixture "fixture/chat" "chat-2" "act-chat-2" (Aeson.object ["text" .= longReport])
           _ <- observed appEnv directory (const (pure ())) event
           assertEqual "the feedback guard matches nothing" [] =<< readCandidates pool
-          assertEqual "lifted guard" Enqueued =<< processDecodedActivityObserving Log.silentLogger appEnv directory (Just observerSettings) (\_ _ -> pure ()) IncludeAgentActors [observerAgent] (const (pure ())) event {messageId = "chat-2b"} (Just deliveryRef)
+          assertEqual "lifted guard" Enqueued =<< processDecodedActivityObserving Log.silentLogger appEnv directory observerIntake (\_ _ _ -> pure ()) IncludeAgentActors [observerAgent] (const (pure ())) event {messageId = "chat-2b"} (Just deliveryRef)
           assertEqual "no job" [] =<< readRunJobs pool
           assertEqual "agent skip without a subject" [("act-chat-2", "skipped", Just "agent-actor", Nothing, Nothing)] =<< readCandidates pool,
       testCase "a source no adapter recognizes is a bounded skip without a subject" do
@@ -182,7 +185,7 @@ tests databaseFixture =
           ensureQueue pool
           directory <- observerDirectory
           let anySource = observerAgent {trigger = Stream {match = StreamMatch {verb = Nothing, source = Nothing, subjectType = Nothing, verbs = []}}}
-          assertEqual "committed" Enqueued =<< processDecodedActivityObserving Log.silentLogger appEnv directory (Just observerSettings) (\_ _ -> pure ()) ExcludeAgentActors [anySource] (const (pure ())) (chatEventBy humanActorFixture "external/slack" "chat-6" "act-chat-6" (Aeson.object ["text" .= longReport])) (Just deliveryRef)
+          assertEqual "committed" Enqueued =<< processDecodedActivityObserving Log.silentLogger appEnv directory observerIntake (\_ _ _ -> pure ()) ExcludeAgentActors [anySource] (const (pure ())) (chatEventBy humanActorFixture "external/slack" "chat-6" "act-chat-6" (Aeson.object ["text" .= longReport])) (Just deliveryRef)
           assertEqual "no job" [] =<< readRunJobs pool
           assertEqual "skip" [("act-chat-6", "skipped", Just "unsupported-source", Nothing, Nothing)] =<< readCandidates pool,
       testCase "a bug report from an observer commits one inbox row, root origin, root, candidate and job together" do
@@ -239,7 +242,7 @@ tests databaseFixture =
         withFixture databaseFixture \appEnv pool -> do
           ensureQueue pool
           directory <- directoryWith Active
-          assertEqual "committed" Enqueued =<< processDecodedActivityObserving Log.silentLogger appEnv directory (Just observerSettings) (\_ _ -> pure ()) ExcludeAgentActors [streamAgent {identity = Just IdentityDecl {principal = declarationCoordinate "agent_risk"}}] (const (pure ())) activityEvent (Just deliveryRef)
+          assertEqual "committed" Enqueued =<< processDecodedActivityObserving Log.silentLogger appEnv directory observerIntake (\_ _ _ -> pure ()) ExcludeAgentActors [streamAgent {identity = Just IdentityDecl {principal = declarationCoordinate "agent_risk"}}] (const (pure ())) activityEvent (Just deliveryRef)
           jobs <- readRunJobs pool
           assertEqual "no root" [Nothing] (map (.executionRootId) jobs)
           assertEqual "no candidate" 0 =<< countRows pool "shikigami.initiative_candidates",
@@ -331,7 +334,7 @@ tests databaseFixture =
 
 observed :: AppEnv -> DirectoryHandle -> (StreamHit -> IO ()) -> IntegrationEvent -> IO RecordDisposition
 observed appEnv directory onHit event =
-  processDecodedActivityObserving Log.silentLogger appEnv directory (Just observerSettings) (\_ _ -> pure ()) ExcludeAgentActors [observerAgent] onHit event (Just deliveryRef)
+  processDecodedActivityObserving Log.silentLogger appEnv directory observerIntake (\_ _ _ -> pure ()) ExcludeAgentActors [observerAgent] onHit event (Just deliveryRef)
 
 observerDirectory :: IO DirectoryHandle
 observerDirectory = do
@@ -348,6 +351,11 @@ observerAgent =
       behavior = Flow {name = declarationCoordinate "propose-work"},
       identity = Just IdentityDecl {principal = declarationCoordinate "agent_proposer"}
     }
+
+-- | The observer allowances as the consumer consults them: the initiative
+-- disposition behind the kernel's stream hook.
+observerIntake :: StreamIntake
+observerIntake = streamIntake "initiative" (const True) noPackSettings (StreamHook (\_ -> streamDisposition (Just observerSettings)))
 
 observerSettings :: InitiativeSettings
 observerSettings =
