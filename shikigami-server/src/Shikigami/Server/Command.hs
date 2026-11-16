@@ -95,7 +95,6 @@ import Shikigami.Server.Command.Runs (runRunsShow)
 import Shikigami.Server.Command.StubKanmon (runStubKanmonCmd)
 import Shikigami.Server.Command.StubKawa (runStubKawaCmd)
 import Shikigami.Server.Command.Validate (runValidate)
-import Shikigami.Server.Command.Watchdog (watchdogVerb)
 import Shikigami.Server.Command.Workers (runWorkersControl, runWorkersInspect, runWorkersInterrupt, runWorkersSend)
 import Shikigami.StateRevision (StateRevision, parseRevision)
 import Shikigami.Trigger.RequestKey qualified as Addressed
@@ -231,10 +230,9 @@ adminSubcommandsWith packs =
   where
     mounted AdminVerb {name, parser} = (\run -> (run . adminContext name, [])) <$> parser
 
--- | The verbs of the use cases still compiled into the core, then each
--- composed pack's, in composition order (docs/adr/0129).
+-- | Each composed pack's verbs, in composition order (docs/adr/0129).
 packVerbs :: [FlowPack] -> [AdminVerb]
-packVerbs packs = watchdogVerb : concatMap (.adminVerbs) packs
+packVerbs = concatMap (.adminVerbs)
 
 -- | What a pack's verb is given: the reads an operator verb needs, and the one
 -- way to the store, which verifies the schema before it opens.

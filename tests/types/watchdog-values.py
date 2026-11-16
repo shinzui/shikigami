@@ -10,6 +10,11 @@ plan = json.loads((ROOT / "dist-newstyle/cache/plan.json").read_text())
 units = [entry["id"] for entry in plan["install-plan"]
          if entry["pkg-name"] == "shikigami-core" and entry.get("component-name") == "lib"]
 assert len(units) == 1, units
+# The watchdog vocabulary lives in its flow pack; the probes compile against
+# the pack's bodies and library components beside the core.
+pack_units = [entry["id"] for entry in plan["install-plan"]
+              if entry["pkg-name"] == "flow-pack-watchdog" and entry.get("component-name") in ("lib:bodies", "lib")]
+assert len(pack_units) == 2, pack_units
 HEADER = '''{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE OverloadedRecordDot #-}
@@ -20,11 +25,11 @@ import Data.Coerce (coerce)
 import Data.Text (Text)
 import GHC.Generics qualified as Generics
 import Shikigami.Agent.Principal (AgentIdentity)
-import Shikigami.Watchdog.Types qualified as Types
-import Shikigami.Watchdog.Grant qualified as Grant
-import Shikigami.Watchdog.Classify qualified as Classify
-import Shikigami.Watchdog.Episode qualified as Episode
-import Shikigami.Program.Decision.Drift qualified as Drift
+import FlowPack.Watchdog.Types qualified as Types
+import FlowPack.Watchdog.Grant qualified as Grant
+import FlowPack.Watchdog.Classify qualified as Classify
+import FlowPack.Watchdog.Episode qualified as Episode
+import FlowPack.Watchdog.Program.Drift qualified as Drift
 import Data.List.NonEmpty (NonEmpty)
 '''
 POSITIVE = '''
@@ -51,7 +56,7 @@ with tempfile.TemporaryDirectory(prefix="shikigami-watchdog-values-") as directo
     source = Path(directory) / "WatchdogBoundary.hs"
     def compile(body):
         source.write_text(HEADER + body)
-        return subprocess.run(["cabal", "exec", "--", "ghc", "-fno-code", "-package-id", units[0], str(source)],
+        return subprocess.run(["cabal", "exec", "--", "ghc", "-fno-code", "-package-id", units[0], *[flag for unit in pack_units for flag in ("-package-id", unit)], str(source)],
                               cwd=ROOT, capture_output=True, text=True, timeout=45)
     result = compile(POSITIVE)
     assert result.returncode == 0, (result.stdout, result.stderr)

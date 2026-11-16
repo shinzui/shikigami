@@ -239,8 +239,7 @@ were last computed on October 29 and do not include these.
 
 ## Watchdog extension (2026-11-06)
 
-`Watchdog`, `Program.Decision.Drift`, `Flow.Observe`, `Flow.Watchdog`, the
-watchdog metrics/sampler and `Server.Command.Watchdog` map to
+The watchdog, now the flow pack `packs/flow-pack-watchdog` (`FlowPack.Watchdog.*`), maps to
 [CAP-32](capabilities/active-work-watchdog.md). Inspection and counters extend the
 existing worker and administrative binaries. The `objectives` command was absent
 from the older administrative table; it is now linked to its owning guide.

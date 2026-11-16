@@ -34,7 +34,6 @@ let adminVerbs =
       , [ "workers" ]
       , [ "objectives" ]
       , [ "mandates" ]
-      , [ "watchdog" ]
       , [ "record" ]
       , [ "record", "list" ]
       ]

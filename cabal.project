@@ -8,6 +8,7 @@ packages:
   shikigami-workers
   packs/flow-pack-examples
   packs/flow-pack-initiative
+  packs/flow-pack-watchdog
   packs/flow-pack-practice-review
   packs/examples-distribution
   packs/kikan-shikigami

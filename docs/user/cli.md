@@ -44,9 +44,6 @@ shikigami workers inspect <SESSION> [--json] [--after <POSITION>] [--limit <N>]
 shikigami workers send|interrupt|cancel|transfer|reconcile|reconcile-checkpoint|integrate ...
 shikigami objectives create|inspect|history|command ...
 shikigami objectives trackers bind|command|inspect|proposals|deliveries|operation ...
-shikigami watchdog inspect [--agents DIR] [--grace SECONDS] [--fail-when-overdue] [--json]
-shikigami watchdog episodes [--open] [--objective ID] [--after ID] [--limit N] [--json]
-shikigami watchdog findings EPISODE_ID [--after ID] [--limit N] [--json]
 ```
 
 A use case that ships as a flow pack adds its verbs to the admin command of a distribution
@@ -55,6 +52,9 @@ composed with it. `kikan-shikigami` has every command above and:
 ```text
 kikan-shikigami proposals inspect|list|candidates|admissions|prune ...
 kikan-shikigami proposals policy install|list|revoke ...
+kikan-shikigami watchdog inspect [--agents DIR] [--grace SECONDS] [--fail-when-overdue] [--json]
+kikan-shikigami watchdog episodes [--open] [--objective ID] [--after ID] [--limit N] [--json]
+kikan-shikigami watchdog findings EPISODE_ID [--after ID] [--limit N] [--json]
 ```
 
 

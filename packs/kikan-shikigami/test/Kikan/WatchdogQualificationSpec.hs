@@ -19,6 +19,12 @@ import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Time (addUTCTime, getCurrentTime)
 import FlowPack.Initiative.Fixture.Proposing qualified as P
+import FlowPack.Watchdog.Grant
+import FlowPack.Watchdog.Inspection
+import FlowPack.Watchdog.Observation
+import FlowPack.Watchdog.Observation.Read
+import FlowPack.Watchdog.Store qualified as Ledger
+import FlowPack.Watchdog.Types
 import Hasql.Transaction qualified as Tx
 import Keiro.Outbox qualified as Outbox
 import Keiro.Workflow
@@ -55,11 +61,6 @@ import Shikigami.Sink.Intent (SinkIntent (..), decodeSinkIntentEvent)
 import Shikigami.StateRevision (advanceRevision, initialRevision)
 import Shikigami.Trigger.Schedule (CatchUpPolicy (SkipMissed), parseCron)
 import Shikigami.Trigger.Scheduler (SchedulerEnv (..), runSchedulerTimerWorker)
-import Shikigami.Watchdog.Grant
-import Shikigami.Watchdog.Inspection
-import Shikigami.Watchdog.Observation
-import Shikigami.Watchdog.Store qualified as Ledger
-import Shikigami.Watchdog.Types
 import Shikigami.WorkerSession.Capability qualified as Workers
 import Shikigami.WorkerSession.Store qualified as Sessions
 import Shikigami.WorkerSession.Types

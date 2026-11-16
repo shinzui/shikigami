@@ -193,12 +193,10 @@ library
     Shikigami.Flow.DeclaredTool
     Shikigami.Flow.Delegate
     Shikigami.Flow.Objectives
-    Shikigami.Flow.Observe
     Shikigami.Flow.Pack
     Shikigami.Flow.Routing
     Shikigami.Flow.Sdk
     Shikigami.Flow.Sdk.Program
-    Shikigami.Flow.Watchdog
     Shikigami.Flow.Workers
     Shikigami.FormatVersion
     Shikigami.Generated.Conformance
@@ -297,7 +295,6 @@ library
     Shikigami.Program.Decision
     Shikigami.Program.Decision.Adaptive
     Shikigami.Program.Decision.Confidence
-    Shikigami.Program.Decision.Drift
     Shikigami.Program.Decision.Registry
     Shikigami.Program.DecisionRunner
     Shikigami.Program.Registry
@@ -351,19 +348,6 @@ library
     Shikigami.Trust.LocalOperator.Grant
     Shikigami.Trust.Runtime
     Shikigami.Trust.Tier
-    Shikigami.Watchdog.Admission
-    Shikigami.Watchdog.Classify
-    Shikigami.Watchdog.Delivery
-    Shikigami.Watchdog.Drift
-    Shikigami.Watchdog.Episode
-    Shikigami.Watchdog.Grant
-    Shikigami.Watchdog.Inspection
-    Shikigami.Watchdog.Ledger
-    Shikigami.Watchdog.Observation
-    Shikigami.Watchdog.Settings
-    Shikigami.Watchdog.Store
-    Shikigami.Watchdog.Types
-    Shikigami.Watchdog.Waiting
     Shikigami.WorkerSession.Capability
     Shikigami.WorkerSession.Catalog
     Shikigami.WorkerSession.Checkpoint
@@ -479,7 +463,6 @@ library
     Shikigami.RunJobs.Generated.QueueCodec
     Shikigami.RunJobs.Generated.QueuePolicy
     Shikigami.Sink.Auth.Internal
-    Shikigami.Watchdog.Store.Internal
     Shikigami.WorkerSession.Bindings
     Shikigami.WorkerSession.CheckpointAuthority
     Shikigami.WorkerSessionLifecycle.BehaviorHoles
@@ -623,12 +606,19 @@ library flow-sdk
     Shikigami.Agent.Name,
     Shikigami.Agent.Principal,
     Shikigami.Agent.RunJob,
+    Shikigami.Coordination.Observation,
     Shikigami.Decision.Contract,
     Shikigami.Decision.ModelAlias,
     Shikigami.Duration,
+    Shikigami.Execution.Attempt,
     Shikigami.Execution.Coordinate,
     Shikigami.Execution.Identity,
+    Shikigami.Execution.Observation,
+    Shikigami.Execution.Progress,
+    Shikigami.Execution.Quantity,
     Shikigami.Execution.Resources,
+    Shikigami.Execution.RootObservation,
+    Shikigami.Execution.Transcript,
     Shikigami.Flow.Decision,
     Shikigami.Flow.Delegate,
     Shikigami.Flow.Objectives,
@@ -638,6 +628,7 @@ library flow-sdk
     Shikigami.FormatVersion,
     Shikigami.Objective.Command,
     Shikigami.Objective.Keys,
+    Shikigami.Objective.Observation,
     Shikigami.Objective.Operation,
     Shikigami.Objective.Types,
     Shikigami.Prelude,
@@ -645,7 +636,13 @@ library flow-sdk
     Shikigami.Program.Decision.Confidence,
     Shikigami.Repository,
     Shikigami.Router.Decision,
+    Shikigami.Sink.Types,
+    Shikigami.Sink.Validate,
     Shikigami.StateRevision,
+    Shikigami.WorkerSession.Observation,
+    Shikigami.WorkerSession.Types,
+    Shikigami.Workspace.Process,
+    Shikigami.Workspace.ProcessObservation,
 
 -- The pack SDK: what a pack's interpreter may import in addition. Only a
 -- pack's main library depends on it; IOE and Store are nameable here and
@@ -658,11 +655,15 @@ library pack-sdk
     shikigami-core,
 
   reexported-modules:
+    Shikigami.Agent.Approval.Workflow,
+    Shikigami.Agent.Loader,
     Shikigami.Agent.Run.Key,
+    Shikigami.Agent.Workflow.Name,
     Shikigami.App,
+    Shikigami.Approval.Observation,
     Shikigami.Directory,
-    Shikigami.Execution.Quantity,
     Shikigami.Execution.ResourcesStore,
+    Shikigami.ExecutionDriver.Generated.WorkflowRuntime,
     Shikigami.Memory.Access,
     Shikigami.Memory.Scope,
     Shikigami.Objective.Association,
@@ -674,6 +675,8 @@ library pack-sdk
     Shikigami.Sink.Intent,
     Shikigami.Trigger.Enqueue,
     Shikigami.Trigger.RequestKey,
+    Shikigami.Trigger.Schedule,
+    Shikigami.Workspace.Types,
 
 -- Host adapters of the local-operator tier: the process launcher, the
 -- worktree provider and the checkout resolver. The domain library links no
@@ -743,7 +746,6 @@ test-suite shikigami-core-test
     Shikigami.DelegationBatchSpec
     Shikigami.DirectorySpec
     Shikigami.DirectoryValueSpec
-    Shikigami.DriftProgramSpec
     Shikigami.EnqueueHardeningSpec
     Shikigami.ExecutionPolicySpec
     Shikigami.ExecutionPositionSpec
@@ -784,9 +786,6 @@ test-suite shikigami-core-test
     Shikigami.SinkHonestySpec
     Shikigami.SinkIntentSpec
     Shikigami.TypeSafeDecisionSpec
-    Shikigami.WatchdogClassifySpec
-    Shikigami.WatchdogDriftCadenceSpec
-    Shikigami.WatchdogTypesSpec
     Shikigami.WireCompatSpec
     Shikigami.WorkerSessionPositionSpec
     Shikigami.WorkspaceActionProofSpec
@@ -911,12 +910,6 @@ test-suite shikigami-core-postgres-test
     Shikigami.SinkDeliverySpec
     Shikigami.SpikeWorkflowSpec
     Shikigami.TypeSafeDecisionWorkflowSpec
-    Shikigami.WatchdogClassifySpec
-    Shikigami.WatchdogDriftSpec
-    Shikigami.WatchdogInspectionSpec
-    Shikigami.WatchdogObservationSpec
-    Shikigami.WatchdogStoreSpec
-    Shikigami.WatchdogSweepSpec
     Shikigami.WorkerSessionCapabilitySpec
     Shikigami.WorkerSessionHandoffSpec
     Shikigami.WorkerSessionSpec

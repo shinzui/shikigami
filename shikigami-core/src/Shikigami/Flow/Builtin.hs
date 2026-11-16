@@ -33,12 +33,10 @@ import Shikigami.Flow.DeclaredTool qualified as DeclaredTool
 import Shikigami.Flow.Delegate qualified as Delegate
 import Shikigami.Flow.Pack
 import Shikigami.Flow.Routing qualified as Routing
-import Shikigami.Flow.Watchdog (sweepAgeGauge, watchdogSweepFlow)
 import Shikigami.Program.Decision.Registry (builtinDecisionPrograms, builtinRetainedCodecs)
 import Shikigami.Program.Registry (programRegistry)
 import Shikigami.Router.Decision (RouteDecision (..), RouteOutcome (..), RouteSelection (..))
 import Shikigami.RuntimePolicy
-import Shikigami.Watchdog.Admission (watchdogScheduleHook)
 
 -- | The one pack the stock roles compose.
 builtinPack :: FlowPack
@@ -50,12 +48,9 @@ builtinPack =
       retainedCodecs = builtinRetainedCodecs,
       tasks = programRegistry,
       settings = [],
-      -- The watchdog is still compiled into the core, so the builtin pack
-      -- carries its schedule hook until it moves (plan 131, M5).
-      triggers = noTriggerHooks {schedule = Just watchdogScheduleHook},
+      triggers = noTriggerHooks,
       adminVerbs = [],
-      -- Likewise its sweep-age gauge.
-      gauges = [sweepAgeGauge]
+      gauges = []
     }
 
 -- | The builtin pack alone, composed. It cannot fail for a reviewed build, so
@@ -75,7 +70,6 @@ builtinFlows =
           lifecycle = LifecycleDiagram "flowchart LR\n Admit --> Attempt --> Settle" []
         }
       runDeclaredToolFlow,
-    watchdogSweepFlow,
     kernelCapabilityFlow
       FlowDef
         { name = declarationCoordinate "adaptive-delivery",

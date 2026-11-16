@@ -1,0 +1,9 @@
+decision-prepare-watchdog-drift
+decision-result-watchdog-drift
+emit-signals-watchdog-deliver
+watchdog-close
+watchdog-drift-record
+watchdog-grant
+watchdog-observe
+watchdog-open
+watchdog-record

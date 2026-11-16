@@ -47,7 +47,6 @@ import Shikigami.DelegationBatchSpec qualified as DelegationBatchSpec
 import Shikigami.Directory (disabledDirectoryHandle)
 import Shikigami.DirectorySpec qualified as DirectorySpec
 import Shikigami.DirectoryValueSpec qualified as DirectoryValueSpec
-import Shikigami.DriftProgramSpec qualified as DriftProgramSpec
 import Shikigami.EnqueueHardeningSpec qualified as EnqueueHardeningSpec
 import Shikigami.ExecutionPolicySpec qualified as ExecutionPolicySpec
 import Shikigami.ExecutionPositionSpec qualified as ExecutionPositionSpec
@@ -101,9 +100,6 @@ import Shikigami.SinkIntentSpec qualified as SinkIntentSpec
 import Shikigami.Trigger.Schedule (isDue, nextDue, parseCron)
 import Shikigami.Trigger.Stream (IncludeAgentActors (IncludeAgentActors), matchesStream, matchesStreamWith)
 import Shikigami.TypeSafeDecisionSpec qualified as TypeSafeDecisionSpec
-import Shikigami.WatchdogClassifySpec qualified as WatchdogClassifySpec
-import Shikigami.WatchdogDriftCadenceSpec qualified as WatchdogDriftCadenceSpec
-import Shikigami.WatchdogTypesSpec qualified as WatchdogTypesSpec
 import Shikigami.WireCompatSpec qualified as WireCompatSpec
 import Shikigami.WorkerSessionPositionSpec qualified as WorkerSessionPositionSpec
 import Shikigami.WorkspaceActionProofSpec qualified as WorkspaceActionProofSpec
@@ -131,10 +127,6 @@ main =
           WorkspaceActionProofSpec.tests,
           AgentLoaderSpec.tests,
           ApprovalNotificationSpec.tests,
-          WatchdogTypesSpec.tests,
-          WatchdogClassifySpec.tests,
-          DriftProgramSpec.tests,
-          WatchdogDriftCadenceSpec.tests,
           ObjectiveSpec.tests,
           MandateSpec.tests,
           AdaptiveProposalSpec.tests,

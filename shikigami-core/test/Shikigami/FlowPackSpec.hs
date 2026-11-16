@@ -28,9 +28,9 @@ tests =
           ["Examples", "two words", "-leading", "trailing-", "double--hyphen", "snake_case", Text.replicate 65 "a"],
       testCase "the builtin pack composes, and its flows are found with their pack" do
         registeredPacks builtinFlowRegistry @?= [packName "builtin"]
-        case lookupFlow builtinFlowRegistry (declarationCoordinate "watchdog-sweep") of
+        case lookupFlow builtinFlowRegistry (declarationCoordinate "adaptive-delivery") of
           Just entry -> entry.pack @?= packName "builtin"
-          Nothing -> assertFailure "watchdog-sweep is a builtin flow"
+          Nothing -> assertFailure "adaptive-delivery is a builtin flow"
         assertBool "an unknown flow misses" (null (lookupFlow builtinFlowRegistry (declarationCoordinate "no-such-flow")))
         assertBool "a builtin task is found" (not (null (lookupTask builtinFlowRegistry "noop-summary")))
         assertBool "an unknown task misses" (null (lookupTask builtinFlowRegistry "no-such-task")),
@@ -47,7 +47,7 @@ tests =
           @?= [DuplicateTaskName "noop-summary" (packName "builtin") (packName "probe")]
         refusals [withSetting (probePack "first" []), withSetting (probePack "second" [])]
           @?= [DuplicateSettingKey "probe.parity" (packName "first") (packName "second")]
-        length (refusals [builtinPack, (probePack "probe" ["watchdog-sweep"]) {decisionPrograms = builtinPack.decisionPrograms, retainedCodecs = builtinPack.retainedCodecs}]) @?= 3,
+        length (refusals [builtinPack, (probePack "probe" ["adaptive-delivery"]) {decisionPrograms = builtinPack.decisionPrograms, retainedCodecs = builtinPack.retainedCodecs}]) @?= 3,
       testCase "flow names keep composition order" do
         registry <- either (assertFailure . show) pure (composeFlowRegistry [probePack "probe" ["one", "two"]])
         registeredFlowNames registry @?= [declarationCoordinate "one", declarationCoordinate "two"]

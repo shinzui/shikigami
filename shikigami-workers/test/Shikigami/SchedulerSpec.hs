@@ -37,7 +37,6 @@ import Shikigami.Duration qualified
 import Shikigami.Execution.Quantity (parseResourceAmount)
 import Shikigami.Execution.Resources qualified as Resources
 import Shikigami.Execution.ResourcesStore qualified as Roots
-import Shikigami.Flow.Watchdog (watchdogFlowName)
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Shikigami.RunJobs qualified as RunJobs
@@ -146,7 +145,7 @@ tests databaseFixture =
                 refusing = const (Just PackAllowance {pack = "fixture", allowance = Left "fixture allowance is disabled"})
             let pool = StoreConnection.pool store
                 appEnv = AppEnv (defaultConnectionSettings connStr) tracer Nothing Nothing
-                declaration = scheduledAgent "heartbeat" "* * * * *" & #behavior .~ Flow watchdogFlowName
+                declaration = scheduledAgent "heartbeat" "* * * * *" & #behavior .~ Flow (declarationCoordinate "funded-sweep")
                 env =
                   (testSchedulerEnv pool (Map.singleton declaration.name cron) SkipMissed Log.silentLogger)
                     { declarations = [declaration],

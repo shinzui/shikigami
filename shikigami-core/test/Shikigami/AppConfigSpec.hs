@@ -73,7 +73,6 @@ import Shikigami.Sink.Auth (TokenSource (..), credentialToken, matchesBearerHead
 import Shikigami.Sink.Permission (SinkKind (..))
 import Shikigami.Trigger.Schedule (CatchUpPolicy (..), parseCron)
 import Shikigami.Trigger.Stream (IncludeAgentActors (..))
-import Shikigami.Watchdog.Settings (WatchdogSettings (..), watchdogSettingsFrom)
 import Shikigami.Workspace.Settings (WorkspaceSettings (..), WorkspaceSupervisorSettings (..))
 import Shikigami.Workspace.Value
 import Test.Tasty (TestTree, testGroup)
@@ -83,8 +82,7 @@ tests :: TestTree
 tests =
   testGroup
     "application configuration"
-    [ watchdogConfigurationTests,
-      objectiveConfigurationTests,
+    [ objectiveConfigurationTests,
       httpAuthTests,
       surfaceTests,
       precedenceTests,
@@ -180,7 +178,6 @@ surfaceTests =
                 "trust.local_operator.approvals_file",
                 "trust.local_operator.state_dir",
                 "trust.tier",
-                "watchdog",
                 "worker.capacity",
                 "worker.run_timeout_seconds",
                 "workspace.supervisor",
@@ -229,7 +226,6 @@ surfaceTests =
               ("SHIKIGAMI_BEHAVIOR_HARNESS", "behavior.harness"),
               ("SHIKIGAMI_OBJECTIVES", "objectives"),
               ("SHIKIGAMI_OBJECTIVE_TRACKERS", "objective_trackers"),
-              ("SHIKIGAMI_WATCHDOG", "watchdog"),
               ("SHIKIGAMI_WORKSPACES", "workspaces"),
               ("SHIKIGAMI_WORKSPACE_SUPERVISOR", "workspace.supervisor"),
               ("SHIKIGAMI_BEHAVIOR_MODEL", "behavior.model"),
@@ -1060,25 +1056,6 @@ objectiveConfigurationTests =
 
 fixturePolicy :: (PolicyNumber a) => Integer -> a
 fixturePolicy number = either (error . show) id (parsePolicyNumber number)
-
-watchdogConfigurationTests :: TestTree
-watchdogConfigurationTests =
-  testGroup
-    "watchdog configuration"
-    [ testCase "omission disables observation" do
-        isNothing (watchdogSettingsFrom defaultAppConfig.packSettings) @?= True,
-      testCase "environment object resolves and is visible in the schema" do
-        config <- resolveOrFail (optionsWith [] []) [] [("SHIKIGAMI_WATCHDOG", document)]
-        principal <- either (assertFailure . Text.unpack) pure (mkAgentPrincipal "agent_watchdog")
-        fmap (.principal) (watchdogSettingsFrom config.packSettings) @?= Just (VerifiedIdentity principal)
-        assertBool "schema describes watchdog" ("watchdog" `Text.isInfixOf` renderSchemaText appConfigSchema),
-      testCase "bad limits refuse the watchdog key" do
-        forM_
-          [Text.replace "60" "0" document, Text.replace "60" "-1" document, Text.replace "10" "0" document, Text.replace "\"scope\":\"all\"" "\"scope\":{\"objectives\":[]}" document]
-          \value -> (runWith (diagnosticOptions CheckConfig) [] [("SHIKIGAMI_WATCHDOG", value)]).exitCode @?= resolutionExitCode
-    ]
-  where
-    document = "{\"principal\":\"agent_watchdog\",\"scope\":\"all\",\"stuckWindowSeconds\":60,\"parkedWindowSeconds\":60,\"coordinatorWindowSeconds\":60,\"subjectsPerSweep\":10}"
 
 -- ── A pack setting, as a composed executable sees it ────────────────────────
 

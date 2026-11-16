@@ -7,8 +7,8 @@ provider: mori://shinzui/shikigami
 status: shipped
 stability: experimental
 since: unreleased
-packages: [shikigami-core, shikigami-workers, shikigami-server, shikigami-migrations]
-interface: [Shikigami.Flow.Watchdog, Shikigami.Watchdog.Store, shikigami watchdog]
+packages: [flow-pack-watchdog, kikan-shikigami, shikigami-core, shikigami-workers, shikigami-migrations]
+interface: [FlowPack.Watchdog, watchdog-sweep, watchdog, kikan-shikigami watchdog]
 tags: [watchdog, supervision]
 generated:
   by: process:codex-cli
@@ -16,16 +16,16 @@ generated:
 requires: [CAP-1, CAP-4, CAP-21, CAP-26]
 evidence:
   - kind: test
-    resource: shikigami-core/test/Shikigami/WatchdogClassifySpec.hs
+    resource: packs/flow-pack-watchdog/test/FlowPack/Watchdog/ClassifySpec.hs
     proves: "Semantic progress, waiting deadlines, uncertainty and separate coordinator classification."
   - kind: test
-    resource: shikigami-core/test-postgres/Shikigami/WatchdogObservationSpec.hs
+    resource: packs/flow-pack-watchdog/test/FlowPack/Watchdog/ObservationSpec.hs
     proves: "Bounded lock-free owner metadata, exact approval associations and protected-body exclusion."
   - kind: test
-    resource: shikigami-core/test-postgres/Shikigami/WatchdogSweepSpec.hs
+    resource: packs/flow-pack-watchdog/test/FlowPack/Watchdog/SweepSpec.hs
     proves: "Durable episode, decision and delivery recovery with separate accounting and authority refusal."
   - kind: test
-    resource: shikigami-workers/test/Shikigami/WatchdogQualificationSpec.hs
+    resource: packs/kikan-shikigami/test/Kikan/WatchdogQualificationSpec.hs
     proves: "Eight integrated IR-19 cases through scheduled ticks, queue admission and resume."
   - kind: guide
     resource: docs/operations/watchdog.md
@@ -59,10 +59,10 @@ and [root accounting](root-resource-accounting.md).
 
 ## Evidence
 
-- [Classifier](../../shikigami-core/test/Shikigami/WatchdogClassifySpec.hs): semantic marks and deadlines.
-- [Observation](../../shikigami-core/test-postgres/Shikigami/WatchdogObservationSpec.hs): bounded metadata and owner isolation.
-- [Sweep](../../shikigami-core/test-postgres/Shikigami/WatchdogSweepSpec.hs): retained decisions, episodes, delivery and replay.
-- [Qualification](../../shikigami-workers/test/Shikigami/WatchdogQualificationSpec.hs): eight scheduled IR-19 cases.
+- [Classifier](../../packs/flow-pack-watchdog/test/FlowPack/Watchdog/ClassifySpec.hs): semantic marks and deadlines.
+- [Observation](../../packs/flow-pack-watchdog/test/FlowPack/Watchdog/ObservationSpec.hs): bounded metadata and owner isolation.
+- [Sweep](../../packs/flow-pack-watchdog/test/FlowPack/Watchdog/SweepSpec.hs): retained decisions, episodes, delivery and replay.
+- [Qualification](../../packs/kikan-shikigami/test/Kikan/WatchdogQualificationSpec.hs): eight scheduled IR-19 cases.
 - [Operations](../operations/watchdog.md): configuration, inspection and limits.
 
 ## Limits

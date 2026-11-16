@@ -58,7 +58,6 @@ library
     Shikigami.Server.Command.StubKanmon
     Shikigami.Server.Command.StubKawa
     Shikigami.Server.Command.Validate
-    Shikigami.Server.Command.Watchdog
     Shikigami.Server.Command.Workers
     Shikigami.Server.Config
     Shikigami.Server.RequestLog
@@ -169,7 +168,6 @@ test-suite shikigami-server-test
     Shikigami.Server.ProblemSpec
     Shikigami.Server.RequestLogSpec
     Shikigami.Server.TelemetrySpec
-    Shikigami.Server.WatchdogCommandSpec
 
   -- The probe conformance kit and the WAI round-trip tests run a real Warp
   -- server; Warp's timer manager requires the threaded runtime.

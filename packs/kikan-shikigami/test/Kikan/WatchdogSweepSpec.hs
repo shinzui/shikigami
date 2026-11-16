@@ -23,11 +23,18 @@ import Data.Time (addUTCTime, getCurrentTime)
 import Data.Vector qualified as Vector
 import Effectful (Eff, liftIO)
 import FlowPack.Initiative.Fixture.Proposing qualified as P
+import FlowPack.Watchdog.Body.Sweep (driftAlias)
+import FlowPack.Watchdog.Classify (classifyPage)
+import FlowPack.Watchdog.Grant
+import FlowPack.Watchdog.Observation
+import FlowPack.Watchdog.Observation.Read
+import FlowPack.Watchdog.Store qualified as Ledger
+import FlowPack.Watchdog.Types
 import Hasql.Transaction qualified as Tx
 import Keiro.PGMQ (runJobEff, runJobOnce, withJobRuntime)
 import Keiro.Workflow (WorkflowId (..), WorkflowOutcome (..))
 import Kikan.Fixture.ExecutionIdentity (fixtureOperationId, fixtureRootId)
-import Kikan.Fixture.Watchdog (watchdogAllowances, watchdogPackSettings)
+import Kikan.Fixture.Watchdog (kikanFlows, watchdogAllowances, watchdogPackSettings)
 import Kioku.Id (genSessionId)
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (Flow), defaultDelegationBudget)
@@ -48,7 +55,7 @@ import Shikigami.Execution.Quantity (parseResourceAmount)
 import Shikigami.Execution.Resources qualified as R
 import Shikigami.Execution.ResourcesStore qualified as Roots
 import Shikigami.Flow.Decision qualified as Decision
-import Shikigami.Flow.Watchdog (driftAlias)
+import Shikigami.Flow.Pack (decisionServices)
 import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
@@ -58,11 +65,6 @@ import Shikigami.Sink.GrantStore qualified as Grants
 import Shikigami.StateRevision (advanceRevision, initialRevision)
 import Shikigami.Trigger.Schedule (CatchUpPolicy (SkipMissed), nextDue, parseCron)
 import Shikigami.Trigger.Scheduler (SchedulerEnv (..), armNextRun, runSchedulerTimerWorker)
-import Shikigami.Watchdog.Classify (classifyPage)
-import Shikigami.Watchdog.Grant
-import Shikigami.Watchdog.Observation
-import Shikigami.Watchdog.Store qualified as Ledger
-import Shikigami.Watchdog.Types
 import Shikigami.WorkerSession.Input
 import Shikigami.WorkerSession.Store qualified as Sessions
 import Shikigami.WorkerSession.Types
@@ -95,7 +97,7 @@ tests fixture =
           (_, message) <- owned h (Sessions.acceptMessage access initialRevision initialRevision (fixtureOperationId "watchdog-message") instruction) >>= right
           _ <- owned h (Sessions.startAssignment access (advanceRevision initialRevision) initialRevision (fixtureOperationId "watchdog-start") message.assignmentId) >>= right
           identity <- VerifiedIdentity <$> right (mkAgentPrincipal "agent_watchdog")
-          declaration <- right =<< (loadAgent =<< P.repositoryFile "agents/proof/watchdog.dhall")
+          declaration <- right =<< (loadAgent =<< P.repositoryFile "packs/flow-pack-watchdog/agents/watchdog.dhall")
           configured <-
             right
               ( Aeson.eitherDecode
@@ -146,7 +148,8 @@ tests fixture =
                   & #directory .~ directory
                   & #grants .~ DbGrants h.pool
                   & #packSettings .~ watchdogPackSettings (Just configured)
-                  & #decisions .~ (Decision.builtinDecisionServices (checked (modelCatalog [binding])) & #providers .~ [provider])
+                  & #flows .~ kikanFlows
+                  & #decisions .~ (decisionServices kikanFlows (checked (modelCatalog [binding])) & #providers .~ [provider])
           cron <- right (parseCron "* * * * *")
           due <- maybe (assertFailure "no due tick") pure (nextDue cron now)
           let scheduler = SchedulerEnv h.pool (Map.singleton declaration.name cron) [declaration] (watchdogAllowances (Just configured)) (Map.singleton declaration.name (Just (declarationCoordinate "agent_watchdog"))) directory SkipMissed Log.silentLogger

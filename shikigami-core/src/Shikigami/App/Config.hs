@@ -218,7 +218,6 @@ import Shikigami.Sink.Permission (SinkKind)
 import Shikigami.Trigger.Schedule (CatchUpPolicy (..))
 import Shikigami.Trigger.Stream (IncludeAgentActors (..), agentActorInclusion, agentActorsIncluded)
 import Shikigami.Trust.Tier (TrustTier (..), trustTierText)
-import Shikigami.Watchdog.Settings (watchdogSetting)
 import Shikigami.Workspace.Settings (WorkspaceSettings, WorkspaceSupervisorSettings)
 
 -- ── Value types ─────────────────────────────────────────────────────────────
@@ -882,7 +881,7 @@ appConfigWith settings =
 -- way a pack declares its own so that they move with their use case
 -- (docs/adr/0129). Every executable accepts them until then.
 coreUseCaseSettings :: [PackSetting]
-coreUseCaseSettings = [watchdogSetting]
+coreUseCaseSettings = []
 
 -- | One pack setting: its raw value read by shape, then validated by the
 -- pack. A refusal names the pack's expectation and never the value.

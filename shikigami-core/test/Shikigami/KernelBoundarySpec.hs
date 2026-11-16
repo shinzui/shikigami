@@ -179,7 +179,7 @@ kernelViolations policy inputs =
     isShikigami dependency = "shikigami-" `Text.isPrefixOf` dependency
     stanzaLabel stanza = if Text.null stanza.name then stanza.kind else stanza.kind <> " " <> stanza.name
 
--- | @Shikigami/Watchdog/Store.hs@ is @Shikigami.Watchdog.Store@.
+-- | @Shikigami/Watchdog/Store.hs@ is @FlowPack.Watchdog.Store@.
 moduleOf :: FilePath -> Maybe Text
 moduleOf path
   | takeExtension path /= ".hs" = Nothing

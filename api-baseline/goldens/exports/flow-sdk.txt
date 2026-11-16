@@ -257,6 +257,7 @@ Shikigami.Flow.Sdk ApprovalRequest
 Shikigami.Flow.Sdk ApprovalRequest.channel
 Shikigami.Flow.Sdk ApprovalRequest.context
 Shikigami.Flow.Sdk ApprovalRequest.prompt
+Shikigami.Flow.Sdk DecisionAbort
 Shikigami.Flow.Sdk DecisionMode
 Shikigami.Flow.Sdk DecisionMode.AdvisoryDecisions
 Shikigami.Flow.Sdk DecisionMode.StrictDecisions
@@ -374,6 +375,7 @@ Shikigami.Flow.Sdk declarationCoordinateText
 Shikigami.Flow.Sdk delegate
 Shikigami.Flow.Sdk emitSignal
 Shikigami.Flow.Sdk emitSignalTo
+Shikigami.Flow.Sdk emitSignals
 Shikigami.Flow.Sdk flowPackNameText
 Shikigami.Flow.Sdk kernelCapabilityFlow
 Shikigami.Flow.Sdk noTriggerHooks

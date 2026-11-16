@@ -7,7 +7,8 @@ module Packs (packs) where
 import FlowPack.Examples (examplesPack)
 import FlowPack.Initiative (initiativePack)
 import FlowPack.PracticeReview (practiceReviewPack)
+import FlowPack.Watchdog (watchdogPack)
 import Shikigami.Flow.Sdk (FlowPack)
 
 packs :: [FlowPack]
-packs = [examplesPack, practiceReviewPack, initiativePack]
+packs = [examplesPack, practiceReviewPack, initiativePack, watchdogPack]

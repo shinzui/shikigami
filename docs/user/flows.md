@@ -299,7 +299,8 @@ has the scheduler enroll a root with the allowance's limits for exactly its prin
 bind it to the run, in the transaction that enqueues the job. `Right Nothing` lets the tick
 run unfunded.
 
-`packs/flow-pack-initiative` uses all three, and is the worked example.
+`packs/flow-pack-initiative` is the worked example of a stream hook, verbs and counting, and
+`packs/flow-pack-watchdog` of a funded schedule and a gauge.
 
 ### Composing a pack into an executable
 

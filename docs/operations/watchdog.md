@@ -6,9 +6,19 @@ root controls, process deadlines and exact approval associations. It excludes
 prompts, replay bodies, tool arguments/results and approval bodies. Its read grant
 cannot cancel, transfer, complete or rewrite work. Findings are advisory.
 
+## Where it runs
+
+The watchdog ships in the flow pack `packs/flow-pack-watchdog`, and runs from the
+`kikan-shikigami` distribution, which composes it. `kikan-shikigami-scheduler` funds each
+tick from the allowance, `kikan-shikigami-worker` runs the sweep and samples its gauge, and
+`kikan-shikigami watchdog` is the operator's view. The stock `shikigami-*` executables have
+none of it: they refuse the `watchdog` key as unknown, the stock worker refuses the
+manifest (`unknown flow watchdog-sweep`), and `shikigami watchdog` is not a command. The
+other commands below (`grants`, `agents`) are the kernel's and work from either.
+
 ## Enable a scheduled watchdog
 
-Apply migrations, copy `agents/proof/watchdog.dhall` into the configured agents
+Apply migrations, copy `packs/flow-pack-watchdog/agents/watchdog.dhall` into the configured agents
 directory, and replace its placeholder principal with your directory's verified,
 active watchdog principal. The proof declaration uses a five-minute cron. Configure
 both scheduler and worker with the same `watchdog` object; omission disables it.
@@ -88,10 +98,10 @@ paused identity refuses emission without granting intervention authority.
 ## Inspect independently of the schedule
 
 ```bash
-shikigami --config config.json watchdog inspect --agents agents --json
-shikigami --config config.json watchdog inspect --agents agents --grace 60 --fail-when-overdue --json
-shikigami --config config.json watchdog episodes --open --limit 20 --json
-shikigami --config config.json watchdog findings EPISODE_ID --limit 20 --json
+kikan-shikigami --config config.json watchdog inspect --agents agents --json
+kikan-shikigami --config config.json watchdog inspect --agents agents --grace 60 --fail-when-overdue --json
+kikan-shikigami --config config.json watchdog episodes --open --limit 20 --json
+kikan-shikigami --config config.json watchdog findings EPISODE_ID --limit 20 --json
 ```
 
 Pages accept `--after ID`; episode pages also accept `--objective ID`. Limits are

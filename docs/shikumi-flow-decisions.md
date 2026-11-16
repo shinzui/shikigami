@@ -319,7 +319,7 @@ for its calls; no existing slot changes behavior.
 
 ## Assessing drift from bounded metadata
 
-[Program.Decision.Drift](../shikigami-core/src/Shikigami/Program/Decision/Drift.hs)
+[FlowPack.Watchdog.Program.Drift](../packs/flow-pack-watchdog/bodies/FlowPack/Watchdog/Program/Drift.hs), in the watchdog pack,
 registers `shikigami.watchdog-drift`, version `1`. Its input is one objective's
 public goal and criteria plus bounded subject references and accepted operation
 specifications. Tool arguments, instructions, transcript and result bodies are

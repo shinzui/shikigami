@@ -3,18 +3,19 @@ module Kikan.WatchdogTelemetrySpec (tests) where
 import Data.Aeson (eitherDecode)
 import Data.Time (getCurrentTime)
 import FlowPack.Initiative.Fixture.Proposing qualified as P
+import FlowPack.Watchdog.Grant
+import FlowPack.Watchdog.Ledger (SweepOrigin (..), SweepSummary (..))
+import FlowPack.Watchdog.Observation (PassCompletion (PassCompleted))
+import FlowPack.Watchdog.Observation.Read
+import FlowPack.Watchdog.Runtime (sweepAgeGauge)
+import FlowPack.Watchdog.Settings (WatchdogSettings (..))
+import FlowPack.Watchdog.Store qualified as Ledger
+import FlowPack.Watchdog.Types
 import Keiro.Workflow (WorkflowId (..), WorkflowName (..))
 import Kikan.Fixture.Watchdog (watchdogPackSettings)
 import Shikigami.App (runAppIO)
 import Shikigami.Flow.Pack (PackGauge (..))
-import Shikigami.Flow.Watchdog (sweepAgeGauge)
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
-import Shikigami.Watchdog.Grant
-import Shikigami.Watchdog.Ledger (SweepOrigin (..), SweepSummary (..))
-import Shikigami.Watchdog.Observation (PassCompletion (PassCompleted))
-import Shikigami.Watchdog.Settings (WatchdogSettings (..))
-import Shikigami.Watchdog.Store qualified as Ledger
-import Shikigami.Watchdog.Types
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
 

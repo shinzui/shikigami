@@ -58,8 +58,6 @@ Available commands:
                            recurring authority
   record                   Read the action record of authority decisions and
                            effects
-  watchdog                 Inspect watchdog coverage, overdue sweeps and
-                           advisory findings
   wf                       Inspect and operate durable workflows
   timer                    Inspect and operate durable timers
   outbox                   Inspect and operate the transactional outbox

@@ -40,9 +40,10 @@ import Shikigami.Decision.ModelCatalog
 import Shikigami.Fixture.ExamplePack (exampleFlowRegistry, judgmentDecisionSlot, triageDecisionSlot)
 import Shikigami.Fixture.JudgmentExample (judgmentProgram)
 import Shikigami.Fixture.TypeSafe qualified as TypeSafe
-import Shikigami.Flow (FlowDef (..), flowDecisionSlotsFor)
+import Shikigami.Flow (DecisionMode (..), FlowDef (..), LifecycleDiagram (..), flowDecisionSlotsFor)
 import Shikigami.Flow.Pack (PackFlow (..), RegisteredFlow (..), registeredFlows)
 import Shikigami.Program.Decision
+import Shikigami.RuntimePolicy (DefaultModelRequirement (..))
 import Shikigami.Trigger.Schedule (parseCron)
 import Shikumi.Program (Program (Embed))
 import Test.Tasty (TestTree, testGroup)
@@ -112,12 +113,13 @@ tests =
         assertBool "duplicate slot labels" (not (null (slotErrors registry declaration [slot, slot])))
         assertBool "unknown contract" (not (null (slotErrors (mustRight (programRegistry [])) declaration [slot])))
         assertBool "undeclared alias" (not (null (slotErrors registry ((declaration & #decisionModels .~ ([]))) [slot])))
-        watchdog <- case [flow | flow <- builtinFlows, flow.name == declarationCoordinate "watchdog-sweep"] of
-          [flow] -> pure flow
-          _ -> assertFailure "watchdog Flow registration is absent or duplicated"
-        flowDecisionSlotsFor (declaration & #decisionModels .~ []) watchdog @?= []
-        assertBool "declared optional Drift retains its inventory" (not (null (flowDecisionSlotsFor (declaration & #decisionModels .~ [fixtureModelAlias "drift"]) watchdog)))
-        assertBool "other flows have empty inventories" (all (\flow -> flow.name `elem` map declarationCoordinate ["watchdog-sweep", "propose-work", "adaptive-delivery", "shikumi-decision-example", "shikumi-judgment-example"] || null flow.decisionSlots) builtinFlows)
+        -- An advisory flow is held only to the slots whose alias the declaration
+        -- lists; a strict flow is held to all of them.
+        let advisory = FlowDef {name = declarationCoordinate "fixture-advisory", decisionSlots = [slot], requiresDefaultModel = DefaultModelOptional, decisionMode = AdvisoryDecisions, lifecycle = LifecycleDiagram "flowchart LR\n A --> B" []}
+        flowDecisionSlotsFor (declaration & #decisionModels .~ []) advisory @?= []
+        assertBool "a listed alias retains its inventory" (not (null (flowDecisionSlotsFor declaration advisory)))
+        flowDecisionSlotsFor (declaration & #decisionModels .~ []) (advisory {decisionMode = StrictDecisions}) @?= [slot]
+        assertBool "other flows have empty inventories" (all (\flow -> flow.name `elem` map declarationCoordinate ["adaptive-delivery", "shikumi-decision-example", "shikumi-judgment-example"] || null flow.decisionSlots) builtinFlows)
         map (.decisionSlots) (filter (\flow -> flow.name == declarationCoordinate "adaptive-delivery") builtinFlows) @?= [adaptiveSlots],
       testCase "historical declaration JSON defaults to no permission and keeps its bytes" do
         declaration <- mustRight <$> loadAgent "../agents/heartbeat.dhall"

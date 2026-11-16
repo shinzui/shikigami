@@ -27,6 +27,7 @@ common common
     flow-pack-examples,
     flow-pack-initiative,
     flow-pack-practice-review,
+    flow-pack-watchdog,
     shikigami-core:flow-sdk,
 
 executable kikan-shikigami-worker
@@ -38,6 +39,12 @@ executable kikan-shikigami-worker
 executable kikan-shikigami-consume-stream
   import: common
   hs-source-dirs: app/consume-stream
+  main-is: Main.hs
+  build-depends: shikigami-workers
+
+executable kikan-shikigami-scheduler
+  import: common
+  hs-source-dirs: app/scheduler
   main-is: Main.hs
   build-depends: shikigami-workers
 
@@ -98,6 +105,7 @@ test-suite kikan-shikigami-test
     filepath,
     flow-pack-initiative,
     flow-pack-initiative:test-support,
+    flow-pack-watchdog,
     generic-lens,
     hasql,
     hasql-pool,

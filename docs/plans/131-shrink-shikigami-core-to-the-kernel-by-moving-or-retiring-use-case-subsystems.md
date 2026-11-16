@@ -319,6 +319,23 @@ this Mac through the same operator verbs as before (`watchdog inspect`, `proposa
     instruments are replaced by events on `shikigami.pack.events` and one new kernel
     instrument, `shikigami.pack.gauges`, fed by a new `FlowPack.gauges` field. The builtin
     pack still carries the flow, the hook and the gauge; the move is next.
+  - The move is made (2026-11-16). `Watchdog/*`, `Flow/Watchdog`, `Flow/Observe`,
+    `Program/Decision/Drift` and the `watchdog` verbs are `packs/flow-pack-watchdog`: twelve
+    modules in `bodies` (the vocabulary, the classifier, the drift program and cadence, the
+    `Observe` capability and the sweep body) and twelve in the library (the interpreter, the
+    observation and waiting reads, the ledger and drift stores, the schedule hook, the
+    setting, the verbs and the gauge). `Observation`, `Waiting` and `Drift` were each split
+    into a vocabulary module and a store module to keep `bodies` on `flow-sdk`. The builtin
+    pack has two flows (`run-declared-tool`, `adaptive-delivery`), no hook, no gauge and one
+    decision program; `coreUseCaseSettings` is empty again; `Watchdog` is gone from
+    `kernel.namespaces`. The distribution composes the pack and gains
+    `kikan-shikigami-scheduler`. The stock `shikigami` command loses `watchdog`.
+  - Suites after the move: shikigami-core-test, shikigami-core-postgres-test,
+    shikigami-server-test, shikigami-agent-test pass; shikigami-workers-test 300 of 301
+    (FRIC-76 only); flow-pack-watchdog-test 115; kikan-shikigami-test 10;
+    flow-pack-initiative-test, flow-pack-practice-review-test and flow-pack-examples-test
+    pass. `just kernel-fitness` 7, `just haskell-conventions` and
+    `tests/types/watchdog-values.py` pass.
 - [ ] M6: The adaptive-delivery coordinator is confirmed as a kernel primitive and stays in
   `shikigami-core`. Its disposition is recorded, an import check shows it has no Kikan
   service dependency, and a real objective on a local repository receives an adaptive
@@ -512,6 +529,44 @@ this Mac through the same operator verbs as before (`watchdog inspect`, `proposa
 
 ## Decision Log
 
+- Decision (M5): The watchdog pack's test suite compiles the kernel's spec modules it uses
+  as fixtures from the kernel's test directories.
+  Rationale: the watchdog reads other owners' state, so its PostgreSQL specs stand on the
+  kernel's own fixtures for worker sessions, objectives, execution transcripts, the
+  agent-run workflow and routing: 21 modules and about 11,800 lines, all `*Spec` modules in
+  `shikigami-core/test-postgres` and `shikigami-core/test`. Copying them, as M4 could afford
+  for one fixture, would fork the kernel's test harness. The suite lists those directories
+  in `hs-source-dirs` and the 21 modules in `other-modules`, and its `main` changes to
+  `shikigami-core` first, because the fixtures read manifests relative to it. A kernel test
+  still depends on no pack; the dependency runs one way. The cost is a suite that builds
+  only inside this repository. The durable answer is a public `shikigami-core:test-support`
+  library holding the fixtures apart from the specs, which is the test-support item EP-11
+  already names for the SDK.
+  Date: 2026-11-16
+- Decision (M5): The pack library re-exports its `bodies` modules.
+  Rationale: the distribution's cross-pack tests and the type probes name findings, grants
+  and policies, which live in the private `bodies` component. `reexported-modules` on the
+  library gives one public reading surface without making `bodies` public or copying
+  types. The fitness check still holds `bodies` to `flow-sdk` and the library to the SDK.
+  Date: 2026-11-16
+- Decision (M5): Final SDK additions for the watchdog. `flow-sdk` re-exports
+  `Shikigami.Coordination.Observation`, `Shikigami.Execution.{Attempt, Observation, Progress,
+  Quantity, RootObservation, Transcript}`, `Shikigami.Objective.Observation`,
+  `Shikigami.Sink.{Types, Validate}`, `Shikigami.WorkerSession.{Observation, Types}` and
+  `Shikigami.Workspace.{Process, ProcessObservation}`, and the facade adds `emitSignals` and
+  `DecisionAbort (..)`. `pack-sdk` re-exports `Shikigami.Agent.{Approval.Workflow, Loader,
+  Workflow.Name}`, `Shikigami.Approval.Observation`,
+  `Shikigami.ExecutionDriver.Generated.WorkflowRuntime`, `Shikigami.Trigger.Schedule` and
+  `Shikigami.Workspace.Types`, and the facade adds the schedule hook types and
+  `PackGauge (..)`. `Shikigami.Execution.Quantity` moved from `pack-sdk` to `flow-sdk`.
+  Rationale: each is imported by moved code; the lists are computed from the packs'
+  imports. The `*.Observation` modules are the intended read surface of their owners. Three
+  are kernel internals to narrow before the freeze (plan 136, M3):
+  `ExecutionDriver.Generated.WorkflowRuntime` (the observation read needs the execution
+  workflow's name), `Agent.Approval.Workflow` (the waiting read decodes an approval's
+  parked payload) and `Agent.Loader` (`watchdog inspect --agents DIR` loads a directory the
+  operator names, where `AdminContext.declarations` reads only the configured one).
+  Date: 2026-11-16
 - Decision (M5): A pack reports a level through `FlowPack.gauges`, on one kernel gauge.
   Rationale: the sweep-age gauge is read by the worker's sampler with no run in progress,
   which is the point of it: it is how a stopped watchdog is seen. `FlowRunContext.metrics`

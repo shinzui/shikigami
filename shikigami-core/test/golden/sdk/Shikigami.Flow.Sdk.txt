@@ -6,6 +6,7 @@ ActivityCoordinate
 ActivityEnvelope (..)
 ApprovalChannel (..)
 ApprovalRequest (..)
+DecisionAbort (..)
 DecisionMode (..)
 DeclarationCoordinate
 DefaultModelRequirement (..)
@@ -47,6 +48,7 @@ declarationCoordinateText
 delegate
 emitSignal
 emitSignalTo
+emitSignals
 flowPackNameText
 kernelCapabilityFlow
 noTriggerHooks

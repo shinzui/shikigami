@@ -346,11 +346,7 @@ tests fixture =
         atRoot <- doesFileExist "domain/shikigami/agent-run.keiro"
         declared <- TextIO.readFile (if atRoot then "domain/shikigami/agent-run.keiro" else "../domain/shikigami/agent-run.keiro")
         let compiled = [slot.label | entry <- FlowPack.registeredFlows builtinFlowRegistry, slot <- entry.flow.definition.decisionSlots]
-        compiled @?= [mustRight (parseDecisionSlotLabel "watchdog-drift"), mustRight (parseDecisionSlotLabel "adapt")]
-        -- The watchdog's slot is a use case's: its labels start with its name and
-        -- are pinned beside it, not declared in the kernel's specification.
-        let (StepName watchdogPrepare, _) = Decision.decisionStepNames (Decision.decisionSite "watchdog-drift")
-        assertBool "a use case's decision labels are not in the kernel specification" (not (("step " <> watchdogPrepare) `Text.isInfixOf` declared))
+        compiled @?= [mustRight (parseDecisionSlotLabel "adapt")]
         adaptive <- TextIO.readFile (if atRoot then "domain/shikigami/adaptive-delivery.keiro" else "../domain/shikigami/adaptive-delivery.keiro")
         let (StepName prepare, StepName result) = Decision.decisionStepNames Decision.adaptiveSite
         mapM_ (\label -> assertBool "accepted adaptive label declared in its child family" (("step " <> label) `Text.isInfixOf` adaptive)) [prepare, "decision-submit-adapt", result],

@@ -1,0 +1,254 @@
+cabal-version: 3.4
+name: flow-pack-watchdog
+version: 0.1.0.0
+synopsis: The active-work watchdog for Shikigami, as a flow pack
+description:
+  One advisory sweep per scheduled tick over active work: stuck sessions,
+  unresolved outcomes, stuck coordinators and drift from the objective. It
+  reads, records findings and notifies; it has no authority to intervene. The
+  pack holds the watchdog-sweep flow, its drift program, the watchdog
+  setting, the schedule hook, the operator verbs and the sweep-age gauge.
+  See docs/operations/watchdog.md.
+
+license: BSD-3-Clause
+build-type: Simple
+extra-source-files: test/golden/labels.txt
+
+common common
+  default-language: GHC2024
+  default-extensions:
+    BlockArguments
+    DeriveAnyClass
+    DuplicateRecordFields
+    MultilineStrings
+    NoFieldSelectors
+    OverloadedLabels
+    OverloadedRecordDot
+    OverloadedStrings
+
+  ghc-options:
+    -Wall
+    -Werror=missing-fields
+    -Wcompat
+    -Widentities
+    -Wincomplete-record-updates
+    -Wincomplete-uni-patterns
+    -Wpartial-fields
+    -Wredundant-constraints
+
+-- The sweep body, the capability it is written against, the drift program
+-- and the vocabulary they share. This component depends on
+-- shikigami-core:flow-sdk and on no other Shikigami component.
+library bodies
+  import: common
+  visibility: private
+  hs-source-dirs: bodies
+  exposed-modules:
+    FlowPack.Watchdog.Body.Sweep
+    FlowPack.Watchdog.Capability
+    FlowPack.Watchdog.Classify
+    FlowPack.Watchdog.Delivery
+    FlowPack.Watchdog.Drift
+    FlowPack.Watchdog.Grant
+    FlowPack.Watchdog.Ledger
+    FlowPack.Watchdog.Observation
+    FlowPack.Watchdog.Program.Drift
+    FlowPack.Watchdog.Settings
+    FlowPack.Watchdog.Types
+    FlowPack.Watchdog.Waiting
+
+  build-depends:
+    aeson,
+    base,
+    bytestring,
+    containers,
+    effectful-core,
+    generic-lens,
+    keiro,
+    lens,
+    mmzk-typeid,
+    shikigami-core:flow-sdk,
+    shikumi,
+    text,
+    time,
+    transformers,
+    uuid,
+    vector,
+
+-- The pack value, the interpreter, the observation reads, the ledger store,
+-- the schedule hook, the operator verbs and the gauge.
+library
+  import: common
+  hs-source-dirs: src
+  exposed-modules:
+    FlowPack.Watchdog
+    FlowPack.Watchdog.Admission
+    FlowPack.Watchdog.Command
+    FlowPack.Watchdog.Drift.Store
+    FlowPack.Watchdog.Episode
+    FlowPack.Watchdog.Inspection
+    FlowPack.Watchdog.Observation.Read
+    FlowPack.Watchdog.Runtime
+    FlowPack.Watchdog.Setting
+    FlowPack.Watchdog.Store
+    FlowPack.Watchdog.Store.Internal
+    FlowPack.Watchdog.Waiting.Read
+
+  -- The vocabulary is the pack's public reading surface: a distribution's
+  -- tests and other tools name findings and policies through the library.
+  reexported-modules:
+    FlowPack.Watchdog.Body.Sweep,
+    FlowPack.Watchdog.Capability,
+    FlowPack.Watchdog.Classify,
+    FlowPack.Watchdog.Delivery,
+    FlowPack.Watchdog.Drift,
+    FlowPack.Watchdog.Grant,
+    FlowPack.Watchdog.Ledger,
+    FlowPack.Watchdog.Observation,
+    FlowPack.Watchdog.Program.Drift,
+    FlowPack.Watchdog.Settings,
+    FlowPack.Watchdog.Types,
+    FlowPack.Watchdog.Waiting,
+
+  build-depends:
+    aeson,
+    base,
+    bytestring,
+    containers,
+    contravariant-extras,
+    effectful,
+    effectful-core,
+    flow-pack-watchdog:bodies,
+    generic-lens,
+    hasql,
+    hasql-transaction,
+    keiro,
+    kiroku-store,
+    lens,
+    mmzk-typeid,
+    optparse-applicative,
+    shikigami-core:flow-sdk,
+    shikigami-core:pack-sdk,
+    text,
+    time,
+    transformers,
+    uuid,
+    vector,
+
+-- The specs use the kernel's own database fixtures. Those live in the
+-- kernel's spec modules, so this suite compiles them from the kernel's test
+-- directories instead of keeping a second copy.
+test-suite flow-pack-watchdog-test
+  import: common
+  type: exitcode-stdio-1.0
+  hs-source-dirs:
+    test
+    ../../shikigami-core/test-postgres
+    ../../shikigami-core/test
+
+  main-is: Main.hs
+  other-modules:
+    FlowPack.Watchdog.ClassifySpec
+    FlowPack.Watchdog.CommandSpec
+    FlowPack.Watchdog.DriftCadenceSpec
+    FlowPack.Watchdog.DriftProgramSpec
+    FlowPack.Watchdog.DriftSpec
+    FlowPack.Watchdog.InspectionSpec
+    FlowPack.Watchdog.ObservationSpec
+    FlowPack.Watchdog.PackSpec
+    FlowPack.Watchdog.Registry
+    FlowPack.Watchdog.StoreSpec
+    FlowPack.Watchdog.SweepSpec
+    FlowPack.Watchdog.TypesSpec
+    Shikigami.AgentWorkflowSpec
+    Shikigami.ExecutionSelectionWorkflowSpec
+    Shikigami.ExecutionTranscriptSpec
+    Shikigami.Fixture.AcknowledgementFlow
+    Shikigami.Fixture.DecisionExampleFlow
+    Shikigami.Fixture.DecisionExamples
+    Shikigami.Fixture.ExamplePack
+    Shikigami.Fixture.ExecutionIdentity
+    Shikigami.Fixture.JudgmentExample
+    Shikigami.Fixture.JudgmentExampleFlow
+    Shikigami.Fixture.KawaStub
+    Shikigami.Fixture.ObjectiveExampleFlow
+    Shikigami.Fixture.SinkHttp
+    Shikigami.FlowLifecycleSpec
+    Shikigami.ObjectiveStoreSpec
+    Shikigami.RouterWorkflowSpec
+    Shikigami.RunEvidenceSpec
+    Shikigami.WorkerSessionCapabilitySpec
+    Shikigami.WorkerSessionSpec
+    Shikigami.WorkerSessionStoreSpec
+    Shikigami.WorkspaceProcessProfileStoreSpec
+
+  ghc-options:
+    -threaded
+    -rtsopts
+    -with-rtsopts=-N
+
+  build-depends:
+    aeson,
+    aeson-pretty,
+    async,
+    baikai,
+    baikai-claude,
+    baikai-openai,
+    base,
+    bytestring,
+    containers,
+    contravariant-extras ^>=0.3,
+    danwa-api,
+    danwa-client,
+    directory,
+    effectful,
+    effectful-core,
+    filepath,
+    flow-pack-watchdog,
+    generic-lens,
+    hasql,
+    hasql-pool,
+    hasql-transaction,
+    hs-opentelemetry-api,
+    hs-opentelemetry-exporter-in-memory,
+    hs-opentelemetry-propagator-w3c,
+    hs-opentelemetry-sdk,
+    http-client,
+    http-types,
+    keiki,
+    keiro,
+    keiro-pgmq,
+    kikan-en-contract,
+    kioku-api,
+    kioku-core,
+    kiroku-store,
+    lens,
+    mmzk-typeid,
+    optparse-applicative,
+    pgmq-hasql,
+    process,
+    relay-pagination,
+    servant-client,
+    settei,
+    settei-env,
+    settei-env ==0.2.0.0,
+    settei-optparse-applicative,
+    settei-yaml,
+    shibuya-core,
+    shikigami-core,
+    shikigami-migrations:test-support,
+    shikigami-server,
+    shikigami-workers,
+    shikumi,
+    shikumi-tools,
+    streamly-core,
+    tasty,
+    tasty-hunit,
+    text,
+    time,
+    unix,
+    unordered-containers,
+    uuid,
+    vector,
+    wai,
+    warp,
