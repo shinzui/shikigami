@@ -291,7 +291,7 @@ this Mac through the same operator verbs as before (`watchdog inspect`, `proposa
     the fix is part of this milestone: see the lease entries under Surprises and the
     Decision Log (FRIC-86). A second attempt was refused `creation-denied` only because the
     fixture authorizer admits three fixed principals; the accepted run uses one of them.
-- [ ] M5: `Watchdog` runs from `flow-pack-watchdog` through a kernel schedule-allowance
+- [x] M5 (2026-11-16): `Watchdog` runs from `flow-pack-watchdog` through a kernel schedule-allowance
   hook. A scheduled sweep observes a real local run and `kikan-shikigami watchdog inspect` shows it.
   - Kernel schedule hook (2026-11-16). `TriggerHooks` gains `schedule :: Maybe ScheduleHook`,
     a pure `PackSettings -> ScheduleCandidate -> Either Text (Maybe ScheduledAllowance)`.
@@ -336,6 +336,23 @@ this Mac through the same operator verbs as before (`watchdog inspect`, `proposa
     flow-pack-initiative-test, flow-pack-practice-review-test and flow-pack-examples-test
     pass. `just kernel-fitness` 7, `just haskell-conventions` and
     `tests/types/watchdog-values.py` pass.
+  - Real scheduled run (2026-11-16), on an isolated database with the fixture authorizer,
+    the local Kafka broker and OpenAI `gpt-5.4-mini`: `kikan-shikigami-scheduler`,
+    `kikan-shikigami-worker` and `kikan-shikigami-consume-stream` with the pack's manifest
+    on a one-minute cron and a `watchdog` policy with an allowance. A real meeting
+    transcript became a proposal and, on approval, objective
+    `shikigami_objective_01m7k1dng6e07tpe4wb4xrack2` (the M4 path). Three ticks fired a
+    minute apart, each enrolled its own root and ran one sweep, once. The sweep at 20:40
+    saw no subject; the one at 20:41 observed that objective as a `coordinator` subject;
+    the one at 20:42, with the objective idle past its 60-second window, opened a
+    `stuck-coordinator` episode with one finding citing the objective at revision 0.
+    `kikan-shikigami watchdog inspect --agents DIR --json` shows the last completed sweep
+    and its coverage, `watchdog inspect --grace 60 --fail-when-overdue` exits 0, and
+    `watchdog episodes` and `watchdog findings EPISODE` show the episode and the finding.
+  - The stock executables refuse the same configuration (`unknown key`), and the stock
+    `shikigami watchdog` answers `Invalid argument`.
+  - The scheduler's log carried eight `scheduler.timer.unknown_kind` errors for the memory
+    session's timers during that healthy run (FRIC-87, unchanged).
 - [ ] M6: The adaptive-delivery coordinator is confirmed as a kernel primitive and stays in
   `shikigami-core`. Its disposition is recorded, an import check shows it has no Kikan
   service dependency, and a real objective on a local repository receives an adaptive

@@ -978,7 +978,15 @@ proposal from a real model assessment, an ask, an approval and an objective. Tha
 a kernel defect no fixture reaches: a worker's resume loop re-entered every run its job loop
 was still driving, so any step slower than a second ran twice and the proposing run was
 failed by its duplicate. The worker's first drive now holds the instance lease (FRIC-86).
-EP-6 M5 is next. Stage 1 (the pilot) ends at the declaration baseline, and stage 2 at
+EP-6 M5 is accepted on 2026-11-16 (`8b39a9bd`): the watchdog runs from
+`flow-pack-watchdog`. The kernel gained a schedule hook, through which a pack funds its
+scheduled ticks from an operator's allowance while the kernel enrolls the root
+(`38bd5798`), and a pack gauge sampled by the worker (`f7d25186`); `Observe` left the
+kernel's effect row and the watchdog's patch gate and labels left the specification. In a
+real run from the distribution, sweeps fired every minute, observed the objective a real
+proposal had created, and opened a `stuck-coordinator` finding when it sat idle. With
+three use cases out, the builtin pack holds `run-declared-tool` and `adaptive-delivery`.
+EP-6 M6 is next. Stage 1 (the pilot) ends at the declaration baseline, and stage 2 at
 the kernel baseline.
 
 - [ ] Architectural acceptance: the keiro modernization campaign runs for real on at least
