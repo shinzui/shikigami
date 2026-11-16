@@ -1514,6 +1514,15 @@ in  Schema.Project::{
         , key = Some "warp"
         }
       ]
+    , docs =
+      [ Schema.DocRef::{
+        , key = "doc-site"
+        , kind = Schema.DocKind.Guide
+        , audience = Schema.DocAudience.User
+        , description = Some "Shikigami documentation site"
+        , location = Schema.DocLocation.Canonical "mori://shinzui/shikigami-docs/docs/site"
+        }
+      ]
     , okfBundles =
       [ Schema.OkfBundle::{
         , name = "friction-log"

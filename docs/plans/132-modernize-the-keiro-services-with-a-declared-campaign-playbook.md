@@ -247,6 +247,15 @@ These came from read-only research on 2026-11-15, before implementation.
   small and belong to EP-4, and the campaign's own files stay declarations.
   Date: 2026-11-15
 
+- Decision (after M1): kizashi replaces kanmon as the pilot, and koyomi becomes the second
+  repository; kanmon keeps its readiness commits and leaves the campaign. Seihou update
+  conflicts with the operator's own edits are reported and left for the operator to resolve
+  interactively; the campaign never passes `--force`.
+  Rationale: The user decided on 2026-11-15, after the readiness run showed kanmon has no keiro
+  dependency (the pilot would add keiro rather than upgrade it) and that the plan-skill update
+  stops on the operator's `.gitignore` edits.
+  Date: 2026-11-15
+
 ## Outcomes & Retrospective
 
 (To be filled during and after implementation.)
