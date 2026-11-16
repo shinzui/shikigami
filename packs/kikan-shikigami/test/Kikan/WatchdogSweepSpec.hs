@@ -27,6 +27,7 @@ import Hasql.Transaction qualified as Tx
 import Keiro.PGMQ (runJobEff, runJobOnce, withJobRuntime)
 import Keiro.Workflow (WorkflowId (..), WorkflowOutcome (..))
 import Kikan.Fixture.ExecutionIdentity (fixtureOperationId, fixtureRootId)
+import Kikan.Fixture.Watchdog (watchdogAllowances)
 import Kioku.Id (genSessionId)
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (Flow), defaultDelegationBudget)
@@ -149,7 +150,7 @@ tests fixture =
                   & #decisions .~ (Decision.builtinDecisionServices (checked (modelCatalog [binding])) & #providers .~ [provider])
           cron <- right (parseCron "* * * * *")
           due <- maybe (assertFailure "no due tick") pure (nextDue cron now)
-          let scheduler = SchedulerEnv h.pool (Map.singleton declaration.name cron) [declaration] (Just configured) (Map.singleton declaration.name (Just (declarationCoordinate "agent_watchdog"))) directory SkipMissed Log.silentLogger
+          let scheduler = SchedulerEnv h.pool (Map.singleton declaration.name cron) [declaration] (watchdogAllowances (Just configured)) (Map.singleton declaration.name (Just (declarationCoordinate "agent_watchdog"))) directory SkipMissed Log.silentLogger
           _ <- owned h (armNextRun cron declaration.name now)
           targetBefore <- owned h (Roots.inspectRoot targetRoot) >>= right
           _ <- owned h (runSchedulerTimerWorker h.env scheduler due)

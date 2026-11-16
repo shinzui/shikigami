@@ -23,27 +23,35 @@ module Shikigami.Trigger.Hook
     PackDisposition (..),
     noStreamIntake,
     streamIntake,
+    ScheduleHook (..),
+    ScheduleCandidate (..),
+    ScheduledAllowance (..),
+    ScheduleIntake,
+    PackAllowance (..),
+    noScheduleIntake,
+    scheduleIntake,
   )
 where
 
 import Data.Text (Text)
-import Data.Time (UTCTime)
+import Data.Time (NominalDiffTime, UTCTime)
 import Hasql.Transaction (Transaction)
 import Keiro.Workflow (WorkflowId)
 import Shikigami.Activity (ActivityEnvelope)
 import Shikigami.Agent.Decl (AgentDecl)
-import Shikigami.Agent.Principal (AgentIdentity)
-import Shikigami.Execution.Resources (Envelope)
+import Shikigami.Agent.Principal (AgentIdentity, AgentPrincipal)
+import Shikigami.Execution.Resources (Envelope, Limits)
 import Shikigami.Pack.Setting (PackSettings)
 
 -- | The trigger hooks one pack contributes. A field arrives with its first
 -- consumer (ADR-1).
 data TriggerHooks = TriggerHooks
-  { stream :: !(Maybe StreamHook)
+  { stream :: !(Maybe StreamHook),
+    schedule :: !(Maybe ScheduleHook)
   }
 
 noTriggerHooks :: TriggerHooks
-noTriggerHooks = TriggerHooks {stream = Nothing}
+noTriggerHooks = TriggerHooks {stream = Nothing, schedule = Nothing}
 
 -- | A pack's say over the stream records that match its flows' agents. Pure
 -- and total: the two instants are the consumer's, and no clock is read.
@@ -107,4 +115,54 @@ noStreamIntake = const Nothing
 streamIntake :: Text -> (AgentDecl -> Bool) -> PackSettings -> StreamHook -> StreamIntake
 streamIntake pack owns settings (StreamHook decide) candidate
   | owns candidate.agent = Just PackDisposition {pack, disposition = decide settings candidate}
+  | otherwise = Nothing
+
+-- | A pack's say over the scheduled ticks of its flows' agents (ADR-119).
+--
+-- A scheduled run normally starts with no resource root. A pack whose flow
+-- spends on a schedule, with nobody there to fund it, declares an operator
+-- owned allowance instead: the tick enrolls a fresh root with those limits and
+-- binds it to the run, in the transaction that enqueues the job. The pack
+-- supplies only the allowance check. Recovering the root and binding it are
+-- kernel resource code ("Shikigami.Trigger.Enrollment").
+--
+-- Pure and total. 'Left' refuses the tick with a bounded reason, recorded as
+-- a run skip; @Right Nothing@ lets the tick run without a root.
+newtype ScheduleHook = ScheduleHook (PackSettings -> ScheduleCandidate -> Either Text (Maybe ScheduledAllowance))
+
+-- | One due tick, after the directory admitted the agent's identity.
+data ScheduleCandidate = ScheduleCandidate
+  { agent :: !AgentDecl,
+    -- | The identity the run job would carry.
+    identity :: !AgentIdentity,
+    dueAt :: !UTCTime
+  }
+
+-- | What an enrolled tick may spend, and who may spend it.
+data ScheduledAllowance = ScheduledAllowance
+  { -- | The only principal the root is enrolled for.
+    principal :: !AgentPrincipal,
+    limits :: !Limits,
+    -- | How long after the tick fires the root's cutoff falls.
+    lifetime :: !NominalDiffTime
+  }
+  deriving stock (Eq, Show)
+
+-- | The owning pack's answer for one tick, with its name for logs.
+data PackAllowance = PackAllowance
+  { pack :: !Text,
+    allowance :: !(Either Text (Maybe ScheduledAllowance))
+  }
+
+-- | The composed hooks, as the scheduler consults them. 'Nothing' means no
+-- pack has a say over this agent, and the tick runs without a root.
+type ScheduleIntake = ScheduleCandidate -> Maybe PackAllowance
+
+noScheduleIntake :: ScheduleIntake
+noScheduleIntake = const Nothing
+
+-- | One pack's hook as an intake, for the agents that pack owns.
+scheduleIntake :: Text -> (AgentDecl -> Bool) -> PackSettings -> ScheduleHook -> ScheduleIntake
+scheduleIntake pack owns settings (ScheduleHook decide) candidate
+  | owns candidate.agent = Just PackAllowance {pack, allowance = decide settings candidate}
   | otherwise = Nothing

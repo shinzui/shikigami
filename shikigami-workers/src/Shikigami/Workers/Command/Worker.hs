@@ -59,6 +59,7 @@ import Shikigami.Trust.LocalOperator.Approvals (defaultApprovalsPath)
 import Shikigami.Trust.LocalOperator.Grant (defaultStateDirectory)
 import Shikigami.Trust.LocalOperator.Host (LocalOperatorPaths (..), queuedCodingAgents)
 import Shikigami.Trust.Tier (TrustTier (..))
+import Shikigami.Watchdog.Settings (watchdogSettingsFrom)
 import Shikigami.Workers.Config (WorkerEnv (..), directoryLoopRegistration, persistAgentLoadReport, schedulerSchedules, startProcessDirectory)
 import Shikigami.Workers.Registry (runWorkers)
 import Shikigami.Workspace.ConfiguredHost (configuredWorkspaceHostWithTransfers, configuredWorkspaceTransfers)
@@ -244,7 +245,7 @@ runWorkerCmdWith packs resumeBudget config = do
                   directory,
                   directoryRefresher,
                   objectiveSettings = config.objectiveSettings,
-                  observe = FlowObserve.ObserveSeed config.watchdog (watchdogHooks shikigamiMetrics),
+                  observe = FlowObserve.ObserveSeed (watchdogSettingsFrom config.packSettings) (watchdogHooks shikigamiMetrics),
                   packMetrics = \pack -> PackMetrics (recordPackEvent shikigamiMetrics (flowPackNameText pack)),
                   -- Identity only: a repository's source is a private locator
                   -- and must not reach a model provider.

@@ -1,10 +1,10 @@
 {-# LANGUAGE DataKinds #-}
 
 -- | Operator-owned read policy. Omission from AppConfig disables observation.
-module Shikigami.Watchdog.Settings (WatchdogSettings (..), DeliveryPolicy (..), WatchdogAllowance (..), ObservationScope (..)) where
+module Shikigami.Watchdog.Settings (WatchdogSettings (..), DeliveryPolicy (..), WatchdogAllowance (..), ObservationScope (..), watchdogKey, watchdogSetting, watchdogSettingsFrom) where
 
 import Control.Monad (forM, unless)
-import Data.Aeson (FromJSON (..), ToJSON (..), Value (..), object, withObject, withText, (.:), (.:?), (.=))
+import Data.Aeson (FromJSON (..), Result (..), ToJSON (..), Value (..), fromJSON, object, withObject, withText, (.:), (.:?), (.=))
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.List.NonEmpty (NonEmpty)
 import Data.Map.Strict qualified as Map
@@ -20,6 +20,7 @@ import Shikigami.Duration (Duration, durationTime)
 import Shikigami.Execution.Quantity (amountUnits)
 import Shikigami.Execution.Resources qualified as Resources
 import Shikigami.Objective.Types (ObjectiveId)
+import Shikigami.Pack.Setting (PackSetting (..), PackSettings, SettingShape (..), packSettingValue)
 import Shikigami.Sink.Validate (sinkErrors)
 import Shikigami.Watchdog.Types (WatchdogLimit, limitValue)
 
@@ -145,3 +146,32 @@ instance ToJSON WatchdogSettings where
         "delivery" .= value.delivery,
         "allowance" .= value.allowance
       ]
+
+-- | The key of the one configuration setting, as a pack setting: the key and
+-- variable the kernel declared before the use case owned them. An executable
+-- composed with the use case accepts the key; any other refuses it as unknown.
+watchdogKey :: Text
+watchdogKey = "watchdog"
+
+-- | The setting as an executable accepts it. Unset, nothing is observed.
+watchdogSetting :: PackSetting
+watchdogSetting =
+  PackSetting
+    { key = watchdogKey,
+      environment = "SHIKIGAMI_WATCHDOG",
+      description = "Read-only active work observation: exact principal, scope, windows and bounded sweep size",
+      expectation = "a structurally valid JSON value of the declared type",
+      shape = JsonSetting,
+      whenAbsent = Nothing,
+      validate = \value -> case fromJSON value of
+        Success (_ :: WatchdogSettings) -> Right ()
+        Error _ -> Left "not a watchdog policy"
+    }
+
+-- | The typed settings of a run or a process. The value was decoded once at
+-- start by the same instance, so a failure here can only be a value no
+-- executable validated; it reads as unset.
+watchdogSettingsFrom :: PackSettings -> Maybe WatchdogSettings
+watchdogSettingsFrom settings = case fromJSON <$> packSettingValue watchdogKey settings of
+  Just (Success configured) -> Just configured
+  _ -> Nothing

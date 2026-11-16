@@ -46,6 +46,10 @@ module Shikigami.Flow.Pack
     StreamSkip (..),
     StreamEvaluation (..),
     streamIntakeOf,
+    ScheduleHook (..),
+    ScheduleCandidate (..),
+    ScheduledAllowance (..),
+    scheduleIntakeOf,
 
     -- * Pack settings
     PackSetting (..),
@@ -117,7 +121,7 @@ import Shikigami.Program.Decision qualified as Decision
 import Shikigami.Program.Task (ProgramTask (..))
 import Shikigami.Repository (RepositoryId)
 import Shikigami.Sink (GrantSource)
-import Shikigami.Trigger.Hook (PackDisposition (..), StreamCandidate (..), StreamDisposition (..), StreamEvaluation (..), StreamHook (..), StreamIntake, StreamSkip (..), TriggerHooks (..), noTriggerHooks)
+import Shikigami.Trigger.Hook (PackAllowance (..), PackDisposition (..), ScheduleCandidate (..), ScheduleHook (..), ScheduleIntake, ScheduledAllowance (..), StreamCandidate (..), StreamDisposition (..), StreamEvaluation (..), StreamHook (..), StreamIntake, StreamSkip (..), TriggerHooks (..), noTriggerHooks)
 import System.Exit (exitFailure)
 
 -- | A pack's checked name: lowercase ASCII words joined by @-@, 1 to 64 bytes.
@@ -355,6 +359,17 @@ streamIntakeOf registry settings candidate = do
   entry <- lookupFlow registry flowName
   StreamHook decide <- lookup entry.pack registry.hooks >>= (.stream)
   pure PackDisposition {pack = flowPackNameText entry.pack, disposition = decide settings candidate}
+
+-- | The composed schedule hooks, as the scheduler consults them, by the same
+-- ownership rule as 'streamIntakeOf'.
+scheduleIntakeOf :: FlowRegistry -> PackSettings -> ScheduleIntake
+scheduleIntakeOf registry settings candidate = do
+  flowName <- case candidate.agent.behavior of
+    Flow {name} -> Just name
+    _ -> Nothing
+  entry <- lookupFlow registry flowName
+  ScheduleHook decide <- lookup entry.pack registry.hooks >>= (.schedule)
+  pure PackAllowance {pack = flowPackNameText entry.pack, allowance = decide settings candidate}
 
 decisionProgramRegistry :: FlowRegistry -> ProgramRegistry
 decisionProgramRegistry registry = registry.programs

@@ -44,6 +44,7 @@ module Shikigami.Workers.Command
     workerRoleInfoWith,
     workspaceSupervisorRoleInfo,
     schedulerRoleInfo,
+    schedulerRoleInfoWith,
     consumeStreamRoleInfo,
     consumeStreamRoleInfoWith,
     consumeEventsRoleInfo,
@@ -124,16 +125,21 @@ workerRoleInfoWith packs =
 
 -- | @shikigami-scheduler@: arm Schedule triggers and drive timer firing.
 schedulerRoleInfo :: RoleInfo
-schedulerRoleInfo =
+schedulerRoleInfo = schedulerRoleInfoWith []
+
+-- | The scheduler composed with flow packs, whose schedule hooks decide
+-- whether a due tick runs under an enrolled resource root.
+schedulerRoleInfoWith :: [FlowPack] -> RoleInfo
+schedulerRoleInfoWith packs =
   RoleInfo
     { binaryName = "shikigami-scheduler",
       role = SchedulerRole,
-      packSettings = [],
+      packSettings = concatMap (.settings) packs,
       parserInfo =
         withConfigOptions
           "shikigami-scheduler"
           "Arm Schedule triggers and drive keiro timer firing"
-          (pure runSchedulerCmd)
+          (pure (runSchedulerCmd packs))
           (sourcesOf [agentsOption])
     }
 

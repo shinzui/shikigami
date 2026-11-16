@@ -1,22 +1,24 @@
 {-# LANGUAGE DataKinds #-}
 
--- | Schedule-only resource enrollment. Other trigger paths grant no allowance.
-module Shikigami.Watchdog.Admission (watchdogAllowance, enrollScheduledWatchdogTx) where
+-- | The watchdog's say over its scheduled ticks. Other trigger paths grant no
+-- allowance; the kernel enrolls the root ("Shikigami.Trigger.Enrollment").
+module Shikigami.Watchdog.Admission (watchdogAllowance, watchdogScheduleHook) where
 
-import Control.Lens ((&), (.~))
-import Data.Generics.Labels ()
 import Data.Text (Text)
-import Data.Time (UTCTime, addUTCTime)
-import Hasql.Transaction (Transaction)
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..))
 import Shikigami.Agent.DeclarationValue (declarationCoordinate)
-import Shikigami.Agent.Principal (AgentIdentity (..), resolveAgentIdentity)
-import Shikigami.Agent.RunJob (RunJob (..), runJobWorkflowId)
+import Shikigami.Agent.Principal (AgentIdentity (..))
 import Shikigami.Duration (durationTime)
-import Shikigami.Execution.Identity (ExecutionRootId)
-import Shikigami.Execution.Resources (Envelope (..))
-import Shikigami.Execution.ResourcesStore (recoverRootForWorkflowTx)
+import Shikigami.Trigger.Hook (ScheduleCandidate (..), ScheduleHook (..), ScheduledAllowance (..))
 import Shikigami.Watchdog.Settings
+
+-- | Every tick of a @watchdog-sweep@ agent needs the operator's allowance for
+-- exactly its principal; a tick of any other flow has none and needs none.
+watchdogScheduleHook :: ScheduleHook
+watchdogScheduleHook = ScheduleHook \settings candidate ->
+  fmap (fmap scheduled) (watchdogAllowance (watchdogSettingsFrom settings) candidate.agent candidate.identity)
+  where
+    scheduled allowance = ScheduledAllowance {principal = allowance.principal, limits = allowance.limits, lifetime = durationTime allowance.cutoffSeconds}
 
 watchdogAllowance :: Maybe WatchdogSettings -> AgentDecl -> AgentIdentity -> Either Text (Maybe WatchdogAllowance)
 watchdogAllowance settings declaration identity = case declaration.behavior of
@@ -28,14 +30,3 @@ watchdogAllowance settings declaration identity = case declaration.behavior of
       then Right (Just allowance)
       else Left "watchdog allowance principal or Flow mismatch"
   _ -> Right Nothing
-
-enrollScheduledWatchdogTx :: ExecutionRootId -> WatchdogAllowance -> UTCTime -> RunJob -> Transaction (Either Text RunJob)
-enrollScheduledWatchdogTx candidate allowance now job
-  | job.identity /= VerifiedIdentity allowance.principal || allowance.flow /= declarationCoordinate "watchdog-sweep" || job.parentRunWorkflowId /= Nothing || job.parentSessionId /= Nothing || job.delegationBudgetId /= Nothing || job.delegationDepth /= Nothing || job.executionRootId /= Nothing = pure (Left "watchdog enrollment requires the bound new root run")
-  | otherwise = case resolveAgentIdentity job.identity of
-      Left _ -> pure (Left "watchdog identity is unresolved")
-      Right creator -> do
-        root <- recoverRootForWorkflowTx candidate creator job.agentName (runJobWorkflowId job) (Envelope allowance.limits (addUTCTime (durationTime allowance.cutoffSeconds) now))
-        pure case root of
-          Left _ -> Left "watchdog resource enrollment refused"
-          Right identifier -> Right (job & #executionRootId .~ Just identifier)

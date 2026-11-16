@@ -359,6 +359,7 @@ Shikigami.Flow.Sdk Subject
 Shikigami.Flow.Sdk Subject.kind
 Shikigami.Flow.Sdk Subject.subjectId
 Shikigami.Flow.Sdk TriggerHooks
+Shikigami.Flow.Sdk TriggerHooks.schedule
 Shikigami.Flow.Sdk TriggerHooks.stream
 Shikigami.Flow.Sdk Workflow
 Shikigami.Flow.Sdk activityCoordinate

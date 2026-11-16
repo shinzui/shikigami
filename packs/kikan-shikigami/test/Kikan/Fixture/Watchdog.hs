@@ -53,14 +53,18 @@ import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
 import Shikigami.Objective.Types qualified as Objective
+import Shikigami.Pack.Setting (packSettingsFromList)
 import Shikigami.Sink (GrantSource (DbGrants), SinkKind (SDanwaConversation))
 import Shikigami.Sink.GrantStore qualified as Grants
 import Shikigami.StateRevision (advanceRevision, initialRevision)
+import Shikigami.Trigger.Hook (ScheduleIntake, scheduleIntake)
 import Shikigami.Trigger.Schedule (CatchUpPolicy (SkipMissed), nextDue, parseCron)
 import Shikigami.Trigger.Scheduler (SchedulerEnv (..), armNextRun, runSchedulerTimerWorker)
+import Shikigami.Watchdog.Admission (watchdogScheduleHook)
 import Shikigami.Watchdog.Classify (classifyPage)
 import Shikigami.Watchdog.Grant
 import Shikigami.Watchdog.Observation
+import Shikigami.Watchdog.Settings (watchdogKey)
 import Shikigami.Watchdog.Store qualified as Ledger
 import Shikigami.Watchdog.Types
 import Shikigami.WorkerSession.Input
@@ -177,7 +181,7 @@ tickWith :: Watchdog -> Agent.AgentRunDeps -> UTCTime -> (RunJob -> IO ()) -> (R
 tickWith w dependencies at check dispatch = do
   cron <- right (parseCron "* * * * *")
   due <- maybe (assertFailure "no due tick") pure (nextDue cron at)
-  let scheduler = SchedulerEnv w.base.pool (Map.singleton w.declaration.name cron) [w.declaration] (Just w.settings) (Map.singleton w.declaration.name (Just (declarationCoordinate "agent_watchdog"))) w.directory SkipMissed Log.silentLogger
+  let scheduler = SchedulerEnv w.base.pool (Map.singleton w.declaration.name cron) [w.declaration] (watchdogAllowances (Just w.settings)) (Map.singleton w.declaration.name (Just (declarationCoordinate "agent_watchdog"))) w.directory SkipMissed Log.silentLogger
   _ <- owned w.base (armNextRun cron w.declaration.name at)
   _ <- owned w.base (runSchedulerTimerWorker w.base.env scheduler due)
   received <- newIORef []
@@ -213,3 +217,9 @@ checked = either (error . show) id
 
 right :: (Show e) => Either e a -> IO a
 right = either (assertFailure . show) pure
+
+-- | The watchdog's schedule hook over one explicit policy, as the composed
+-- scheduler would consult it for a @watchdog-sweep@ agent.
+watchdogAllowances :: Maybe WatchdogSettings -> ScheduleIntake
+watchdogAllowances settings =
+  scheduleIntake "builtin" (const True) (packSettingsFromList [(watchdogKey, toJSON configured) | configured <- maybe [] pure settings]) watchdogScheduleHook

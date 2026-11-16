@@ -117,7 +117,7 @@ tests fixture = withResource (newMVar Map.empty) (const (pure ())) $ \resource -
         _ <- P.runTx w.base (Tx.sql "UPDATE shikigami.execution_transcript_operations SET state=jsonb_set(state,'{permission,expiresAt}',to_jsonb(clock_timestamp()-interval '1 second')) WHERE state->'permission' IS NOT NULL")
         cron <- right (parseCron "* * * * *")
         let expiredAt = addUTCTime 901 now
-            pausedAdmission = SchedulerEnv w.base.pool (Map.singleton w.declaration.name cron) [w.declaration] (Just (w.settings & #allowance .~ Nothing)) (Map.singleton w.declaration.name (Just (declarationCoordinate "agent_watchdog"))) w.directory SkipMissed Log.silentLogger
+            pausedAdmission = SchedulerEnv w.base.pool (Map.singleton w.declaration.name cron) [w.declaration] (watchdogAllowances (Just (w.settings & #allowance .~ Nothing))) (Map.singleton w.declaration.name (Just (declarationCoordinate "agent_watchdog"))) w.directory SkipMissed Log.silentLogger
         -- Drain through the production dispatcher. The schedule also becomes
         -- due at this instant; refuse its allowance while firing the approval,
         -- then admit the next tick with the original operator policy.
@@ -236,7 +236,7 @@ tests fixture = withResource (newMVar Map.empty) (const (pure ())) $ \resource -
           view <- P.runTx w.base (Ledger.inspectWatchdog w.identity AllObjectives) >>= right
           cron <- right (parseCron "* * * * *")
           assertBool "skipped cadence becomes overdue" (case overdueVerdict cron (remainingDuration 0) (addUTCTime 600 now) view.lastCompletedSweep of SweepOverdue {} -> True; _ -> False)
-          let scheduler = SchedulerEnv w.base.pool (Map.singleton w.declaration.name cron) [w.declaration] (Just (w.settings & #allowance .~ Nothing)) (Map.singleton w.declaration.name (Just (declarationCoordinate "agent_watchdog"))) w.directory SkipMissed Log.silentLogger
+          let scheduler = SchedulerEnv w.base.pool (Map.singleton w.declaration.name cron) [w.declaration] (watchdogAllowances (Just (w.settings & #allowance .~ Nothing))) (Map.singleton w.declaration.name (Just (declarationCoordinate "agent_watchdog"))) w.directory SkipMissed Log.silentLogger
           _ <- owned w.base (runSchedulerTimerWorker w.base.env scheduler (addUTCTime 120 now))
           skips <- right =<< DirectoryStore.listRunSkips w.base.pool
           assertBool "RunSkip retained" (not (null skips))

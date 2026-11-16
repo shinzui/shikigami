@@ -42,6 +42,7 @@ import Shikigami.Objective.Types hiding (Cancelled, Completed)
 import Shikigami.Prelude
 import Shikigami.RecurringObjective.Generated.WorkflowRuntime qualified as Native
 import Shikigami.RunEvidence.Catalog qualified as Catalog
+import Shikigami.Trigger.Hook (noScheduleIntake)
 import Shikigami.Trigger.Schedule (CatchUpPolicy (SkipMissed))
 import Shikigami.Trigger.Scheduler (SchedulerEnv (..))
 import Shikigami.Trigger.Timer (runTimerPass)
@@ -58,7 +59,7 @@ tests fixture =
           _ <- admit env request
           let runtime = Objectives.ObjectiveRuntime env operatorHost.settings disabledDirectoryHandle allowAllForTests Nothing
               drive = run env (runWorkflowWith (shikigamiWorkflowRunOptions env) Native.workflowName (M.mandateWorkflowId request.mandateId) (Workflow.workflow (Just runtime) Nothing))
-              scheduler = SchedulerEnv store.pool Map.empty [] Nothing Map.empty disabledDirectoryHandle SkipMissed Log.silentLogger
+              scheduler = SchedulerEnv store.pool Map.empty [] noScheduleIntake Map.empty disabledDirectoryHandle SkipMissed Log.silentLogger
           drive >>= (@?= Suspended)
           before <- right =<< run env (Mandates.inspectMandate operatorHost request.mandateId)
           claimed <- run env (claimDueTimer (addUTCTime 100 now))

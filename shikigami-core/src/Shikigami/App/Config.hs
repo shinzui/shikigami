@@ -49,8 +49,6 @@ module Shikigami.App.Config
     HttpAuthSettings (..),
     InspectionSettings (..),
     inspectionKey,
-    WatchdogSettings (..),
-    watchdogKey,
     httpAuthModeKey,
     httpAuthTokenKey,
     httpAuthCallerKey,
@@ -220,7 +218,7 @@ import Shikigami.Sink.Permission (SinkKind)
 import Shikigami.Trigger.Schedule (CatchUpPolicy (..))
 import Shikigami.Trigger.Stream (IncludeAgentActors (..), agentActorInclusion, agentActorsIncluded)
 import Shikigami.Trust.Tier (TrustTier (..), trustTierText)
-import Shikigami.Watchdog.Settings (WatchdogSettings (..))
+import Shikigami.Watchdog.Settings (watchdogSetting)
 import Shikigami.Workspace.Settings (WorkspaceSettings, WorkspaceSupervisorSettings)
 
 -- ── Value types ─────────────────────────────────────────────────────────────
@@ -523,7 +521,6 @@ data AppConfig = AppConfig
     workspaceSupervisorSettings :: !(Maybe WorkspaceSupervisorSettings),
     objectiveSettings :: !ObjectiveSettings,
     trackerSettings :: !TrackerSettings,
-    watchdog :: !(Maybe WatchdogSettings),
     -- | @trust.tier@: who decides a run's actions and how its processes are
     -- contained (ADR-124). @contained@ keeps what each executable does today.
     trustTier :: !TrustTier,
@@ -600,7 +597,6 @@ kernelAppConfig =
     <*> optional (secretSetting workspaceSupervisorKey "Private systemd socket and bounded peer-checked workspace supervisor intake" jsonDecoder)
     <*> withDefault (secretSetting (stableKey "objectives") "Objective enablement, local operator and default-deny recorded agent creation grants" jsonDecoder) (constant "objectives-disabled" "Objective tracking requires explicit enablement" defaultObjectiveSettings)
     <*> withDefault (secretSetting (stableKey "objective_trackers") "Provider-neutral objective tracker connections and explicit use/export grants" jsonDecoder) (constant "trackers-disabled" "External objective tracking requires explicit enablement" defaultTrackerSettings)
-    <*> optional (publicSettingWithRenderer watchdogKey "Read-only active work observation: exact principal, scope, windows and bounded sweep size" jsonDecoder renderJson)
     <*> withDefault trustTierSetting (constant "contained-tier" "Each executable keeps its configured authority and containment" Contained)
     <*> optional (publicSettingWithRenderer trustApprovalsFileKey "The local operator's explicit approvals file (schema/LocalOperator.dhall)" (Text.unpack <$> textDecoder) Text.pack)
     <*> optional (publicSettingWithRenderer trustStateDirectoryKey "The local operator's state directory for grants, worktrees and locks" (Text.unpack <$> textDecoder) Text.pack)
@@ -884,10 +880,9 @@ appConfigWith settings =
 
 -- | The settings of the use cases still compiled into the core, declared the
 -- way a pack declares its own so that they move with their use case
--- (docs/adr/0129). Every executable accepts them until then. The list only
--- shrinks.
+-- (docs/adr/0129). Every executable accepts them until then.
 coreUseCaseSettings :: [PackSetting]
-coreUseCaseSettings = []
+coreUseCaseSettings = [watchdogSetting]
 
 -- | One pack setting: its raw value read by shape, then validated by the
 -- pack. A refusal names the pack's expectation and never the value.
@@ -1657,7 +1652,6 @@ kernelEnvironmentBindings =
     binding (EnvName "SHIKIGAMI_BEHAVIOR_HARNESS") behaviorHarnessKey,
     binding (EnvName "SHIKIGAMI_OBJECTIVES") (stableKey "objectives"),
     binding (EnvName "SHIKIGAMI_OBJECTIVE_TRACKERS") (stableKey "objective_trackers"),
-    binding (EnvName "SHIKIGAMI_WATCHDOG") watchdogKey,
     binding (EnvName "SHIKIGAMI_WORKSPACES") workspacesKey,
     binding (EnvName "SHIKIGAMI_WORKSPACE_SUPERVISOR") workspaceSupervisorKey,
     binding (EnvName "SHIKIGAMI_BEHAVIOR_MODEL") behaviorModelKey,
@@ -1849,6 +1843,3 @@ httpAuthTokenSetting = secretSetting httpAuthTokenKey "Inbound API bearer token 
   decoder \key raw -> case runDecoder textDecoder key raw of
     Right value | Text.length value >= 16 -> Right (SecretText value)
     _ -> Left (decodeFailure key "a bearer token of at least sixteen characters")
-
-watchdogKey :: Key
-watchdogKey = stableKey "watchdog"

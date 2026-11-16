@@ -38,6 +38,7 @@ import Shikigami.Program.Decision.Registry (builtinDecisionPrograms, builtinReta
 import Shikigami.Program.Registry (programRegistry)
 import Shikigami.Router.Decision (RouteDecision (..), RouteOutcome (..), RouteSelection (..))
 import Shikigami.RuntimePolicy
+import Shikigami.Watchdog.Admission (watchdogScheduleHook)
 
 -- | The one pack the stock roles compose.
 builtinPack :: FlowPack
@@ -49,7 +50,9 @@ builtinPack =
       retainedCodecs = builtinRetainedCodecs,
       tasks = programRegistry,
       settings = [],
-      triggers = noTriggerHooks,
+      -- The watchdog is still compiled into the core, so the builtin pack
+      -- carries its schedule hook until it moves (plan 131, M5).
+      triggers = noTriggerHooks {schedule = Just watchdogScheduleHook},
       adminVerbs = []
     }
 

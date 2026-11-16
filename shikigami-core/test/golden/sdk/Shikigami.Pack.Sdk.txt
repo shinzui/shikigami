@@ -9,6 +9,9 @@ PackMetrics (..)
 PackSetting (..)
 PackSettings
 RunModel (..)
+ScheduleCandidate (..)
+ScheduleHook (..)
+ScheduledAllowance (..)
 SettingDefault (..)
 SettingShape (..)
 Store

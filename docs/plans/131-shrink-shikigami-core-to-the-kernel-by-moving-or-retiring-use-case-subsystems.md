@@ -293,6 +293,17 @@ this Mac through the same operator verbs as before (`watchdog inspect`, `proposa
     fixture authorizer admits three fixed principals; the accepted run uses one of them.
 - [ ] M5: `Watchdog` runs from `flow-pack-watchdog` through a kernel schedule-allowance
   hook. A scheduled sweep observes a real local run and `kikan-shikigami watchdog inspect` shows it.
+  - Kernel schedule hook (2026-11-16). `TriggerHooks` gains `schedule :: Maybe ScheduleHook`,
+    a pure `PackSettings -> ScheduleCandidate -> Either Text (Maybe ScheduledAllowance)`.
+    The scheduler consults the composed `ScheduleIntake` (`scheduleIntakeOf`) for a due
+    tick and, given an allowance, calls the kernel's `enrollScheduledRootTx`
+    (`Shikigami.Trigger.Enrollment`), the generic half of what was
+    `enrollScheduledWatchdogTx`. The scheduler composes packs (`schedulerRoleInfoWith`).
+    The `watchdog` key leaves the kernel's configuration record and is declared as a
+    `PackSetting` in `coreUseCaseSettings`, with the same key, variable, validation and
+    public rendering. The builtin pack carries the watchdog's hook for now; nothing about
+    the watchdog's behavior changes. The scheduler's enrollment test uses a fixture
+    allowance; the refusal texts of the enrollment are now `scheduled ...`.
 - [ ] M6: The adaptive-delivery coordinator is confirmed as a kernel primitive and stays in
   `shikigami-core`. Its disposition is recorded, an import check shows it has no Kikan
   service dependency, and a real objective on a local repository receives an adaptive
@@ -480,6 +491,16 @@ this Mac through the same operator verbs as before (`watchdog inspect`, `proposa
 
 ## Decision Log
 
+- Decision (M5): The schedule hook answers with an allowance and nothing else, and the
+  kernel enrolls the root.
+  Rationale: the plan's sketch, with three adjustments found in the code. The hook takes
+  `PackSettings`, like the stream hook, because the allowance is the operator's setting. A
+  refusal is `Text`, the bounded reason the scheduler already records as a run skip, so no
+  `ScheduleRefusal` type is introduced for one use. `ScheduledAllowance` has no `flow`
+  field: the intake only puts a tick to the pack that owns the agent's flow, so naming the
+  flow again would be a second answer to a question the registry already answered. Its
+  `lifetime` is a `NominalDiffTime`, because a `Duration` is tagged with its owner's name.
+  Date: 2026-11-16
 - Decision (M4): The worker's first drive of a run holds the keiro instance lease.
   Rationale: the discovery above. `Shikigami.Workflow.Versioning.runWorkflowLeased` claims
   the lease the resume worker claims (same owner scheme, same `timeout + 30` lifetime),

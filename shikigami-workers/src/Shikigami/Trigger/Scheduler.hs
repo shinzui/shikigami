@@ -48,15 +48,17 @@ import Shikigami.Mandate.Timer qualified as MandateTimer
 import Shikigami.Mandate.Wake qualified as MandateWake
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.Trigger.Enqueue (enqueueRunJobTx, enqueueScheduledRun, scheduleRunIdempotencyKey, scheduledRunJob)
+import Shikigami.Trigger.Enrollment (enrollScheduledRootTx)
+import Shikigami.Trigger.Hook (PackAllowance (..), ScheduleCandidate (..), ScheduleIntake)
 import Shikigami.Trigger.Schedule (CatchUpPolicy (..), CronSchedule, nextDue)
-import Shikigami.Watchdog.Admission
-import Shikigami.Watchdog.Settings (WatchdogSettings)
 
 data SchedulerEnv = SchedulerEnv
   { pool :: !Pool,
     schedules :: !(Map AgentName CronSchedule),
     declarations :: ![AgentDecl],
-    watchdog :: !(Maybe WatchdogSettings),
+    -- | The composed packs' say over a due tick: whether it runs under an
+    -- enrolled resource root ("Shikigami.Trigger.Hook").
+    allowances :: !ScheduleIntake,
     -- | Declaration principal ids keyed by scheduled agent name.
     principalIds :: !(Map AgentName (Maybe (DeclarationCoordinate "principal"))),
     directory :: !Directory.DirectoryHandle,
@@ -148,7 +150,9 @@ scheduleFireAction env now TimerRow {payload = timerPayload} =
       let admission = do
             identity <- admittedIdentity agent declaredPrincipalId decision
             allowance <- case [declaration | declaration <- env.declarations, declaration.name == agent] of
-              [declaration] -> either (Left . (declaredPrincipalId,)) Right (watchdogAllowance env.watchdog declaration identity)
+              [declaration] -> case env.allowances ScheduleCandidate {agent = declaration, identity, dueAt} of
+                Just PackAllowance {allowance = decided} -> either (Left . (declaredPrincipalId,)) Right decided
+                Nothing -> Right Nothing
               _ -> Right Nothing
             pure (identity, allowance)
       case admission of
@@ -158,7 +162,7 @@ scheduleFireAction env now TimerRow {payload = timerPayload} =
             Just policy -> do
               candidate <- liftIO newExecutionRootId
               enrolled <- runTransaction do
-                enrollScheduledWatchdogTx candidate policy now (scheduledRunJob identity agent dueAt) >>= \case
+                enrollScheduledRootTx candidate policy now (scheduledRunJob identity agent dueAt) >>= \case
                   Left problem -> pure (Left problem)
                   Right job -> Right <$> enqueueRunJobTx job
               pure (fmap (const ()) enrolled)

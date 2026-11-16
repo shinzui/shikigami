@@ -43,9 +43,9 @@ import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshData
 import Shikigami.RunJobs qualified as RunJobs
 import Shikigami.RuntimePolicy (ManifestStrictness (..))
 import Shikigami.Trigger.Enqueue (ensureRunQueue, runQueueName)
+import Shikigami.Trigger.Hook (PackAllowance (..), ScheduledAllowance (..), noScheduleIntake)
 import Shikigami.Trigger.Schedule (CatchUpPolicy (..), CronSchedule, cronExpressionClaim, nextDue, parseCron)
 import Shikigami.Trigger.Scheduler (SchedulerEnv (..), armNextRun, parseSchedulePayload, runSchedulerTimerWorker, scheduleFireAction, scheduleTimerId, scheduleTimerPayload, shikigamiTimerFallback)
-import Shikigami.Watchdog.Settings
 import Shikigami.Workers.Config (schedulerSchedules)
 import System.Exit (ExitCode (ExitFailure))
 import Test.Tasty (TestTree, testGroup)
@@ -132,38 +132,25 @@ tests databaseFixture =
 
             refired <- runAppIO appEnv (runSchedulerTimerWorker appEnv env (atMinute 2))
             assertBool "re-armed next schedule timer fired" (either (const False) (> 0) refired),
-      testCase "watchdog tick enrolls once at receipt and retains the original allowance on retry" do
+      testCase "a pack's allowance enrolls a tick once at receipt, and a retry retains the original allowance" do
         withShikigamiFreshDatabase databaseFixture \connStr ->
           withStore (defaultConnectionSettings connStr) \store -> do
             tracer <- noopTracer
             directory <- directoryWith Active
             cron <- parseCronOrFail "* * * * *"
-            identity <- VerifiedIdentity <$> either (assertFailure . Text.unpack) pure (mkAgentPrincipal "agent_heartbeat")
-            configured <-
-              either
-                assertFailure
-                pure
-                ( Aeson.eitherDecode
-                    ( Aeson.encode
-                        ( Aeson.object
-                            [ "principal" .= ("agent_heartbeat" :: Text),
-                              "scope" .= ("all" :: Text),
-                              "stuckWindowSeconds" .= (60 :: Int),
-                              "parkedWindowSeconds" .= (30 :: Int),
-                              "coordinatorWindowSeconds" .= (60 :: Int),
-                              "subjectsPerSweep" .= (9 :: Int),
-                              "allowance" .= Aeson.object ["principal" .= ("agent_heartbeat" :: Text), "flow" .= watchdogFlowName, "cutoffSeconds" .= (240 :: Int), "limits" .= Aeson.object ["ActiveWork" .= (1 :: Int), "ModelAttempts" .= (1 :: Int), "Tokens" .= (1000 :: Int), "CostMicroUsd" .= ("unbounded" :: Text), "ToolAttempts" .= (0 :: Int), "LifetimeDescendants" .= (0 :: Int)]]
-                            ]
-                        )
-                    )
-                )
+            principal <- either (assertFailure . Text.unpack) pure (mkAgentPrincipal "agent_heartbeat")
+            let amount = Resources.Limited . either (error . show) id . parseResourceAmount
+                limits = Map.fromList [(Resources.ActiveWork, amount 1), (Resources.ModelAttempts, amount 1), (Resources.Tokens, amount 1000), (Resources.CostMicroUsd, Resources.ExplicitlyUnbounded)]
+                -- A fixture pack's answer for every tick: one decision, by lifetime.
+                allowing lifetime = const (Just PackAllowance {pack = "fixture", allowance = Right (Just ScheduledAllowance {principal, limits, lifetime})})
+                refusing = const (Just PackAllowance {pack = "fixture", allowance = Left "fixture allowance is disabled"})
             let pool = StoreConnection.pool store
                 appEnv = AppEnv (defaultConnectionSettings connStr) tracer Nothing Nothing
                 declaration = scheduledAgent "heartbeat" "* * * * *" & #behavior .~ Flow watchdogFlowName
                 env =
                   (testSchedulerEnv pool (Map.singleton declaration.name cron) SkipMissed Log.silentLogger)
                     { declarations = [declaration],
-                      watchdog = Just configured,
+                      allowances = allowing 240,
                       principalIds = Map.singleton declaration.name (Just (declarationCoordinate "agent_heartbeat")),
                       directory
                     }
@@ -172,16 +159,15 @@ tests databaseFixture =
             tick env aDayLater >>= assertBool "late tick admitted" . either (const False) (maybe False (const True))
             jobs <- readRunJobs pool
             original <- case jobs of [job] -> pure job; _ -> assertFailure (show jobs)
-            root <- maybe (assertFailure "watchdog job has no root") pure original.executionRootId
+            root <- maybe (assertFailure "the enrolled job has no root") pure original.executionRootId
             state <- runAppIO appEnv (Roots.inspectRoot root) >>= either (assertFailure . show) (either (assertFailure . show) pure)
             state.envelope.cutoff @?= addUTCTime 240 aDayLater
-            let broadened = configured & #allowance .~ fmap (\allowance -> allowance & #cutoffSeconds .~ either (error . show) id (Shikigami.Duration.parseDuration 480)) configured.allowance
-            tick (env {watchdog = Just broadened}) (addUTCTime 60 aDayLater) >>= assertBool "retry admitted" . either (const False) (maybe False (const True))
+            tick (env {allowances = allowing 480}) (addUTCTime 60 aDayLater) >>= assertBool "retry admitted" . either (const False) (maybe False (const True))
             replayed <- readRunJobs pool
             map (.executionRootId) replayed @?= [Just root]
             retained <- runAppIO appEnv (Roots.inspectRoot root) >>= either (assertFailure . show) (either (assertFailure . show) pure)
             retained.envelope @?= state.envelope
-            tick (env {watchdog = Nothing}) aDayLater >>= assertBool "disabled tick acknowledged as skip" . either (const False) (maybe False (const True))
+            tick (env {allowances = refusing}) aDayLater >>= assertBool "disabled tick acknowledged as skip" . either (const False) (maybe False (const True))
             readRunJobs pool >>= (@?= [])
             skips <- either (assertFailure . Text.unpack) pure =<< DirectoryStore.listRunSkips pool
             length skips @?= 1,
@@ -399,7 +385,7 @@ scheduledAgent agentName cron =
 -- | A 'SchedulerEnv' with the two fields every case below varies made explicit.
 testSchedulerEnv :: Pool.Pool -> Map.Map AgentName CronSchedule -> CatchUpPolicy -> Log.Logger -> SchedulerEnv
 testSchedulerEnv pool schedules catchUpPolicy logger =
-  SchedulerEnv {pool, schedules, declarations = [], watchdog = Nothing, principalIds = Map.empty, directory = disabledDirectoryHandle, catchUpPolicy, logger}
+  SchedulerEnv {pool, schedules, declarations = [], allowances = noScheduleIntake, principalIds = Map.empty, directory = disabledDirectoryHandle, catchUpPolicy, logger}
 
 directoryWith :: Lifecycle -> IO DirectoryHandle
 directoryWith lifecycle = do

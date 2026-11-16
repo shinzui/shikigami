@@ -48,6 +48,15 @@ Shikigami.Pack.Sdk PackSetting.whenAbsent
 Shikigami.Pack.Sdk PackSettings
 Shikigami.Pack.Sdk RunModel
 Shikigami.Pack.Sdk RunModel.completeJsonObject
+Shikigami.Pack.Sdk ScheduleCandidate
+Shikigami.Pack.Sdk ScheduleCandidate.agent
+Shikigami.Pack.Sdk ScheduleCandidate.dueAt
+Shikigami.Pack.Sdk ScheduleCandidate.identity
+Shikigami.Pack.Sdk ScheduleHook
+Shikigami.Pack.Sdk ScheduledAllowance
+Shikigami.Pack.Sdk ScheduledAllowance.lifetime
+Shikigami.Pack.Sdk ScheduledAllowance.limits
+Shikigami.Pack.Sdk ScheduledAllowance.principal
 Shikigami.Pack.Sdk SettingDefault
 Shikigami.Pack.Sdk SettingDefault.reason
 Shikigami.Pack.Sdk SettingDefault.rule

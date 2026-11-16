@@ -47,6 +47,7 @@ import Shikigami.Fixture.ExecutionIdentity (fixtureAttemptId, fixtureOperationId
 import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
+import Shikigami.Trigger.Hook (noScheduleIntake)
 import Shikigami.Trigger.Schedule (CatchUpPolicy (SkipMissed), parseCron)
 import Shikigami.Trigger.Scheduler (SchedulerEnv (..))
 import Shikigami.Trigger.Timer (runTimerPass)
@@ -152,7 +153,7 @@ testSchedulerEnv :: Pool.Pool -> SchedulerEnv
 testSchedulerEnv pool =
   SchedulerEnv
     { declarations = [],
-      watchdog = Nothing,
+      allowances = noScheduleIntake,
       pool,
       schedules = Map.empty,
       principalIds = Map.empty,

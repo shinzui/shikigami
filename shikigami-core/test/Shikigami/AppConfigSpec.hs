@@ -73,6 +73,7 @@ import Shikigami.Sink.Auth (TokenSource (..), credentialToken, matchesBearerHead
 import Shikigami.Sink.Permission (SinkKind (..))
 import Shikigami.Trigger.Schedule (CatchUpPolicy (..), parseCron)
 import Shikigami.Trigger.Stream (IncludeAgentActors (..))
+import Shikigami.Watchdog.Settings (WatchdogSettings (..), watchdogSettingsFrom)
 import Shikigami.Workspace.Settings (WorkspaceSettings (..), WorkspaceSupervisorSettings (..))
 import Shikigami.Workspace.Value
 import Test.Tasty (TestTree, testGroup)
@@ -1065,11 +1066,11 @@ watchdogConfigurationTests =
   testGroup
     "watchdog configuration"
     [ testCase "omission disables observation" do
-        isNothing defaultAppConfig.watchdog @?= True,
+        isNothing (watchdogSettingsFrom defaultAppConfig.packSettings) @?= True,
       testCase "environment object resolves and is visible in the schema" do
         config <- resolveOrFail (optionsWith [] []) [] [("SHIKIGAMI_WATCHDOG", document)]
         principal <- either (assertFailure . Text.unpack) pure (mkAgentPrincipal "agent_watchdog")
-        fmap (.principal) config.watchdog @?= Just (VerifiedIdentity principal)
+        fmap (.principal) (watchdogSettingsFrom config.packSettings) @?= Just (VerifiedIdentity principal)
         assertBool "schema describes watchdog" ("watchdog" `Text.isInfixOf` renderSchemaText appConfigSchema),
       testCase "bad limits refuse the watchdog key" do
         forM_

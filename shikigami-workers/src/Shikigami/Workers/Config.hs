@@ -67,7 +67,7 @@ import Shikigami.Execution.Capacity (RuntimeLimits)
 import Shikigami.Execution.Policy.Types (HarnessPolicy)
 import Shikigami.Flow.Decision qualified as FlowDecision
 import Shikigami.Flow.Observe qualified as FlowObserve
-import Shikigami.Flow.Pack (FlowPackName, FlowRegistry, PackMetrics)
+import Shikigami.Flow.Pack (FlowPackName, FlowRegistry, PackMetrics, scheduleIntakeOf)
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Health.Worker (Heartbeats, LoopName (DirectoryLoop), LoopStaleness, beat, loopStaleness)
 import Shikigami.Inspection.Consumer (ConsumerInspection)
@@ -340,7 +340,7 @@ schedulerEnv :: WorkerEnv -> Scheduler.SchedulerEnv
 schedulerEnv env =
   Scheduler.SchedulerEnv
     { Scheduler.declarations = env.agents,
-      Scheduler.watchdog = env.observe.settings,
+      Scheduler.allowances = scheduleIntakeOf env.flows env.packSettings,
       Scheduler.pool = (.pool) env,
       Scheduler.schedules = envSchedules env,
       Scheduler.principalIds = principalIdsByAgent ((.agents) env),

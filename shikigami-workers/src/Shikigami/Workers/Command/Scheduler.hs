@@ -24,6 +24,8 @@ import Shikigami.App.Config (AppConfig, Role (SchedulerRole))
 import Shikigami.App.Config qualified as Config
 import Shikigami.App.Config.Load (requireDatabaseUrl)
 import Shikigami.Directory (DirectoryRuntime (..))
+import Shikigami.Flow.Builtin (builtinPack)
+import Shikigami.Flow.Pack (FlowPack, composeFlowRegistryOrExit, scheduleIntakeOf)
 import Shikigami.Health.Supervision (superviseLoops)
 import Shikigami.Health.Worker (LoopName (DirectoryLoop, SchedulerLoop), beat, loopStaleAfter, newHeartbeatsWithStaleness, serveProbesWith)
 import Shikigami.Inspection.Runtime (withInspectionRuntime)
@@ -43,10 +45,11 @@ import System.Exit (exitFailure)
 -- The manifest directory comes from @agents.directory@ (the @--agents@ flag is a
 -- command-line source for it) and the connection string from
 -- @database.connection_string@.
-runSchedulerCmd :: AppConfig -> IO ()
-runSchedulerCmd config = do
+runSchedulerCmd :: [FlowPack] -> AppConfig -> IO ()
+runSchedulerCmd packs config = do
   logger <- Log.newStderrLogger Log.Info
   connStr <- Config.revealSecretText <$> requireDatabaseUrl "shikigami-scheduler" config
+  flows <- composeFlowRegistryOrExit logger "shikigami-scheduler" (builtinPack : packs)
   verifyShikigamiMigrations connStr
   withRunTelemetry "shikigami.scheduler" \tr keiroMetrics _ -> do
     let settings = runtimeConnectionSettings logger keiroMetrics connStr
@@ -89,7 +92,7 @@ runSchedulerCmd config = do
             env =
               SchedulerEnv
                 { declarations = agents,
-                  watchdog = config.watchdog,
+                  allowances = scheduleIntakeOf flows config.packSettings,
                   pool = storePool,
                   schedules = scheduleMap,
                   principalIds = principalIdsByAgent agents,

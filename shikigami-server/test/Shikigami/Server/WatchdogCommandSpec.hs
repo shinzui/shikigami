@@ -4,7 +4,7 @@ module Shikigami.Server.WatchdogCommandSpec (tests) where
 
 import Control.Exception (try)
 import Control.Lens ((&), (.~))
-import Data.Aeson (eitherDecode)
+import Data.Aeson (eitherDecode, toJSON)
 import Data.Generics.Labels ()
 import Data.Time (getCurrentTime)
 import Hasql.Transaction qualified as Tx
@@ -17,9 +17,11 @@ import Shikigami.App (AppEnv (..), noopTracer, runAppIO)
 import Shikigami.App.Config (AppConfig (..), defaultAppConfig, opaqueSecretText)
 import Shikigami.Duration (remainingDuration)
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
+import Shikigami.Pack.Setting (packSettingsFromList)
 import Shikigami.Server.Command.Watchdog (runWatchdogInspect)
 import Shikigami.Watchdog.Grant
 import Shikigami.Watchdog.Observation (PassCompletion (PassIncomplete))
+import Shikigami.Watchdog.Settings (watchdogKey)
 import Shikigami.Watchdog.Store qualified as Store
 import Shikigami.Watchdog.Types
 import System.Exit (ExitCode (..))
@@ -50,7 +52,7 @@ withCommand fixture use = withShikigamiFreshDatabase fixture \connection -> do
   tracer <- noopTracer
   settings <- right (eitherDecode "{\"principal\":\"agent_watchdog\",\"scope\":\"all\",\"stuckWindowSeconds\":60,\"parkedWindowSeconds\":30,\"coordinatorWindowSeconds\":60,\"subjectsPerSweep\":9}")
   let env = AppEnv (defaultConnectionSettings connection) tracer Nothing Nothing
-      config = defaultAppConfig & #databaseUrl .~ Just (opaqueSecretText connection) & #watchdog .~ Just settings
+      config = defaultAppConfig & #databaseUrl .~ Just (opaqueSecretText connection) & #packSettings .~ packSettingsFromList [(watchdogKey, toJSON settings)]
   use env config settings
 
 seed :: AppEnv -> WatchdogSettings -> IO ()

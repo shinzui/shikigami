@@ -97,7 +97,7 @@ runFindings episode after limit config = do
   reading config (Store.listFindings settings.principal settings.scope episode after limit) >>= emit
 
 requireSettings :: AppConfig -> IO WatchdogSettings
-requireSettings config = maybe (die "watchdog is disabled; configure its principal and observation scope") pure config.watchdog
+requireSettings config = maybe (die "watchdog is disabled; configure its principal and observation scope") pure (watchdogSettingsFrom config.packSettings)
 
 reading :: AppConfig -> Transaction (Either Store.WatchdogError a) -> IO a
 reading config action = do
