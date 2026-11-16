@@ -384,7 +384,7 @@ rule.
 | EP-4 | Execute Dhall-declared playbooks with fan-out, approval gates, and learning capture | [docs/plans/129-execute-dhall-declared-playbooks-with-fan-out-approval-gates-and-learning-capture.md](../plans/129-execute-dhall-declared-playbooks-with-fan-out-approval-gates-and-learning-capture.md) | EP-2; EP-8 M2 (for M2); EP-3 M4 (for M4) | EP-3 | Complete |
 | EP-5 | Move the extension boundary out of shikigami-core with flow packs and an architecture fitness check | [docs/plans/130-move-the-extension-boundary-out-of-shikigami-core-with-flow-packs-and-an-architecture-fitness-check.md](../plans/130-move-the-extension-boundary-out-of-shikigami-core-with-flow-packs-and-an-architecture-fitness-check.md) | None | None | Not Started |
 | EP-6 | Shrink shikigami-core to the kernel by moving or retiring use-case subsystems | [docs/plans/131-shrink-shikigami-core-to-the-kernel-by-moving-or-retiring-use-case-subsystems.md](../plans/131-shrink-shikigami-core-to-the-kernel-by-moving-or-retiring-use-case-subsystems.md) | EP-5 | None | Not Started |
-| EP-7 | Modernize the keiro services with a declared campaign playbook | [docs/plans/132-modernize-the-keiro-services-with-a-declared-campaign-playbook.md](../plans/132-modernize-the-keiro-services-with-a-declared-campaign-playbook.md) | EP-3, EP-4 | EP-5 | Not Started |
+| EP-7 | Modernize the keiro services with a declared campaign playbook | [docs/plans/132-modernize-the-keiro-services-with-a-declared-campaign-playbook.md](../plans/132-modernize-the-keiro-services-with-a-declared-campaign-playbook.md) | EP-3, EP-4 | EP-5 | In Progress |
 | EP-8 | Give the kernel its own action, record, output, approval and trigger contracts with local adapters | [docs/plans/133-give-the-kernel-its-own-action-record-output-approval-and-trigger-contracts-with-local-adapters.md](../plans/133-give-the-kernel-its-own-action-record-output-approval-and-trigger-contracts-with-local-adapters.md) | EP-1 (for M2 and M3) | None | In Progress |
 | EP-9 | Declare and run a routine agent with one file and one command | [docs/plans/134-declare-and-run-a-routine-agent-with-one-file-and-one-command.md](../plans/134-declare-and-run-a-routine-agent-with-one-file-and-one-command.md) | EP-1; EP-8 M2; EP-2 M2b (for the scheduled milestone) | EP-3 | Complete |
 | EP-10 | Move the Kikan service bindings out of shikigami-core and compose a Kikan distribution | [docs/plans/135-move-the-kikan-service-bindings-out-of-shikigami-core-and-compose-a-kikan-distribution.md](../plans/135-move-the-kikan-service-bindings-out-of-shikigami-core-and-compose-a-kikan-distribution.md) | EP-5, EP-8 | EP-6 | Not Started |
@@ -910,7 +910,11 @@ local report), a local approval inbox, and `Trigger.Manual` as the default; the 
 keep their path until EP-10. EP-3 is complete (declared tools also run as durable, restart-safe
 flow steps). EP-4 is complete: Dhall playbooks run durably across repositories with
 approvals, reflections that carry learnings forward, bundle proposals on a branch, and fan-out
-over tool output (ADR 0128). EP-9 is complete: a routine agent is one short file, `shikigami-local
+over tool output (ADR 0128). EP-7 M1 is accepted: the campaign is declared under
+`agents/campaigns/keiro-modernization/`, and kanmon passed readiness in place (Mori current,
+an `AGENTS.md`, a build plan, an upgraded Seihou manifest). Its M2 waits on two operator
+decisions: kanmon has no keiro dependency to upgrade, and its plan-skill update needs an
+interactive `.gitignore` resolution. EP-9 is complete: a routine agent is one short file, `shikigami-local
 run` runs it with one confirmation, and `shikigami-local up` runs scheduled ones locally (the
 worker still composes local-operator ports only for coding agents; Surprises). Stage 1 (the pilot) ends at
 the declaration baseline, and stage 2 at the kernel baseline.

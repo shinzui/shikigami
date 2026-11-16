@@ -27,6 +27,11 @@ provenance:
       at: 2026-11-15T14:47:54Z
       mode: "update"
       note: "MasterPlan 22 review cascade: EP-8 ports, payload and step-output items, durable Tool steps, drain rule and EP-11 baseline gate"
+    - model: "claude-opus-5-5"
+      harness: "claude-code"
+      at: 2026-11-16T00:26:35Z
+      mode: "implement"
+      note: "M1 accepted: campaign declared, kanmon readiness in place; M2 waits on operator decisions"
 ---
 
 # Modernize the keiro services with a declared campaign playbook
@@ -68,10 +73,26 @@ it ships as declarations with no change to `shikigami-core`.
 
 ## Progress
 
-- [ ] Milestone 1: the repository list is confirmed with the user, the campaign declarations
+- [x] Milestone 1 (2026-11-15): the repository list is confirmed with the user, the campaign declarations
   validate, and the pilot repository passes readiness through a real playbook run that
   stops after the readiness approval. The run is drained to a terminal state before any
   later shape change lands.
+  Evidence: `agents/campaigns/keiro-modernization/` (declaration, `tools.dhall`,
+  `repos.dhall` with the seven confirmed repositories, `playbook.dhall`) and
+  `agents/skills/campaign-readiness`. `shikigami validate` parsed the declaration and
+  `shikigami-local playbook validate` printed the step tree. ADR-27 recheck: no tags, no
+  users, only this session's pilot journals (all terminal), and MasterPlan 22 does not record
+  the end of the exception. kanmon was confirmed once with `InPlace` placement. Run
+  `5738fce0-4f63-5308-8db3-9380d1b2d5d5` probed R1–R7 and its readiness agent committed
+  `152c616` on kanmon's current branch (`mori schema upgrade` and `mori register` rewrote
+  `mori.dhall`; a new `AGENTS.md`; `nix develop -c cabal build all --dry-run` wrote
+  `dist-newstyle/cache/plan.json`). After approval the run completed. `mori status --json`
+  now shows the schema `current` and the project registered, and `mina config show` resolves
+  `root: /Users/shinzui/Keikaku/bokuno/kanmon`. Runs `1db7e350-…` and `e6227c3d-…`
+  (after `seihou manifest upgrade` was declared) upgraded `.seihou/manifest.json` from schema 3
+  to 15 (`bec8597`). R4 and R7 stay open: `seihou update exec-plan` needs an interactive
+  resolution of the operator's own `.gitignore` edits, which the agent correctly refused to
+  `--force`. Every run is terminal.
 - [ ] Milestone 2: a full pilot run on the pilot repository, with the operator approving every
   gate. It ends with the work committed on kanmon's current branch, blueprint receipts, an
   executed MasterPlan, a green build, one recorded learning and one approved playbook
@@ -86,6 +107,22 @@ it ships as declarations with no change to `shikigami-core`.
 
 
 ## Surprises & Discoveries
+
+- Observation: kanmon does not depend on keiro. keiro appears only in the description text of
+  `kanmon-api.cabal` and `kanmon-core.cabal`; no `build-depends`, `cabal.project` or Nix input
+  names it, and kanmon's plans record a deliberate decision not to depend on keiro. Its
+  `mori.dhall` still lists `shinzui/keiro`. Modernizing kanmon "to the current keiro stack"
+  would therefore add keiro, not upgrade it, which changes what the pilot proves.
+  Evidence: the readiness reports of runs `5738fce0-…` and `e6227c3d-…`.
+- Observation: The plan-skill update (R4) needs a human: `seihou update exec-plan` reports the
+  operator's `.gitignore` as modified by the user and refuses to continue without an
+  interactive terminal or `--force`. R7 (the friction log) depends on R4's newer exec-plan
+  skill.
+  Evidence: `seihou update exec-plan --dry-run --json` → `unresolved_conflicts … .gitignore`.
+- Observation: The first readiness run stopped at its `mori status --json` probe, which exits 1
+  for a stale schema; EP-4 gained the `Probe` step. A scratch `XDG_CONFIG_HOME` used for these
+  runs hid the operator's seihou install cache from the agent (an artifact of this session's
+  harness, fixed by linking `~/.config/seihou`).
 
 These came from read-only research on 2026-11-15, before implementation.
 
@@ -196,6 +233,19 @@ These came from read-only research on 2026-11-15, before implementation.
   `playbook:keiro-modernization` named the same scope in a spelling EP-4 does not use.
   Date: 2026-11-15
 
+
+- Decision (M1): The campaign uses EP-4's landed format. The payload's `repos` is a list of
+  Mori identities (`FromPayload` yields strings), and the coding agent's workspace is
+  `{{repo}}`. Probes are `Probe` steps; the readiness prompt quotes them through
+  `{{steps.ID.output}}`. EP-4 has no conditions, so Milestone 1's bundle ends at the readiness
+  approval and the `modernize` playbook joins in Milestone 2 (where declining an approval ends
+  the run). Blueprint selection is a coding-agent step returning JSON for `FromStep`, because
+  EP-4 has no Skill step. The two kernel gaps found here (`{{steps.ID.output}}` and `Probe`)
+  were filled in EP-4's interpreter; `shikigami-core`'s manifest-walk test learned to skip a
+  campaign directory's non-declaration files. The campaign files themselves add no Haskell.
+  Rationale: The plan says to record mismatches against the owning plan; both gaps were
+  small and belong to EP-4, and the campaign's own files stay declarations.
+  Date: 2026-11-15
 
 ## Outcomes & Retrospective
 

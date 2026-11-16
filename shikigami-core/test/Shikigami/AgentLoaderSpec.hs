@@ -44,7 +44,7 @@ import Shikigami.RuntimePolicy (ManifestStrictness (..))
 import Shikigami.Trigger.Schedule (parseCron)
 import System.Directory (doesDirectoryExist, listDirectory)
 import System.Exit (ExitCode (ExitFailure))
-import System.FilePath (takeExtension, (</>))
+import System.FilePath (takeBaseName, takeDirectory, takeExtension, takeFileName, (</>))
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
 
@@ -276,3 +276,6 @@ isLiveManifest path =
     && not ("/detectors/schema.dhall" `isSuffixOf` path)
     -- Playbook bundles sit beside the declarations that run them.
     && not ("/playbooks/" `isInfixOf` path && not ("-agent.dhall" `isSuffixOf` path))
+    -- A campaign directory holds one declaration named after it, beside its
+    -- tools, repositories and bundle.
+    && not ("/campaigns/" `isInfixOf` path && takeBaseName path /= takeFileName (takeDirectory path))
