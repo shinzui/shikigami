@@ -284,6 +284,12 @@ it is never applied to a run already in progress.
   reviews and validates the branch before merging it.
   Date: 2026-11-15
 
+- Decision (after M4, for EP-7): Templates gain `{{steps.ID.summary}}` and
+  `{{steps.ID.output}}` for an earlier step of the same playbook, so a coding agent's prompt can
+  quote probe output. They are observed values: a workspace may not name one.
+  Rationale: EP-7's readiness step quotes its probes; the plan's sketch used the same holes.
+  Date: 2026-11-15
+
 ## Outcomes & Retrospective
 
 Complete on 2026-11-15. An operator declares a procedure as a Dhall bundle, checks it with

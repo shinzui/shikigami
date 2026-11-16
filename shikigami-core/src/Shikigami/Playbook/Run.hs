@@ -72,7 +72,9 @@ data Carried = Carried
     learned :: ![Text],
     suggestions :: ![Text],
     -- | Each finished step's JSON output, by step key.
-    outputs :: !(Map Text Value)
+    outputs :: !(Map Text Value),
+    -- | Each finished step's summary and bounded text output, by step key.
+    texts :: !(Map Text (Text, Text))
   }
 
 -- | What a 'Reflect' step's agent answered.
@@ -125,7 +127,7 @@ runPlaybook ::
 runPlaybook agent pinned payload = do
   let bundle = pinned.bundle
   prior <- recall (declarationCoordinate "playbook-learnings") MemoryQuery {query = bundle.main}
-  let start = Carried {recalled = take 10 (concatMap (filter (not . Text.null) . Text.lines . (.content)) (filter (isPlaybookMemory bundle.main) prior)), learned = [], suggestions = [], outputs = Map.empty}
+  let start = Carried {recalled = take 10 (concatMap (filter (not . Text.null) . Text.lines . (.content)) (filter (isPlaybookMemory bundle.main) prior)), learned = [], suggestions = [], outputs = Map.empty, texts = Map.empty}
   (results, stopped, carried) <- case lookupPlaybook bundle bundle.main of
     Nothing -> pure ([], Just "the main playbook is missing", start)
     Just root -> runSteps agent (takeDirectory pinned.file) bundle payload (payloadParameters payload) Map.empty "" start root.steps
@@ -202,7 +204,18 @@ runSteps agent base bundle payload parameters variables prefix = go []
         case stopped of
           Just reason -> pure (reverse done', Just reason, carried')
           Nothing -> go done' carried' rest
-    render carried = renderTemplate parameters (Map.insert "learnings" (learningsText carried) variables)
+    render carried = renderTemplate parameters (Map.insert "learnings" (learningsText carried) variables <> stepVariables carried)
+    -- steps.ID.summary and steps.ID.output for this playbook's finished steps.
+    stepVariables carried =
+      Map.fromList
+        ( concat
+            [ [("steps." <> local <> ".summary", summary'), ("steps." <> local <> ".output", output)]
+            | (stepKey, (summary', output)) <- Map.toList carried.texts,
+              Just local <- [Text.stripPrefix prefix stepKey],
+              not (Text.isInfixOf "." local)
+            ]
+        )
+    remember key summary' output carried = carried {texts = Map.insert key (summary', Text.take 8192 output) carried.texts}
     runOne carried current =
       let key = prefix <> stepId current
        in case current of
@@ -210,7 +223,7 @@ runSteps agent base bundle payload parameters variables prefix = go []
               coding carried key (render carried prompt) (render carried workspace) agent.access deadlineMinutes skills \outcome ->
                 let result = StepResult key (outcomeLabel outcome) (renderOutcome outcome)
                  in case outcome of
-                      Completed CompletedRun {finalMessage} -> ([result], Nothing, carried {outputs = maybe carried.outputs (\value -> Map.insert key value carried.outputs) (lastJsonObject finalMessage)})
+                      Completed CompletedRun {finalMessage} -> ([result], Nothing, remember key result.summary finalMessage carried {outputs = maybe carried.outputs (\value -> Map.insert key value carried.outputs) (lastJsonObject finalMessage)})
                       _ -> ([result], Just (key <> ": " <> renderOutcome outcome), carried)
             Reflect {prompt, workspace} ->
               coding carried key (reflectionInstruction <> "\n" <> render carried prompt) (render carried workspace) ReadOnly 15 [] \outcome -> case outcome of
@@ -229,7 +242,7 @@ runSteps agent base bundle payload parameters variables prefix = go []
                   outcome <- runDeclaredTool (toolStepKey key) requested
                   let result = StepResult key (toolStepOutcomeLabel outcome) (renderToolStepOutcome outcome)
                   pure case outcome of
-                    ToolCompleted ToolRun {exit = 0, stdout} -> ([result], Nothing, carried {outputs = maybe carried.outputs (\value -> Map.insert key value carried.outputs) (Aeson.decodeStrict (Text.Encoding.encodeUtf8 stdout))})
+                    ToolCompleted ToolRun {exit = 0, stdout} -> ([result], Nothing, remember key result.summary stdout carried {outputs = maybe carried.outputs (\value -> Map.insert key value carried.outputs) (Aeson.decodeStrict (Text.Encoding.encodeUtf8 stdout))})
                     _ -> ([result], Just (key <> ": " <> renderToolStepOutcome outcome), carried)
             Approval {prompt} -> do
               ack <- awaitAck (StepName ("playbook-" <> key)) ApprovalRequest {prompt = render carried prompt, context = object ["step" .= key, "playbook" .= bundle.main], channel = ViaLocalInbox}

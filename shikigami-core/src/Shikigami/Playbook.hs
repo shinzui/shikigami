@@ -5,8 +5,10 @@
 -- fan-out name a sibling (@RunPlaybook@, @ForEach@) instead of embedding
 -- steps, because Dhall has no recursive types. Text fields are templates:
 -- @{{run.NAME}}@ reads a top-level string of the run's trigger payload and
--- @{{NAME}}@ reads a variable bound by an enclosing @ForEach@, and
--- @{{learnings}}@ the learnings recorded so far. Validation
+-- @{{NAME}}@ reads a variable bound by an enclosing @ForEach@,
+-- @{{steps.ID.summary}}@ and @{{steps.ID.output}}@ an earlier step of the same
+-- playbook (observed, like step-sourced items), and @{{learnings}}@ the
+-- learnings recorded so far. Validation
 -- refuses a reference to nothing, an unknown sibling and a cycle, naming the
 -- step that is wrong.
 module Shikigami.Playbook
@@ -147,8 +149,8 @@ validateBundle bundle@Bundle {main, playbooks} =
             <> [DuplicateStep name step | step <- nub ids, length (filter (== step) ids) > 1]
             <> concat (zipWith (\earlier step -> checkStep (path <> [name]) variables name earlier step) (List.inits ids) steps)
     checkStep path variables playbookName earlier step =
-      [UndefinedReference playbookName (stepId step) reference | reference <- references step, not (defined variables reference)]
-        <> [ObservedWorkspace playbookName (stepId step) reference | reference <- workspaceReferences step, observed variables reference]
+      [UndefinedReference playbookName (stepId step) reference | reference <- references step, not (defined variables reference || earlierStepReference earlier reference)]
+        <> [ObservedWorkspace playbookName (stepId step) reference | reference <- workspaceReferences step, observed variables reference || "steps." `Text.isPrefixOf` reference]
         <> case step of
           ForEach {items = FromStep {step = source}}
             | source `notElem` earlier -> [UnknownSourceStep playbookName (stepId step) source]
@@ -166,6 +168,10 @@ validateBundle bundle@Bundle {main, playbooks} =
       _ -> []
     variableOf reference = fst (Text.breakOn "." reference)
     observed variables reference = maybe False id (lookup (variableOf reference) variables)
+    -- steps.ID.summary or steps.ID.output of an earlier step of this playbook.
+    earlierStepReference earlier reference = case Text.splitOn "." reference of
+      ["steps", source, field] -> source `elem` earlier && field `elem` ["summary", "output"]
+      _ -> False
     into path variables playbookName step target
       | target `elem` path = [PlaybookCycle (path <> [target])]
       | otherwise = case lookupPlaybook bundle target of

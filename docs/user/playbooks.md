@@ -69,8 +69,10 @@ The steps are:
 * `RunPlaybook` — run a sibling playbook once.
 
 Text fields are templates: `{{run.NAME}}` reads a top-level string of the payload,
-`{{NAME}}` a variable bound by an enclosing `ForEach`, and `{{learnings}}` the learnings so
-far. The first step that does not succeed (a failed coding agent, a declared tool that does
+`{{NAME}}` a variable bound by an enclosing `ForEach`, `{{steps.ID.summary}}` and
+`{{steps.ID.output}}` an earlier step of the same playbook (a tool's standard output or a
+coding agent's final message, at most 8 KiB, observed like step-sourced items), and
+`{{learnings}}` the learnings so far. The first step that does not succeed (a failed coding agent, a declared tool that does
 not exit 0, a declined approval) ends the run.
 
 ## Fanning out over a step's output

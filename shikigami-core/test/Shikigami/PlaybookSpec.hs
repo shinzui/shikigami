@@ -51,6 +51,13 @@ tests =
         validateBundle (bundle [tool, fanOut "packages"] "") @?= []
         validateBundle (bundle [fanOut "packages", tool] "") @?= [UnknownSourceStep "m" "each" "packages"]
         validateBundle (bundle [tool, fanOut "packages"] "{{package.path}}") @?= [ObservedWorkspace "one" "fix" "package.path"],
+      testCase "steps.ID.output names an earlier step and never a workspace" do
+        let probe = Tool {id = "probe", tool = "git", args = ["status"], deadlineMinutes = 1}
+            fix workspace = CodingAgent {id = "fix", prompt = "Status: {{steps.probe.output}} ({{steps.probe.summary}})", workspace, deadlineMinutes = 5, skills = []}
+            bundle steps = Bundle {main = "m", playbooks = [Playbook {name = "m", steps}]}
+        validateBundle (bundle [probe, fix ""]) @?= []
+        validateBundle (bundle [fix "", probe]) @?= [UndefinedReference "m" "fix" "steps.probe.output", UndefinedReference "m" "fix" "steps.probe.summary"]
+        validateBundle (bundle [probe, fix "{{steps.probe.output}}"]) @?= [ObservedWorkspace "m" "fix" "steps.probe.output"],
       testCase "a reflection is the last JSON line with learnings, bounded" do
         let message = "I looked.\n{\"learnings\": [\"a\", \"b\", \"c\", \"d\"], \"playbookSuggestion\": \"" <> Text.replicate 5000 "x" <> "\"}\n"
         fmap (.learnings) (parseReflection message) @?= Just ["a", "b", "c"]
