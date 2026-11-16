@@ -912,9 +912,12 @@ flow steps). EP-4 is complete: Dhall playbooks run durably across repositories w
 approvals, reflections that carry learnings forward, bundle proposals on a branch, and fan-out
 over tool output (ADR 0128). EP-7 M1 is accepted: the campaign is declared under
 `agents/campaigns/keiro-modernization/`, and kanmon passed readiness in place (Mori current,
-an `AGENTS.md`, a build plan, an upgraded Seihou manifest). Its M2 waits on two operator
-decisions: kanmon has no keiro dependency to upgrade, and its plan-skill update needs an
-interactive `.gitignore` resolution. EP-9 is complete: a routine agent is one short file, `shikigami-local
+an `AGENTS.md`, a build plan, an upgraded Seihou manifest). Kizashi replaced kanmon as the pilot
+(kanmon has no keiro dependency). The kizashi pilot was stopped on 2026-11-16 because it was
+slower than the work by hand; keiro 0.25 was finished by hand, and the playbook's remaining
+untested behavior was checked in minutes with a fixture bundle (`build-repair`), which found
+and fixed two kernel defects (FRIC-78, FRIC-79). EP-7 M2's acceptance (a full gated pilot)
+is not met, and the campaign's shape needs fewer gates and steps before koyomi. EP-9 is complete: a routine agent is one short file, `shikigami-local
 run` runs it with one confirmation, and `shikigami-local up` runs scheduled ones locally (the
 worker still composes local-operator ports only for coding agents; Surprises). Stage 1 (the pilot) ends at
 the declaration baseline, and stage 2 at the kernel baseline.

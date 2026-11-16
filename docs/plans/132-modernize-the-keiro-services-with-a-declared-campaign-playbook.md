@@ -97,6 +97,25 @@ it ships as declarations with no change to `shikigami-core`.
   gate. It ends with the work committed on kanmon's current branch, blueprint receipts, an
   executed MasterPlan, a green build, one recorded learning and one approved playbook
   change.
+  - (2026-11-16) Stopped on the operator's decision and finished by hand. Kizashi run
+    `c4341273-0d66-516c-a51b-b840d26be160` approved readiness, a selection of three blueprints
+    and the MasterPlan (`8e74bc1`), then applied `fix-nix-haskell-flake-customizations`
+    (`30191f5`, implemented in `b7669c2`) and keiro-upgrade 0.22→0.24 (`be9b920`). It stopped
+    at 0.24 because the installed keiro-upgrade was 0.13.0, which has no 0.24→0.25 edge. By
+    hand: `seihou upgrade keiro-upgrade` (0.14.0), installing the two Shibuya blueprints that
+    edge entails, the 0.25 bounds and fallout, receipts and the 0033 migration (kizashi
+    `75b4308`, `All 234 tests passed`). The run is parked at a durable wake and is not
+    resumed (FRIC-80). migrate-keiro-stack (kizashi plan 49: six packages, Settei and a
+    disposable-database proof) is not started.
+  - (2026-11-16) The campaign's tail was validated instead with
+    `agents/playbooks/build-repair.dhall` on a scratch Cabal package, in minutes rather than
+    hours. Run `042ad7a9-…` probed a failing build, repaired it (one-file commit), passed the
+    final build, reported the failing tests probe (`FAIL label of a negative price`) in the
+    close approval without stopping, and reflected three learnings. Run `741c7724-…` was told to
+    change nothing: its final build failed and the run ended `stopped`, with the step labelled
+    `failed`. A later run's `fix-build` prompt quoted the earlier run's three learnings. This
+    exposed and fixed FRIC-78 (a coding agent refused a checkout path over 128 characters) and
+    FRIC-79 (learnings were never recalled across runs).
 - [ ] Milestone 3: a run on the second repository uses the improved playbook, and its
   transcript shows the repository-1 learning applied: a step skipped, reordered or given
   better instructions.
@@ -147,7 +166,34 @@ These came from read-only research on 2026-11-15, before implementation.
   Evidence: `mori registry show shinzui/koyomi --full` reports `Registration: stale`.
 
 
+- Observation: the campaign took longer than doing the work by hand. Most of the time went
+  into Shikigami and Seihou defects found on the way (the output limit, IR-23, BUG-5, FRIC-78,
+  FRIC-79), into four runs, three of them drained after a playbook change (the drain rule makes each
+  change a fresh run), and into operator gates at every stage that each waited for a person. Applying one blueprint took
+  three coding agents (apply, implement, fix-build) plus two builds.
+  Evidence: runs `1a947d4f…`, `2e5d2432…`, `91dda5f5…` and `c4341273…`; kizashi `8b92d3e..be9b920`.
+- Observation: the campaign rendered guidance from the installed blueprint, not the latest one.
+  keiro-upgrade 0.13.0 has no 0.24→0.25 edge, and 0.14.0's edge entails two Shibuya blueprints
+  that were not installed. `seihou outdated` lists only installed blueprints, so the missing
+  ones surfaced at render time.
+  Evidence: `seihou agent --debug migrate keiro-upgrade --from=0.24.0.0 --to=0.25.0.0` →
+  `entails blueprint 'shibuya-pgmq-adapter-upgrade', which is not installed`.
+- Observation: applying `nix-haskell-flake` 0.40.0 in kizashi brought a managed `fourmolu.yaml`
+  (2-space, trailing commas) into a tree formatted with fourmolu's defaults, so the pre-commit
+  hook restyles every file a later change touches.
+  Evidence: kizashi `30191f5` adds `fourmolu.yaml`; `75b4308` restyles four modules.
+
 ## Decision Log
+
+- Decision: Stop gating kizashi through the campaign. Finish keiro 0.25 by hand, and validate
+  the playbook tail with a small fixture bundle (`agents/playbooks/build-repair.dhall`) rather
+  than the rest of the kizashi run.
+  Rationale: the user observed on 2026-11-16 that the campaign was taking longer than the
+  work by hand. What remained untested in Shikigami (repair of a broken build, a failed final
+  build, a failing tests probe, Reflect at the end, learnings across runs) needs only a
+  minutes-long run on a fixture, and that run found two defects the kizashi run had not
+  reached.
+  Date: 2026-11-16
 
 - Decision: The campaign covers seven repositories, confirmed by the user on 2026-11-15:
   kanmon, kizashi, koyomi, danwa, keiei, meibo (`meibo-project/meibo`) and jinmyaku

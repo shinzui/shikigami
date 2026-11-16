@@ -2,6 +2,21 @@
 
 ## 2026-11-16
 
+* **Addition**: FRIC-80 records nuisance tooling friction with mori://shinzui/shikigami: The local operator cannot cancel a parked agent run
+
+
+* **Update**: FRIC-79 resolved: Status set to resolved.
+
+
+* **Update**: FRIC-78 resolved: Status set to resolved.
+
+
+* **Addition**: FRIC-79 records detour interface friction with mori://shinzui/shikigami: A playbook run never recalled learnings written by an earlier run
+
+
+* **Addition**: FRIC-78 records blocked interface friction with mori://shinzui/shikigami: A coding agent refuses a local checkout whose file identity is longer than 128 characters
+
+
 * **Update**: FRIC-77 resolved: Status set to resolved.
 
 * **Addition**: FRIC-77 records slowdown interface friction with mori://shinzui/shikigami: A declaration with declared tools fails late with a bare MissingCapabilityIdentity

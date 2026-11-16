@@ -119,10 +119,12 @@ data CodingAgentTarget = CodingAgentTarget
   }
   deriving stock (Eq, Ord, Show)
 
--- | Each field is opaque, 1 to 128 characters, without whitespace.
+-- | Each field is opaque and without whitespace. The provider and access are
+-- 1 to 128 characters; the repository is up to 4096, because a local
+-- checkout's @file://@ identity carries its whole path.
 mkCodingAgentTarget :: Text -> Text -> Text -> Either Text CodingAgentTarget
 mkCodingAgentTarget provider access repository =
-  CodingAgentTarget <$> validOpaque "coding-agent provider" "#" provider <*> validOpaque "coding-agent access" "#" access <*> validOpaque "repository" "#" repository
+  CodingAgentTarget <$> validOpaque "coding-agent provider" "#" provider <*> validOpaque "coding-agent access" "#" access <*> validOpaqueWithin 4096 "repository" "#" repository
 
 data CapabilityOperation
   = ConnectProvider
@@ -376,9 +378,12 @@ validCapabilityId value
   | otherwise = Left "capability id must match [a-z][a-z0-9.-]* without consecutive dots"
 
 validOpaque :: Text -> Text -> Text -> Either Text Text
-validOpaque label reserved value
+validOpaque = validOpaqueWithin 128
+
+validOpaqueWithin :: Int -> Text -> Text -> Text -> Either Text Text
+validOpaqueWithin limit label reserved value
   | Text.null value = Left (label <> " must not be empty")
-  | Text.length value > 128 = Left (label <> " must be at most 128 characters")
+  | Text.length value > limit = Left (label <> " must be at most " <> Text.pack (show limit) <> " characters")
   | Text.any (\c -> isSpace c || isControl c) value = Left (label <> " must not contain whitespace or control characters")
   | Just offending <- Text.find (`Text.elem` reserved) value = Left (label <> " must not contain " <> Text.singleton offending)
   | otherwise = Right value

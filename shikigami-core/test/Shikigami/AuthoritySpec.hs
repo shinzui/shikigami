@@ -59,7 +59,13 @@ vocabularyTests =
         assertBool "reserved revision character" (isLeft (mkCapabilityTarget "a" "v@1"))
         assertBool "whitespace tool name" (isLeft (mkToolName "read file"))
         assertBool "five target segments" (isLeft (mkOutputTarget ("a" :| ["b", "c", "d", "e"])))
-        assertBool "undotted output kind" (isLeft (mkOutputKind "kizashi"))
+        assertBool "undotted output kind" (isLeft (mkOutputKind "kizashi")),
+      testCase "a coding agent accepts a local checkout's long file identity" do
+        let checkout = "file:///private/tmp/" <> Text.replicate 30 "nested-dir/" <> "fixture"
+        assertBool "a 350-character checkout identity" (either (const False) ((== checkout) . (.repository)) (mkCodingAgentTarget "claude" "edit" checkout))
+        assertBool "an empty repository" (isLeft (mkCodingAgentTarget "claude" "edit" ""))
+        assertBool "a repository with whitespace" (isLeft (mkCodingAgentTarget "claude" "edit" "file:///a b"))
+        assertBool "a 129-character provider" (isLeft (mkCodingAgentTarget (Text.replicate 129 "a") "edit" "mori://shinzui/a"))
     ]
 
 portTests :: TestTree

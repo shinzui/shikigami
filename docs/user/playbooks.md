@@ -112,7 +112,15 @@ Values from step output are observed: they may appear in prompts and as tool arg
 
 A run recalls the playbook's learnings from earlier runs when it starts, and each `Reflect`
 step adds its own; later prompts quote them through `{{learnings}}` as observed evidence, not
-instructions. The run keeps its new learnings for later runs when it ends.
+instructions. The run keeps its new learnings for later runs when it ends, as one memory headed
+`Learnings of playbook NAME` (the bundle's main playbook) and tagged `playbook` and `NAME`; the
+next run recalls up to ten lines by that header. Learnings are shared by runs of the same
+declaration, whichever repository they work in.
+
+`agents/playbooks/build-repair.dhall` checks this end to end in a few minutes. Run it twice on a
+small Cabal package whose build is broken: the first run repairs the build, reports failing
+tests without stopping, waits for the close approval and reflects. The second run's
+`fix-build` prompt then quotes the first run's learnings.
 
 When a `Reflect` step suggests a change to the playbook, the run ends with one coding agent in
 the Git repository that holds the bundle, on that run's branch. The change is kept only when it

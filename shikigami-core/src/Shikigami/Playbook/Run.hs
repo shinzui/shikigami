@@ -126,8 +126,11 @@ runPlaybook ::
   Eff es Value
 runPlaybook agent pinned payload = do
   let bundle = pinned.bundle
-  prior <- recall (declarationCoordinate "playbook-learnings") MemoryQuery {query = bundle.main}
-  let start = Carried {recalled = take 10 (concatMap (filter (not . Text.null) . Text.lines . (.content)) (filter (isPlaybookMemory bundle.main) prior)), learned = [], suggestions = [], outputs = Map.empty, texts = Map.empty}
+  -- Kioku's keyword recall matches every word of the query, so the header
+  -- line finds this playbook's learnings and not the run outcomes that also
+  -- name the playbook.
+  prior <- recall (declarationCoordinate "playbook-learnings") MemoryQuery {query = learningsHeader bundle.main}
+  let start = Carried {recalled = take 10 (concatMap (filter (\line -> not (Text.null line) && line /= learningsHeader bundle.main) . Text.lines . (.content)) (filter (isPlaybookMemory bundle.main) prior)), learned = [], suggestions = [], outputs = Map.empty, texts = Map.empty}
   (results, stopped, carried) <- case lookupPlaybook bundle bundle.main of
     Nothing -> pure ([], Just "the main playbook is missing", start)
     Just root -> runSteps agent (takeDirectory pinned.file) bundle payload (payloadParameters payload) Map.empty "" start root.steps
@@ -135,7 +138,7 @@ runPlaybook agent pinned payload = do
     if null carried.learned
       then pure []
       else do
-        _ <- rememberWith (declarationCoordinate "playbook-learnings") defaultRememberOptions {extraTags = Set.fromList ["playbook", bundle.main]} (object ["summary" .= Text.unlines carried.learned, "playbook" .= bundle.main])
+        _ <- rememberWith (declarationCoordinate "playbook-learnings") defaultRememberOptions {extraTags = Set.fromList ["playbook", bundle.main]} (object ["summary" .= Text.unlines (learningsHeader bundle.main : carried.learned), "playbook" .= bundle.main])
         pure carried.learned
   proposal <- propose agent pinned payload carried.suggestions
   pure
@@ -149,6 +152,10 @@ runPlaybook agent pinned payload = do
     )
   where
     isPlaybookMemory name MemoryRecord {tags} = Set.member "playbook" tags && Set.member name tags
+
+-- | The first line of a playbook's learnings memory, and the query that recalls it.
+learningsHeader :: Text -> Text
+learningsHeader name = "Learnings of playbook " <> name
 
 -- | One coding agent in the bundle's repository turns the suggestions into a
 -- change of the bundle file, committed on the run's branch.
@@ -254,6 +261,8 @@ runSteps agent base bundle payload parameters variables prefix = go []
                   let result = StepResult key (toolStepOutcomeLabel outcome) (renderToolStepOutcome outcome)
                   pure case outcome of
                     ToolCompleted ToolRun {exit = 0, stdout} -> ([result], Nothing, remember key result.summary stdout carried {outputs = maybe carried.outputs (\value -> Map.insert key value carried.outputs) (Aeson.decodeStrict (Text.Encoding.encodeUtf8 stdout))})
+                    -- A Tool step must succeed; a nonzero exit fails it and ends the run.
+                    ToolCompleted ToolRun {} -> ([result {outcome = "failed"}], Just (key <> ": " <> renderToolStepOutcome outcome), carried)
                     _ -> ([result], Just (key <> ": " <> renderToolStepOutcome outcome), carried)
             Approval {prompt} -> do
               ack <- awaitAck (StepName ("playbook-" <> key)) ApprovalRequest {prompt = render carried prompt, context = object ["step" .= key, "playbook" .= bundle.main], channel = ViaLocalInbox}
