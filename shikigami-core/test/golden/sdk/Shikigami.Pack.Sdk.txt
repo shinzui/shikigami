@@ -5,6 +5,8 @@ Logger
 PackSetting (..)
 PackSettings
 RunModel (..)
+SettingDefault (..)
+SettingShape (..)
 Store
 StoreError
 interpret
@@ -13,6 +15,7 @@ logDebug
 logError
 logInfo
 logWarn
+packSettingText
 packSettingValue
 reinterpret
 runTransaction

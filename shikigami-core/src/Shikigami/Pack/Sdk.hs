@@ -16,8 +16,11 @@ module Shikigami.Pack.Sdk
 
     -- * Pack settings
     PackSetting (..),
+    SettingShape (..),
+    SettingDefault (..),
     PackSettings,
     packSettingValue,
+    packSettingText,
 
     -- * Interpreting a pack capability
     IOE,
@@ -47,5 +50,5 @@ import Effectful.Error.Static (Error)
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Error (StoreError)
 import Kiroku.Store.Transaction (runTransaction, runTransactionNoRetry)
-import Shikigami.Flow.Pack (FlowRunContext (..), PackSetting (..), PackSettings, RunModel (..), packSettingValue)
+import Shikigami.Flow.Pack (FlowRunContext (..), PackSetting (..), PackSettings, RunModel (..), SettingDefault (..), SettingShape (..), packSettingText, packSettingValue)
 import Shikigami.Log (Logger, logDebug, logError, logInfo, logWarn)

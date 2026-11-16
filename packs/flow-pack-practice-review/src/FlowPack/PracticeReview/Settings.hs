@@ -11,9 +11,10 @@ module FlowPack.PracticeReview.Settings
   )
 where
 
+import Data.Aeson (Value (String))
 import Data.Functor (void)
 import FlowPack.PracticeReview.Capability (AttentionRecipientMap, emptyAttentionRecipientMap, parseAttentionRecipientMap)
-import Shikigami.Pack.Sdk (PackSetting (..), PackSettings, packSettingValue)
+import Shikigami.Pack.Sdk (PackSetting (..), PackSettings, SettingDefault (..), SettingShape (..), packSettingText)
 import Shikigami.Prelude (Text)
 
 attentionRecipientsKey :: Text
@@ -29,10 +30,17 @@ attentionRecipientsSetting =
       environment = "SHIKIGAMI_PRACTICE_REVIEW_ATTENTION_RECIPIENTS",
       description = "Comma-separated practice-review owner mappings (owner=recipient_id or sorted owner+owner=recipient_id)",
       expectation = "a comma-separated unique map of owner or sorted owner+owner keys to recipient_... ids",
-      defaultRule = "practice-review-attention-unmapped",
-      defaultReason = "Require operators to map every actionable review owner explicitly",
-      defaultValue = "",
-      validate = void . parseAttentionRecipientMap
+      shape = TextSetting,
+      whenAbsent =
+        Just
+          SettingDefault
+            { rule = "practice-review-attention-unmapped",
+              reason = "Require operators to map every actionable review owner explicitly",
+              value = String ""
+            },
+      validate = \case
+        String raw -> void (parseAttentionRecipientMap raw)
+        _ -> Left "not text"
     }
 
 -- | The typed map of a run. The text was validated at start by the parser
@@ -40,6 +48,6 @@ attentionRecipientsSetting =
 -- executable validated; it is treated as unmapped, the fail-closed default.
 attentionRecipientsFrom :: PackSettings -> AttentionRecipientMap
 attentionRecipientsFrom settings =
-  case parseAttentionRecipientMap <$> packSettingValue attentionRecipientsKey settings of
+  case parseAttentionRecipientMap <$> packSettingText attentionRecipientsKey settings of
     Just (Right recipients) -> recipients
     _ -> emptyAttentionRecipientMap

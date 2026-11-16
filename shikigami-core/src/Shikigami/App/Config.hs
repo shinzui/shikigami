@@ -177,7 +177,7 @@ import Data.ByteString.Lazy qualified as LBS
 import Data.Char (isAlphaNum, isSpace)
 import Data.Generics.Labels ()
 import Data.Map.Strict qualified as Map
-import Data.Maybe (fromMaybe, isJust)
+import Data.Maybe (catMaybes, fromMaybe, isJust)
 import Data.Set (Set)
 import Data.Set qualified as Set
 import Data.Text (Text)
@@ -217,7 +217,7 @@ import Shikigami.Initiative.Settings (InitiativeSettings (..))
 import Shikigami.Inspection.Settings (InspectionSettings (..))
 import Shikigami.Objective.Tracker.Config (TrackerSettings, defaultTrackerSettings)
 import Shikigami.Objective.Types (ObjectiveSettings, defaultObjectiveSettings)
-import Shikigami.Pack.Setting (PackSetting (..), PackSettings, noPackSettings, packSettingsFromList)
+import Shikigami.Pack.Setting (PackSetting (..), PackSettings, SettingDefault (..), SettingShape (..), noPackSettings, packSettingsFromList)
 import Shikigami.RuntimePolicy
 import Shikigami.Sink.Permission (SinkKind)
 import Shikigami.Trigger.Schedule (CatchUpPolicy (..))
@@ -879,20 +879,28 @@ directorySettingsConfig =
 -- required. With no setting this is 'appConfig'.
 appConfigWith :: [PackSetting] -> Config AppConfig
 appConfigWith settings =
-  (\config values -> config & #packSettings .~ packSettingsFromList values)
+  (\config values -> config & #packSettings .~ packSettingsFromList (catMaybes values))
     <$> appConfig
     <*> traverse packSettingConfig settings
 
-packSettingConfig :: PackSetting -> Config (Text, Text)
+-- | One pack setting: its raw value read by shape, then validated by the
+-- pack. A refusal names the pack's expectation and never the value.
+packSettingConfig :: PackSetting -> Config (Maybe (Text, Aeson.Value))
 packSettingConfig setting =
-  (setting.key,)
-    <$> withDefault
-      (publicSettingWithRenderer (stableKey setting.key) setting.description (decoder decodeValue) id)
-      (constant setting.defaultRule setting.defaultReason setting.defaultValue)
+  fmap (setting.key,) <$> case setting.whenAbsent of
+    Nothing -> optional declared
+    Just absent -> Just <$> withDefault declared (constant absent.rule absent.reason absent.value)
   where
-    decodeValue key raw = case runDecoder textDecoder key raw of
-      Left _ -> Left (decodeFailure key setting.expectation)
-      Right value -> bimap (const (decodeFailure key setting.expectation)) (const value) (setting.validate value)
+    declared = publicSettingWithRenderer (stableKey setting.key) setting.description (decoder decodeValue) renderValue
+    refusal key = decodeFailure key setting.expectation
+    decodeValue key raw = do
+      value <- first (const (refusal key)) case setting.shape of
+        TextSetting -> Aeson.String <$> runDecoder textDecoder key raw
+        JsonSetting -> runDecoder jsonDecoder key raw
+      bimap (const (refusal key)) (const value) (setting.validate value)
+    renderValue = \case
+      Aeson.String text -> text
+      other -> renderJson other
 
 -- | The static schema, for @--describe-config@ and for tests.
 appConfigSchema :: Schema

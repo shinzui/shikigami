@@ -214,19 +214,23 @@ attentionRecipientsSetting =
       environment = "SHIKIGAMI_PRACTICE_REVIEW_ATTENTION_RECIPIENTS",
       description = "Comma-separated practice-review owner mappings (...)",
       expectation = "a comma-separated unique map of owner or sorted owner+owner keys to recipient_... ids",
-      defaultRule = "practice-review-attention-unmapped",
-      defaultReason = "Require operators to map every actionable review owner explicitly",
-      defaultValue = "",
-      validate = void . parseAttentionRecipientMap
+      shape = TextSetting,
+      whenAbsent = Just SettingDefault {rule = "practice-review-attention-unmapped", reason = "...", value = String ""},
+      validate = \case String raw -> void (parseAttentionRecipientMap raw); _ -> Left "not text"
     }
 ```
+
+`TextSetting` reads one scalar as text. `JsonSetting` reads a structured value, a mapping in a
+YAML file or JSON text in a flag or a variable, and hands `validate` that JSON. `whenAbsent =
+Nothing` leaves the key optional and absent when unset.
 
 List it in the pack's `settings`. A composed executable then accepts the key from a file,
 `--set` or its environment variable, shows it in `--describe-config` and
 `--explain-config`, and runs `validate` at start: a `Left` refuses to start and prints
-`expectation`. The value reaches an interpreter as validated text,
-`packSettingValue key context.settings`, and the pack decodes it with the parser `validate`
-ran. A setting always has a default, so composing a pack never makes a key required. Two
+`expectation`. The value reaches an interpreter as validated JSON,
+`packSettingValue key context.settings` (`packSettingText` for a text setting), and the pack
+decodes it with the parser `validate` ran. A setting is never required: it has a default or
+is optional. Two
 packs that declare one key, or a pack key that collides with a kernel key or variable, refuse
 to start.
 

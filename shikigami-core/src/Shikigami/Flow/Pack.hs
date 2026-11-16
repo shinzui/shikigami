@@ -33,8 +33,11 @@ module Shikigami.Flow.Pack
 
     -- * Pack settings
     PackSetting (..),
+    SettingShape (..),
+    SettingDefault (..),
     PackSettings,
     packSettingValue,
+    packSettingText,
 
     -- * The composed registry
     FlowRegistry,
@@ -90,7 +93,7 @@ import Shikigami.Execution.Identity (ExecutionRootId)
 import Shikigami.Flow (FlowDef (..), FlowEffects, flowDecisionSlotsFor)
 import Shikigami.Flow.Decision (DecisionServices (..), decisionProviders)
 import Shikigami.Log qualified as Log
-import Shikigami.Pack.Setting (PackSetting (..), PackSettings, packSettingValue)
+import Shikigami.Pack.Setting (PackSetting (..), PackSettings, SettingDefault (..), SettingShape (..), packSettingText, packSettingValue)
 import Shikigami.Program.Decision (ProgramRegistry, ResultCodecRegistry, SomeProgram, SomeResultCodec)
 import Shikigami.Program.Decision qualified as Decision
 import Shikigami.Program.Task (ProgramTask (..))

@@ -30,6 +30,7 @@ import Baikai.Model qualified as Model
 import Baikai.Models.Generated (allModels)
 import Baikai.Options qualified as Options
 import Control.Monad (forM_)
+import Data.Aeson qualified as Aeson
 import Data.ByteString (ByteString)
 import Data.ByteString.Char8 qualified as ByteString
 import Data.List (sort)
@@ -67,7 +68,7 @@ import Shikigami.Execution.Policy.Types qualified as Harness
 import Shikigami.Initiative.Settings (ObserverAllowance (..))
 import Shikigami.Inspection.Settings qualified as Inspection
 import Shikigami.Objective.Types (ObjectiveService (..), ObjectiveSettings (..), defaultObjectiveSettings, parseOperatorId)
-import Shikigami.Pack.Setting (PackSetting (..), noPackSettings, packSettingValue)
+import Shikigami.Pack.Setting (PackSetting (..), SettingDefault (..), SettingShape (..), noPackSettings, packSettingText, packSettingValue)
 import Shikigami.RuntimePolicy (ManifestStrictness (..))
 import Shikigami.Sink.Auth (TokenSource (..), credentialToken, matchesBearerHeader, staticTokenSource)
 import Shikigami.Sink.Permission (SinkKind (..))
@@ -551,12 +552,29 @@ strictnessTests =
         assertBool (Text.unpack run.standardError) ("probe.parity" `Text.isInfixOf` run.standardError),
       testCase "a composed executable accepts a pack setting from a flag and from its variable" do
         fromFlag <- composedOrFail (optionsWith [] [cliOverride probeKey "even"]) []
-        packSettingValue "probe.parity" fromFlag.packSettings @?= Just "even"
+        packSettingText "probe.parity" fromFlag.packSettings @?= Just "even"
         fromEnvironment <- composedOrFail (optionsWith [] []) [("SHIKIGAMI_PROBE_PARITY", "odd")]
-        packSettingValue "probe.parity" fromEnvironment.packSettings @?= Just "odd",
+        packSettingText "probe.parity" fromEnvironment.packSettings @?= Just "odd",
       testCase "a pack setting no source supplies takes its declared default" do
         unset <- composedOrFail (optionsWith [] []) []
-        packSettingValue "probe.parity" unset.packSettings @?= Just "even",
+        packSettingText "probe.parity" unset.packSettings @?= Just "even",
+      testCase "a structured pack setting is read from a file mapping or from JSON text, and is absent when unset" do
+        let structured =
+              probeSetting
+                { key = "probe.limits",
+                  environment = "SHIKIGAMI_PROBE_LIMITS",
+                  shape = JsonSetting,
+                  whenAbsent = Nothing,
+                  validate = \case Aeson.Object _ -> Right (); _ -> Left "not an object"
+                }
+            bindingsFor = either (error . Text.unpack) id (environmentBindingsWith [structured])
+            attempt options environment = appConfigRunWith [structured] AdminRole options (Right []) (environmentSource bindingsFor (snapshot environment))
+            valueOf run = maybe (assertFailure (Text.unpack run.standardError)) (pure . packSettingValue "probe.limits" . (.packSettings)) run.resolved
+        fromEnvironment <- valueOf (attempt (optionsWith [] []) [("SHIKIGAMI_PROBE_LIMITS", "{\"calls\":3}")])
+        fromEnvironment @?= Just (Aeson.object ["calls" Aeson..= (3 :: Int)])
+        unset <- valueOf (attempt (optionsWith [] []) [])
+        unset @?= Nothing
+        (attempt (optionsWith [] []) [("SHIKIGAMI_PROBE_LIMITS", "[1,2]")]).exitCode @?= resolutionExitCode,
       testCase "a pack's validator refuses a value at start, naming the expectation and not the value" do
         let run = composedRun (optionsWith [] [cliOverride probeKey "sideways"]) []
         run.exitCode @?= resolutionExitCode
@@ -1104,10 +1122,9 @@ probeSetting =
       environment = "SHIKIGAMI_PROBE_PARITY",
       description = "Which parity the probe pack prefers",
       expectation = "the word even or odd",
-      defaultRule = "probe-even",
-      defaultReason = "Even unless an operator says otherwise",
-      defaultValue = "even",
-      validate = \value -> if value `elem` ["even", "odd"] then Right () else Left "neither even nor odd"
+      shape = TextSetting,
+      whenAbsent = Just SettingDefault {rule = "probe-even", reason = "Even unless an operator says otherwise", value = Aeson.String "even"},
+      validate = \value -> if value `elem` [Aeson.String "even", Aeson.String "odd"] then Right () else Left "neither even nor odd"
     }
 
 probeKey :: Key

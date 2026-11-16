@@ -5,6 +5,7 @@
 -- are run, in "FlowPack.PracticeReview.OrchestrationSpec".
 module FlowPack.PracticeReview.PackSpec (tests) where
 
+import Data.Aeson (Value (String))
 import Data.List.NonEmpty qualified as NonEmpty
 import Data.Text (Text)
 import Data.Text qualified as Text
@@ -82,7 +83,7 @@ settingTests =
             "target-owner+triage=recipient_one,triage+target-owner=recipient_two"
           ],
       testCase "a value no executable validated is treated as unmapped" do
-        attentionRecipientsFrom (packSettingsFromList [(attentionRecipientsKey, "not a map")]) @?= emptyAttentionRecipientMap
+        attentionRecipientsFrom (packSettingsFromList [(attentionRecipientsKey, String "not a map")]) @?= emptyAttentionRecipientMap
     ]
   where
     settings = practiceReviewPack.settings

@@ -73,9 +73,8 @@ withSetting FlowPack {name, flows, decisionPrograms, retainedCodecs, tasks} =
               environment = "SHIKIGAMI_PROBE_PARITY",
               description = "Which parity the probe pack prefers",
               expectation = "the word even or odd",
-              defaultRule = "probe-even",
-              defaultReason = "Even unless an operator says otherwise",
-              defaultValue = "even",
+              shape = TextSetting,
+              whenAbsent = Nothing,
               validate = const (Right ())
             }
         ]
