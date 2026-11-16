@@ -17,7 +17,8 @@ Runtime subprocesses receive a cleared environment and disposable configuration.
 The loopback model is a scripted Responses SSE transport. Real production parsing,
 tool admission, C13 verification, execution owners, queue, workflow journals and
 objective stores execute. The loopback authority issues short-lived exact-action
-Biscuit proofs for the three fixture principals, with a fixed public fixture key;
+Biscuit proofs for the four fixture principals (`triage`, `coordinator`,
+`successor` and `watchdog`, each `agent_01h000000000000000<name>`), with a fixed public fixture key;
 these credentials must never be used for a deployment. The OAuth proxy uses
 public fake credentials. The fixture producer enqueues conversation turns through
 the production producer; reply delivery is denied independently by C11.
