@@ -2,6 +2,12 @@
 
 ## 2026-11-16
 
+* **Update**: FRIC-81 promoted: Status set to promoted.
+
+
+* **Addition**: FRIC-81 records detour interface friction with mori://shinzui/keiro: A pack cannot list the labels its flow journals without PostgreSQL
+
+
 * **Addition**: FRIC-80 records nuisance tooling friction with mori://shinzui/shikigami: The local operator cannot cancel a parked agent run
 
 

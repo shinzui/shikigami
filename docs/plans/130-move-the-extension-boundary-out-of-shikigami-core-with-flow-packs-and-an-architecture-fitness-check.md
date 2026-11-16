@@ -32,6 +32,11 @@ provenance:
       at: 2026-11-16T03:48:14Z
       mode: "implement"
       note: "M1: kernel fitness check, kernel policy in module-ownership.json, ADR 0129"
+    - model: "claude-fable-5-2"
+      harness: "claude-code"
+      at: 2026-11-16T04:42:50Z
+      mode: "implement"
+      note: "M2: pack API, flow-sdk and pack-sdk, watchdog representative check, flow-pack-examples and examples-distribution, IR-61"
 ---
 
 # Move the extension boundary out of shikigami-core with flow packs and an architecture fitness check
@@ -96,15 +101,38 @@ again.
     The empty `Id` and `Store` directories are gone. ADR
     [0129](../adr/0129-the-kernel-owns-primitives-and-use-cases-ship-as-declarations-or-packs.md)
     is written and amends ADR-75 and ADR-13.
-- [ ] M2. The pack API, both SDK components and the first in-repository pack. Flows (a body
-  plus a pack-owned interpreter), decision programs and ShikumiProgram tasks are composed at
-  executable start. The representative check passes first: the watchdog flow body compiles in
-  a throwaway pack against the pack flow shape with its `Observe` interpreter.
-  `packs/flow-pack-examples` owns at-risk-customer, and the frozen list shrinks by its
-  modules. On this Mac the `packs/examples-distribution` agent-run runs the flow against a
-  real issue text, and the stock agent-run refuses it. `just keiro-gate` reports only the
-  recorded label removal, with the pre-release facts rechecked. The keiro improvement request
-  for pack-declared workflow fragments is filed.
+- [x] M2 (2026-11-16). The pack API, both SDK components and the first in-repository pack.
+  Flows (a body plus a pack-owned interpreter), decision programs and ShikumiProgram tasks are
+  composed at executable start. The representative check ran before the shape was fixed and
+  changed it. `packs/flow-pack-examples` owns at-risk-customer, and the frozen list shrank by
+  its two modules. The keiro improvement request is filed.
+  - Evidence, commits `653056eb` (composable registry), `6989b827` (SDK components) and
+    `627e8a2a` (the pack). `shikigami-examples flows` prints
+    `examples  at-risk-customer  default-model=required  slots=-` after ten `builtin` lines,
+    and the stock `shikigami flows` has no `at-risk` line.
+  - Real run on this Mac, low path. The payload was the body of the most recent issue of
+    `shinzui/keiro` (2,019 bytes, no risk word). `shikigami-examples-agent-run` logged
+    `flow.registry.composed` with packs `builtin` (ten flows) and `examples`
+    (`at-risk-customer`), then
+    `{"agent":"at-risk-customer","event":"flow.selected","flow":"at-risk-customer","pack":"examples",...}`,
+    and printed `output: {"level":"low","rationale":"no high-risk signal detected",...}` with
+    exit 0. The stock `shikigami-agent-run` printed
+    `agent-run: unknown flow at-risk-customer; registered flows: run-declared-tool, watchdog-sweep, ...`
+    before opening a session.
+  - Planting `import Effectful (IOE)` in
+    `packs/flow-pack-examples/bodies/FlowPack/Examples/Body/AtRiskCustomer.hs` fails with
+    "Could not load module ‘Effectful’. It is a member of the hidden package"; removing it
+    builds.
+  - Suites at `627e8a2a`: shikigami-core-test 963, shikigami-core-postgres-test 688,
+    shikigami-agent-test 42, shikigami-server-test 114, shikigami-core-diagrams-test 2,
+    flow-pack-examples-test 13, keiro-shikigami-conformance. `just kernel-fitness` passes
+    7 tests, now over two real packages under `packs/`. `nix eval` of
+    `.#packages.aarch64-darwin.shikigami-worker.drvPath` succeeds with
+    `nix/qualification/cohort.json` unchanged.
+  - `just keiro-gate HEAD~1` reports one finding, `WorkflowBodyChanged` for AgentRun (see
+    Surprises), and `just keiro-diff HEAD` is clean.
+  - Filed `mori://shinzui/keiro/okf/improvement-requests/concepts/IR-61` (keiro commit
+    `136879d1`).
 - [ ] M3. A pack in a separate repository with no Shikigami change. A local repository,
   `mori://shinzui/shikigami-operator-packs` (intended URI), builds a `repository-ledger` pack
   and its distribution against this checkout and runs it over real checkouts under `/Users/shinzui/Keikaku/bokuno/`.
@@ -145,6 +173,63 @@ again.
   modules. The two SDK components are the first reviewed surface.
 
 
+- Observation (M2, the representative check): the watchdog body compiles against the pack
+  shape, and the check changed the shape in three ways.
+  Evidence: a throwaway `packs/flow-pack-probe` (not merged) held the watchdog body verbatim in
+  a `bodies` sublibrary and the `Observe` effect with its interpreter in the main library. The
+  body was typed `(FlowEffects es, Observe :> es) => Value -> Eff es Value`, with Cabal
+  `mixins` restricting `bodies` to `flow-sdk` plus a named module list, so no `IOE` or `Store`
+  was in scope; planting `import Effectful (IOE)` failed with "member of the hidden package".
+  Its unit test ran the body over a recording interpreter that returned one fixed, empty
+  observation page and printed
+  `the watchdog body performed ["probe-grant","probe-open","probe-observe","probe-record","probe-close"]`.
+  - What the shape could not express, now fixed. (1) `runObserve` needs `Error StoreError`
+    for a journaled read, so `PackFlow.run` grants it. (2) The sweep origin needs the native
+    workflow name, so `FlowRunContext` carries `workflowName`. (3) The kernel chose the
+    advisory decision interpreter and the optional drift slot by testing the flow's name;
+    `FlowDef.decisionMode` (`StrictDecisions` or `AdvisoryDecisions`) now carries both.
+  - What the watchdog gets by name today and how a pack obtains it. The sweep-failure hook:
+    the pack's `run` wraps the body in `try` and calls its own hook, which the probe did. The
+    sweep origin and `driftEnabled`: built from `FlowRunContext` (`workflowName`, `runId`,
+    `occurredAt`, `identity` through `resolvedIdentity`, `agent.decisionModels`,
+    `executionRoot`). Two by-name branches remain in `runFlowDefinition` for EP-6: the
+    inventory is emptied when `Observe` is unavailable, and `onSweepFailed`. The
+    `shikigami-watchdog-v1` patch gate is also still evaluated by the kernel; a pack that keeps
+    it must call `patch` itself, which `flow-sdk` does not export yet.
+  - Kernel modules the probe imported beyond the SDK, the first candidates for EP-6. Body:
+    `Shikigami.Decision.Contract`, `Shikigami.Decision.ModelAlias`,
+    `Shikigami.Flow.Capability` (`emitSignals`), `Shikigami.Flow.Decision` (`Decision`,
+    `DecisionLabel`, `decide`, `decisionSlot`, `decisionStep`),
+    `Shikigami.Objective.Observation`, `Shikigami.Program.DecisionRunner` (`DecisionAbort`),
+    `Shikigami.Sink.Types`, and `Effectful.Exception` (`try`, `throwIO`). Interpreter:
+    `Shikigami.Agent.Principal` (`resolvedIdentity`), `Shikigami.Agent.Decl`,
+    `Shikigami.Objective.Observation` and `Hasql.Transaction`. Modules that move with the
+    subsystem: `Shikigami.Watchdog.{Classify, Delivery, Drift, Grant, Ledger, Observation,
+    Store, Types}` and `Shikigami.Program.Decision.Drift`.
+- Observation (M2): `just keiro-gate` reports the recorded removal as one finding, and five
+  labels left, not one.
+  Evidence: the AgentRun declaration also carried at-risk-customer's `recall-risk-history`,
+  `remember-acknowledged`, `remember-declined` and `remember-escalated`. With `classify` they
+  are the five removals behind
+  `BREAKING: AgentRun workflow-body AgentRun: workflow body labels, kinds, result types, or order changed without a new patch guard; wrap a cross-cutting change in patch, or rename the replay label for one changed step [WorkflowBodyChanged]`
+  with `vector: private-history-read=breaking old-binary-read-new-events=breaking snapshot-hydration=advisory rollout=stop-the-world`
+  and `replay-neutral: stored-data replay is unchanged by this diff`. It is accepted under
+  ADR-27. The hand-owned `KeiroConformance.Expectations` body list lost the same five labels.
+- Observation (M2): a pack cannot list the labels its body journals without PostgreSQL.
+  Evidence: `Keiro.Workflow` 0.22.0.0 exports the `Workflow` effect without constructors, and
+  `runWorkflow` and `runWorkflowWith` need `Store`. The pack's test runs each branch under
+  `runWorkflowWith` on a fresh database and reads the step index; the kernel capabilities are
+  recording interpreters, for which `Shikigami.Flow.Capability` and
+  `Shikigami.Flow.Acknowledgement` now export their effect constructors. IR-61 asks keiro for
+  a store-free interpreter.
+- Observation (M2): `shikigami-agent-run` already had `--payload` and already printed the
+  behavior output, so M2 added only the composition, the pre-session refusal and
+  `flow.selected`. The line is `output: <json>`, with a colon.
+- Observation (M2): the qualification fixture `fixtures/qualification/agents/at-risk-customer.dhall`
+  named the moved flow. A stock worker loading that directory would refuse to start, so the
+  agent moved to `packs/flow-pack-examples/agents/qualification-at-risk-customer.dhall`. Its
+  directory entry stays. The durable approval scenario of plan 79 needs a worker composed
+  with the pack before it can be qualified again; EP-6 creates the first such distribution.
 - Observation: Ten namespaces were added to the core after this plan was drafted, all by
   MasterPlan 22's kernel work: Authority, CodingAgent, CodingAgentStep, DeclaredTool,
   DeclaredToolStep, Output, Playbook, Process, Record and Trust. They are classified `kernel`.
@@ -157,6 +242,67 @@ again.
   authorizer. EP-10 must split them; ADR 0129 records it.
 
 ## Decision Log
+
+- Decision: Recheck of the pre-release facts before M2 touched `Shikigami.Agent.Workflow`,
+  `Shikigami.Flow` and `domain/` (base `1a7dfe16`). `git tag --list` is empty.
+  `docs/workflow-versioning.md` still carries "Current first-release baseline exception", and
+  MasterPlan 22 records no "exception ended". The development database holds non-terminal
+  runs: three suspended `shikigami.agent-run` instances (among them the parked campaign run
+  `c4341273-0d66-516c-a51b-b840d26be160`), two running coding-agent children and one running
+  approval. The drain rule's wording is not met, and M2 proceeded.
+  Rationale: none of those runs is an at-risk-customer run, and
+  `select count(*) from keiro.keiro_workflow_steps where step_name = 'classify'` is 0, so no
+  journal can meet the removed labels. There is no local cancel for a parked run (FRIC-80),
+  and the campaign run is not to be resumed. The commits before the pack move change no step
+  shape. The user should confirm that the three parked runs are abandoned before EP-11's
+  baseline gate.
+  Date: 2026-11-16
+- Decision: `BehaviorEnv.tasks` is a lookup function, `Text -> Maybe ProgramTask`, set with
+  `withProgramTasks`, and `decisionServices` and `flowDeclarationErrors` live in
+  `Shikigami.Flow.Pack`. The plan sketched `tasks :: FlowRegistry` and a `decisionServices` in
+  `Shikigami.Flow.Decision`.
+  Rationale: `Shikigami.Flow.Pack` imports `Shikigami.Flow`, which reaches
+  `Shikigami.Behavior.Run` through `Shikigami.Flow.Routing`, so the registry type cannot appear
+  in `BehaviorEnv` or `Flow.Decision` without a module cycle. The stub and provider
+  constructors answer from the builtin tasks; production composition replaces the lookup.
+  Date: 2026-11-16
+- Decision: `FlowDef.lifecycle` stays a required `LifecycleDiagram`, not the `Maybe` of the
+  plan's sketch, and `FlowDef` gains `decisionMode`.
+  Rationale: every flow has a diagram today and `render-lifecycle` reads it; no consumer needs
+  its absence. `decisionMode` comes from the representative check (see Surprises).
+  Date: 2026-11-16
+- Decision: The SDK names the sink capability `SinkCapability`, exports the effect vocabulary
+  a pack capability needs (`Effect`, `Dispatch`, `DispatchOf`, `send`) and `Eff` and `(:>)`
+  from `flow-sdk`, and `pack-sdk` also exports `liftIO`, `Error`, `StoreError` and
+  `runTransactionNoRetry`. `Shikigami.Pack.Sdk` makes `Pack` a kernel namespace, added to
+  `domainRoots` and `kernel.namespaces`.
+  Rationale: the kernel's `Sink` effect and the `Sink` declaration a body constructs share a
+  name across modules and cannot both be exported unqualified. A `bodies` sublibrary that
+  depended on `effectful-core` to write a signature could import `IOE`, so the SDK re-exports
+  what a body needs and the body depends on `flow-sdk` alone. The interpreter additions are
+  what the probe's `Observe` interpreter imported.
+  Date: 2026-11-16
+- Decision: Every label of the moved body is renamed with the pack's prefix, not only
+  `classify`: the memory keys (`examples-risk-history` and three more), the two sink keys and
+  the acknowledgement step. The five declared steps leave `domain/shikigami/agent-run.keiro`.
+  The golden inventory accepts a label that starts with `examples-` or with a kernel
+  capability prefix (`recall-`, `remember-`, `emit-signal-`, `flow-`) followed by it.
+  Rationale: the plan's rule is that every literal label of a pack flow starts with the pack's
+  name, and ADR-1 forbids leaving four declared steps no runtime journals.
+  Date: 2026-11-16
+- Decision: The core's durable tests use `Shikigami.Fixture.AcknowledgementFlow` in
+  `shikigami-core/test-postgres`, a copy of the old body under its old test-local labels,
+  registered as flow `acknowledgement-fixture` in a `fixture` pack. `FlowLifecycleSpec` runs
+  bodies through a test-local `SpikeFlow` record. The pure classification tests and the
+  lifecycle tests moved into the pack's suite.
+  Rationale: the tests exercise kernel machinery and may not depend on a pack. The agent name
+  stays `at-risk-customer` because the seeded sink grant is keyed by it.
+  Date: 2026-11-16
+- Decision: `flow.selected` is logged from the workflow body, outside any step, so a resumed
+  run logs it again.
+  Rationale: the worker and the one-off command then share one line, and the line states
+  which pack this process chose for this pass, which is true on a replay too.
+  Date: 2026-11-16
 
 - Decision: The fitness check is its own test module, `Shikigami.KernelBoundarySpec`, which
   reuses the `.cabal` parser that `PackageArchitectureSpec` now exports, instead of a group
@@ -1014,3 +1160,9 @@ MasterPlan's classification; and replaces the first-deployment check with the dr
 
 Revision note (2026-11-15, user decision): the adaptive-delivery coordinator is kernel and
 is no longer frozen as flow-pack material; the `workflows` pack field now lands with EP-10.
+
+Revision note (2026-11-16, M2 implementation): M2 is complete. The representative check
+added `Error StoreError` to `PackFlow.run`, `workflowName` to `FlowRunContext` and
+`FlowDef.decisionMode`. Five labels left the AgentRun declaration instead of one, the
+qualification fixture agent moved with the flow, and the pack's label inventory is derived
+from a real keiro journal. IR-61 is filed with keiro.

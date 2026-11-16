@@ -36,6 +36,11 @@ provenance:
       at: 2026-11-16T03:13:20Z
       mode: "implement"
       note: "EP-7 pilot moved to kizashi, stopped and finished by hand; campaign tail validated with build-repair"
+    - model: "claude-fable-5-2"
+      harness: "claude-code"
+      at: 2026-11-16T04:42:50Z
+      mode: "update"
+      note: "EP-5 M2 accepted: packs composed at start, SDK components, first pack, IR-61"
 ---
 
 # Rebuild Shikigami as a kernel where use cases are declared, not coded
@@ -925,7 +930,15 @@ and fixed two kernel defects (FRIC-78, FRIC-79). EP-7 M2's acceptance (a full ga
 is not met, and the campaign's shape needs fewer gates and steps before koyomi. EP-9 is complete: a routine agent is one short file, `shikigami-local
 run` runs it with one confirmation, and `shikigami-local up` runs scheduled ones locally (the
 worker still composes local-operator ports only for coding agents; Surprises). EP-5 M1 is accepted (ADR 0129): the kernel fitness check classifies every core namespace,
-freezes the leaving groups and steers a new use-case namespace to a declaration or a pack. Stage 1 (the pilot) ends at
+freezes the leaving groups and steers a new use-case namespace to a declaration or a pack. EP-5 M2
+is accepted on 2026-11-16: flows, decision programs and tasks are composed from packs at
+executable start (`Shikigami.Flow.Pack`), `shikigami-core:flow-sdk` and `:pack-sdk` exist with
+pinned export lists, and `packs/flow-pack-examples` owns at-risk-customer, which
+`packs/examples-distribution` runs and the stock executables refuse. The representative check
+against the watchdog changed the pack shape before any subsystem moved (the store's error
+channel, the workflow name, and a flow's decision mode as declaration data), and
+`mori://shinzui/keiro/okf/improvement-requests/concepts/IR-61` asks keiro for pack-declared
+workflow fragments. EP-5 M3 (a pack in a separate repository) remains. Stage 1 (the pilot) ends at
 the declaration baseline, and stage 2 at the kernel baseline.
 
 - [ ] Architectural acceptance: the keiro modernization campaign runs for real on at least
