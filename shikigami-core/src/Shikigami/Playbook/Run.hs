@@ -215,7 +215,7 @@ runSteps agent base bundle payload parameters variables prefix = go []
               not (Text.isInfixOf "." local)
             ]
         )
-    remember key summary' output carried = carried {texts = Map.insert key (summary', Text.take 8192 output) carried.texts}
+    remember key summary' output carried = carried {texts = Map.insert key (summary', Text.take 131072 output) carried.texts}
     runOne carried current =
       let key = prefix <> stepId current
        in case current of

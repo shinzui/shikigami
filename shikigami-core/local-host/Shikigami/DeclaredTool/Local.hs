@@ -53,9 +53,10 @@ data ToolAttemptResult = ToolAttemptResult
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
--- | Per-stream bytes kept in the outcome.
+-- | Per-stream bytes kept in the outcome. A rendered Seihou migration chain
+-- (EP-7) is about 64 KiB, and playbooks quote tool output in later prompts.
 keptOutput :: Natural
-keptOutput = 65536
+keptOutput = 262144
 
 localDeclaredToolRunner :: FilePath -> LocalWorkspace -> DeclaredToolRunner
 localDeclaredToolRunner wrapper local =
