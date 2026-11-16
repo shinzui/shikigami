@@ -60,7 +60,6 @@ import Shikigami.Execution.Store qualified as Execution
 import Shikigami.Execution.Transcript
 import Shikigami.Flow.Builtin (builtinFlowRegistry)
 import Shikigami.Flow.Decision qualified as Decision
-import Shikigami.Flow.Observe qualified as Observe
 import Shikigami.Flow.Pack (noPackMetrics)
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Log qualified as Log
@@ -167,7 +166,6 @@ workflowCase configFile prefix stage = do
               objectives = Nothing,
               packMetrics = const noPackMetrics,
               workspaceCatalog = [],
-              observe = Observe.disabledObserve,
               agents = [declaration],
               kizashi = KizashiConfig "http://localhost:1" (declarationCoordinate "recipient"),
               kawa = KawaConfig "http://localhost:1" (activityCoordinate "fixture"),

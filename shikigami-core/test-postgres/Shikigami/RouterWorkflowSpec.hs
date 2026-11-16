@@ -61,7 +61,6 @@ import Shikigami.Execution.Policy.Types qualified as Harness
 import Shikigami.Fixture.ExamplePack (exampleFlowRegistry)
 import Shikigami.Fixture.SinkHttp (testSinkHttp)
 import Shikigami.Flow.Decision qualified as FlowDecision
-import Shikigami.Flow.Observe qualified as FlowObserve
 import Shikigami.Flow.Pack (noPackMetrics)
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.FormatVersion (FormatVersion (V1))
@@ -354,7 +353,6 @@ routerDeps appEnv behaviorEnv routing agents =
       AgentWorkflow.objectives = Nothing,
       AgentWorkflow.packMetrics = const noPackMetrics,
       AgentWorkflow.workspaceCatalog = [],
-      AgentWorkflow.observe = FlowObserve.disabledObserve,
       AgentWorkflow.workspace = Nothing,
       AgentWorkflow.agents,
       AgentWorkflow.kizashi = KizashiConfig {baseUrl = "http://localhost:1", defaultRecipient = (declarationCoordinate "recipient")},

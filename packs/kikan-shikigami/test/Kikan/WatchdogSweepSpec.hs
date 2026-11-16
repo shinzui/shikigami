@@ -27,7 +27,7 @@ import Hasql.Transaction qualified as Tx
 import Keiro.PGMQ (runJobEff, runJobOnce, withJobRuntime)
 import Keiro.Workflow (WorkflowId (..), WorkflowOutcome (..))
 import Kikan.Fixture.ExecutionIdentity (fixtureOperationId, fixtureRootId)
-import Kikan.Fixture.Watchdog (watchdogAllowances)
+import Kikan.Fixture.Watchdog (watchdogAllowances, watchdogPackSettings)
 import Kioku.Id (genSessionId)
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (Flow), defaultDelegationBudget)
@@ -48,7 +48,6 @@ import Shikigami.Execution.Quantity (parseResourceAmount)
 import Shikigami.Execution.Resources qualified as R
 import Shikigami.Execution.ResourcesStore qualified as Roots
 import Shikigami.Flow.Decision qualified as Decision
-import Shikigami.Flow.Observe qualified as Observe
 import Shikigami.Flow.Watchdog (driftAlias)
 import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Log qualified as Log
@@ -146,7 +145,7 @@ tests fixture =
                   & #agents .~ [declaration]
                   & #directory .~ directory
                   & #grants .~ DbGrants h.pool
-                  & #observe .~ Observe.ObserveSeed (Just configured) Observe.noObserveHooks
+                  & #packSettings .~ watchdogPackSettings (Just configured)
                   & #decisions .~ (Decision.builtinDecisionServices (checked (modelCatalog [binding])) & #providers .~ [provider])
           cron <- right (parseCron "* * * * *")
           due <- maybe (assertFailure "no due tick") pure (nextDue cron now)

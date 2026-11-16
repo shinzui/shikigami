@@ -14,6 +14,7 @@ module Shikigami.Pack.Sdk
     FlowRunContext (..),
     RunModel (..),
     PackMetrics (..),
+    PackGauge (..),
 
     -- * Admin verbs
     AdminVerb (..),
@@ -69,5 +70,5 @@ import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Error (StoreError)
 import Kiroku.Store.Transaction (runTransaction, runTransactionNoRetry)
 import Shikigami.App (AppEffects)
-import Shikigami.Flow.Pack (AdminContext (..), AdminVerb (..), FlowRunContext (..), PackMetrics (..), PackSetting (..), PackSettings, RunModel (..), ScheduleCandidate (..), ScheduleHook (..), ScheduledAllowance (..), SettingDefault (..), SettingShape (..), StreamCandidate (..), StreamDisposition (..), StreamEvaluation (..), StreamHook (..), StreamSkip (..), packSettingText, packSettingValue)
+import Shikigami.Flow.Pack (AdminContext (..), AdminVerb (..), FlowRunContext (..), PackGauge (..), PackMetrics (..), PackSetting (..), PackSettings, RunModel (..), ScheduleCandidate (..), ScheduleHook (..), ScheduledAllowance (..), SettingDefault (..), SettingShape (..), StreamCandidate (..), StreamDisposition (..), StreamEvaluation (..), StreamHook (..), StreamSkip (..), packSettingText, packSettingValue)
 import Shikigami.Log (Logger, logDebug, logError, logInfo, logWarn)

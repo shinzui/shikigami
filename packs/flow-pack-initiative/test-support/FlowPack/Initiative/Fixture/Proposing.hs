@@ -115,7 +115,6 @@ import Shikigami.Execution.Identity (parseOperationId)
 import Shikigami.Execution.Policy.Types (defaultHarnessPolicy)
 import Shikigami.Flow.Builtin (builtinPack)
 import Shikigami.Flow.Decision qualified as Decision
-import Shikigami.Flow.Observe qualified as FlowObserve
 import Shikigami.Flow.Pack (FlowRegistry, PackMetrics (..), composeFlowRegistry, decisionServices)
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Log qualified as Log
@@ -319,7 +318,6 @@ proposingDeps env behavior provider binding objectiveRuntime settings repository
       workspace = Nothing,
       coordination = Nothing,
       objectives = Just objectiveRuntime,
-      observe = FlowObserve.disabledObserve,
       -- The proposer's counter, as the worker backs it: the event and its
       -- bounded attribute values, in the order the interpreter gives them.
       packMetrics = \_ -> PackMetrics \event attributes -> seen (event, Text.intercalate ":" (map snd attributes)),

@@ -75,7 +75,6 @@ import Shikigami.Fixture.ExamplePack (exampleFlowRegistry)
 import Shikigami.Fixture.KawaStub (kawaDoorwayApplication)
 import Shikigami.Fixture.SinkHttp (testHttpLimits, testSinkHttpFor)
 import Shikigami.Flow.Decision qualified as FlowDecision
-import Shikigami.Flow.Observe qualified as FlowObserve
 import Shikigami.Flow.Pack (noPackMetrics)
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Log qualified as Log
@@ -564,7 +563,6 @@ withFixtureUsingTracer databaseFixture tracer label sinks kizashi danwa use =
                 AgentWorkflow.objectives = Nothing,
                 AgentWorkflow.packMetrics = const noPackMetrics,
                 AgentWorkflow.workspaceCatalog = [],
-                AgentWorkflow.observe = FlowObserve.disabledObserve,
                 AgentWorkflow.workspace = Nothing,
                 AgentWorkflow.agents = [declaration],
                 AgentWorkflow.kizashi = kizashi,

@@ -62,7 +62,8 @@ examplesFixturePack =
       tasks = [],
       settings = [],
       triggers = noTriggerHooks,
-      adminVerbs = []
+      adminVerbs = [],
+      gauges = []
     }
   where
     flow :: Text -> [DecisionSlot] -> DefaultModelRequirement -> (forall es. (FlowEffects es) => Value -> Eff es Value) -> PackFlow

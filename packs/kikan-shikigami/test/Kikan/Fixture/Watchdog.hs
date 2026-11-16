@@ -47,13 +47,12 @@ import Shikigami.Execution.Identity (ExecutionRootId)
 import Shikigami.Execution.Resources qualified as R
 import Shikigami.Execution.ResourcesStore qualified as Roots
 import Shikigami.Flow.Decision qualified as Decision
-import Shikigami.Flow.Observe qualified as Observe
 import Shikigami.Flow.Watchdog (driftAlias)
 import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
 import Shikigami.Objective.Types qualified as Objective
-import Shikigami.Pack.Setting (packSettingsFromList)
+import Shikigami.Pack.Setting (PackSettings, packSettingsFromList)
 import Shikigami.Sink (GrantSource (DbGrants), SinkKind (SDanwaConversation))
 import Shikigami.Sink.GrantStore qualified as Grants
 import Shikigami.StateRevision (advanceRevision, initialRevision)
@@ -157,7 +156,7 @@ withWatchdog fixture use = P.withProposing fixture P.defaultOptions \h -> do
           & #agents .~ [declaration]
           & #directory .~ directory
           & #grants .~ DbGrants h.pool
-          & #observe .~ Observe.ObserveSeed (Just configured) Observe.noObserveHooks
+          & #packSettings .~ watchdogPackSettings (Just configured)
           & #decisions .~ (Decision.builtinDecisionServices (checked (modelCatalog [binding])) & #providers .~ [provider])
   use (Watchdog h identity declaration configured directory dependencies objective.objectiveId targetRoot admission started (readIORef calls) (readIORef prompts) (writeIORef answerRef . Just))
 
@@ -222,4 +221,8 @@ right = either (assertFailure . show) pure
 -- scheduler would consult it for a @watchdog-sweep@ agent.
 watchdogAllowances :: Maybe WatchdogSettings -> ScheduleIntake
 watchdogAllowances settings =
-  scheduleIntake "builtin" (const True) (packSettingsFromList [(watchdogKey, toJSON configured) | configured <- maybe [] pure settings]) watchdogScheduleHook
+  scheduleIntake "builtin" (const True) (watchdogPackSettings settings) watchdogScheduleHook
+
+-- | The operator's policy as the composed executable hands it to the sweep.
+watchdogPackSettings :: Maybe WatchdogSettings -> PackSettings
+watchdogPackSettings settings = packSettingsFromList [(watchdogKey, toJSON configured) | configured <- maybe [] pure settings]

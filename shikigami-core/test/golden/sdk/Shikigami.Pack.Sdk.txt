@@ -5,6 +5,7 @@ Error
 FlowRunContext (..)
 IOE
 Logger
+PackGauge (..)
 PackMetrics (..)
 PackSetting (..)
 PackSettings

@@ -7,7 +7,7 @@ import Control.Lens ((&), (.~))
 import Control.Monad (when)
 import Data.Aeson (Value, eitherDecode, encode, object, toJSON, (.=))
 import Data.Generics.Labels ()
-import Data.IORef (atomicModifyIORef', newIORef)
+import Data.IORef (atomicModifyIORef', modifyIORef', newIORef, readIORef)
 import Data.Int (Int64)
 import Data.List.NonEmpty qualified as NonEmpty
 import Data.Map.Strict qualified as Map
@@ -38,13 +38,14 @@ import Shikigami.Execution.Resources qualified as Resources
 import Shikigami.Execution.ResourcesStore qualified as Roots
 import Shikigami.Fixture.ExecutionIdentity (fixtureOperationId)
 import Shikigami.Flow.Decision qualified as Decision
-import Shikigami.Flow.Observe qualified as Observe
+import Shikigami.Flow.Pack (PackMetrics (..))
 import Shikigami.Flow.Watchdog (driftAlias, watchdogFlowName)
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
 import Shikigami.Objective.Capability qualified as Objectives
 import Shikigami.Objective.Command (Command (CancelObjective))
 import Shikigami.Objective.Types qualified as Objective
 import Shikigami.ObjectiveStoreSpec qualified as ObjectiveFixture
+import Shikigami.Pack.Setting (PackSettings, packSettingsFromList)
 import Shikigami.Program.Decision.Drift (DriftInput (..), DriftProposal (..), DriftProposalSubject (..))
 import Shikigami.RouterWorkflowSpec qualified as RouterFixture
 import Shikigami.Sink (GrantSource (StaticGrants), SinkKind (SDanwaConversation))
@@ -55,6 +56,7 @@ import Shikigami.Trigger.Enqueue (scheduledRunJob)
 import Shikigami.Watchdog.Classify (Observed (..), classifyPage)
 import Shikigami.Watchdog.Grant
 import Shikigami.Watchdog.Observation
+import Shikigami.Watchdog.Settings (WatchdogSettings, watchdogKey, watchdogSettingsFrom)
 import Shikigami.Watchdog.Store qualified as Ledger
 import Shikigami.Watchdog.Types
 import Shikigami.WatchdogDriftSpec qualified as DriftFixture
@@ -96,13 +98,13 @@ tests fixture =
           intent.resolvedRecipient @?= Nothing,
       testCase "committed Drift result survives AgentRun restart without another provider call" $
         withDriftSweep fixture \h deps job -> do
-          crashResumeWith (1, 1, 1, 1) h.env deps job (StepName "decision-result-drift")
+          crashResumeWith (1, 1, 1, 1) h.env deps job (StepName "decision-result-watchdog-drift")
           h.calls >>= (@?= 1),
       testCase "a Drift refusal still delivers an independently stuck session" $
         withDriftSweep fixture \h deps job -> do
           access <- right =<< run h.env (Sessions.authorizeSession (sessionIdFor h.admission) h.admission.context.identity (pure (Right ())))
           start h.env access
-          grant <- right (resolveObservationGrant deps.observe.settings job.identity)
+          grant <- right (resolveObservationGrant (watchdogSettingsFrom deps.packSettings) job.identity)
           page <- right =<< run h.env (observePage grant defaultObservationBounds initialCursor)
           let priorPage = page & #subjects .~ [subject | subject <- page.subjects, subject.subject == WorkerSession (sessionIdFor h.admission)] & #observedAt .~ addUTCTime (-120) page.observedAt
           seedMarks h.env grant priorPage
@@ -169,31 +171,33 @@ tests fixture =
           counts env >>= (@?= (3, 1, 1, 1)),
       testCase "missing delivery policy reports a refusal and still closes" $
         withSweep fixture \env deps job -> do
-          let seed = deps.observe
-              changed = fmap (\settings -> settings & #delivery .~ Nothing) seed.settings
-          complete =<< runAgentRunWorkflow (deps & #observe .~ Observe.ObserveSeed changed Observe.noObserveHooks) job
+          let changed = fmap (\settings -> settings & #delivery .~ Nothing) (watchdogSettingsFrom deps.packSettings)
+          complete =<< runAgentRunWorkflow (deps & #packSettings .~ watchdogPackSettings changed) job
           counts env >>= (@?= (2, 1, 0, 0)),
       testCase "per-intent C11 denial produces no outbox or pending delivery" $
         withSweep fixture \env deps job -> do
           complete =<< runAgentRunWorkflow (deps & #grants .~ StaticGrants Map.empty) job
           counts env >>= (@?= (2, 1, 0, 0)),
-      testCase "pre-patch AgentRun emits no watchdog or Drift application labels" $
+      testCase "a run without an enrolled root sweeps and makes no drift decision, whatever the declaration lists" $
         withSweep fixture \env deps job -> do
-          let options = shikigamiWorkflowRunOptions env & #activePatches .~ Set.empty
-          complete . Right =<< run env (runWorkflowWith options agentRunWorkflowName (runJobWorkflowId job) (agentRunWorkflow deps (Just job)))
-          counts env >>= (@?= (1, 0, 0, 0))
+          let listed = deps & #agents .~ map (\decl -> decl & #decisionModels .~ [driftAlias]) deps.agents
+          complete =<< runAgentRunWorkflow listed job
           index <- run env (loadStepIndex agentRunWorkflowName (runJobWorkflowId job) 0)
-          assertBool "no new labels" (all (\label -> not ("watchdog-" `Text.isPrefixOf` label || "decision-" `Text.isPrefixOf` label)) (Map.keys index)),
-      testCase "one-off unavailable adapter adds no observation or decision labels" $
+          assertBool "the sweep ran" (Map.member "watchdog-close" index)
+          assertBool "no drift decision was prepared" (not (Map.member "decision-prepare-watchdog-drift" index)),
+      testCase "a sweep counts on the pack counter with bounded tags and no identifier" $
+        withSweep fixture \_env deps job -> do
+          seen <- newIORef []
+          let counting = deps & #packMetrics .~ const (PackMetrics (\event tags -> modifyIORef' seen ((event, tags) :)))
+          complete =<< runAgentRunWorkflow counting job
+          complete =<< runAgentRunWorkflow (counting & #packSettings .~ watchdogPackSettings Nothing) (nextJob job)
+          counted <- reverse <$> readIORef seen
+          assertBool "a completed sweep is counted" (("sweep", [("outcome", "completed")]) `elem` counted)
+          assertBool "a refused grant is counted as an uncompleted sweep" (("refusal", [("refusal.kind", "uncompleted")]) `elem` counted && ("sweep", [("outcome", "refused")]) `elem` counted)
+          assertBool "every tag is one of the closed set" (all (\(event, tags) -> event `elem` ["sweep", "finding", "refusal"] && all ((`elem` ["outcome", "detection.kind", "refusal.kind"]) . fst) tags) counted),
+      testCase "an executable without the watchdog setting retains a disabled-policy grant refusal" $
         withSweep fixture \env deps job -> do
-          let oneOff = deps & #observe .~ Observe.disabledObserve & #agents .~ map (\decl -> decl & #decisionModels .~ [driftAlias]) deps.agents
-          complete =<< runAgentRunWorkflow oneOff job
-          counts env >>= (@?= (1, 0, 0, 0))
-          index <- run env (loadStepIndex agentRunWorkflowName (runJobWorkflowId job) 0)
-          assertBool "unavailable adapter is silent" (all (\label -> not ("watchdog-" `Text.isPrefixOf` label || "decision-" `Text.isPrefixOf` label)) (Map.keys index)),
-      testCase "configured worker retains a disabled-policy grant refusal" $
-        withSweep fixture \env deps job -> do
-          complete =<< runAgentRunWorkflow (deps & #observe .~ Observe.ObserveSeed Nothing Observe.noObserveHooks) job
+          complete =<< runAgentRunWorkflow (deps & #packSettings .~ watchdogPackSettings Nothing) job
           counts env >>= (@?= (1, 0, 0, 0))
           index <- run env (loadStepIndex agentRunWorkflowName (runJobWorkflowId job) 0)
           assertBool "disabled refusal is retained" (Map.member "watchdog-grant" index),
@@ -252,7 +256,7 @@ withSweepCount count fixture use = withFixture fixture \env admission access -> 
   let declaration = AgentFixture.decl & #behavior .~ Flow watchdogFlowName & #sinks .~ []
       deps =
         AgentFixture.testDepsWithAgents env behavior defaultAgentRunHooks [declaration]
-          & #observe .~ Observe.ObserveSeed (Just settings) Observe.noObserveHooks
+          & #packSettings .~ watchdogPackSettings (Just settings)
           & #directory .~ directory
           & #grants .~ StaticGrants (Map.singleton principal (Set.singleton SDanwaConversation))
       job = scheduledRunJob principal declaration.name page.observedAt
@@ -297,7 +301,7 @@ withDriftSweep fixture use = DriftFixture.withHarness fixture \h -> do
           & #deliveryPool .~ Just h.pool
           & #decisions .~ h.services
           & #grants .~ StaticGrants (Map.singleton job.identity (Set.singleton SDanwaConversation))
-          & #observe .~ Observe.ObserveSeed (Just settings) Observe.noObserveHooks
+          & #packSettings .~ watchdogPackSettings (Just settings)
   use h deps job
 
 seedMarks :: AppEnv -> ObservationGrant -> ObservationPage -> IO ()
@@ -337,9 +341,8 @@ crashResumeWith expected env deps job target = do
   afterCrash <- run env (loadStepIndex agentRunWorkflowName (runJobWorkflowId job) 0)
   assertBool "the target journal append committed" (Map.member target.unStepName afterCrash)
   assertBool "crash occurred before watchdog-close committed" (not (Map.member "watchdog-close" afterCrash))
-  let seed = deps.observe
-      changed = fmap (\settings -> settings & #delivery .~ Nothing) seed.settings
-  complete =<< runAgentRunWorkflow (deps & #observe .~ Observe.ObserveSeed changed Observe.noObserveHooks) job
+  let changed = fmap (\settings -> settings & #delivery .~ Nothing) (watchdogSettingsFrom deps.packSettings)
+  complete =<< runAgentRunWorkflow (deps & #packSettings .~ watchdogPackSettings changed) job
   counts env >>= (@?= expected)
 
 counts :: AppEnv -> IO (Int64, Int64, Int64, Int64)
@@ -356,3 +359,7 @@ run env action = right =<< runAppIO env action
 
 right :: (Show e) => Either e a -> IO a
 right = either (assertFailure . show) pure
+
+-- | The operator's policy as the composed executable hands it to the sweep.
+watchdogPackSettings :: Maybe WatchdogSettings -> PackSettings
+watchdogPackSettings settings = packSettingsFromList [(watchdogKey, toJSON configured) | configured <- maybe [] pure settings]

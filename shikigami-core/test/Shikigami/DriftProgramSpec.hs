@@ -37,7 +37,7 @@ tests =
         let descriptorValue = descriptor (programRef driftProgram)
         versionedDigest "shikigami.watchdog-drift-descriptor/1" descriptorValue @?= "sha256:d8d47c490849c498c7b251378221af9eeb47a89b204fde64d60f563aa4ae0705"
         driftStep.accounting @?= Flow.RootAccountedCall
-        Flow.decisionStepNames driftStep.site @?= (StepName "decision-prepare-drift", StepName "decision-result-drift")
+        Flow.decisionStepNames driftStep.site @?= (StepName "decision-prepare-watchdog-drift", StepName "decision-result-watchdog-drift")
         _ <- checked (lookupProgram decisionPrograms (programRef driftProgram))
         _ <- checked (lookupResultCodec @DriftProposal decisionCodecs descriptorValue)
         pure (),

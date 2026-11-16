@@ -44,7 +44,6 @@ import Shikigami.Execution.ResourcesStore qualified as Roots
 import Shikigami.Execution.Runner (OperationContext (..))
 import Shikigami.Execution.Selection (ExecutionSelection (..))
 import Shikigami.Execution.Transcript (ExecutionSnapshot (..), Operation (..), OperationSpec (..))
-import Shikigami.Flow.Observe qualified as Observe
 import Shikigami.Flow.Workers qualified as FlowWorkers
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
@@ -138,7 +137,7 @@ tests fixture = withResource (newMVar Map.empty) (const (pure ())) $ \resource -
       testCase "IR-19 case 4: accepted worker operations yield cited drift without objective mutation" $ withWatchdog fixture \original -> do
         (snapshot, _) <- acceptedTool original False
         let configured = original.settings & #driftSubjectsPerSweep .~ Just (checked (parseWatchdogLimit 2))
-            w = original & #settings .~ configured & #deps . #observe .~ Observe.ObserveSeed (Just configured) Observe.noObserveHooks
+            w = original & #settings .~ configured & #deps . #packSettings .~ watchdogPackSettings (Just configured)
         w.answer (object ["assessments" .= [object ["subject" .= subjectKeyText (subjectKey subject), "category" .= ("outside-scope" :: Text), "rationale" .= ("The accepted unrelated-export operation does not advance the goal." :: Text), "evidenceIndexes" .= [0 :: Int]] | subject <- [ObjectiveCoordinator w.objective, Execution snapshot.executionId]]])
         before <- P.objectives w.base
         receipts <- P.count w.base "shikigami.objective_receipts"
@@ -214,14 +213,14 @@ tests fixture = withResource (newMVar Map.empty) (const (pure ())) $ \resource -
           let dispatch job = do
                 let witness = do
                       index <- owned w.base (loadStepIndex Agent.agentRunWorkflowName (runJobWorkflowId job) 0)
-                      when (Map.member "decision-result-drift" index) do
+                      when (Map.member "decision-result-watchdog-drift" index) do
                         first <- atomicModifyIORef' crashed (\old -> (True, not old))
                         when first (throwIO (userError "committed result crash"))
                     options = shikigamiWorkflowRunOptions w.base.env & #onJournalAppend .~ Just witness
                 result <- try @SomeException (owned w.base (runWorkflowWith options Agent.agentRunWorkflowName (runJobWorkflowId job) (Agent.agentRunWorkflow w.deps (Just job))))
                 assertBool "crash observed" (either (const True) (const False) result)
                 index <- owned w.base (loadStepIndex Agent.agentRunWorkflowName (runJobWorkflowId job) 0)
-                assertBool "committed decision before close" (Map.member "decision-result-drift" index && not (Map.member "watchdog-close" index))
+                assertBool "committed decision before close" (Map.member "decision-result-watchdog-drift" index && not (Map.member "watchdog-close" index))
                 pure (Right Suspended)
           _ <- tickWith w w.deps now (const (pure ())) dispatch
           w.calls >>= (@?= 1)
@@ -243,12 +242,12 @@ tests fixture = withResource (newMVar Map.empty) (const (pure ())) $ \resource -
           evidence resource 8 w ["committedDecisionCalls" .= (1 :: Int), "findings" .= length found, "runSkips" .= length skips, "overdue" .= True]
         withWatchdog fixture \original -> do
           let configured = original.settings & #allowance .~ fmap (\allowance -> allowance & #limits .~ Map.insert R.ModelAttempts (R.Limited (checked (Shikigami.Execution.Quantity.parseResourceAmount 2))) allowance.limits) original.settings.allowance
-              w = original & #settings .~ configured & #deps . #observe .~ Observe.ObserveSeed (Just configured) Observe.noObserveHooks
+              w = original & #settings .~ configured & #deps . #packSettings .~ watchdogPackSettings (Just configured)
           once <- newIORef True
           let dependencies =
                 w.deps
                   & #hooks . #afterStepBody
-                    .~ ( \label -> when (label == StepName "decision-result-drift") do
+                    .~ ( \label -> when (label == StepName "decision-result-watchdog-drift") do
                            first <- atomicModifyIORef' once (False,)
                            when first (throwIO (userError "lost result append"))
                        )

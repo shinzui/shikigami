@@ -35,6 +35,9 @@ Shikigami.Pack.Sdk IOE
 Shikigami.Pack.Sdk Logger
 Shikigami.Pack.Sdk MonadIO|
 Shikigami.Pack.Sdk MonadIO|.liftIO
+Shikigami.Pack.Sdk PackGauge
+Shikigami.Pack.Sdk PackGauge.name
+Shikigami.Pack.Sdk PackGauge.sample
 Shikigami.Pack.Sdk PackMetrics
 Shikigami.Pack.Sdk PackMetrics.count
 Shikigami.Pack.Sdk PackSetting

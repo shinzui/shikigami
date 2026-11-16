@@ -170,11 +170,9 @@ import Shikigami.Flow.Decision qualified as FlowDecision
 import Shikigami.Flow.DeclaredTool qualified as FlowDeclaredTool
 import Shikigami.Flow.Delegate qualified as FlowDelegate
 import Shikigami.Flow.Objectives qualified as FlowObjectives
-import Shikigami.Flow.Observe qualified as FlowObserve
 import Shikigami.Flow.Pack qualified as FlowPack
 import Shikigami.Flow.Routing (RoutingRuntime)
 import Shikigami.Flow.Routing qualified as FlowRouting
-import Shikigami.Flow.Watchdog qualified as WatchdogFlow
 import Shikigami.Flow.Workers qualified as FlowWorkers
 import Shikigami.Log qualified as Log
 import Shikigami.Log.Correlation (runCorrelationId)
@@ -214,7 +212,6 @@ import Shikigami.Sink.Intent
   )
 import Shikigami.Sink.Permission (SinkKind, sinkKindText)
 import Shikigami.Telemetry.TraceContext qualified as TraceContext
-import Shikigami.Watchdog.Ledger qualified as Watchdog
 import Shikigami.WorkerSession.Capability qualified as WorkerCapability
 import Shikigami.WorkerSession.Handoff qualified as WorkerHandoff
 import Shikigami.WorkerSession.Store qualified as WorkerStore
@@ -247,7 +244,6 @@ data AgentRunDeps = AgentRunDeps
     -- | The repositories of the operator's workspace catalog, by identity. A
     -- pack flow may offer them to a model; their source locators stay private.
     workspaceCatalog :: ![RepositoryId],
-    observe :: !FlowObserve.ObserveSeed,
     agents :: ![AgentDecl],
     kizashi :: !KizashiConfig,
     kawa :: !KawaConfig,
@@ -1346,12 +1342,7 @@ runFlowDefinition deps activeBehaviorEnv resolvedProfile approvalPolicyForRun re
               Left Objective.ObjectiveUnavailable -> throwIO (TransientBehaviorFailure "objective authority unavailable")
               value -> pure value
       else pure (Right Nothing)
-  (watchdogNativeName, watchdogNativeRun) <- Workflow.currentWorkflow
-  useWatchdog <- Workflow.patch (Workflow.PatchId "shikigami-watchdog-v1")
-  let observeInterpreter action
-        | useWatchdog = FlowObserve.runObserve (FlowObserve.ObserveRuntime deps.observe job.identity (Watchdog.SweepOrigin watchdogNativeName watchdogNativeRun (runJobOccurredAt job) job.identity) (WatchdogFlow.driftAlias `elem` decl.decisionModels && job.executionRootId /= Nothing)) action
-        | otherwise = FlowObserve.unavailableObserve action
-      inventory = if (not useWatchdog || not (FlowObserve.observeAvailable deps.observe)) && flow.name == WatchdogFlow.watchdogFlowName then [] else Flow.flowDecisionSlotsFor decl flow
+  let inventory = Flow.flowDecisionSlotsFor decl flow
       decisionTimeout = DecisionContract.parseDecisionTimeout (floor (durationTime (depsRunTimeout deps) * 1000000))
       decisionInterpreter action
         | null inventory = FlowDecision.runDecisionDisabled action
@@ -1385,15 +1376,11 @@ runFlowDefinition deps activeBehaviorEnv resolvedProfile approvalPolicyForRun re
           . FlowWorkers.runWorkers deps.coordination deps.actionAuthority coordinator coordinationPolicy
           . Adaptive.runAdaptiveDelivery (adaptiveRuntime deps) coordinator resolvedProfile (Harness.narrowHarnessPolicy deps.harness decl.harness)
           . FlowObjectives.runObjectives deps.objectives objectivePolicy
-          . observeInterpreter
           . FlowRouting.runRouting routingEnv
           . decisionInterpreter
           . acknowledgementInterpreter
           $ runFlow runContext ((.triggerPayload) job)
       )
-  case attempted of
-    Left _ | useWatchdog && flow.name == WatchdogFlow.watchdogFlowName -> liftIO deps.observe.hooks.onSweepFailed
-    _ -> pure ()
   when (not (null inventory)) do
     forM_ ((.deliveryPool) deps) \pool -> do
       finalized <- liftIO (DecisionEvidence.finalizeDecisionReport (DecisionEvidence.postgresDecisionEvidenceStore pool) (runCorrelationId (jobIdempotencyKey job)))

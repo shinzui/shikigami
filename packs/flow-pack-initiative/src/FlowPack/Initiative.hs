@@ -33,5 +33,6 @@ initiativePack =
       -- Pure and total: the verdict and the ledger transactions the stream
       -- consumer commits for it.
       triggers = noTriggerHooks {stream = Just (StreamHook (streamDisposition . initiativeSettingsFrom))},
-      adminVerbs = [proposalsVerb]
+      adminVerbs = [proposalsVerb],
+      gauges = []
     }

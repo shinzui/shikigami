@@ -108,16 +108,23 @@ uncomputable schedule. Invalid configuration or unavailable/corrupt storage fail
 the command. Use this command from your monitoring system. Readiness and liveness
 HTTP probes retain their existing meanings and do not inspect watchdog cadence.
 
-With OTel configured, the worker's independent fifteen-second sampler publishes
-`shikigami.watchdog.sweep.age` in seconds from the database clock, even when no
-watchdog run is active. No completion means no gauge value. A failed read logs a
-bounded failure event and records no new age; an older exported point can remain,
-so monitor its timestamp too. Other samplers continue. Runtime callbacks increment
-`shikigami.watchdog.sweeps` (`outcome`: completed/refused/failed),
-`shikigami.watchdog.findings` (`detection.kind`: stuck/unresolved/stuck-coordinator/drift)
-and `shikigami.watchdog.refusals` (`refusal.kind`: retained/uncompleted). Attributes
-contain no subject IDs or error bodies. These callbacks are at least once around
-a lost journal append; use the ledger for exact audit counts.
+With OTel configured, the worker's independent fifteen-second sampler publishes the
+watchdog's sweep age on `shikigami.pack.gauges` with `gauge=sweep.age` and the owning
+`pack`, in seconds from the database clock, even when no watchdog run is active. No
+completion means no gauge value, and so does an unset `watchdog` key. A failed read logs
+`worker.metrics.pack_gauge_sample_failed` with the pack and gauge and records no new age; an
+older exported point can remain, so monitor its timestamp too. Other samplers continue.
+
+A sweep counts on `shikigami.pack.events`, with the owning `pack` and one of three events:
+`event=sweep` (`outcome`: completed/refused/failed), `event=finding` (`detection.kind`:
+stuck/unresolved/stuck-coordinator/drift) and `event=refusal` (`refusal.kind`:
+retained/uncompleted). Attributes contain no subject IDs or error bodies. A step that is
+replayed counts nothing again, but a step that loses its journal append is counted twice;
+use the ledger for exact audit counts.
+
+Before the watchdog became a pack flow these were four instruments named
+`shikigami.watchdog.sweep.age`, `.sweeps`, `.findings` and `.refusals`. An alert written
+against those names needs the new instrument and the `gauge` or `event` attribute.
 
 ## Respond to a finding
 

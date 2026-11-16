@@ -4,12 +4,7 @@
 -- | Journaled read authority and advisory ledger writes. No owner commands.
 module Shikigami.Flow.Observe
   ( Observe,
-    ObserveSeed (..),
     ObserveRuntime (..),
-    ObserveHooks (..),
-    noObserveHooks,
-    disabledObserve,
-    observeAvailable,
     Granted (..),
     SweepOpened (..),
     ObservedPage (..),
@@ -20,10 +15,10 @@ module Shikigami.Flow.Observe
     recordDrift,
     closeSweep,
     runObserve,
-    unavailableObserve,
   )
 where
 
+import Control.Monad (replicateM_)
 import Data.Aeson (FromJSON (..), ToJSON (..), object, withObject, (.:), (.=))
 import Data.Either (rights)
 import Data.List (nub)
@@ -42,6 +37,7 @@ import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Error (StoreError)
 import Kiroku.Store.Transaction (runTransactionNoRetry)
 import Shikigami.Agent.Principal (AgentIdentity)
+import Shikigami.Flow.Pack (PackMetrics (..))
 import Shikigami.Objective.Observation qualified as Objective
 import Shikigami.Watchdog.Classify (Observed (..), PriorMark)
 import Shikigami.Watchdog.Drift qualified as Drift
@@ -50,28 +46,10 @@ import Shikigami.Watchdog.Observation
 import Shikigami.Watchdog.Store qualified as Ledger
 import Shikigami.Watchdog.Types
 
-data ObserveHooks = ObserveHooks
-  { onSweepCompleted :: !(SweepId -> Ledger.SweepSummary -> IO ()),
-    onFinding :: !(FindingView -> IO ()),
-    onRefusal :: !(IO ()),
-    onSweepFailed :: !(IO ())
-  }
-
-noObserveHooks :: ObserveHooks
-noObserveHooks = ObserveHooks (\_ _ -> pure ()) (\_ -> pure ()) (pure ()) (pure ())
-
-data ObserveSeed
-  = ObserveSeed {settings :: !(Maybe WatchdogSettings), hooks :: !ObserveHooks}
-  | UnavailableObserve {settings :: !(Maybe WatchdogSettings), hooks :: !ObserveHooks}
-
-observeAvailable :: ObserveSeed -> Bool
-observeAvailable ObserveSeed {} = True
-observeAvailable UnavailableObserve {} = False
-
-disabledObserve :: ObserveSeed
-disabledObserve = UnavailableObserve Nothing noObserveHooks
-
-data ObserveRuntime = ObserveRuntime {seed :: !ObserveSeed, identity :: !AgentIdentity, origin :: !Ledger.SweepOrigin, driftEnabled :: !Bool}
+-- | What one sweep's interpreter is given. The policy is the operator's
+-- setting, absent when the watchdog is not configured; every event the sweep
+-- counts goes to the pack's counter with bounded attributes.
+data ObserveRuntime = ObserveRuntime {settings :: !(Maybe WatchdogSettings), metrics :: !PackMetrics, identity :: !AgentIdentity, origin :: !Ledger.SweepOrigin, driftEnabled :: !Bool}
 
 data Granted = Granted {grant :: !GrantSnapshot, delivery :: !(Maybe DeliveryPolicy), driftEnabled :: !Bool}
   deriving stock (Eq, Show, Generic)
@@ -124,14 +102,14 @@ closeSweep :: (Observe :> es) => SweepId -> Ledger.SweepSummary -> Eff es (Eithe
 closeSweep sweep = send . CloseSweep sweep
 
 runObserve :: (Workflow :> es, Store :> es, Error StoreError :> es, IOE :> es) => ObserveRuntime -> Eff (Observe : es) a -> Eff es a
-runObserve runtime = selectObserve runtime.seed $ interpret \_ -> \case
+runObserve runtime = interpret \_ -> \case
   ResolveGrant -> step (StepName "watchdog-grant") do
-    let result = (\grant -> Granted (snapshotGrant grant) (runtime.seed.settings >>= (.delivery)) runtime.driftEnabled) <$> resolveObservationGrant runtime.seed.settings runtime.identity
-    case result of Left _ -> liftIO runtime.seed.hooks.onRefusal; Right _ -> pure ()
+    let result = (\grant -> Granted (snapshotGrant grant) (runtime.settings >>= (.delivery)) runtime.driftEnabled) <$> resolveObservationGrant runtime.settings runtime.identity
+    case result of Left _ -> liftIO uncompleted; Right _ -> pure ()
     pure result
   OpenSweep granted -> step (StepName "watchdog-open") do
     proposed <- liftIO newSweepId
-    result <- case restoreGrant granted.grant runtime.identity runtime.seed.settings of
+    result <- case restoreGrant granted.grant runtime.identity runtime.settings of
       Left _ -> pure (Left Ledger.LedgerBindingConflict)
       Right _ -> runTransactionNoRetry do
         Ledger.openSweep proposed runtime.origin granted.grant >>= \case
@@ -143,10 +121,10 @@ runObserve runtime = selectObserve runtime.seed $ interpret \_ -> \case
                 Ledger.readSweep sweep >>= \case
                   Right (Just saved) -> pure (Right (SweepOpened sweep (maybe initialCursor (.cursor) coverage) saved.openedAt))
                   _ -> pure (Left Ledger.LedgerCorrupt)
-    case result of Left _ -> liftIO runtime.seed.hooks.onRefusal; Right _ -> pure ()
+    case result of Left _ -> liftIO uncompleted; Right _ -> pure ()
     pure result
   ObserveActive granted cursor -> step (StepName "watchdog-observe") do
-    case restoreGrant granted.grant runtime.identity runtime.seed.settings of
+    case restoreGrant granted.grant runtime.identity runtime.settings of
       Left _ -> pure (Left ObservationUnavailable)
       Right grant ->
         observePage grant defaultObservationBounds cursor >>= \case
@@ -195,34 +173,27 @@ runObserve runtime = selectObserve runtime.seed $ interpret \_ -> \case
     report result
   CloseSweep sweep summary -> step (StepName "watchdog-close") do
     result <- runTransactionNoRetry (ownedSweep runtime sweep (Ledger.closeSweep sweep summary))
-    case result of Right _ -> liftIO (runtime.seed.hooks.onSweepCompleted sweep summary); Left _ -> liftIO runtime.seed.hooks.onRefusal
+    case result of Right _ -> liftIO (completed summary); Left _ -> liftIO uncompleted
     pure result
   where
     report result = do
-      liftIO case result of Right outcome -> mapM_ runtime.seed.hooks.onFinding outcome.notices; Left _ -> pure ()
+      liftIO case result of Right outcome -> mapM_ found outcome.notices; Left _ -> pure ()
       pure result
-
-selectObserve :: ObserveSeed -> (Eff (Observe : es) a -> Eff es a) -> Eff (Observe : es) a -> Eff es a
-selectObserve seed interpreter
-  | observeAvailable seed = interpreter
-  | otherwise = unavailableObserve
+    -- A journaled step replays its result and not its body, so a resumed run
+    -- counts nothing twice; a step that crashes after its transaction may.
+    count = runtime.metrics.count
+    uncompleted = count "sweep" [("outcome", "refused")] >> count "refusal" [("refusal.kind", "uncompleted")]
+    completed summary
+      | summary.refusals == 0 = count "sweep" [("outcome", "completed")]
+      | otherwise = count "sweep" [("outcome", "refused")] >> replicateM_ (fromIntegral summary.refusals) (count "refusal" [("refusal.kind", "retained")])
+    found finding = count "finding" [("detection.kind", case finding.kind of StuckWork -> "stuck"; UnresolvedOutcome -> "unresolved"; StuckCoordinatorWork -> "stuck-coordinator"; DriftWork -> "drift")]
 
 -- The effect can write only its own admitted native sweep, even if another
 -- compiled Flow passes a decoded id or a fabricated read view.
 ownedSweep :: ObserveRuntime -> SweepId -> Tx.Transaction (Either Ledger.WatchdogError a) -> Tx.Transaction (Either Ledger.WatchdogError a)
-ownedSweep runtime sweep action = case resolveObservationGrant runtime.seed.settings runtime.identity of
+ownedSweep runtime sweep action = case resolveObservationGrant runtime.settings runtime.identity of
   Left _ -> Tx.condemn >> pure (Left Ledger.LedgerBindingConflict)
   Right _ ->
     Ledger.readSweep sweep >>= \case
       Right (Just saved) | saved.origin == runtime.origin -> action
       _ -> Tx.condemn >> pure (Left Ledger.LedgerBindingConflict)
-
--- No application journal labels in historical or one-off runs.
-unavailableObserve :: Eff (Observe : es) a -> Eff es a
-unavailableObserve = interpret \_ -> \case
-  ResolveGrant -> pure (Left WatchdogDisabled)
-  OpenSweep _ -> pure (Left Ledger.LedgerBindingConflict)
-  ObserveActive _ _ -> pure (Left ObservationUnavailable)
-  RecordPage _ _ _ -> pure (Left Ledger.LedgerBindingConflict)
-  RecordDrift _ _ _ _ -> pure (Left Ledger.LedgerBindingConflict)
-  CloseSweep _ _ -> pure (Left Ledger.LedgerBindingConflict)

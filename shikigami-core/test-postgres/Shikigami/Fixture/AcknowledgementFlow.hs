@@ -91,7 +91,8 @@ fixturePack =
       tasks = [],
       settings = [],
       triggers = noTriggerHooks,
-      adminVerbs = []
+      adminVerbs = [],
+      gauges = []
     }
 
 -- | The builtin pack, the example fixtures and this fixture pack, as a

@@ -33,7 +33,7 @@ import Shikigami.Flow.DeclaredTool qualified as DeclaredTool
 import Shikigami.Flow.Delegate qualified as Delegate
 import Shikigami.Flow.Pack
 import Shikigami.Flow.Routing qualified as Routing
-import Shikigami.Flow.Watchdog (watchdogFlowName, watchdogSlots, watchdogSweep)
+import Shikigami.Flow.Watchdog (sweepAgeGauge, watchdogSweepFlow)
 import Shikigami.Program.Decision.Registry (builtinDecisionPrograms, builtinRetainedCodecs)
 import Shikigami.Program.Registry (programRegistry)
 import Shikigami.Router.Decision (RouteDecision (..), RouteOutcome (..), RouteSelection (..))
@@ -53,7 +53,9 @@ builtinPack =
       -- The watchdog is still compiled into the core, so the builtin pack
       -- carries its schedule hook until it moves (plan 131, M5).
       triggers = noTriggerHooks {schedule = Just watchdogScheduleHook},
-      adminVerbs = []
+      adminVerbs = [],
+      -- Likewise its sweep-age gauge.
+      gauges = [sweepAgeGauge]
     }
 
 -- | The builtin pack alone, composed. It cannot fail for a reviewed build, so
@@ -73,9 +75,7 @@ builtinFlows =
           lifecycle = LifecycleDiagram "flowchart LR\n Admit --> Attempt --> Settle" []
         }
       runDeclaredToolFlow,
-    kernelCapabilityFlow
-      FlowDef {name = watchdogFlowName, decisionSlots = watchdogSlots, requiresDefaultModel = DefaultModelOptional, decisionMode = AdvisoryDecisions, lifecycle = LifecycleDiagram "flowchart LR\n Grant --> Observe --> Classify --> Record --> Drift --> Deliver --> Close" []}
-      watchdogSweep,
+    watchdogSweepFlow,
     kernelCapabilityFlow
       FlowDef
         { name = declarationCoordinate "adaptive-delivery",

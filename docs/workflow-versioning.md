@@ -563,6 +563,9 @@ supplies, and the practice-review pack owns its `practice-review-*` labels in
 The proposing flow's fifteen labels and its two patch ids,
 `shikigami-initiative-v1` and `shikigami-initiative-admission-v1`, left the same way (plan
 131, M4) and are pinned in `packs/flow-pack-initiative/test/golden/labels.txt`.
+The sweep's seven `watchdog-*` and `emit-signals-watchdog-deliver` labels, its drift
+decision labels (now `decision-prepare-watchdog-drift` and `decision-result-watchdog-drift`)
+and the patch id `shikigami-watchdog-v1` left with the watchdog's interpreter (plan 131, M5).
 
 Flow capability families include `recall-<label>`, `remember-<label>`, and
 `emit-signal:<label>`. Child identity comes from the governed delegation/approval

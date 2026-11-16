@@ -131,10 +131,11 @@ command and `kikan-shikigami-agent-run`, all reading one list in `src-shared/Pac
 test suite, `kikan-shikigami-test`, holds only what needs two composed use cases together,
 such as the watchdog observing work the initiative pack admitted.
 
-A pack contributes five things through its one `FlowPack` value: `flows`, with decision
+A pack contributes six things through its one `FlowPack` value: `flows`, with decision
 programs and tasks; `settings`, the configuration keys it owns; `triggers`, its say over
-stream intake for the agents that run its flows; `adminVerbs`, its operator verbs; and, at
-run time, events on the kernel's `shikigami.pack.events` counter. A pack may also publish a
+stream intake and scheduled ticks for the agents that run its flows; `adminVerbs`, its
+operator verbs; `gauges`, levels the worker samples for it; and, at run time, events on the
+kernel's `shikigami.pack.events` counter. A pack may also publish a
 `test-support` sublibrary for tests; that one may depend on the worker package, which the
 pack's own library may not. The stock
 executables run kernel behaviors and declared agents only; a use case that ships as a pack

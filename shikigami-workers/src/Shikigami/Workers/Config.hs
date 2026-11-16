@@ -66,7 +66,6 @@ import Shikigami.Duration
 import Shikigami.Execution.Capacity (RuntimeLimits)
 import Shikigami.Execution.Policy.Types (HarnessPolicy)
 import Shikigami.Flow.Decision qualified as FlowDecision
-import Shikigami.Flow.Observe qualified as FlowObserve
 import Shikigami.Flow.Pack (FlowPackName, FlowRegistry, PackMetrics, scheduleIntakeOf)
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Health.Worker (Heartbeats, LoopName (DirectoryLoop), LoopStaleness, beat, loopStaleness)
@@ -172,7 +171,6 @@ data WorkerEnv = WorkerEnv
     objectiveSettings :: !ObjectiveSettings,
     packMetrics :: !(FlowPackName -> PackMetrics),
     workspaceCatalog :: ![RepositoryId],
-    observe :: !FlowObserve.ObserveSeed,
     trackers :: !(Maybe Tracker.TrackerHost),
     -- | The validated settings of the composed flow packs.
     packSettings :: !PackSettings
@@ -248,7 +246,6 @@ agentRunDeps env =
       AgentWorkflow.objectives = Just (objectiveRuntime env),
       AgentWorkflow.packMetrics = env.packMetrics,
       AgentWorkflow.workspaceCatalog = env.workspaceCatalog,
-      AgentWorkflow.observe = env.observe,
       AgentWorkflow.agents = (.agents) env,
       AgentWorkflow.kizashi = (.kizashi) env,
       AgentWorkflow.kawa = (.kawa) env,

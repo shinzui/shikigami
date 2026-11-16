@@ -152,7 +152,6 @@ import Shikigami.Execution.Policy.Types qualified as Harness
 import Shikigami.Flow.Builtin (builtinPack)
 import Shikigami.Flow.Capability (SinkEnv (..), runSink)
 import Shikigami.Flow.Decision qualified as FlowDecision
-import Shikigami.Flow.Observe qualified as FlowObserve
 import Shikigami.Flow.Pack (composeFlowRegistry, noPackMetrics, runModel)
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Log qualified as Log
@@ -740,7 +739,6 @@ specialistAgentRunDeps appEnv behaviorEnv practiceReview =
       AgentWorkflow.objectives = Nothing,
       AgentWorkflow.packMetrics = const noPackMetrics,
       AgentWorkflow.workspaceCatalog = [],
-      AgentWorkflow.observe = FlowObserve.disabledObserve,
       AgentWorkflow.workspace = Nothing,
       AgentWorkflow.agents = [reviewerDecl],
       AgentWorkflow.kizashi = KizashiConfig {baseUrl = "http://localhost:1", defaultRecipient = (declarationCoordinate "recipient_unused")},

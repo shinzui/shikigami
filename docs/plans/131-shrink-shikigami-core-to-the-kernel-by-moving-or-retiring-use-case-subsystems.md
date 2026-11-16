@@ -309,6 +309,16 @@ this Mac through the same operator verbs as before (`watchdog inspect`, `proposa
     same repeatable-read, read-only transaction. It mounts after the kernel's verbs, so it
     moves from before `record` to after it in `shikigami --help`; `cli-shikigami` re-pinned
     (`help text changed; every pinned option and command is still offered`).
+  - The sweep as a pack flow (2026-11-16). `watchdog-sweep` is a `PackFlow` whose `run`
+    installs the `Observe` interpreter from `FlowRunContext` (policy from `settings`, origin
+    from the run, counts on `metrics`). `Observe` is gone from `FlowEffects`, `observe` from
+    `AgentRunDeps`, and the kernel's `runFlowBehavior` no longer names the watchdog: the
+    `shikigami-watchdog-v1` patch gate, the three `watchdogFlowName` tests and the
+    sweep-failure hook are deleted. The specification loses the patch block and its nine
+    labels. The drift decision site is `watchdog-drift`. The four `shikigami.watchdog.*`
+    instruments are replaced by events on `shikigami.pack.events` and one new kernel
+    instrument, `shikigami.pack.gauges`, fed by a new `FlowPack.gauges` field. The builtin
+    pack still carries the flow, the hook and the gauge; the move is next.
 - [ ] M6: The adaptive-delivery coordinator is confirmed as a kernel primitive and stays in
   `shikigami-core`. Its disposition is recorded, an import check shows it has no Kikan
   service dependency, and a real objective on a local repository receives an adaptive
@@ -496,6 +506,38 @@ this Mac through the same operator verbs as before (`watchdog inspect`, `proposa
 
 ## Decision Log
 
+- Decision (M5): A pack reports a level through `FlowPack.gauges`, on one kernel gauge.
+  Rationale: the sweep-age gauge is read by the worker's sampler with no run in progress,
+  which is the point of it: it is how a stopped watchdog is seen. `FlowRunContext.metrics`
+  exists only inside a run, so the counter port cannot carry it. `PackGauge` is a bounded
+  name and a `sample` over the pack's settings in `AppEffects`; the sampler records it on
+  `shikigami.pack.gauges` with `pack` and `gauge`. It is the sixth field of `FlowPack` and
+  arrives with its first consumer (ADR-1). The alternative, leaving
+  `shikigami.watchdog.sweep.age` in the kernel, would have kept a watchdog name and a
+  watchdog store read in `shikigami-workers`.
+  Date: 2026-11-16
+- Decision (M5): A sweep runs wherever its flow is composed and its policy is configured;
+  the one-off command is no longer special.
+  Rationale: the kernel used to hand the one-off command a disabled observe seed, so a
+  sweep there wrote no label, and it emptied the decision inventory when observation was
+  unavailable. Both were the kernel knowing about one flow. A pack flow reads its policy
+  from the validated settings like any other, so a hand-run sweep in a composed one-off
+  now sweeps if the `watchdog` key names the run's principal, and is refused at
+  `watchdog-grant` if it does not. It cannot spend: a drift assessment needs the alias on
+  the declaration and an enrolled root, and only a scheduled tick is enrolled
+  (`driftEnabled`). The stock one-off has no `watchdog-sweep` flow once the pack moves. A
+  run under an executable without the setting retains its disabled-policy refusal, as a
+  worker without the setting always did.
+  Date: 2026-11-16
+- Decision (M5): The watchdog's patch gate and labels are removed under the pre-release
+  exception, and its drift decision site is renamed `watchdog-drift`.
+  Rationale: as for Initiative in M4 (ADR-27). A pack's durable labels start with its name,
+  so `decision-prepare-drift` and `decision-result-drift` become
+  `decision-prepare-watchdog-drift` and `decision-result-watchdog-drift`. The development
+  database holds the patch marker `patch:shikigami-watchdog-v1` on 27 runs, all completed,
+  and no row with a `watchdog-` or drift decision label; no run is in flight to replay the
+  removed branch. A new run journals no patch marker for it.
+  Date: 2026-11-16
 - Decision (M5): The schedule hook answers with an allowance and nothing else, and the
   kernel enrolls the root.
   Rationale: the plan's sketch, with three adjustments found in the code. The hook takes

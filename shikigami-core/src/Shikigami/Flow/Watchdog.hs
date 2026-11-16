@@ -1,33 +1,40 @@
 {-# LANGUAGE DataKinds #-}
 
 -- | One bounded advisory sweep per invocation. No intervention operations.
-module Shikigami.Flow.Watchdog (watchdogSweep, watchdogFlowName, watchdogSlots, driftAlias, driftStep) where
+module Shikigami.Flow.Watchdog (watchdogSweepFlow, sweepAgeGauge, watchdogSweep, watchdogFlowName, watchdogSlots, driftAlias, driftStep) where
 
 import Data.Aeson (Value, object, toJSON, (.=))
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.List.NonEmpty qualified as NonEmpty
 import Data.Map.Strict qualified as Map
-import Data.Maybe (mapMaybe)
+import Data.Maybe (isJust, mapMaybe)
 import Data.Text (Text)
-import Effectful (Eff, (:>))
-import Effectful.Exception (throwIO, try)
+import Effectful (Eff, liftIO, (:>))
+import Effectful.Exception (onException, throwIO, try)
+import Kiroku.Store.Transaction (runTransactionNoRetry)
+import Shikigami.Agent.Decl (AgentDecl (..))
 import Shikigami.Agent.DeclarationValue (DeclarationCoordinate, declarationCoordinate)
 import Shikigami.Decision.Contract (DecisionSlot, FailureCode (EvidenceFailure), failureCode)
 import Shikigami.Decision.ModelAlias (ModelAlias, modelAliasFromNonEmpty)
+import Shikigami.Flow (DecisionMode (..), FlowDef (..), LifecycleDiagram (..))
 import Shikigami.Flow.Capability (Sink, emitSignals)
 import Shikigami.Flow.Decision (Decision, DecisionAccounting (RootAccountedCall), DecisionStep, decide, decisionSite, decisionSlot, decisionStep)
 import Shikigami.Flow.Observe
+import Shikigami.Flow.Pack (FlowRunContext (..), PackFlow (..), PackGauge (..), PackMetrics (..))
 import Shikigami.Objective.Observation (ObjectiveObservation (..))
 import Shikigami.Program.Decision (programRef)
 import Shikigami.Program.Decision.Drift qualified as Program
 import Shikigami.Program.DecisionRunner (DecisionAbort (..))
+import Shikigami.RuntimePolicy (DefaultModelRequirement (..))
 import Shikigami.Sink.Types (SinkOutcome (..), SinkResult (..))
 import Shikigami.Watchdog.Classify
 import Shikigami.Watchdog.Delivery qualified as Delivery
 import Shikigami.Watchdog.Drift qualified as Drift
 import Shikigami.Watchdog.Grant (GrantSnapshot (..))
-import Shikigami.Watchdog.Ledger (PageOutcomeView (..), SweepSummary (..))
+import Shikigami.Watchdog.Ledger (PageOutcomeView (..), SweepOrigin (..), SweepSummary (..))
 import Shikigami.Watchdog.Observation
+import Shikigami.Watchdog.Settings (WatchdogSettings (..), watchdogSettingsFrom)
+import Shikigami.Watchdog.Store (readSweepAgeSeconds)
 import Shikigami.Watchdog.Types
 
 watchdogFlowName :: DeclarationCoordinate "flow"
@@ -40,7 +47,50 @@ watchdogSlots :: [DecisionSlot]
 watchdogSlots = [decisionSlot driftStep [driftAlias]]
 
 driftStep :: DecisionStep Program.DriftInput Program.DriftProposal
-driftStep = decisionStep (decisionSite "drift") RootAccountedCall (programRef Program.driftProgram)
+driftStep = decisionStep (decisionSite "watchdog-drift") RootAccountedCall (programRef Program.driftProgram)
+
+-- | The sweep as a pack flow: the body over the pack's own @Observe@
+-- interpreter, which the kernel never names. A drift assessment is advisory
+-- and is made only by a declaration that lists the @drift@ alias, on a run
+-- that carries an enrolled root to charge it to.
+--
+-- A sweep that dies is counted before the failure reaches the workflow
+-- driver, so a watchdog that cannot finish is visible without a finding.
+watchdogSweepFlow :: PackFlow
+watchdogSweepFlow =
+  PackFlow
+    { definition =
+        FlowDef
+          { name = watchdogFlowName,
+            decisionSlots = watchdogSlots,
+            requiresDefaultModel = DefaultModelOptional,
+            decisionMode = AdvisoryDecisions,
+            lifecycle = LifecycleDiagram "flowchart LR\n Grant --> Observe --> Classify --> Record --> Drift --> Deliver --> Close" []
+          },
+      run = \context payload ->
+        runObserve
+          ObserveRuntime
+            { settings = watchdogSettingsFrom context.settings,
+              metrics = context.metrics,
+              identity = context.requestIdentity,
+              origin = SweepOrigin context.workflowName context.runId context.occurredAt context.requestIdentity,
+              driftEnabled = driftAlias `elem` context.agent.decisionModels && isJust context.executionRoot
+            }
+          (watchdogSweep payload)
+          `onException` liftIO (context.metrics.count "sweep" [("outcome", "failed")])
+    }
+
+-- | Database-clock age, in seconds, of the last completed scoped sweep. It is
+-- absent until one completes and when the watchdog is not configured, so an
+-- alert on it fires when sweeps stop and not merely because none was asked for.
+sweepAgeGauge :: PackGauge
+sweepAgeGauge =
+  PackGauge
+    { name = "sweep.age",
+      sample = \settings -> case watchdogSettingsFrom settings of
+        Nothing -> pure (Right Nothing)
+        Just configured -> either (const (Left "watchdog ledger unavailable")) Right <$> runTransactionNoRetry (readSweepAgeSeconds configured.principal configured.scope)
+    }
 
 watchdogSweep :: (Observe :> es, Decision :> es, Sink :> es) => Value -> Eff es Value
 watchdogSweep _ =

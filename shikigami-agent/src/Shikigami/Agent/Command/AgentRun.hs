@@ -62,7 +62,6 @@ import Shikigami.Execution.Resources (Dimension (..), Envelope (..), Limit (..))
 import Shikigami.Execution.SelectionRuntime (assignmentIdFor)
 import Shikigami.Execution.Transcript (executionIdFor)
 import Shikigami.Flow.Builtin (builtinPack)
-import Shikigami.Flow.Observe qualified as FlowObserve
 import Shikigami.Flow.Pack qualified as FlowPack
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Log qualified as Log
@@ -237,7 +236,6 @@ runDurableAgent flows logger store@KirokuStore {pool} appEnv workspace triggerPa
             AgentWorkflow.objectives = Nothing,
             AgentWorkflow.packMetrics = const FlowPack.noPackMetrics,
             AgentWorkflow.workspaceCatalog = [],
-            AgentWorkflow.observe = FlowObserve.disabledObserve,
             AgentWorkflow.workspace = tierRuntime.workspace,
             AgentWorkflow.agents = [decl],
             AgentWorkflow.kizashi = kizashiConfig,

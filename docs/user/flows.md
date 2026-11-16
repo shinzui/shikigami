@@ -144,7 +144,8 @@ examplesPack =
       tasks = [],
       settings = [],
       triggers = noTriggerHooks,
-      adminVerbs = []
+      adminVerbs = [],
+      gauges = []
     }
 
 atRiskCustomerDefinition :: FlowDef
@@ -278,6 +279,25 @@ so pattern-match it (`AdminContext {runStore}`) instead of using record-dot.
 `context.metrics` is a `PackMetrics`: `count event attributes`. The kernel counts it on
 `shikigami.pack.events` and adds the `pack` attribute. Pass bounded tags only, never an
 identifier, observed text or an error message.
+
+### A level to sample
+
+A counter says what happened in a run. A pack that must stay visible when no run happens,
+as a sweep that stopped, lists a `PackGauge` in `gauges`: a bounded name and
+`sample :: PackSettings -> Eff AppEffects (Either Text (Maybe Int64))`. The worker's
+telemetry sampler reads it every fifteen seconds and records it on
+`shikigami.pack.gauges` with the `pack` and `gauge` attributes. `Right Nothing` is no level
+yet and records nothing; a `Left` is logged with its bounded reason.
+
+### A funded schedule
+
+A scheduled run starts with no resource root. A pack whose flow spends on a schedule sets
+`triggers.schedule` to a `ScheduleHook`, a pure
+`PackSettings -> ScheduleCandidate -> Either Text (Maybe ScheduledAllowance)`. `Left`
+refuses the tick with a bounded reason, recorded as a run skip. `Right (Just allowance)`
+has the scheduler enroll a root with the allowance's limits for exactly its principal and
+bind it to the run, in the transaction that enqueues the job. `Right Nothing` lets the tick
+run unfunded.
 
 `packs/flow-pack-initiative` uses all three, and is the worked example.
 

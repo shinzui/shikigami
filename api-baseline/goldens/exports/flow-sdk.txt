@@ -282,6 +282,7 @@ Shikigami.Flow.Sdk FlowPack
 Shikigami.Flow.Sdk FlowPack.adminVerbs
 Shikigami.Flow.Sdk FlowPack.decisionPrograms
 Shikigami.Flow.Sdk FlowPack.flows
+Shikigami.Flow.Sdk FlowPack.gauges
 Shikigami.Flow.Sdk FlowPack.name
 Shikigami.Flow.Sdk FlowPack.retainedCodecs
 Shikigami.Flow.Sdk FlowPack.settings

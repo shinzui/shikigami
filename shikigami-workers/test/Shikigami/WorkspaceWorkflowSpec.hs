@@ -60,7 +60,6 @@ import Shikigami.Execution.Transcript (ExecutionSnapshot (..), executionIdFor)
 import Shikigami.Fixture.ExecutionIdentity (fixtureOperationId, fixtureRootId)
 import Shikigami.Flow.Builtin (builtinFlowRegistry)
 import Shikigami.Flow.Decision qualified as Decision
-import Shikigami.Flow.Observe qualified as FlowObserve
 import Shikigami.Flow.Pack (noPackMetrics)
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.FormatVersion (FormatVersion (V1))
@@ -368,7 +367,6 @@ withWorkflowAuthority authorizer configure fixture use = Fixture.withFixture fix
             objectives = Nothing,
             packMetrics = const noPackMetrics,
             workspaceCatalog = [],
-            observe = FlowObserve.disabledObserve,
             agents = [declaration],
             kizashi = KizashiConfig "http://localhost:1" (declarationCoordinate "recipient"),
             kawa = KawaConfig "http://localhost:1" (activityCoordinate "fixture"),

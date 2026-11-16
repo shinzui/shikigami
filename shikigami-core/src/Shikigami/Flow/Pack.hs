@@ -32,6 +32,8 @@ module Shikigami.Flow.Pack
     runModel,
     PackMetrics (..),
     noPackMetrics,
+    PackGauge (..),
+    registeredGauges,
 
     -- * Admin verbs
     AdminVerb (..),
@@ -86,6 +88,7 @@ import Data.Aeson (Value, object, (.=))
 import Data.ByteString qualified as ByteString
 import Data.Char (isAsciiLower, isDigit)
 import Data.Generics.Labels ()
+import Data.Int (Int64)
 import Data.List (find)
 import Data.List.NonEmpty (NonEmpty)
 import Data.List.NonEmpty qualified as NonEmpty
@@ -103,7 +106,7 @@ import Shikigami.Activity (ActivityEnvelope)
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..))
 import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Principal (AgentIdentity, ResolvedAgentIdentity)
-import Shikigami.App (AppEnv)
+import Shikigami.App (AppEffects, AppEnv)
 import Shikigami.Behavior.Compatibility (renderResponseCompatibilityError, validateResponseRequest)
 import Shikigami.Behavior.Run (BehaviorEnv (..), completeBehaviorRequest)
 import Shikigami.Decision.Contract (DecisionFailure)
@@ -162,7 +165,22 @@ data FlowPack = FlowPack
     -- | The pack's say over trigger intake for the agents that run its flows.
     triggers :: !TriggerHooks,
     -- | The operator verbs the pack adds to the admin command.
-    adminVerbs :: ![AdminVerb]
+    adminVerbs :: ![AdminVerb],
+    -- | Levels the worker's telemetry sampler reads for the pack.
+    gauges :: ![PackGauge]
+  }
+
+-- | One level a pack wants sampled: how stale its last result is, how deep
+-- its backlog. The worker's sampler reads it on its own cadence and records
+-- it on the kernel's instrument (@shikigami.pack.gauges@) with the pack's
+-- name and this one. A counter says what happened in a run; a gauge is how a
+-- pack stays visible when no run happens at all.
+data PackGauge = PackGauge
+  { -- | A bounded name, unique within the pack.
+    name :: !Text,
+    -- | Read the level. @Right Nothing@ is no level to report yet; a 'Left'
+    -- is logged with a bounded reason and recorded as nothing.
+    sample :: !(PackSettings -> Eff AppEffects (Either Text (Maybe Int64)))
   }
 
 -- | A flow body plus the pack-owned interpreter that runs it.
@@ -269,6 +287,7 @@ data FlowRegistry = FlowRegistry
     entries :: ![RegisteredFlow],
     taskEntries :: ![(FlowPackName, ProgramTask)],
     hooks :: ![(FlowPackName, TriggerHooks)],
+    gaugeEntries :: ![(FlowPackName, PackGauge)],
     programs :: !ProgramRegistry,
     codecs :: !ResultCodecRegistry
   }
@@ -301,7 +320,7 @@ composeFlowRegistry composed =
   case NonEmpty.nonEmpty (packErrors <> flowErrors <> taskErrors <> settingErrors <> programErrors <> codecErrors) of
     Just errors -> Left errors
     Nothing -> case (programsResult, codecsResult) of
-      (Right programs, Right codecs) -> Right FlowRegistry {packs = packNames, entries, taskEntries, hooks = [(pack.name, pack.triggers) | pack <- composed], programs, codecs}
+      (Right programs, Right codecs) -> Right FlowRegistry {packs = packNames, entries, taskEntries, hooks = [(pack.name, pack.triggers) | pack <- composed], gaugeEntries = [(pack.name, gauge) | pack <- composed, gauge <- pack.gauges], programs, codecs}
       -- Both failures are already reported above; this arm is unreachable.
       _ -> Left (NonEmpty.fromList (programErrors <> codecErrors))
   where
@@ -370,6 +389,10 @@ scheduleIntakeOf registry settings candidate = do
   entry <- lookupFlow registry flowName
   ScheduleHook decide <- lookup entry.pack registry.hooks >>= (.schedule)
   pure PackAllowance {pack = flowPackNameText entry.pack, allowance = decide settings candidate}
+
+-- | Every composed pack's gauges, with their pack, in composition order.
+registeredGauges :: FlowRegistry -> [(FlowPackName, PackGauge)]
+registeredGauges registry = registry.gaugeEntries
 
 decisionProgramRegistry :: FlowRegistry -> ProgramRegistry
 decisionProgramRegistry registry = registry.programs

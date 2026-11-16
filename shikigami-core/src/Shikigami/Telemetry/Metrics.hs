@@ -17,10 +17,7 @@ module Shikigami.Telemetry.Metrics
     recordConsumerRecord,
     recordStreamDisposition,
     recordPackEvent,
-    recordWatchdogSweep,
-    recordWatchdogFinding,
-    recordWatchdogRefusal,
-    recordWatchdogAge,
+    recordPackGauge,
     recordActionRecordEvent,
   )
 where
@@ -60,10 +57,7 @@ data ShikigamiMetrics = ShikigamiMetrics
     consumerRecords :: !(Counter Int64),
     streamDispositions :: !(Counter Int64),
     packEvents :: !(Counter Int64),
-    watchdogSweeps :: !(Counter Int64),
-    watchdogFindings :: !(Counter Int64),
-    watchdogRefusals :: !(Counter Int64),
-    watchdogSweepAge :: !(Gauge Int64),
+    packGauges :: !(Gauge Int64),
     recordEvents :: !(Counter Int64)
   }
 
@@ -90,12 +84,9 @@ newShikigamiMetrics meter = liftIO do
   consumerRecords <- counter "shikigami.consumer.records" "Kafka records delivered to a Shikigami processor."
   streamDispositions <- counter "shikigami.stream.dispositions" "Matched stream records a flow pack's hook evaluated or skipped, by pack and verdict."
   packEvents <- counter "shikigami.pack.events" "Events a flow pack's interpreter counted, by pack and event."
-  watchdogSweeps <- counter "shikigami.watchdog.sweeps" "Watchdog attempts by outcome; runtime callbacks are at least once."
-  watchdogFindings <- counter "shikigami.watchdog.findings" "Watchdog notices by detection kind."
-  watchdogRefusals <- counter "shikigami.watchdog.refusals" "Watchdog observation and delivery refusals."
   recordEvents <- meterCreateCounterInt64 meter "shikigami.record.events" (Just "{event}") (Just "Action record events by kind and decision; append_failed counts refused unrecorded actions.") defaultAdvisoryParameters
-  watchdogSweepAge <- meterCreateGaugeInt64 meter "shikigami.watchdog.sweep.age" (Just "s") (Just "Database-clock age of the last completed scoped sweep; absent before completion.") defaultAdvisoryParameters
-  pure ShikigamiMetrics {watchdogSweeps, watchdogFindings, watchdogRefusals, watchdogSweepAge, runsStarted, runsCompleted, runsFailed, runsRetried, runsDeadLettered, queueDepth, consumerRecords, streamDispositions, packEvents, recordEvents}
+  packGauges <- meterCreateGaugeInt64 meter "shikigami.pack.gauges" Nothing (Just "Levels a flow pack asked the worker to sample, by pack and gauge; absent until the pack has one to report.") defaultAdvisoryParameters
+  pure ShikigamiMetrics {packGauges, runsStarted, runsCompleted, runsFailed, runsRetried, runsDeadLettered, queueDepth, consumerRecords, streamDispositions, packEvents, recordEvents}
   where
     counter name description =
       meterCreateCounterInt64 meter name (Just "{run}") (Just description) defaultAdvisoryParameters
@@ -159,17 +150,11 @@ recordRun instrument agent trigger outcome =
 attributes :: AttrsBuilder -> Attributes
 attributes = addAttributesFromBuilder defaultAttributeLimits emptyAttributes
 
-recordWatchdogSweep :: (MonadIO m) => ShikigamiMetrics -> Text -> m ()
-recordWatchdogSweep metrics outcome = liftIO (counterAdd metrics.watchdogSweeps 1 (attributes (attr "outcome" outcome)))
-
-recordWatchdogFinding :: (MonadIO m) => ShikigamiMetrics -> Text -> m ()
-recordWatchdogFinding metrics kind = liftIO (counterAdd metrics.watchdogFindings 1 (attributes (attr "detection.kind" kind)))
-
-recordWatchdogRefusal :: (MonadIO m) => ShikigamiMetrics -> Text -> Int64 -> m ()
-recordWatchdogRefusal metrics kind count = liftIO (counterAdd metrics.watchdogRefusals count (attributes (attr "refusal.kind" kind)))
-
-recordWatchdogAge :: (MonadIO m) => ShikigamiMetrics -> Int64 -> m ()
-recordWatchdogAge metrics age = liftIO (gaugeRecord metrics.watchdogSweepAge age emptyAttributes)
+-- | One sampled level of a pack's gauge. The pack names the gauge; the
+-- instrument and the @pack@ attribute are the kernel's.
+recordPackGauge :: (MonadIO m) => ShikigamiMetrics -> Text -> Text -> Int64 -> m ()
+recordPackGauge metrics pack gauge level =
+  liftIO (gaugeRecord metrics.packGauges level (attributes (attr "pack" pack <> attr "gauge" gauge)))
 
 -- | Closed tags only: the record kind and the decision label (or @none@ for
 -- an effect entry, @append_failed@ when the store refused the event).
