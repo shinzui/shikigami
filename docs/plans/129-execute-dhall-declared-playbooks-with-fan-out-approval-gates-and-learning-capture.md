@@ -290,6 +290,14 @@ it is never applied to a run already in progress.
   Rationale: EP-7's readiness step quotes its probes; the plan's sketch used the same holes.
   Date: 2026-11-15
 
+- Decision (after M4, for EP-7): A `Probe` step runs a declared tool whose exit code is its
+  answer (`mori status --json` exits 1 when the schema is stale): any exit is a result, quoted
+  through `{{steps.ID.output}}` with the exit code, and only a refusal, a failure to start, a
+  timeout or an uncertain outcome ends the run. Its deadline is ten minutes.
+  Rationale: EP-7's first kanmon run stopped at its fourth probe; an `onFailure` field on every
+  step would change every bundle, and a probe is a distinct intent.
+  Date: 2026-11-15
+
 ## Outcomes & Retrospective
 
 Complete on 2026-11-15. An operator declares a procedure as a Dhall bundle, checks it with

@@ -60,6 +60,9 @@ The steps are:
 * `Tool` — a declared CLI tool of the declaration, run as a durable step in the run's
   worktree ([declared tools](declared-tools.md)). Each argument is a template rendered into
   exactly one word; the declared patterns decide whether the call runs.
+* `Probe` — a declared tool whose exit code is its answer (for example `mori status --json`,
+  which exits 1 for a stale schema): any exit is recorded and quoted through
+  `{{steps.ID.output}}` with the exit code, and the run continues. Its deadline is ten minutes.
 * `Approval` — the run waits for you in the local approval inbox.
 * `Reflect` — a read-only coding agent looks at the work in `workspace` and answers with up
   to three learnings and an optional suggestion for the bundle (see below).

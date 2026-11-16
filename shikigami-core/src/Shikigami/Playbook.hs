@@ -80,6 +80,11 @@ data PlaybookStep
     CodingAgent {id :: !Text, prompt :: !Text, workspace :: !Text, deadlineMinutes :: !Natural, skills :: ![Text]}
   | -- | A declared tool of the playbook's declaration, as a durable step.
     Tool {id :: !Text, tool :: !Text, args :: ![Text], deadlineMinutes :: !Natural}
+  | -- | A declared tool that reports through its exit code: any exit is a
+    -- result (quoted through @{{steps.ID.output}}@ with the exit code), and
+    -- only a refusal, a failure to start, a timeout or an uncertain outcome
+    -- ends the run. The deadline is ten minutes.
+    Probe {id :: !Text, tool :: !Text, args :: ![Text]}
   | -- | Wait for the operator (the local inbox under the local operator).
     Approval {id :: !Text, prompt :: !Text}
   | -- | Run a sibling playbook once per item, binding the item to the
@@ -98,6 +103,7 @@ stepId :: PlaybookStep -> Text
 stepId = \case
   CodingAgent {id = value} -> value
   Tool {id = value} -> value
+  Probe {id = value} -> value
   Approval {id = value} -> value
   ForEach {id = value} -> value
   RunPlaybook {id = value} -> value
@@ -185,6 +191,7 @@ validateBundle bundle@Bundle {main, playbooks} =
     references = \case
       CodingAgent {prompt, workspace} -> templateReferences prompt <> templateReferences workspace
       Tool {args} -> concatMap templateReferences args
+      Probe {args} -> concatMap templateReferences args
       Approval {prompt} -> templateReferences prompt
       Reflect {prompt, workspace} -> templateReferences prompt <> templateReferences workspace
       _ -> []
@@ -226,6 +233,7 @@ renderStepTree bundle@Bundle {main} = maybe [] (go 0 []) (lookupPlaybook bundle 
     describe = \case
       CodingAgent {deadlineMinutes, workspace} -> "coding agent, " <> Text.pack (show deadlineMinutes) <> " min" <> (if Text.null workspace then "" else " in " <> workspace)
       Tool {tool, args} -> "tool " <> tool <> " " <> Text.unwords args
+      Probe {tool, args} -> "probe " <> tool <> " " <> Text.unwords args
       Approval {} -> "approval"
       ForEach {items, item, playbook} -> "for each " <> item <> " in " <> itemsText items <> " run " <> playbook
       RunPlaybook {playbook} -> "run " <> playbook
