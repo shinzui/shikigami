@@ -12,7 +12,9 @@
 -- the evaluation root and enqueueing its run are kernel resource and queue
 -- code, and stay in the kernel.
 module Shikigami.Trigger.Hook
-  ( StreamHook (..),
+  ( TriggerHooks (..),
+    noTriggerHooks,
+    StreamHook (..),
     StreamCandidate (..),
     StreamDisposition (..),
     StreamSkip (..),
@@ -33,6 +35,15 @@ import Shikigami.Agent.Decl (AgentDecl)
 import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.Execution.Resources (Envelope)
 import Shikigami.Pack.Setting (PackSettings)
+
+-- | The trigger hooks one pack contributes. A field arrives with its first
+-- consumer (ADR-1).
+data TriggerHooks = TriggerHooks
+  { stream :: !(Maybe StreamHook)
+  }
+
+noTriggerHooks :: TriggerHooks
+noTriggerHooks = TriggerHooks {stream = Nothing}
 
 -- | A pack's say over the stream records that match its flows' agents. Pure
 -- and total: the two instants are the consumer's, and no clock is read.

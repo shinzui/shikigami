@@ -45,6 +45,7 @@ module Shikigami.Workers.Command
     workspaceSupervisorRoleInfo,
     schedulerRoleInfo,
     consumeStreamRoleInfo,
+    consumeStreamRoleInfoWith,
     consumeEventsRoleInfo,
   )
 where
@@ -74,7 +75,7 @@ import Shikigami.App.Role (RoleInfo (..), runRole)
 import Shikigami.Flow.Pack (FlowPack (..))
 import Shikigami.Workers.Command.Scheduler (runSchedulerCmd)
 import Shikigami.Workers.Command.Worker (runResumeCmd, runWorkerCmd)
-import Shikigami.Workers.Subscription (runConsumeEvents, runConsumeStream)
+import Shikigami.Workers.Subscription (runConsumeEvents, runConsumeStreamWith)
 import Shikigami.Workspace.Daemon (runWorkspaceSupervisor)
 import Shikigami.Workspace.Maintenance (WorkspaceMaintenance (..), runWorkspaceMaintenance)
 
@@ -138,16 +139,20 @@ schedulerRoleInfo =
 
 -- | @shikigami-consume-stream@: match declared stream agents against @activity.v1@.
 consumeStreamRoleInfo :: RoleInfo
-consumeStreamRoleInfo =
+consumeStreamRoleInfo = consumeStreamRoleInfoWith []
+
+-- | The stream consumer composed with flow packs beside the builtin pack.
+consumeStreamRoleInfoWith :: [FlowPack] -> RoleInfo
+consumeStreamRoleInfoWith packs =
   RoleInfo
     { binaryName = "shikigami-consume-stream",
       role = StreamConsumerRole,
-      packSettings = [],
+      packSettings = concatMap (.settings) packs,
       parserInfo =
         withConfigOptions
           "shikigami-consume-stream"
           "Consume the activity.v1 stream, match declared stream agents, enqueue run jobs"
-          (pure runConsumeStream)
+          (pure (runConsumeStreamWith packs))
           streamConsumerSources
     }
 

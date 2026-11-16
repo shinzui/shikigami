@@ -20,11 +20,17 @@ import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), StreamMatch (..), Trigger (..), defaultMemoryPolicy)
 import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Name (AgentName, mkAgentName)
+import Shikigami.Agent.Principal (compatibilityIdentity)
 import Shikigami.Agent.Run.Key (RunKey, newCliRunKey, parseRunKey, runKeyFromUUID, runKeyText)
 import Shikigami.Agent.RunJob (RunJob, RunRouteKind (AgentWorkflowRoute, ConversationWorkflowRoute))
 import Shikigami.Agent.RunJob qualified as RunJob
+import Shikigami.Flow (DecisionMode (..), FlowDef (..), LifecycleDiagram (..))
+import Shikigami.Flow.Pack
+import Shikigami.Pack.Setting (noPackSettings)
 import Shikigami.Prelude (nameBytes)
+import Shikigami.RuntimePolicy (DefaultModelRequirement (..))
 import Shikigami.Trigger.Enqueue (addressedRunKey, addressedRunKeyWithKey, envelopeOccurredAt, runJobFromEnvelope, runQueueName)
+import Shikigami.Trigger.Hook (PackDisposition (..))
 import Shikigami.Trigger.RequestKey qualified as Addressed
 import Shikigami.Trigger.Schedule (parseCron)
 import Test.Tasty (TestTree, testGroup)
@@ -109,8 +115,48 @@ tests =
         assertEqual
           "an ASCII name still hashes to its ASCII bytes"
           [104, 101, 97, 114, 116, 98, 101, 97, 116]
-          (nameBytes "heartbeat")
+          (nameBytes "heartbeat"),
+      -- A pack's stream hook has a say over the agents that run its own flows
+      -- and over no other agent (docs/adr/0129).
+      testCase "a matched record is put to the stream hook of the pack that owns the agent's flow" do
+        let intake = streamIntakeOf (either (error . show) id (composeFlowRegistry [observingPack, plainPack])) noPackSettings
+            candidateFor flow =
+              StreamCandidate
+                { activity = envelopeAt "2026-07-15T12:00:00Z",
+                  agent = streamAgent {behavior = Flow {name = declarationCoordinate flow}},
+                  identity = compatibilityIdentity (fixtureAgentName "triage-note"),
+                  occurredAt = UTCTime (fromGregorian 2026 7 15) 0,
+                  receivedAt = UTCTime (fromGregorian 2026 7 15) 1
+                }
+            verdictOf = fmap \PackDisposition {pack, disposition} -> (pack, case disposition of StreamSkipped skip -> skip.reason; _ -> "other")
+        verdictOf (intake (candidateFor "observed-flow")) @?= Just ("observing", "not-worth-a-run")
+        verdictOf (intake (candidateFor "plain-flow")) @?= Nothing
+        verdictOf (intake (candidateFor "no-such-flow")) @?= Nothing
+        verdictOf (intake ((candidateFor "observed-flow") {agent = streamAgent {behavior = Skill {path = declarationCoordinate "skills/none"}}})) @?= Nothing
     ]
+  where
+    packWith name flow triggers =
+      FlowPack
+        { name = either (error . show) id (parseFlowPackName name),
+          flows =
+            [ kernelCapabilityFlow
+                FlowDef
+                  { name = declarationCoordinate flow,
+                    lifecycle = LifecycleDiagram "flowchart LR\n Start --> End" [],
+                    decisionSlots = [],
+                    requiresDefaultModel = DefaultModelOptional,
+                    decisionMode = StrictDecisions
+                  }
+                (const (pure (object [])))
+            ],
+          decisionPrograms = [],
+          retainedCodecs = [],
+          tasks = [],
+          settings = [],
+          triggers
+        }
+    observingPack = packWith "observing" "observed-flow" noTriggerHooks {stream = Just (StreamHook \_ _ -> StreamSkipped StreamSkip {reason = "not-worth-a-run", record = pure ()})}
+    plainPack = packWith "plain" "plain-flow" noTriggerHooks
 
 envelopeAt :: Text -> ActivityEnvelope
 envelopeAt occurred =

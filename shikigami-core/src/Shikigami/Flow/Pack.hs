@@ -31,6 +31,16 @@ module Shikigami.Flow.Pack
     RunModel (..),
     runModel,
 
+    -- * Trigger hooks
+    TriggerHooks (..),
+    noTriggerHooks,
+    StreamHook (..),
+    StreamCandidate (..),
+    StreamDisposition (..),
+    StreamSkip (..),
+    StreamEvaluation (..),
+    streamIntakeOf,
+
     -- * Pack settings
     PackSetting (..),
     SettingShape (..),
@@ -98,6 +108,7 @@ import Shikigami.Program.Decision (ProgramRegistry, ResultCodecRegistry, SomePro
 import Shikigami.Program.Decision qualified as Decision
 import Shikigami.Program.Task (ProgramTask (..))
 import Shikigami.Sink (GrantSource)
+import Shikigami.Trigger.Hook (PackDisposition (..), StreamCandidate (..), StreamDisposition (..), StreamEvaluation (..), StreamHook (..), StreamIntake, StreamSkip (..), TriggerHooks (..), noTriggerHooks)
 import System.Exit (exitFailure)
 
 -- | A pack's checked name: lowercase ASCII words joined by @-@, 1 to 64 bytes.
@@ -134,7 +145,9 @@ data FlowPack = FlowPack
     -- | The configuration keys this pack owns. An executable composed with the
     -- pack accepts them and hands their validated values to the pack's
     -- interpreters in 'FlowRunContext'.
-    settings :: ![PackSetting]
+    settings :: ![PackSetting],
+    -- | The pack's say over trigger intake for the agents that run its flows.
+    triggers :: !TriggerHooks
   }
 
 -- | A flow body plus the pack-owned interpreter that runs it.
@@ -221,6 +234,7 @@ data FlowRegistry = FlowRegistry
   { packs :: ![FlowPackName],
     entries :: ![RegisteredFlow],
     taskEntries :: ![(FlowPackName, ProgramTask)],
+    hooks :: ![(FlowPackName, TriggerHooks)],
     programs :: !ProgramRegistry,
     codecs :: !ResultCodecRegistry
   }
@@ -253,7 +267,7 @@ composeFlowRegistry composed =
   case NonEmpty.nonEmpty (packErrors <> flowErrors <> taskErrors <> settingErrors <> programErrors <> codecErrors) of
     Just errors -> Left errors
     Nothing -> case (programsResult, codecsResult) of
-      (Right programs, Right codecs) -> Right FlowRegistry {packs = packNames, entries, taskEntries, programs, codecs}
+      (Right programs, Right codecs) -> Right FlowRegistry {packs = packNames, entries, taskEntries, hooks = [(pack.name, pack.triggers) | pack <- composed], programs, codecs}
       -- Both failures are already reported above; this arm is unreachable.
       _ -> Left (NonEmpty.fromList (programErrors <> codecErrors))
   where
@@ -298,6 +312,19 @@ lookupFlow registry requested = find (\entry -> entry.flow.definition.name == re
 
 lookupTask :: FlowRegistry -> Text -> Maybe ProgramTask
 lookupTask registry requested = snd <$> find (\(_, task) -> taskName task == requested) registry.taskEntries
+
+-- | The composed stream hooks, as the stream consumer consults them. A
+-- record is put to the hook of the pack that owns the matched agent's flow,
+-- and to no other; an agent that runs no flow, or a flow of a pack without a
+-- hook, takes the ordinary trigger path.
+streamIntakeOf :: FlowRegistry -> PackSettings -> StreamIntake
+streamIntakeOf registry settings candidate = do
+  flowName <- case candidate.agent.behavior of
+    Flow {name} -> Just name
+    _ -> Nothing
+  entry <- lookupFlow registry flowName
+  StreamHook decide <- lookup entry.pack registry.hooks >>= (.stream)
+  pure PackDisposition {pack = flowPackNameText entry.pack, disposition = decide settings candidate}
 
 decisionProgramRegistry :: FlowRegistry -> ProgramRegistry
 decisionProgramRegistry registry = registry.programs

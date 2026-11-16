@@ -17,6 +17,8 @@ module Shikigami.Flow.Sdk
     FlowPackNameError (..),
     parseFlowPackName,
     flowPackNameText,
+    TriggerHooks (..),
+    noTriggerHooks,
 
     -- * Flow declarations
     FlowDef (..),
@@ -91,7 +93,7 @@ import Shikigami.Flow.Acknowledgement (Ack (..), Acknowledgement, awaitAck)
 import Shikigami.Flow.Capability (Activity, Memory, MemoryQuery (..), currentActivity, emitSignal, recall, remember)
 import Shikigami.Flow.Capability qualified as Capability
 import Shikigami.Flow.Delegate (Delegate, awaitOne, delegate)
-import Shikigami.Flow.Pack (FlowPack (..), FlowPackName, FlowPackNameError (..), PackFlow (..), flowPackNameText, kernelCapabilityFlow, parseFlowPackName)
+import Shikigami.Flow.Pack (FlowPack (..), FlowPackName, FlowPackNameError (..), PackFlow (..), TriggerHooks (..), flowPackNameText, kernelCapabilityFlow, noTriggerHooks, parseFlowPackName)
 import Shikigami.RuntimePolicy (DefaultModelRequirement (..))
 import Shikigami.Sink.Coordinate (parseSinkSession)
 import Shikigami.Sink.Delivery (SinkMessageId)

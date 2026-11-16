@@ -34,6 +34,7 @@ SinkOutcome (..)
 SinkResult (..)
 StepName (..)
 Subject (..)
+TriggerHooks (..)
 Workflow
 activityCoordinate
 activityCoordinateText
@@ -46,6 +47,7 @@ delegate
 emitSignal
 flowPackNameText
 kernelCapabilityFlow
+noTriggerHooks
 parseFlowPackName
 parseSignalImportance
 parseSinkSession

@@ -8,6 +8,9 @@ module Shikigami.Initiative.Settings
     EvaluationEnvelope (..),
     NoticeTarget (..),
     defaultMaximumPolicyLifetime,
+    initiativesKey,
+    initiativesSetting,
+    initiativeSettingsFrom,
     resolveAllowance,
     evaluationEnvelopeAt,
     allowanceView,
@@ -17,7 +20,7 @@ module Shikigami.Initiative.Settings
 where
 
 import Control.Monad (unless)
-import Data.Aeson (FromJSON (..), ToJSON (..), Value (String), object, withObject, (.!=), (.:), (.:?), (.=))
+import Data.Aeson (FromJSON (..), Result (..), ToJSON (..), Value (String), fromJSON, object, withObject, (.!=), (.:), (.:?), (.=))
 import Data.Aeson.Key qualified as Key
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Aeson.Types (Parser)
@@ -34,6 +37,7 @@ import Shikigami.Agent.Principal (AgentIdentity, AgentPrincipal, identityText, m
 import Shikigami.Duration (Duration, durationTime, remainingDuration)
 import Shikigami.Execution.Resources (Dimension (..), Envelope (..), Limit (..), Limits)
 import Shikigami.Initiative.Types
+import Shikigami.Pack.Setting (PackSetting (..), PackSettings, SettingShape (..), packSettingValue)
 
 data InitiativeSettings = InitiativeSettings
   { observers :: ![ObserverAllowance],
@@ -209,3 +213,29 @@ allowanceView allowance =
       notificationsPerWindow = initiativeLimitInt allowance.notificationsPerWindow,
       windowSeconds = realToFrac (durationTime allowance.window)
     }
+
+initiativesKey :: Text
+initiativesKey = "initiatives"
+
+-- | The setting as an executable accepts it. Unset, nothing observes.
+initiativesSetting :: PackSetting
+initiativesSetting =
+  PackSetting
+    { key = initiativesKey,
+      environment = "SHIKIGAMI_INITIATIVES",
+      description = "Observer allowances: which principals may observe which sources, at what evaluation envelope and attention limits",
+      expectation = "a structurally valid JSON value of the declared type",
+      shape = JsonSetting,
+      whenAbsent = Nothing,
+      validate = \value -> case fromJSON value of
+        Success (_ :: InitiativeSettings) -> Right ()
+        Error _ -> Left "not observer allowances"
+    }
+
+-- | The typed settings of a run or a process. The value was decoded once at
+-- start by the same instance, so a failure here can only be a value no
+-- executable validated; it reads as unset.
+initiativeSettingsFrom :: PackSettings -> Maybe InitiativeSettings
+initiativeSettingsFrom settings = case fromJSON <$> packSettingValue initiativesKey settings of
+  Just (Success configured) -> Just configured
+  _ -> Nothing

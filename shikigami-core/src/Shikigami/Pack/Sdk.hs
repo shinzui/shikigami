@@ -14,6 +14,14 @@ module Shikigami.Pack.Sdk
     FlowRunContext (..),
     RunModel (..),
 
+    -- * Trigger intake
+    StreamHook (..),
+    StreamCandidate (..),
+    StreamDisposition (..),
+    StreamSkip (..),
+    StreamEvaluation (..),
+    Transaction,
+
     -- * Pack settings
     PackSetting (..),
     SettingShape (..),
@@ -47,8 +55,9 @@ where
 import Effectful (IOE, liftIO)
 import Effectful.Dispatch.Dynamic (interpret, reinterpret)
 import Effectful.Error.Static (Error)
+import Hasql.Transaction (Transaction)
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Error (StoreError)
 import Kiroku.Store.Transaction (runTransaction, runTransactionNoRetry)
-import Shikigami.Flow.Pack (FlowRunContext (..), PackSetting (..), PackSettings, RunModel (..), SettingDefault (..), SettingShape (..), packSettingText, packSettingValue)
+import Shikigami.Flow.Pack (FlowRunContext (..), PackSetting (..), PackSettings, RunModel (..), SettingDefault (..), SettingShape (..), StreamCandidate (..), StreamDisposition (..), StreamEvaluation (..), StreamHook (..), StreamSkip (..), packSettingText, packSettingValue)
 import Shikigami.Log (Logger, logDebug, logError, logInfo, logWarn)

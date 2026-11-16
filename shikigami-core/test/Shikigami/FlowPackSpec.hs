@@ -77,7 +77,8 @@ withSetting FlowPack {name, flows, decisionPrograms, retainedCodecs, tasks} =
               whenAbsent = Nothing,
               validate = const (Right ())
             }
-        ]
+        ],
+      triggers = noTriggerHooks
     }
 
 probePack :: Text -> [Text] -> FlowPack
@@ -88,7 +89,8 @@ probePack name flowNames =
       decisionPrograms = [],
       retainedCodecs = [],
       tasks = [],
-      settings = []
+      settings = [],
+      triggers = noTriggerHooks
     }
   where
     definition flowName =

@@ -226,8 +226,14 @@ this Mac through the same operator verbs as before (`watchdog inspect`, `proposa
     `Shikigami.Trigger.Consumer` consult a `StreamIntake` instead of importing the Initiative
     ledger, settings and types; Initiative answers through it
     (`Shikigami.Initiative.Intake.streamDisposition`) with no change in behavior.
-  - Remaining, in the order planned: `FlowPack.triggers` and the registry's intake with a
-    `...With` entry point for the stream consumer; `FlowPack.adminVerbs` with a kernel admin
+  - A third step adds `FlowPack.triggers`, the registry's `streamIntakeOf` and
+    `consumeStreamRoleInfoWith`, so the stream consumer composes packs like the other roles
+    and puts a record only to the hook of the pack that owns the agent's flow. The
+    `initiatives` key is declared as a `PackSetting` (`Shikigami.Initiative.Settings
+    .initiativesSetting`) in `coreUseCaseSettings`, which every executable accepts until the
+    use case leaves; `AppConfig.initiativeSettings` is gone and its readers decode
+    `config.packSettings`.
+  - Remaining, in the order planned: `FlowPack.adminVerbs` with a kernel admin
     context for the `proposals` verbs; a pack metrics port for the three remaining
     `shikigami.initiatives.*` counters; the workspace catalog and objective settings in
     `FlowRunContext`; the `initiatives` setting as a `PackSetting`; then the move itself, with

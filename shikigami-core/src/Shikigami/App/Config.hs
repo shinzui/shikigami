@@ -49,8 +49,6 @@ module Shikigami.App.Config
     HttpAuthSettings (..),
     InspectionSettings (..),
     inspectionKey,
-    InitiativeSettings (..),
-    initiativesKey,
     WatchdogSettings (..),
     watchdogKey,
     httpAuthModeKey,
@@ -213,7 +211,7 @@ import Shikigami.Directory (DirectorySettings (..))
 import Shikigami.Duration
 import Shikigami.Execution.Capacity qualified as Capacity
 import Shikigami.Execution.Policy.Types qualified as Harness
-import Shikigami.Initiative.Settings (InitiativeSettings (..))
+import Shikigami.Initiative.Settings (initiativesSetting)
 import Shikigami.Inspection.Settings (InspectionSettings (..))
 import Shikigami.Objective.Tracker.Config (TrackerSettings, defaultTrackerSettings)
 import Shikigami.Objective.Types (ObjectiveSettings, defaultObjectiveSettings)
@@ -527,7 +525,6 @@ data AppConfig = AppConfig
     objectiveSettings :: !ObjectiveSettings,
     trackerSettings :: !TrackerSettings,
     watchdog :: !(Maybe WatchdogSettings),
-    initiativeSettings :: !(Maybe InitiativeSettings),
     -- | @trust.tier@: who decides a run's actions and how its processes are
     -- contained (ADR-124). @contained@ keeps what each executable does today.
     trustTier :: !TrustTier,
@@ -550,7 +547,11 @@ data AppConfig = AppConfig
 -- path. Defaults are declared through Settei rather than baked into a built-in
 -- source so that @--explain-config@ can say which rule supplied a value and why.
 appConfig :: Config AppConfig
-appConfig =
+appConfig = appConfigWith []
+
+-- | The kernel's own settings. 'appConfig' adds the core's use-case settings.
+kernelAppConfig :: Config AppConfig
+kernelAppConfig =
   AppConfig
     <$> optional databaseConnectionStringSetting
     <*> withDefault agentsDirectorySetting (constant "agents-directory" "Manifests live in ./agents relative to the working directory" "agents")
@@ -601,7 +602,6 @@ appConfig =
     <*> withDefault (secretSetting (stableKey "objectives") "Objective enablement, local operator and default-deny recorded agent creation grants" jsonDecoder) (constant "objectives-disabled" "Objective tracking requires explicit enablement" defaultObjectiveSettings)
     <*> withDefault (secretSetting (stableKey "objective_trackers") "Provider-neutral objective tracker connections and explicit use/export grants" jsonDecoder) (constant "trackers-disabled" "External objective tracking requires explicit enablement" defaultTrackerSettings)
     <*> optional (publicSettingWithRenderer watchdogKey "Read-only active work observation: exact principal, scope, windows and bounded sweep size" jsonDecoder renderJson)
-    <*> optional (publicSettingWithRenderer initiativesKey "Observer allowances: which principals may observe which sources, at what evaluation envelope and attention limits" jsonDecoder renderJson)
     <*> withDefault trustTierSetting (constant "contained-tier" "Each executable keeps its configured authority and containment" Contained)
     <*> optional (publicSettingWithRenderer trustApprovalsFileKey "The local operator's explicit approvals file (schema/LocalOperator.dhall)" (Text.unpack <$> textDecoder) Text.pack)
     <*> optional (publicSettingWithRenderer trustStateDirectoryKey "The local operator's state directory for grants, worktrees and locks" (Text.unpack <$> textDecoder) Text.pack)
@@ -880,8 +880,15 @@ directorySettingsConfig =
 appConfigWith :: [PackSetting] -> Config AppConfig
 appConfigWith settings =
   (\config values -> config & #packSettings .~ packSettingsFromList (catMaybes values))
-    <$> appConfig
-    <*> traverse packSettingConfig settings
+    <$> kernelAppConfig
+    <*> traverse packSettingConfig (coreUseCaseSettings <> settings)
+
+-- | The settings of the use cases still compiled into the core, declared the
+-- way a pack declares its own so that they move with their use case
+-- (docs/adr/0129). Every executable accepts them until then. The list only
+-- shrinks.
+coreUseCaseSettings :: [PackSetting]
+coreUseCaseSettings = [initiativesSetting]
 
 -- | One pack setting: its raw value read by shape, then validated by the
 -- pack. A refusal names the pack's expectation and never the value.
@@ -1592,7 +1599,7 @@ environmentBindings = either (error . Text.unpack) id (environmentBindingsWith [
 -- error an operator of a distribution can meet, not a kernel programming error.
 environmentBindingsWith :: [PackSetting] -> Either Text Bindings
 environmentBindingsWith settings = do
-  packBindings <- traverse packBinding settings
+  packBindings <- traverse packBinding (coreUseCaseSettings <> settings)
   first renderEnvErrorsText (bindings (kernelEnvironmentBindings <> packBindings))
   where
     packBinding setting =
@@ -1652,7 +1659,6 @@ kernelEnvironmentBindings =
     binding (EnvName "SHIKIGAMI_OBJECTIVES") (stableKey "objectives"),
     binding (EnvName "SHIKIGAMI_OBJECTIVE_TRACKERS") (stableKey "objective_trackers"),
     binding (EnvName "SHIKIGAMI_WATCHDOG") watchdogKey,
-    binding (EnvName "SHIKIGAMI_INITIATIVES") initiativesKey,
     binding (EnvName "SHIKIGAMI_WORKSPACES") workspacesKey,
     binding (EnvName "SHIKIGAMI_WORKSPACE_SUPERVISOR") workspaceSupervisorKey,
     binding (EnvName "SHIKIGAMI_BEHAVIOR_MODEL") behaviorModelKey,
@@ -1827,9 +1833,6 @@ httpAuthCallerKey = stableKey "http.auth.caller"
 
 inspectionKey :: Key
 inspectionKey = stableKey "inspection"
-
-initiativesKey :: Key
-initiativesKey = stableKey "initiatives"
 
 httpAuthModeSetting :: Setting Bool
 httpAuthModeSetting =

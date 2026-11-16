@@ -39,6 +39,7 @@ import Shikigami.Flow.Initiative qualified as FlowInitiative
 import Shikigami.Flow.Observe qualified as FlowObserve
 import Shikigami.Flow.Pack (FlowPack, FlowRegistry, composeFlowRegistryOrExit, decisionServices, flowDeclarationErrors, lookupTask)
 import Shikigami.Health.Worker (LoopName (OutboxLoop, QueueLoop, TelemetryLoop, TimerLoop), loopStaleAfter, loopStaleness, newHeartbeatsWithStaleness, serveProbesWith)
+import Shikigami.Initiative.Settings (initiativeSettingsFrom)
 import Shikigami.Inspection.Consumer (consumerInspection)
 import Shikigami.Inspection.Store (withObservedStore)
 import Shikigami.Log qualified as Log
@@ -249,7 +250,7 @@ runWorkerCmdWith packs resumeBudget config = do
                   observe = FlowObserve.ObserveSeed config.watchdog (watchdogHooks shikigamiMetrics),
                   initiatives =
                     FlowInitiative.InitiativeSeed
-                      { settings = config.initiativeSettings,
+                      { settings = initiativeSettingsFrom config.packSettings,
                         -- Identity only: a repository's source is a private locator
                         -- and must not reach a model provider.
                         repositories = [FlowInitiative.RepositoryOption entry.identity (repositoryIdText entry.identity) | entry <- maybe [] (.repositories) config.workspaceSettings],

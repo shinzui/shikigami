@@ -43,7 +43,7 @@ import Shikigami.Flow.Acknowledgement (Ack (..), Acknowledgement, awaitAck)
 import Shikigami.Flow.Builtin (builtinPack)
 import Shikigami.Flow.Capability (Activity, Memory, MemoryQuery (..), currentActivity, emitSignal, recall, remember)
 import Shikigami.Flow.Capability qualified as Capability
-import Shikigami.Flow.Pack (FlowPack (..), FlowRegistry, composeFlowRegistry, kernelCapabilityFlow, parseFlowPackName)
+import Shikigami.Flow.Pack (FlowPack (..), FlowRegistry, composeFlowRegistry, kernelCapabilityFlow, noTriggerHooks, parseFlowPackName)
 import Shikigami.RuntimePolicy (DefaultModelRequirement (..))
 
 data RiskLevel = HighRisk | LowRisk deriving stock (Eq, Show)
@@ -89,7 +89,8 @@ fixturePack =
       decisionPrograms = [],
       retainedCodecs = [],
       tasks = [],
-      settings = []
+      settings = [],
+      triggers = noTriggerHooks
     }
 
 -- | The builtin pack, the example fixtures and this fixture pack, as a

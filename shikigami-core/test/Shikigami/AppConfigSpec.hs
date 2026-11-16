@@ -65,7 +65,7 @@ import Shikigami.Duration (parseDuration)
 import Shikigami.Execution.Capacity qualified as Capacity
 import Shikigami.Execution.Policy.Limits (PolicyNumber (..))
 import Shikigami.Execution.Policy.Types qualified as Harness
-import Shikigami.Initiative.Settings (ObserverAllowance (..))
+import Shikigami.Initiative.Settings (InitiativeSettings (..), ObserverAllowance (..), initiativeSettingsFrom)
 import Shikigami.Inspection.Settings qualified as Inspection
 import Shikigami.Objective.Types (ObjectiveService (..), ObjectiveSettings (..), defaultObjectiveSettings, parseOperatorId)
 import Shikigami.Pack.Setting (PackSetting (..), SettingDefault (..), SettingShape (..), noPackSettings, packSettingText, packSettingValue)
@@ -1047,10 +1047,10 @@ initiativeConfigurationTests =
   testGroup
     "initiative configuration"
     [ testCase "omission disables observation" do
-        isNothing defaultAppConfig.initiativeSettings @?= True,
+        isNothing (initiativeSettingsFrom defaultAppConfig.packSettings) @?= True,
       testCase "a valid allowance resolves" do
         config <- resolveOrFail (optionsWith [] []) [] [("SHIKIGAMI_INITIATIVES", initiativeDocument allowanceFields)]
-        fmap (map (principalText . (.principal)) . (.observers)) config.initiativeSettings @?= Just ["agent_proposer"],
+        fmap (map (principalText . (.principal)) . (.observers)) (initiativeSettingsFrom config.packSettings) @?= Just ["agent_proposer"],
       testCase "unknown keys, duplicates, zero durations and envelopes denying a model call fail loader" do
         forM_
           [ initiativeDocument ("\"surprise\":1," <> allowanceFields),

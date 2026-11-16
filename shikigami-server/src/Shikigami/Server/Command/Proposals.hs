@@ -36,7 +36,7 @@ import Shikigami.Directory qualified as Directory
 import Shikigami.Initiative.Inspection (anyExhausted, inspect)
 import Shikigami.Initiative.Ledger (listCandidates, listProposals, pruneCandidatesBefore)
 import Shikigami.Initiative.Policy
-import Shikigami.Initiative.Settings (InitiativeSettings (..), defaultMaximumPolicyLifetime)
+import Shikigami.Initiative.Settings (InitiativeSettings (..), defaultMaximumPolicyLifetime, initiativeSettingsFrom)
 import Shikigami.Initiative.Types (parseProposalId, parseStandingPolicyId)
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations (verifyShikigamiMigrations)
@@ -70,7 +70,7 @@ runPolicyInstall path _json config = do
             catalog = maybe [] (map (.identity) . (.repositories)) config.workspaceSettings,
             declarations = loadedAgents report,
             now = instant,
-            maximumLifetime = maybe defaultMaximumPolicyLifetime (.maximumPolicyLifetime) config.initiativeSettings
+            maximumLifetime = maybe defaultMaximumPolicyLifetime (.maximumPolicyLifetime) (initiativeSettingsFrom config.packSettings)
           }
   withLedger config (installPolicy operator context input) >>= \case
     Left refusal -> die ("proposals policy install refused: " <> Text.unpack (policyRefusalText refusal))
@@ -107,7 +107,7 @@ runProposalsList claimed status after limit _json config = do
 runProposalsInspect :: Bool -> Bool -> AppConfig -> IO ()
 runProposalsInspect _json failWhenExhausted config = do
   instant <- getCurrentTime
-  reading config (inspect config.initiativeSettings instant) >>= \case
+  reading config (inspect (initiativeSettingsFrom config.packSettings) instant) >>= \case
     Left refusal -> die ("proposals inspect refused: " <> Text.unpack (policyRefusalText refusal))
     Right view -> do
       emit view

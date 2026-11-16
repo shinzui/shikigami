@@ -35,6 +35,8 @@ import Shikigami.Flow.Initiative (proposeWork, proposeWorkFlowName, proposeWorkS
 import Shikigami.Flow.Pack
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Flow.Watchdog (watchdogFlowName, watchdogSlots, watchdogSweep)
+import Shikigami.Initiative.Intake (streamDisposition)
+import Shikigami.Initiative.Settings (initiativeSettingsFrom)
 import Shikigami.Program.Decision.Registry (builtinDecisionPrograms, builtinRetainedCodecs)
 import Shikigami.Program.Registry (programRegistry)
 import Shikigami.Router.Decision (RouteDecision (..), RouteOutcome (..), RouteSelection (..))
@@ -49,7 +51,10 @@ builtinPack =
       decisionPrograms = builtinDecisionPrograms,
       retainedCodecs = builtinRetainedCodecs,
       tasks = programRegistry,
-      settings = []
+      -- The initiatives setting is declared in 'Shikigami.App.Config' while
+      -- its use case is still compiled into the core.
+      settings = [],
+      triggers = noTriggerHooks {stream = Just (StreamHook (streamDisposition . initiativeSettingsFrom))}
     }
 
 -- | The builtin pack alone, composed. It cannot fail for a reviewed build, so

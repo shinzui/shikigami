@@ -9,6 +9,12 @@ SettingDefault (..)
 SettingShape (..)
 Store
 StoreError
+StreamCandidate (..)
+StreamDisposition (..)
+StreamEvaluation (..)
+StreamHook (..)
+StreamSkip (..)
+Transaction
 interpret
 liftIO
 logDebug

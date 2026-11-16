@@ -1,5 +1,6 @@
 module Shikigami.Workers.Subscription
   ( runConsumeStream,
+    runConsumeStreamWith,
     runConsumeEvents,
   )
 where
@@ -14,6 +15,8 @@ import Shikigami.App.Config (AppConfig, Role (EventConsumerRole, StreamConsumerR
 import Shikigami.App.Config qualified as Config
 import Shikigami.App.Config.Load (requireDatabaseUrl)
 import Shikigami.Directory (DirectoryRuntime (..))
+import Shikigami.Flow.Builtin (builtinPack)
+import Shikigami.Flow.Pack (FlowPack, composeFlowRegistryOrExit, streamIntakeOf)
 import Shikigami.Health.Supervision (superviseLoops)
 import Shikigami.Health.Worker
   ( Heartbeats,
@@ -27,7 +30,6 @@ import Shikigami.Health.Worker
     serveProbesWith,
     supervisedLoopVerdict,
   )
-import Shikigami.Initiative.Intake (streamDisposition)
 import Shikigami.Inspection.Consumer (consumerInspection)
 import Shikigami.Inspection.Store (withObservedStore)
 import Shikigami.Log qualified as Log
@@ -36,7 +38,6 @@ import Shikigami.Runtime (registerRuntimeCatalog, runtimeConnectionSettings)
 import Shikigami.Telemetry (withRunTelemetry)
 import Shikigami.Trigger.Consumer (EventHit (..), OnSupervisor, StreamConfig (..), StreamHit (..), ensureDeadLetterQueue, subscribeActivityStream, subscribeIntegrationEventStream)
 import Shikigami.Trigger.Enqueue (ensureRunQueue)
-import Shikigami.Trigger.Hook (StreamHook (..), streamIntake)
 import Shikigami.Trigger.Stream (IncludeAgentActors (ExcludeAgentActors, IncludeAgentActors))
 import Shikigami.Workers.Config (directoryLoopRegistration, persistAgentLoadReport, startProcessDirectory)
 
@@ -49,7 +50,13 @@ import Shikigami.Workers.Config (directoryLoopRegistration, persistAgentLoadRepo
 -- the @--broker@, @--topic@, @--group@, @--agents@ and
 -- @--include-agent-actors@ flags are command-line sources for those keys.
 runConsumeStream :: AppConfig -> IO ()
-runConsumeStream config = do
+runConsumeStream = runConsumeStreamWith []
+
+-- | The stream consumer composed with flow packs beside the builtin pack. A
+-- pack's stream hook has a say over the records that match its flows' agents
+-- (docs/adr/0129).
+runConsumeStreamWith :: [FlowPack] -> AppConfig -> IO ()
+runConsumeStreamWith packs config = do
   logger <- Log.newStderrLogger Log.Info
   let include = (.kafkaIncludeAgentActors) config
       broker = (.kafkaBroker) config
@@ -98,7 +105,8 @@ runConsumeStream config = do
           ((ConsumerLoop, loopStaleAfter ConsumerLoop) : directoryLoopRegistration ((.directorySettings) config))
       DirectoryRuntime {handle = directory, refresher = directoryRefresher} <-
         startProcessDirectory logger registry ((.directorySettings) config)
-      let intake = streamIntake "initiative" (const True) config.packSettings (StreamHook (\_ -> streamDisposition config.initiativeSettings))
+      flows <- composeFlowRegistryOrExit logger "shikigami-consume-stream" (builtinPack : packs)
+      let intake = streamIntakeOf flows config.packSettings
           consumerLoop = subscribeActivityStream logger (consumerSupervisor registry) shikigamiMetrics appEnv directory intake cfg include agents onHit
           directoryLoops = maybe [] (pure . (DirectoryLoop,)) directoryRefresher
       serveProbesWith
