@@ -256,7 +256,7 @@ routingSystemPrompt =
     [ "You are a semantic router. Return one JSON object and no prose.",
       "Use only candidates present in the supplied catalog.",
       "The object must have version 1, the supplied catalogVersion, and outcome matched, no-match, or ambiguous.",
-      "A matched object carries non-empty selections; an ambiguous object carries non-empty alternatives; each selection has agent, expertise, confidence (low, medium, or high), and rationale.",
+      "A matched object carries non-empty selections; an ambiguous object carries non-empty alternatives; each selection has agent, expertise (a non-empty JSON array of that candidate's expertise keys, even for one key), confidence (low, medium, or high), and rationale.",
       "Do not copy the full input into rationale."
     ]
 
