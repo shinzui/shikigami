@@ -353,7 +353,7 @@ this Mac through the same operator verbs as before (`watchdog inspect`, `proposa
     `shikigami watchdog` answers `Invalid argument`.
   - The scheduler's log carried eight `scheduler.timer.unknown_kind` errors for the memory
     session's timers during that healthy run (FRIC-87, unchanged).
-- [ ] M6: The adaptive-delivery coordinator is confirmed as a kernel primitive and stays in
+- [x] M6 (2026-11-16, acceptance amended; see the Decision Log): The adaptive-delivery coordinator is confirmed as a kernel primitive and stays in
   `shikigami-core`. Its disposition is recorded, an import check shows it has no Kikan
   service dependency, and a real objective on a local repository receives an adaptive
   decision from a stock executable.
@@ -366,7 +366,25 @@ this Mac through the same operator verbs as before (`watchdog inspect`, `proposa
     `Shikigami.Authority.KikanEn` or anything under it, or `Shikigami.DanwaConversation`.
     The real tree passes; a planted import of `Shikigami.Sink.KizashiClient` from
     `Shikigami.Coordination.Workflow` fails with the reason the coordinator is a primitive.
-    `just kernel-fitness` 8. The real run is still to be made.
+    `just kernel-fitness` 8.
+  - Real run (2026-11-16), on an isolated database with the fixture authorizer, the local
+    Kafka broker and OpenAI `gpt-5.4-mini` under the `propose` and `adaptive` aliases. No
+    stock executable can start it (FRIC-88), so the coordinator was funded and launched by
+    an Initiative standing policy from the distribution: a real transcript became a
+    proposal; the policy admitted it, created objective
+    `shikigami_objective_01m7k3raq9e6hbk1gygjxxnf16`, enrolled a root (two active work,
+    four model attempts), staffed and launched `adaptive-delivery`. `adaptive-admission`
+    accepted the run, the model returned a proposal, `adaptive-validation` accepted it, and
+    the coordinator parked on its assignment. `objectives inspect OBJECTIVE --json` shows
+    the decision under `adaptive.decisions` (`AwaitAssignments`, rationale, expected
+    benefit, `laterEvidence: combined-check`), and `proposals admissions` shows the
+    admission `launched` with its root and coordinator run.
+  - What that run did not show: a dispatched worker. The pinned policy had no targets,
+    because the one delegate left to the stock proof manifest, `code-researcher`, declares
+    no identity; the decision was to await the coordinator's own assignment.
+  - It took four attempts. The first hung in `proposals policy install` (FRIC-90, fixed);
+    the second lost its authorizer; the third and fourth decisions were rejected for their
+    shape and then their evidence (FRIC-89, fixed).
 - [ ] M7: Kernel namespace list closed, the core specification holds no use-case label,
   dispositions recorded in ADRs and architecture docs, before/after size reported. All packs
   composed in the `kikan-shikigami` distribution, plus a kernel mandate cycle, run on this Mac
@@ -556,6 +574,28 @@ this Mac through the same operator verbs as before (`watchdog inspect`, `proposa
 
 ## Decision Log
 
+- Decision (M6): The acceptance is amended. The real adaptive decision is taken from a
+  coordinator funded by a standing policy in the distribution, and a dispatched worker is
+  not part of it.
+  Rationale: the plan asked for the run "with the stock `shikigami-worker`, which composes
+  no pack" and for "the same outcome as before this plan". Neither exists. No stock route
+  gives a run a resource root, and adaptive admission refuses a run without one (FRIC-88):
+  `enqueue-run` and the run API set none, `shikigami resources` only inspects, and
+  `enrollRootRun` is called only by the local one-off. Before this plan there was no real
+  adaptive run at all; plan 86's actual-model trial is still open. What the milestone is
+  for, that the coordinator is kernel code that needs no pack and no Kikan service, is
+  shown by the import rule and by the run itself: every step from `adaptive-admission` on
+  is `shikigami-core`, executed here by a worker whose packs contributed only the launch.
+  The operator approved running it this way on 2026-11-16. A stock route to fund an
+  objective run, and a delegate with an identity so a worker can be dispatched, are left
+  to plan 86.
+  Date: 2026-11-16
+- Decision (M6): The coordinator's proposal vocabulary states the proposal's exact shape.
+  Rationale: FRIC-89. The text is input data journaled in `decision-prepare-adapt`, not a
+  step, a label or a stored codec: a run in flight replays the input it journaled, and a
+  new run prepares with the new text. The program's signature and descriptor are
+  unchanged, so no pinned binding moves.
+  Date: 2026-11-16
 - Decision (M5): The watchdog pack's test suite compiles the kernel's spec modules it uses
   as fixtures from the kernel's test directories.
   Rationale: the watchdog reads other owners' state, so its PostgreSQL specs stand on the

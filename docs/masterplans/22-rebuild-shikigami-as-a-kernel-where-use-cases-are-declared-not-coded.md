@@ -986,7 +986,12 @@ kernel's effect row and the watchdog's patch gate and labels left the specificat
 real run from the distribution, sweeps fired every minute, observed the objective a real
 proposal had created, and opened a `stuck-coordinator` finding when it sat idle. With
 three use cases out, the builtin pack holds `run-declared-tool` and `adaptive-delivery`.
-EP-6 M6 is next. Stage 1 (the pilot) ends at the declaration baseline, and stage 2 at
+EP-6 M6 is accepted on 2026-11-16 with an amended acceptance: the adaptive coordinator
+stays in the kernel, a boundary rule checks that it imports no Kikan binding, and the first
+real adaptive decision was accepted by its checkpoint owner. No stock executable can fund
+an objective run, so the coordinator was launched by a standing policy from the
+distribution (FRIC-88); the real call needed the proposal vocabulary made exact (FRIC-89)
+and an admin verb un-hung (FRIC-90). No worker was dispatched. EP-6 M7 is next. Stage 1 (the pilot) ends at the declaration baseline, and stage 2 at
 the kernel baseline.
 
 - [ ] Architectural acceptance: the keiro modernization campaign runs for real on at least

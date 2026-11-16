@@ -2,6 +2,15 @@
 
 ## 2026-11-16
 
+* **Addition**: FRIC-90 records detour interface friction with mori://shinzui/shikigami: Any admin verb that checks a principal hung forever when a directory was configured
+
+
+* **Addition**: FRIC-89 records detour interface friction with mori://shinzui/shikigami: The adaptive proposal vocabulary did not say the proposal is flat, that laterEvidence is a key, or how an assignment id is written
+
+
+* **Addition**: FRIC-88 records detour interface friction with mori://shinzui/shikigami: No stock executable can give a run a resource root, so adaptive delivery cannot be started from one
+
+
 * **Addition**: FRIC-87 records nuisance interface friction with mori://shinzui/shikigami: The scheduler logs an error for every memory-session timer it does not own
 
 

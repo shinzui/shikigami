@@ -29,7 +29,7 @@ For example, create an objective to deliver one reviewed report with an exact
 combined artifact identifier and a user-journey criterion. Assign a delivery
 entry to the Flow's principal and admit the run with the separate
 `objectiveId`/`assignmentId` selector described in [objectives](objectives.md).
-The run must carry its admitted resource root. Set a finite cutoff and enough
+The run must carry its admitted resource root. No stock command enrolls one: today a coordinator is funded by a [standing policy](../operations/unrequested-work.md) in a distribution that composes the initiative pack, or by a pack's schedule hook. Set a finite cutoff and enough
 model, tool and descendant capacity for both coordinator decisions and workers.
 The default execution/advance capacities remain one; an operator may configure
 positive bounded values after qualification.
