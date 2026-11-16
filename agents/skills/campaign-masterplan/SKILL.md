@@ -9,6 +9,9 @@ Use this repository's own `master-plan` skill (under `.claude/skills/master-plan
 `agents/skills/master-plan`). Follow it exactly: its init scripts, its frontmatter and its
 provenance rules.
 
+0. If `docs/masterplans/` already has a MasterPlan titled "Modernize <repo> to the current keiro
+   stack" (an earlier, interrupted campaign run), do not write another. Check that it has a
+   child ExecPlan for each selected blueprint, add any that are missing, and report its plans.
 1. Get an intention with `mina ci --json "Modernize <repo> to the current keiro stack"`,
    naming the repository, and pass its id to the init scripts.
 2. Create one MasterPlan titled "Modernize <repo> to the current keiro stack".
