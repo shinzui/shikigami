@@ -90,7 +90,8 @@ fixturePack =
       retainedCodecs = [],
       tasks = [],
       settings = [],
-      triggers = noTriggerHooks
+      triggers = noTriggerHooks,
+      adminVerbs = []
     }
 
 -- | The builtin pack, the example fixtures and this fixture pack, as a

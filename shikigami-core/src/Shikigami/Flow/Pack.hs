@@ -31,6 +31,10 @@ module Shikigami.Flow.Pack
     RunModel (..),
     runModel,
 
+    -- * Admin verbs
+    AdminVerb (..),
+    AdminContext (..),
+
     -- * Trigger hooks
     TriggerHooks (..),
     noTriggerHooks,
@@ -103,6 +107,7 @@ import Shikigami.Execution.Identity (ExecutionRootId)
 import Shikigami.Flow (FlowDef (..), FlowEffects, flowDecisionSlotsFor)
 import Shikigami.Flow.Decision (DecisionServices (..), decisionProviders)
 import Shikigami.Log qualified as Log
+import Shikigami.Pack.Admin (AdminContext (..), AdminVerb (..))
 import Shikigami.Pack.Setting (PackSetting (..), PackSettings, SettingDefault (..), SettingShape (..), packSettingText, packSettingValue)
 import Shikigami.Program.Decision (ProgramRegistry, ResultCodecRegistry, SomeProgram, SomeResultCodec)
 import Shikigami.Program.Decision qualified as Decision
@@ -147,7 +152,9 @@ data FlowPack = FlowPack
     -- interpreters in 'FlowRunContext'.
     settings :: ![PackSetting],
     -- | The pack's say over trigger intake for the agents that run its flows.
-    triggers :: !TriggerHooks
+    triggers :: !TriggerHooks,
+    -- | The operator verbs the pack adds to the admin command.
+    adminVerbs :: ![AdminVerb]
   }
 
 -- | A flow body plus the pack-owned interpreter that runs it.

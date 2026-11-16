@@ -29,7 +29,7 @@ import Shikigami.App.Config.Load (ConfigOptions (..), ConfigRun (..), Diagnostic
 import Shikigami.Execution.Counter (nextAttempt, noAttempts)
 import Shikigami.Execution.Quantity (ResourceAmount, parseResourceAmount)
 import Shikigami.Execution.Resources qualified as Resources
-import Shikigami.Server.Command (adminInfo, adminPrefs, adminSubcommands)
+import Shikigami.Server.Command (adminInfo, adminPrefs, adminSubcommands, repeatedVerbs)
 import Shikigami.Server.Command.Ops (redactDatabaseUrl)
 import Shikigami.Server.Command.ResolveApproval (resolutionResult, resolveApprovalOptionsParser)
 import Shikigami.Server.Command.Resources (resourceView)
@@ -64,9 +64,14 @@ tests =
                 "objectives",
                 "mandates",
                 "watchdog",
-                "proposals",
-                "record"
+                "record",
+                "proposals"
               ],
+      -- A pack's verb is mounted after the kernel's verbs and may not shadow one
+      -- (docs/adr/0129).
+      testCase "a verb declared twice is named, and distinct verbs are not" do
+        repeatedVerbs (map fst adminSubcommands) @?= []
+        repeatedVerbs ["flows", "proposals", "record", "proposals", "flows"] @?= ["flows", "proposals"],
       testCase "watchdog verbs parse bounded inspection and pagination" do
         episode <- Text.unpack . episodeIdText <$> newEpisodeId
         mapM_

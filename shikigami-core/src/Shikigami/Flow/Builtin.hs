@@ -54,7 +54,8 @@ builtinPack =
       -- The initiatives setting is declared in 'Shikigami.App.Config' while
       -- its use case is still compiled into the core.
       settings = [],
-      triggers = noTriggerHooks {stream = Just (StreamHook (streamDisposition . initiativeSettingsFrom))}
+      triggers = noTriggerHooks {stream = Just (StreamHook (streamDisposition . initiativeSettingsFrom))},
+      adminVerbs = []
     }
 
 -- | The builtin pack alone, composed. It cannot fail for a reviewed build, so

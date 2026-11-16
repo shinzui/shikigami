@@ -298,6 +298,7 @@ library
     Shikigami.ObjectiveTrackerLookup.ReadModelHoles
     Shikigami.Output
     Shikigami.Output.Local
+    Shikigami.Pack.Admin
     Shikigami.Pack.Sdk
     Shikigami.Pack.Setting
     Shikigami.Playbook

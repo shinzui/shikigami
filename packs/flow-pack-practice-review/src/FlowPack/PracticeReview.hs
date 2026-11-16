@@ -66,7 +66,8 @@ practiceReviewPackWith runtime =
       retainedCodecs = [],
       tasks = [],
       settings = [attentionRecipientsSetting],
-      triggers = noTriggerHooks
+      triggers = noTriggerHooks,
+      adminVerbs = []
     }
 
 routerDefinition :: FlowDef

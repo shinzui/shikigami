@@ -37,31 +37,44 @@ module Shikigami.Server.Command
     AdminAction,
     runAdmin,
     runAdminWith,
+    repeatedVerbs,
   )
 where
 
+import Control.Exception (finally)
 import Control.Lens ((&), (.~))
 import Data.Bifunctor (first)
 import Data.Generics.Labels ()
+import Data.List (nub, tails)
 import Data.Maybe (catMaybes)
 import Data.Text qualified as Text
 import Data.Time.Format.ISO8601 (iso8601ParseM)
+import Kiroku.Store.Connection (withStore)
 import Options.Applicative hiding (action)
 import Settei.Optparse (namedOption)
 import Settei.Source (Source)
+import Shikigami.Agent.DeclarationValue (declarationCoordinate)
+import Shikigami.Agent.Loader (loadAgentsReport, loadedAgents)
 import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Payload (payloadArgument)
-import Shikigami.App.Config (AppConfig, Role (AdminRole), kafkaActivityTopicKey, kafkaBrokerKey)
+import Shikigami.Agent.Principal (principalText)
+import Shikigami.App (AppEnv (..), noopTracer, runAppIO)
+import Shikigami.App.Config (AppConfig (..), Role (AdminRole), kafkaActivityTopicKey, kafkaBrokerKey, revealSecretText)
 import Shikigami.App.Config.Load
   ( ConfigOptions (..),
     configOptions,
+    requireDatabaseUrl,
     runAppConfigWith,
     usageExitCode,
   )
 import Shikigami.App.Version (versionOption)
+import Shikigami.Directory qualified as Directory
 import Shikigami.Execution.Identity (parseExecutionRootId, parseOperationId)
-import Shikigami.Flow.Pack (FlowPack (..))
+import Shikigami.Flow.Pack (AdminContext (..), AdminVerb (..), FlowPack (..))
+import Shikigami.Log qualified as Log
+import Shikigami.Migrations (verifyShikigamiMigrations)
 import Shikigami.Objective.Tracker.Control.Types (HistoryKind (Proposals, Publications))
+import Shikigami.Runtime (registerRuntimeCatalog, runtimeConnectionSettings)
 import Shikigami.Server.Command.Agents (runAgentsList, runAgentsSync)
 import Shikigami.Server.Command.EnqueueRun (runEnqueueRun)
 import Shikigami.Server.Command.Executions (runExecutionsInspect)
@@ -71,7 +84,7 @@ import Shikigami.Server.Command.Mandates
 import Shikigami.Server.Command.ObjectiveTrackers
 import Shikigami.Server.Command.Objectives
 import Shikigami.Server.Command.Ops (opsConfigSources, opsInvocationParser, runOps)
-import Shikigami.Server.Command.Proposals
+import Shikigami.Server.Command.Proposals (proposalsVerb)
 import Shikigami.Server.Command.PublishFixture (runPublishFixture)
 import Shikigami.Server.Command.Record (RecordListOptions (..), runRecordList)
 import Shikigami.Server.Command.RenderLifecycle (runRenderLifecycle)
@@ -91,8 +104,9 @@ import Shikigami.WorkerSession.Input (parseInstructionText)
 import Shikigami.WorkerSession.Position (MessagePosition, beforeMessages, parseMessagePosition)
 import Shikigami.WorkerSession.Transfer (WorkspaceRef (..))
 import Shikigami.WorkerSession.Types (WorkerSessionId, workerSessionId)
+import Shikigami.Workspace.Settings (WorkspaceRepository (..), WorkspaceSettings (..))
 import Shikigami.Workspace.Value (workspaceCoordinate)
-import System.Exit (ExitCode (..), exitWith)
+import System.Exit (ExitCode (..), die, exitWith)
 import System.IO (hPutStrLn, stderr)
 
 -- | What a subcommand contributes: the work to do once configuration is
@@ -159,6 +173,11 @@ runAdmin = runAdminWith []
 -- | 'runAdmin' for a distribution: the same commands over more packs.
 runAdminWith :: [FlowPack] -> IO ()
 runAdminWith packs = do
+  case repeatedVerbs (map fst (adminSubcommandsWith packs)) of
+    [] -> pure ()
+    repeated -> do
+      hPutStrLn stderr ("shikigami: admin verb declared more than once: " <> unwords repeated)
+      exitWith (ExitFailure usageExitCode)
   (chosen, options) <- customExecParser adminPrefs (adminInfoWith packs)
   case chosen of
     -- A diagnostic with no subcommand is legitimate, and 'runAppConfig' exits
@@ -174,6 +193,11 @@ runAdminWith packs = do
     -- The admin command reads the configuration file a composed worker reads,
     -- so it accepts the same pack settings.
     settings = concatMap (.settings) packs
+
+-- | Verb names that appear more than once: a pack's verb may not shadow a
+-- kernel verb or another pack's.
+repeatedVerbs :: [String] -> [String]
+repeatedVerbs names = nub [name | name : later <- tails names, name `elem` later]
 
 -- | Every subcommand, paired with its name.
 --
@@ -201,9 +225,43 @@ adminSubcommandsWith packs =
     ("objectives", command "objectives" objectivesInfo),
     ("mandates", command "mandates" mandatesInfo),
     ("watchdog", command "watchdog" watchdogInfo),
-    ("proposals", command "proposals" proposalsInfo),
     ("record", command "record" recordInfo)
   ]
+    <> [(Text.unpack verb.name, command (Text.unpack verb.name) (mounted verb)) | verb <- packVerbs packs]
+  where
+    mounted AdminVerb {name, parser} = (\run -> (run . adminContext name, [])) <$> parser
+
+-- | The verbs of the use cases still compiled into the core, then each
+-- composed pack's, in composition order (docs/adr/0129).
+packVerbs :: [FlowPack] -> [AdminVerb]
+packVerbs packs = proposalsVerb : concatMap (.adminVerbs) packs
+
+-- | What a pack's verb is given: the reads an operator verb needs, and the one
+-- way to the store, which verifies the schema before it opens.
+adminContext :: Text.Text -> AppConfig -> AdminContext
+adminContext verb config =
+  AdminContext
+    { settings = config.packSettings,
+      objectives = config.objectiveSettings,
+      repositories = maybe [] (map (.identity) . (.repositories)) config.workspaceSettings,
+      declarations = loadedAgents <$> loadAgentsReport config.agentsDirectory,
+      principalActive = \principal -> do
+        directoryRuntime <- Directory.startDirectory Log.silentLogger config.directorySettings >>= either (die . Text.unpack) pure
+        ( \case
+            Directory.AllowRun (Just _) -> True
+            _ -> False
+          )
+          <$> Directory.consultLifecycle directoryRuntime.handle (Just (declarationCoordinate (principalText principal))) (principalText principal)
+            `finally` maybe (pure ()) id directoryRuntime.refresher,
+      runStore = \action -> do
+        connection <- revealSecretText <$> requireDatabaseUrl verb config
+        verifyShikigamiMigrations connection
+        tracer <- noopTracer
+        let settings = runtimeConnectionSettings Log.silentLogger Nothing connection
+        withStore settings \store -> do
+          registerRuntimeCatalog store
+          runAppIO (AppEnv settings tracer Nothing (Just store)) action
+    }
 
 -- | Read the kernel action record: every authority decision and every
 -- external effect, oldest first.
@@ -220,40 +278,6 @@ recordInfo = info (subparser (command "list" listInfo) <**> helper) (progDesc "R
                 <*> optional (option auto (long "limit" <> metavar "N" <> help "most recent N events (1-1000, default 50)"))
                 <*> switch (long "json" <> help "print JSON Lines")
             )
-
--- | Read and govern unrequested work. A standing policy is the one way past a
--- person, so its verbs are here rather than anywhere an agent could reach.
-proposalsInfo :: ParserInfo AdminAction
-proposalsInfo = info (subparser commands <**> helper) (progDesc "Read proposals, candidates and admissions, and install or revoke standing policies")
-  where
-    commands =
-      command "policy" policyInfo
-        <> command "list" (info (list <**> helper) (progDesc "Page through proposals"))
-        <> command "inspect" (info (inspecting <**> helper) (progDesc "Show observer and policy usage with exhaustion explicit"))
-        <> command "candidates" (info (candidates <**> helper) (progDesc "Page through an observer's recorded candidates"))
-        <> command "admissions" (info (admissions <**> helper) (progDesc "Page through admissions pinned to their policy digests"))
-        <> command "prune" (info (pruning <**> helper) (progDesc "Delete terminal skips older than an instant, a batch at a time"))
-    json = switch (long "json")
-    limit = option auto (long "limit" <> value 50 <> metavar "N")
-    after = optional (strOption (long "after" <> metavar "CURSOR"))
-    list = (\principal status cursor size format -> (runProposalsList principal status cursor size format, [])) <$> optional (strOption (long "principal" <> metavar "PRINCIPAL")) <*> optional (strOption (long "status" <> metavar "STATUS")) <*> after <*> limit <*> json
-    inspecting = (\format failing -> (runProposalsInspect format failing, [])) <$> json <*> switch (long "fail-when-exhausted")
-    candidates = (\principal since cursor size format -> (runProposalsCandidates principal since cursor size format, [])) <$> strOption (long "principal" <> metavar "PRINCIPAL") <*> optional (option instant (long "since" <> metavar "ISO8601")) <*> after <*> limit <*> json
-    admissions = (\policy cursor size format -> (runProposalsAdmissions policy cursor size format, [])) <$> optional (strOption (long "policy" <> metavar "POLICY")) <*> after <*> limit <*> json
-    pruning = (\before batch format -> (runProposalsPrune before batch format, [])) <$> option instant (long "before" <> metavar "ISO8601") <*> option auto (long "batch" <> value 1000 <> metavar "N") <*> json
-    instant = maybeReader iso8601ParseM
-
-policyInfo :: ParserInfo AdminAction
-policyInfo = info (subparser commands <**> helper) (progDesc "Install, revoke and list standing policies as the configured operator")
-  where
-    commands =
-      command "install" (info (installing <**> helper) (progDesc "Validate and install a new policy; a changed policy is a new policy"))
-        <> command "revoke" (info (revoking <**> helper) (progDesc "Stop new admissions at once; admitted work continues"))
-        <> command "list" (info (listing <**> helper) (progDesc "Page through policies with their live, revoked or expired state"))
-    json = switch (long "json")
-    installing = (\path format -> (runPolicyInstall path format, [])) <$> strOption (long "file" <> metavar "FILE") <*> json
-    revoking = (\policy expected format -> (runPolicyRevoke policy expected format, [])) <$> strArgument (metavar "POLICY") <*> option auto (long "expected-revision" <> metavar "N") <*> json
-    listing = (\principal cursor size format -> (runPolicyList principal cursor size format, [])) <$> optional (strOption (long "principal" <> metavar "PRINCIPAL")) <*> optional (strOption (long "after" <> metavar "POLICY")) <*> option auto (long "limit" <> value 50 <> metavar "N") <*> json
 
 mandatesInfo :: ParserInfo AdminAction
 mandatesInfo = info (subparser commands <**> helper) (progDesc "Explicitly admit, inspect, update or cancel finite recurring authority")

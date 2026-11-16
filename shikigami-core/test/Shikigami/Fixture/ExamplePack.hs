@@ -61,7 +61,8 @@ examplesFixturePack =
       retainedCodecs = [retainedCodec triageProgram, retainedCodec investigationProgram, retainedCodec judgmentProgram],
       tasks = [],
       settings = [],
-      triggers = noTriggerHooks
+      triggers = noTriggerHooks,
+      adminVerbs = []
     }
   where
     flow :: Text -> [DecisionSlot] -> DefaultModelRequirement -> (forall es. (FlowEffects es) => Value -> Eff es Value) -> PackFlow

@@ -42,7 +42,8 @@ examplesPack =
       retainedCodecs = [retainedCodec triageProgram, retainedCodec investigationProgram, retainedCodec judgmentProgram],
       tasks = [],
       settings = [],
-      triggers = noTriggerHooks
+      triggers = noTriggerHooks,
+      adminVerbs = []
     }
 
 definition :: Text -> Text -> [DecisionSlot] -> DefaultModelRequirement -> FlowDef

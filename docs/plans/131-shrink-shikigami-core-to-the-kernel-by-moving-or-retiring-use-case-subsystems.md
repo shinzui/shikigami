@@ -233,8 +233,12 @@ this Mac through the same operator verbs as before (`watchdog inspect`, `proposa
     .initiativesSetting`) in `coreUseCaseSettings`, which every executable accepts until the
     use case leaves; `AppConfig.initiativeSettings` is gone and its readers decode
     `config.packSettings`.
-  - Remaining, in the order planned: `FlowPack.adminVerbs` with a kernel admin
-    context for the `proposals` verbs; a pack metrics port for the three remaining
+  - A fourth step adds `FlowPack.adminVerbs` and `Shikigami.Pack.Admin`. The `proposals`
+    verbs are one `AdminVerb` written against `AdminContext` and no longer read `AppConfig`;
+    the admin command mounts pack verbs after its own and refuses a repeated name. The
+    `shikigami proposals` commands, options and help are unchanged; `proposals` now follows
+    `record` in the command list.
+  - Remaining, in the order planned: a pack metrics port for the three remaining
     `shikigami.initiatives.*` counters; the workspace catalog and objective settings in
     `FlowRunContext`; the `initiatives` setting as a `PackSetting`; then the move itself, with
     the two patch blocks and their labels leaving `domain/shikigami/agent-run.keiro`, the
@@ -399,6 +403,18 @@ this Mac through the same operator verbs as before (`watchdog inspect`, `proposa
 
 ## Decision Log
 
+- Decision (M4): An admin verb is an `optparse-applicative` `ParserInfo (AdminContext -> IO ())`
+  with a name, and a verb sees an `AdminContext`, never `AppConfig`.
+  Rationale: the plan asked for a named command the admin entry point mounts. The
+  `proposals` verbs read six things from the process: the pack settings, the objective
+  settings with the local operator, the workspace catalog, the agent declarations, whether a
+  principal is active in the directory, and the store behind a schema check. `AdminContext`
+  is exactly those, built by the server, so a pack's verb needs neither `shikigami-server`
+  nor `shikigami-migrations`, which a pack library may not depend on. The store field is
+  rank-2 (`forall a. Eff AppEffects a -> IO (Either StoreError a)`), so a verb pattern-matches
+  it instead of using record-dot. A repeated verb name refuses the start with the usage exit
+  code.
+  Date: 2026-11-16
 - Decision (M4): The stream hook is pure and answers with transactions, and differs from the
   plan's sketch.
   Rationale: the sketch was `StreamHook (StreamCandidate -> IO StreamDisposition)` with
