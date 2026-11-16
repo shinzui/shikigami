@@ -236,7 +236,7 @@ runSteps agent base bundle payload parameters variables prefix = go []
                     )
                 _ -> ([StepResult key (outcomeLabel outcome) (renderOutcome outcome)], Nothing, carried)
             Probe {tool, args, deadlineMinutes} ->
-              case mkToolName tool >>= \name -> mkToolStep name (render carried <$> args) deadlineMinutes of
+              case mkToolName tool >>= \name -> mkToolStep name (filter (not . Text.null) (render carried <$> args)) deadlineMinutes of
                 Left problem -> pure ([StepResult key "refused" problem], Just (key <> ": " <> problem), carried)
                 Right requested -> do
                   outcome <- runDeclaredTool (toolStepKey key) requested
@@ -247,7 +247,7 @@ runSteps agent base bundle payload parameters variables prefix = go []
                        in ([result], Nothing, remember key result.summary shown carried {outputs = maybe carried.outputs (\value -> Map.insert key value carried.outputs) (Aeson.decodeStrict (Text.Encoding.encodeUtf8 stdout))})
                     _ -> ([result], Just (key <> ": " <> renderToolStepOutcome outcome), carried)
             Tool {tool, args, deadlineMinutes} ->
-              case mkToolName tool >>= \name -> mkToolStep name (render carried <$> args) deadlineMinutes of
+              case mkToolName tool >>= \name -> mkToolStep name (filter (not . Text.null) (render carried <$> args)) deadlineMinutes of
                 Left problem -> pure ([StepResult key "refused" problem], Just (key <> ": " <> problem), carried)
                 Right requested -> do
                   outcome <- runDeclaredTool (toolStepKey key) requested

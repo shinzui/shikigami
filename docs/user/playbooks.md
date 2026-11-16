@@ -59,7 +59,8 @@ The steps are:
   `skills` lists skill directories, relative to the bundle, attached to the agent.
 * `Tool` — a declared CLI tool of the declaration, run as a durable step in the run's
   worktree ([declared tools](declared-tools.md)). Each argument is a template rendered into
-  exactly one word; the declared patterns decide whether the call runs.
+  exactly one word, and a word that renders empty is left out, so an optional flag can be an
+  item field; the declared patterns decide whether the call runs.
 * `Probe` — a declared tool whose exit code is its answer (for example `mori status --json`,
   which exits 1 for a stale schema): any exit is recorded and quoted through
   `{{steps.ID.output}}` with the exit code, and the run continues.
