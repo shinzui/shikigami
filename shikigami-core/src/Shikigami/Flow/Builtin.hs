@@ -32,7 +32,6 @@ import Shikigami.Flow.AdaptiveDelivery (adaptiveDelivery)
 import Shikigami.Flow.DeclaredTool qualified as DeclaredTool
 import Shikigami.Flow.Delegate qualified as Delegate
 import Shikigami.Flow.Initiative (proposeWork, proposeWorkFlowName, proposeWorkSlots)
-import Shikigami.Flow.ObjectiveExample (objectiveExample)
 import Shikigami.Flow.OpenTelemetryPracticeReview
   ( opentelemetryPracticeReviewFlow,
     opentelemetryPracticeReviewFlowName,
@@ -40,8 +39,6 @@ import Shikigami.Flow.OpenTelemetryPracticeReview
   )
 import Shikigami.Flow.Pack
 import Shikigami.Flow.Routing qualified as Routing
-import Shikigami.Flow.ShikumiDecisionExample (exampleSlots, shikumiDecisionExample)
-import Shikigami.Flow.ShikumiJudgmentExample (judgmentSlots, shikumiJudgmentExample)
 import Shikigami.Flow.Watchdog (watchdogFlowName, watchdogSlots, watchdogSweep)
 import Shikigami.Program.Decision.Registry (builtinDecisionPrograms, builtinRetainedCodecs)
 import Shikigami.Program.Registry (programRegistry)
@@ -99,46 +96,6 @@ builtinFlows =
       adaptiveDelivery,
     kernelCapabilityFlow
       FlowDef
-        { name = declarationCoordinate "objective-example",
-          decisionSlots = [],
-          requiresDefaultModel = DefaultModelOptional,
-          decisionMode = StrictDecisions,
-          lifecycle = LifecycleDiagram "flowchart LR\n Create --> Plan --> Progress --> Inspect" []
-        }
-      objectiveExample,
-    kernelCapabilityFlow
-      FlowDef
-        { name = declarationCoordinate "shikumi-decision-example",
-          decisionSlots = exampleSlots,
-          requiresDefaultModel = DefaultModelOptional,
-          decisionMode = StrictDecisions,
-          lifecycle = LifecycleDiagram "flowchart LR\n Request --> Triage --> Investigation --> Specialist" []
-        }
-      shikumiDecisionExample,
-    kernelCapabilityFlow
-      FlowDef
-        { name = declarationCoordinate "shikumi-judgment-example",
-          decisionSlots = judgmentSlots,
-          requiresDefaultModel = DefaultModelOptional,
-          decisionMode = StrictDecisions,
-          lifecycle = LifecycleDiagram "flowchart LR\n Ticket --> Judgment --> Result" []
-        }
-      shikumiJudgmentExample,
-    kernelCapabilityFlow
-      FlowDef
-        { name = declarationCoordinate "delegation-proof",
-          decisionSlots = [],
-          requiresDefaultModel = DefaultModelRequired,
-          decisionMode = StrictDecisions,
-          lifecycle =
-            LifecycleDiagram
-              { mermaid = "flowchart LR\n  Supervisor --> WebResearcher",
-                validationWarnings = []
-              }
-        }
-      delegationProofFlow,
-    kernelCapabilityFlow
-      FlowDef
         { name = declarationCoordinate "architecture-practice-router",
           decisionSlots = [],
           requiresDefaultModel = DefaultModelRequired,
@@ -182,14 +139,6 @@ runDeclaredToolFlow payload = case parseMaybe parseStep payload of
       minutes <- fields .:? "deadlineMinutes" .!= 30
       tool <- either (fail . Text.unpack) pure (mkToolName toolText)
       either (fail . Text.unpack) pure (DeclaredToolWorkflow.mkToolStep tool arguments minutes)
-
--- | Minimal registered proof that Flow can reach the same governed child-run
--- machinery as an imperative supervisor. The target and call-site key are
--- static durable vocabulary; the triggering payload remains the child's input.
-delegationProofFlow :: (FlowEffects es) => Value -> Eff es Value
-delegationProofFlow payload = do
-  child <- Delegate.delegate (declarationCoordinate "web-researcher") (agentNameFromNonEmpty ('w' :| "eb-researcher")) payload
-  Delegate.awaitOne child
 
 -- | First registered routing call site.  A matched decision reserves every
 -- selection before any child is spawned, then awaits successful results in

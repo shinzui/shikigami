@@ -125,7 +125,22 @@ in  [ { name = "agent-declaration"
       , check =
           S.Check.ExportList
             { component = "shikigami-core"
-            , modules = [ "Shikigami.Flow.Sdk", "Shikigami.Flow.Sdk.Program" ]
+            , modules =
+              [ "Shikigami.Agent.Delegate"
+              , "Shikigami.Agent.Name"
+              , "Shikigami.Decision.Contract"
+              , "Shikigami.Flow.Decision"
+              , "Shikigami.Flow.Delegate"
+              , "Shikigami.Flow.Objectives"
+              , "Shikigami.Flow.Sdk"
+              , "Shikigami.Flow.Sdk.Program"
+              , "Shikigami.Objective.Command"
+              , "Shikigami.Objective.Operation"
+              , "Shikigami.Objective.Types"
+              , "Shikigami.Program.Decision"
+              , "Shikigami.Program.Decision.Confidence"
+              , "Shikigami.Router.Decision"
+              ]
             , pinned = "api-baseline/goldens/exports/flow-sdk.txt"
             }
       , freeze = S.Freeze.Kernel

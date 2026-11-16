@@ -1,4 +1,4 @@
-module Shikigami.Flow.ShikumiDecisionExample (shikumiDecisionExample, exampleSlots) where
+module Shikigami.Fixture.DecisionExampleFlow (shikumiDecisionExample, exampleSlots) where
 
 import Data.Aeson (Result (..), Value, eitherDecodeStrict, encode, fromJSON, object, (.=))
 import Data.ByteString.Lazy qualified as LBS
@@ -10,12 +10,12 @@ import Shikigami.Agent.DeclarationValue (declarationCoordinate)
 import Shikigami.Agent.Delegate (DelegationRequest (..))
 import Shikigami.Agent.Name (agentNameText)
 import Shikigami.Decision.Contract
+import Shikigami.Fixture.DecisionExamples
+import Shikigami.Fixture.DecisionExamples (proposedRouteJsonText)
 import Shikigami.Flow.Decision
 import Shikigami.Flow.Delegate (Delegate)
 import Shikigami.Flow.Delegate qualified as Delegate
 import Shikigami.Program.Decision (programRef)
-import Shikigami.Program.Decision.Examples
-import Shikigami.Program.Decision.Examples (proposedRouteJsonText)
 import Shikigami.Router.Decision (RouteDecision (..), RouteOutcome (..), RouteSelection (..))
 
 triageStep :: DecisionStep Request TriageResult

@@ -24,6 +24,7 @@ import Shikigami.Behavior.Provider.Coordinate qualified as Coordinate
 import Shikigami.Decision.Contract
 import Shikigami.Decision.Contract qualified as Model
 import Shikigami.Decision.ModelAlias qualified as Alias
+import Shikigami.Fixture.ExamplePack (triageDecisionSlot)
 import Shikigami.Log.Correlation (runCorrelationId)
 import Shikigami.Program.Decision
 import Shikumi.Adapter (ToPrompt)

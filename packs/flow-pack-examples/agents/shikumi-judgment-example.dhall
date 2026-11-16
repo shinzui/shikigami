@@ -1,4 +1,4 @@
-let A = ../../schema/Agent.dhall
+let A = ../../../schema/Agent.dhall
 
 in  A.Agent::{
     , name = "shikumi-judgment-example"

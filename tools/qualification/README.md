@@ -54,8 +54,13 @@ qualification_test=$(nix develop --command cabal list-bin shikigami-core-postgre
   --project-file="$qualification_project")
 nix develop --command "$qualification_test" --installed-judgment \
   /absolute/operator/bin/shikigami /absolute/worker/bin/shikigami-worker \
-  /absolute/operator/share/shikigami/agents/proof
+  /absolute/agents/directory
 ```
+
+The judgment example is a flow of `packs/flow-pack-examples` since plan 131 (M2). The stock
+worker no longer has it and the runtime package no longer ships its manifest, so pass a
+worker composed with that pack and the pack's `agents` directory. A Nix package of a
+distribution does not exist yet.
 
 The driver provisions PostgreSQL and a loopback TypeSafe fixture, runs the actual
 installed commands from a disposable directory with a temporary HOME and cleared

@@ -37,7 +37,7 @@ import Shikigami.Initiative.Types hiding (NotActionable)
 import Shikigami.Initiative.Types.Internal (Assessment (..))
 import Shikigami.Objective.Keys (ObservedSource (..))
 import Shikigami.Program.Decision
-import Shikigami.Program.Decision.Examples (ModelConfidence, modelConfidenceNumber)
+import Shikigami.Program.Decision.Confidence (ModelConfidence, modelConfidenceNumber)
 import Shikigami.Repository (RepositoryId, repositoryIdText)
 import Shikumi.Adapter (ToPrompt)
 import Shikumi.Program (Program (Predict), emptyParams)

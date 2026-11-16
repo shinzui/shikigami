@@ -1,3 +1,9 @@
+decision-prepare-examples-investigate
+decision-prepare-examples-judge
+decision-prepare-examples-triage
+decision-result-examples-investigate
+decision-result-examples-judge
+decision-result-examples-triage
 emit-signal-examples-alert
 emit-signal-examples-escalate
 examples-classify

@@ -1,15 +1,15 @@
-module Shikigami.Flow.ShikumiJudgmentExample (shikumiJudgmentExample, judgmentSlots) where
+module FlowPack.Examples.Body.JudgmentExample (shikumiJudgmentExample, judgmentSlots) where
 
 import Data.Aeson (Result (..), Value, fromJSON, toJSON)
 import Data.List.NonEmpty (NonEmpty (..))
-import Effectful (Eff, (:>))
+import FlowPack.Examples.Program.Judgment (Ticket, TicketJudgment, judgmentProgram)
 import Shikigami.Decision.Contract
 import Shikigami.Flow.Decision
+import Shikigami.Flow.Sdk (Eff, (:>))
 import Shikigami.Program.Decision (programRef)
-import Shikigami.Program.Decision.JudgmentExample (Ticket, TicketJudgment, judgmentProgram)
 
 judgmentStep :: DecisionStep Ticket TicketJudgment
-judgmentStep = decisionStep judgmentDecisionSlot UnaccountedCall (programRef judgmentProgram)
+judgmentStep = decisionStep (decisionSite "examples-judge") UnaccountedCall (programRef judgmentProgram)
 
 judgmentSlots :: [DecisionSlot]
 judgmentSlots = [decisionSlot judgmentStep [modelAliasFromNonEmpty ('j' :| "udge")]]

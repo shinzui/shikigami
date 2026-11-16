@@ -1,4 +1,4 @@
-module Shikigami.Program.Decision.Examples
+module Shikigami.Fixture.DecisionExamples
   ( Request (..),
     TriageAction (..),
     ModelConfidence,
@@ -12,6 +12,8 @@ module Shikigami.Program.Decision.Examples
     InvestigationAction (..),
     InvestigationResult (..),
     triageProgram,
+    triageDecisionSlot,
+    investigationDecisionSlot,
     investigationProgram,
     examplePrograms,
     exampleCodecs,
@@ -24,34 +26,15 @@ import Data.Proxy (Proxy (..))
 import Data.Text (Text)
 import Data.Text qualified as Text
 import GHC.Generics (Generic)
-import Shikigami.Decision.Contract (versionedDigest)
+import Shikigami.Decision.Contract (DecisionSlotLabel, parseDecisionSlotLabel, versionedDigest)
+import Shikigami.Fixture.JudgmentExample (judgmentProgram)
 import Shikigami.Program.Decision
-import Shikigami.Program.Decision.JudgmentExample (judgmentProgram)
+import Shikigami.Program.Decision.Confidence
 import Shikumi.Adapter (ToPrompt)
 import Shikumi.Error (ShikumiError (ValidationFailure))
 import Shikumi.Program (Program (..), emptyParams)
 import Shikumi.Schema (FromModel (..), ToSchema (..), Validatable)
 import Shikumi.Signature (mkSignature)
-
-newtype ModelConfidence = ModelConfidence Double
-  deriving stock (Eq, Show)
-  deriving newtype (ToJSON)
-
-parseModelConfidence :: Double -> Either Text ModelConfidence
-parseModelConfidence value
-  | isNaN value || isInfinite value || value < 0 || value > 1 = Left "invalid confidence"
-  | otherwise = Right (ModelConfidence value)
-
-modelConfidenceNumber :: ModelConfidence -> Double
-modelConfidenceNumber (ModelConfidence value) = value
-
-instance FromJSON ModelConfidence where
-  parseJSON value = parseJSON value >>= either (fail . Text.unpack) pure . parseModelConfidence
-
-instance ToSchema ModelConfidence where toSchema _ = toSchema (Proxy @Double)
-
-instance FromModel ModelConfidence where
-  fromModelP path value = fromModelP @Double path value >>= first ValidationFailure . parseModelConfidence
 
 -- Exact model proposal bytes; admission remains the separate route validator.
 newtype ProposedRouteJson = ProposedRouteJson Text
@@ -154,3 +137,7 @@ confidenceValid value
 
 mustRegister :: (Show e) => Either e a -> a
 mustRegister = either (error . show) id
+
+triageDecisionSlot, investigationDecisionSlot :: DecisionSlotLabel
+triageDecisionSlot = mustRegister (parseDecisionSlotLabel "triage")
+investigationDecisionSlot = mustRegister (parseDecisionSlotLabel "investigate")

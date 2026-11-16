@@ -40,13 +40,25 @@ library bodies
   import: common
   visibility: private
   hs-source-dirs: bodies
-  exposed-modules: FlowPack.Examples.Body.AtRiskCustomer
+  exposed-modules:
+    FlowPack.Examples.Body.AtRiskCustomer
+    FlowPack.Examples.Body.DecisionExample
+    FlowPack.Examples.Body.DelegationProof
+    FlowPack.Examples.Body.JudgmentExample
+    FlowPack.Examples.Body.ObjectiveExample
+    FlowPack.Examples.Program.Judgment
+    FlowPack.Examples.Program.Triage
+
   build-depends:
     aeson,
     base,
+    bytestring,
+    containers,
     kioku-api,
     shikigami-core:flow-sdk,
+    shikumi,
     text,
+    vector,
 
 -- The pack value and whatever its interpreters need. It may depend on the
 -- two SDK components and on no other Shikigami component.

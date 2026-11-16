@@ -33,9 +33,6 @@ module Shikigami.Decision.Contract
     DecisionSlotLabel,
     parseDecisionSlotLabel,
     decisionSlotLabelText,
-    triageDecisionSlot,
-    investigationDecisionSlot,
-    judgmentDecisionSlot,
     DecisionPreparationId,
     parseDecisionPreparationId,
     decisionPreparationId,
@@ -298,11 +295,6 @@ parseDecisionSlotLabel value = case Text.uncons value of
 
 decisionSlotLabelText :: DecisionSlotLabel -> Text
 decisionSlotLabelText (DecisionSlotLabel value) = value
-
-triageDecisionSlot, investigationDecisionSlot, judgmentDecisionSlot :: DecisionSlotLabel
-triageDecisionSlot = DecisionSlotLabel "triage"
-investigationDecisionSlot = DecisionSlotLabel "investigate"
-judgmentDecisionSlot = DecisionSlotLabel "judge"
 
 instance ToJSON DecisionSlotLabel where
   toJSON = toJSON . decisionSlotLabelText

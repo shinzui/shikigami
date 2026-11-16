@@ -25,6 +25,7 @@ import FlowPack.Examples (atRiskCustomerDefinition, examplesPack)
 import FlowPack.Examples.Body.AtRiskCustomer (RiskLevel (..), RiskVerdict (..), atRiskCustomerFlow, classifyRisk)
 import FlowPack.Examples.Lifecycle.AtRiskCustomer (AtRiskCustomerCommand (..), atRiskCustomerLifecycle, atRiskCustomerMermaid, atRiskCustomerValidationWarnings)
 import Keiki.Acceptor qualified as Acceptor
+import Keiro.Workflow (StepName (..))
 import Keiro.Workflow qualified as Keiro
 import Kioku.Api.Types (MemoryRecord (..))
 import Kioku.Id (genMemoryId)
@@ -37,10 +38,12 @@ import Shikigami.Activity (ActivityEnvelope (..), Actor (..), Subject (..), acti
 import Shikigami.Agent.DeclarationValue (declarationCoordinate, declarationCoordinateText)
 import Shikigami.Agent.Name (mkAgentName)
 import Shikigami.Agent.Principal (ResolvedAgentIdentity (CompatibilityAgent))
+import Shikigami.Decision.Contract (DecisionSlot (..))
 import Shikigami.Flow (FlowDef (..), LifecycleDiagram (..))
 import Shikigami.Flow.Acknowledgement (Ack (..), Acknowledgement (..))
 import Shikigami.Flow.Builtin (builtinPack)
 import Shikigami.Flow.Capability (Memory (..), Sink (..), runActivity)
+import Shikigami.Flow.Decision (decisionStepNames)
 import Shikigami.Flow.Pack
 import Shikigami.Memory.Scope (agentScope)
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase, withShikigamiMigratedSuite)
@@ -109,11 +112,20 @@ compositionTests =
     "composition"
     [ testCase "the pack composes beside the builtin pack and owns its flow" do
         registry <- either (assertFailure . show) pure (composeFlowRegistry [builtinPack, examplesPack])
-        fmap (flowPackNameText . (.pack)) (lookupFlow registry (declarationCoordinate "at-risk-customer")) @?= Just "examples"
+        mapM_
+          (\name -> fmap (flowPackNameText . (.pack)) (lookupFlow registry (declarationCoordinate name)) @?= Just "examples")
+          ["at-risk-customer", "objective-example", "shikumi-decision-example", "shikumi-judgment-example", "delegation-proof"]
         flowPackNameText <$> registeredPacks registry @?= ["builtin", "examples"],
       testCase "the builtin pack alone does not have the flow" do
         registry <- either (assertFailure . show) pure (composeFlowRegistry [builtinPack])
-        assertBool "at-risk-customer left the core" (null (lookupFlow registry (declarationCoordinate "at-risk-customer"))),
+        mapM_
+          (\name -> assertBool (Text.unpack name <> " left the core") (null (lookupFlow registry (declarationCoordinate name))))
+          ["at-risk-customer", "objective-example", "shikumi-decision-example", "shikumi-judgment-example", "delegation-proof"],
+      testCase "the pack's decision programs and their retained codecs compose with the kernel's" do
+        registry <- either (assertFailure . show) pure (composeFlowRegistry [builtinPack, examplesPack])
+        mapM_
+          (\declared -> assertBool "a declared slot resolves its program" (not (null declared.programs)))
+          [slot | entry <- registeredFlows registry, entry.pack == examplesPack.name, slot <- entry.flow.definition.decisionSlots],
       testCase "composing the pack twice is refused" do
         case composeFlowRegistry [builtinPack, examplesPack, examplesPack] of
           Left errors -> assertBool "the duplicate pack is named" (DuplicatePackName examplesPack.name `elem` NonEmpty.toList errors)
@@ -138,7 +150,7 @@ labelTests databaseFixture =
   where
     packName = flowPackNameText examplesPack.name <> "-"
     -- The prefixes the kernel's capability interpreters put before a body's key.
-    kernelPrefixes = ["recall-", "remember-", "emit-signal-", "flow-"]
+    kernelPrefixes = ["recall-", "remember-", "emit-signal-", "flow-", "decision-prepare-", "decision-result-"]
     owned label = any (`Text.isPrefixOf` label) (packName : map (<> packName) kernelPrefixes)
     branches =
       [ (calmPayload, TimedOut),
@@ -183,9 +195,26 @@ journaledLabels databaseFixture branches =
         (zip [0 :: Int ..] branches)
     captured <- readIORef seen
     -- Names beginning with two underscores are keiro's own runtime markers.
-    pure (Set.filter (not . Text.isPrefixOf "__") (Set.unions (captured : journals)))
+    pure (Set.filter (not . Text.isPrefixOf "__") (Set.unions (captured : declaredDecisionLabels : journals)))
   where
     inventoryWorkflow = Keiro.WorkflowName "flow-pack-examples.label-inventory"
+
+-- | The two journal steps of every decision slot a flow of the pack declares.
+-- They follow from the pack value: a decision journals
+-- @decision-prepare-\<site\>@ and @decision-result-\<site\>@.
+--
+-- The objective and delegation keys of the example flows are not derived
+-- here. Walking those bodies needs replies only the kernel's stores can
+-- build, and keiro offers no store-free workflow runtime (keiro IR-61).
+declaredDecisionLabels :: Set.Set Text
+declaredDecisionLabels =
+  Set.fromList
+    [ label
+    | packFlow <- examplesPack.flows,
+      slot <- packFlow.definition.decisionSlots,
+      let (StepName prepare, StepName result) = decisionStepNames slot.label,
+      label <- [prepare, result]
+    ]
 
 record :: (IOE :> es) => IORef (Set.Set Text) -> Text -> Eff es ()
 record seen label = liftIO (modifyIORef' seen (Set.insert label))

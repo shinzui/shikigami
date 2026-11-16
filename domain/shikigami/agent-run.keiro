@@ -24,13 +24,6 @@ workflow AgentRun
     step run-behavior-v2 -> BehaviorOutput
     child approval id input via approvalWorkflowId -> ApprovalWorkflowResult
     step decision-policy -> DecisionPolicyResolution
-    step decision-prepare-triage -> PreparedDecisionResolution
-    step decision-result-triage -> DecisionOutcome
-    step decision-catalog-investigate -> CandidateCatalog
-    step decision-prepare-investigate -> PreparedDecisionResolution
-    step decision-result-investigate -> DecisionOutcome
-    step decision-prepare-judge -> PreparedDecisionResolution
-    step decision-result-judge -> DecisionOutcome
     patch shikigami-adaptive-delivery-v1 {
       step adaptive-admission -> AdaptiveAdmissionResolution
       child adaptive-delivery id input via admittedAdaptiveWorkflowId -> AdaptiveDeliveryResult
@@ -42,10 +35,6 @@ workflow AgentRun
     step worker-coordination-policy -> CoordinationPolicyResolution
     patch shikigami-objective-tracking-v1 {
       step objectives-policy -> ObjectivePolicyResolution
-      step objectives-example-create -> ObjectiveReply
-      step objectives-example-plan -> ObjectiveReply
-      step objectives-example-progress -> ObjectiveReply
-      step objectives-example-inspect -> ObjectiveReply
     }
     patch shikigami-initiative-v1 {
       step initiative-open -> InitiativeOpenResolution

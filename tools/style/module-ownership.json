@@ -221,11 +221,8 @@
       "Shikigami.DanwaConversation.Generated.WorkflowRuntime",
       "Shikigami.Flow.Builtin",
       "Shikigami.Flow.Initiative",
-      "Shikigami.Flow.ObjectiveExample",
       "Shikigami.Flow.Observe",
       "Shikigami.Flow.OpenTelemetryPracticeReview",
-      "Shikigami.Flow.ShikumiDecisionExample",
-      "Shikigami.Flow.ShikumiJudgmentExample",
       "Shikigami.Flow.Watchdog",
       "Shikigami.Initiative.Inspection",
       "Shikigami.Initiative.Intake",
@@ -248,9 +245,7 @@
       "Shikigami.PracticeReview.IdentityStore",
       "Shikigami.PracticeReview.Memory",
       "Shikigami.Program.Decision.Drift",
-      "Shikigami.Program.Decision.Examples",
       "Shikigami.Program.Decision.Initiative",
-      "Shikigami.Program.Decision.JudgmentExample",
       "Shikigami.Sink.Danwa",
       "Shikigami.Sink.KanmonClient",
       "Shikigami.Sink.KawaClient",
@@ -273,8 +268,20 @@
     ],
     "sdkModules": {
       "flow-sdk": [
+        "Shikigami.Agent.Delegate",
+        "Shikigami.Agent.Name",
+        "Shikigami.Decision.Contract",
+        "Shikigami.Flow.Decision",
+        "Shikigami.Flow.Delegate",
+        "Shikigami.Flow.Objectives",
         "Shikigami.Flow.Sdk",
-        "Shikigami.Flow.Sdk.Program"
+        "Shikigami.Flow.Sdk.Program",
+        "Shikigami.Objective.Command",
+        "Shikigami.Objective.Operation",
+        "Shikigami.Objective.Types",
+        "Shikigami.Program.Decision",
+        "Shikigami.Program.Decision.Confidence",
+        "Shikigami.Router.Decision"
       ],
       "pack-sdk": [
         "Shikigami.Pack.Sdk"

@@ -89,8 +89,8 @@ import Shikigami.Execution.SelectionStore qualified as Calls
 import Shikigami.Execution.Store qualified as Durable
 import Shikigami.Execution.Transcript qualified as Replay
 import Shikigami.ExecutionDriver.Generated.WorkflowRuntime qualified as DriverGenerated
+import Shikigami.Fixture.ExamplePack (exampleFlowRegistry, fixtureDecisionServices)
 import Shikigami.Fixture.ExecutionIdentity (fixtureAttemptId, fixtureOperationId, fixtureRootId)
-import Shikigami.Flow.Builtin (builtinFlowRegistry)
 import Shikigami.Flow.Decision qualified as Decision
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.FormatVersion (FormatVersion (V1))
@@ -442,7 +442,7 @@ tests fixture =
           Just awakeable <- run app (lookupAwakeable tokenId)
           awakeable.status @?= Awakeable.Pending
           _ <- driveExecutionChild app (Agent.executionRuntime dependencies) (execution firstMessage) 20
-          let retired = (env & #decisions .~ (Decision.builtinDecisionServices (mustRight (modelCatalog []))))
+          let retired = (env & #decisions .~ (fixtureDecisionServices (mustRight (modelCatalog []))))
           first <- expectRight =<< Conversation.runConversationTurnWithExecution retired declaration (compatibilityIdentity (fixtureAgentName "router")) (Just context) firstMessage
           Conversation.runConversationTurn retired declaration firstMessage >>= (@?= Right first)
           Conversation.submitConversationTurnWithExecution env declaration (compatibilityIdentity (fixtureAgentName "router")) Nothing secondMessage >>= (@?= Right Conversation.ConversationAccepted)
@@ -473,13 +473,13 @@ workerDecl = Fixture.routerDecl & #behavior .~ Skill (declarationCoordinate ("..
 workflowDeps :: AppEnv -> KirokuStore -> BehaviorEnv -> ModelCatalog -> AgentDecl -> Agent.AgentRunDeps
 workflowDeps app store base catalog declaration =
   (Fixture.routerDeps app base (Routing.RoutingRuntime (\_ -> pure Fixture.catalog) (\_ _ _ -> error "unused router")) [declaration])
-    { Agent.decisions = Decision.builtinDecisionServices catalog,
-      Agent.flows = builtinFlowRegistry,
+    { Agent.decisions = fixtureDecisionServices catalog,
+      Agent.flows = exampleFlowRegistry,
       Agent.deliveryPool = Just store.pool
     }
 
 runtime :: AppEnv -> KirokuStore -> BehaviorEnv -> ModelCatalog -> SelectionRuntime
-runtime app store base catalog = SelectionRuntime catalog Nothing (Decision.builtinDecisionServices catalog).providers base (runCorrelationId "selection-fixture") (pure (Right ())) (selectionTransaction app (Just store.pool))
+runtime app store base catalog = SelectionRuntime catalog Nothing (fixtureDecisionServices catalog).providers base (runCorrelationId "selection-fixture") (pure (Right ())) (selectionTransaction app (Just store.pool))
 
 select :: UTCTime -> ExecutionRootId -> ModelCatalog -> Text -> ExecutionSelection
 select now root catalog alias = mustRight (resolveExecutionSelection (fixtureAssignment ("assignment:" <> alias)) catalog (Left PinnedBindingUnavailable) (Just (ExecutionPolicy (fixtureModelAlias alias) (map fixtureModelAlias aliases))) Nothing Nothing Nothing (Just root) now)

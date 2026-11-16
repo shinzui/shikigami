@@ -38,6 +38,8 @@ import Shikigami.Execution.Identity (ExecutionRootId, newExecutionRootId)
 import Shikigami.Execution.Quantity (amountUnits, parseResourceAmount)
 import Shikigami.Execution.Resources qualified as R
 import Shikigami.Execution.ResourcesStore qualified as Roots
+import Shikigami.Fixture.DecisionExamples (Request (..), TriageResult (..), triageProgram)
+import Shikigami.Fixture.ExamplePack (fixtureDecisionServices)
 import Shikigami.Flow.Decision qualified as Decision
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Initiative.Intake (Disposition (..), disposition)
@@ -46,7 +48,6 @@ import Shikigami.Initiative.Types hiding (NotActionable)
 import Shikigami.Log.Correlation (runCorrelationId)
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Shikigami.Program.Decision (programRef)
-import Shikigami.Program.Decision.Examples (Request (..), TriageResult (..), triageProgram)
 import Shikigami.Program.Decision.Initiative
 import Shikigami.Program.DecisionRunner (DecisionAbort (..))
 import Shikigami.Repository (RepositoryId, repositoryId)
@@ -138,7 +139,7 @@ withHarness fixture use = withShikigamiFreshDatabase fixture \connection ->
         { env = AppEnv {connectionSettings = defaultConnectionSettings connection, tracer, metrics = Nothing, store = Nothing},
           evidence = postgresDecisionEvidenceStore store.pool,
           runtime = behavior,
-          services = Decision.builtinDecisionServices catalog & #providers .~ [counted],
+          services = fixtureDecisionServices catalog & #providers .~ [counted],
           calls = readIORef count,
           steps = reverse <$> readIORef seen,
           recordStep = \name -> modifyIORef' seen (name :)

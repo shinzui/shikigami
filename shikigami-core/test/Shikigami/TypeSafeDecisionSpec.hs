@@ -33,9 +33,9 @@ import Shikigami.Behavior.Provider.Coordinate (providerCoordinate)
 import Shikigami.Decision.Answer (answerBlocks)
 import Shikigami.Decision.Contract
 import Shikigami.Decision.ModelCatalog
+import Shikigami.Fixture.JudgmentExample
 import Shikigami.Fixture.TypeSafe
 import Shikigami.Program.Decision
-import Shikigami.Program.Decision.JudgmentExample
 import Shikigami.Program.DecisionRunner
 import Shikumi.Decision.Setting (DecisionSetting (NoulSetting))
 import Shikumi.LLM qualified as LLM

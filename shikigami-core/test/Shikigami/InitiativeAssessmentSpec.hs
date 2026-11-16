@@ -26,6 +26,7 @@ import Shikigami.Behavior.StubProvider (stubModel)
 import Shikigami.Coordination.Decision (adaptiveStep)
 import Shikigami.Decision.Contract
 import Shikigami.Decision.ModelCatalog
+import Shikigami.Fixture.DecisionExamples (parseModelConfidence)
 import Shikigami.Flow.Decision (DecisionAccounting (..), DecisionStep (..), decisionSlot, decisionStepNames, proposeAlias, proposeStep)
 import Shikigami.Initiative.Intake (Disposition (..), disposition)
 import Shikigami.Initiative.Settings (InitiativeSettings)
@@ -33,7 +34,6 @@ import Shikigami.Initiative.Types hiding (NotActionable)
 import Shikigami.Log.Correlation (runCorrelationId)
 import Shikigami.Prelude ((&), (.~))
 import Shikigami.Program.Decision
-import Shikigami.Program.Decision.Examples (parseModelConfidence)
 import Shikigami.Program.Decision.Initiative
 import Shikigami.Program.Decision.Registry (decisionCodecs, decisionPrograms)
 import Shikigami.Program.DecisionRunner

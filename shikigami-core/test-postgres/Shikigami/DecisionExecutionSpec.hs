@@ -51,13 +51,14 @@ import Shikigami.Execution.Timer (observationFireAction)
 import Shikigami.Execution.Transcript
 import Shikigami.ExecutionDriver.Generated.WorkflowRuntime qualified as Generated
 import Shikigami.ExecutionTranscriptSpec (driverRuntime, pendingReference, pumpDriver, run, withConfiguredResourceFixture)
+import Shikigami.Fixture.DecisionExamples
+import Shikigami.Fixture.ExamplePack (fixtureDecisionServices, investigationDecisionSlot)
 import Shikigami.Flow.Decision qualified as Decision
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Log.Correlation (runCorrelationId)
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
 import Shikigami.Prelude ((&), (.~))
 import Shikigami.Program.Decision
-import Shikigami.Program.Decision.Examples
 import Shikigami.Program.DecisionRunner
 import Shikigami.Program.Runtime (ProgramRuntime (..))
 import Shikigami.RouterWorkflowSpec qualified as Fixture
@@ -149,7 +150,7 @@ tests fixture =
                             pure (Right (metadata prepared, state))
                         )
                   )
-              decisionEnv = Decision.DecisionEnv declaration [slot] (Decision.builtinDecisionServices runtime.catalog) runtime.runtime Nothing evidence (Routing.RoutingRuntime (\_ -> error "unused routing catalog") (\_ _ _ -> error "unused routing evaluation")) runtime.timeoutMicros Nothing (const (pure ())) (const (pure ()))
+              decisionEnv = Decision.DecisionEnv declaration [slot] (fixtureDecisionServices runtime.catalog) runtime.runtime Nothing evidence (Routing.RoutingRuntime (\_ -> error "unused routing catalog") (\_ _ _ -> error "unused routing evaluation")) runtime.timeoutMicros Nothing (const (pure ())) (const (pure ()))
               parent = runWorkflow (WorkflowName "accepted-decision-slot") template.runId (Decision.runDecisionAccepted decisionEnv host policy (Decision.decide (Decision.decisionStep Decision.adaptiveSite Decision.UnaccountedCall (programRef investigationProgram)) alias (InvestigationInput "build" "early finding" "bounded catalog")))
               hold provider =
                 provider

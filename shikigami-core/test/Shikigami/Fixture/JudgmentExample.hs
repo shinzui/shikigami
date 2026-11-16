@@ -1,6 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 
-module Shikigami.Program.Decision.JudgmentExample
+module Shikigami.Fixture.JudgmentExample
   ( Ticket (..),
     Category (..),
     PredicateResult (..),

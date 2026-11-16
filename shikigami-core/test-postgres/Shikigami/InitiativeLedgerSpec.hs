@@ -24,6 +24,7 @@ import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Principal (AgentIdentity (..), AgentPrincipal, mkAgentPrincipal, principalText)
 import Shikigami.App (AppEnv (..), noopTracer, runAppIO)
 import Shikigami.Duration (Duration, remainingDuration)
+import Shikigami.Fixture.DecisionExamples (parseModelConfidence)
 import Shikigami.Initiative.Intake (Disposition (..), disposition)
 import Shikigami.Initiative.Ledger
 import Shikigami.Initiative.Settings (InitiativeSettings (..), ObserverAllowance (..))
@@ -32,7 +33,6 @@ import Shikigami.Initiative.Types qualified as Initiative
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Shikigami.Objective.Keys (ObservedSource (..))
 import Shikigami.Objective.Types (ObjectiveId, objectiveIdText, parseObjectiveId)
-import Shikigami.Program.Decision.Examples (parseModelConfidence)
 import Shikigami.Program.Decision.Initiative
 import Shikigami.Repository (repositoryId)
 import Shikigami.StateRevision (advanceRevision, initialRevision)

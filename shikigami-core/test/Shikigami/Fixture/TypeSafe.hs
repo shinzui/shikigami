@@ -23,9 +23,10 @@ import Shikigami.App.Config.Load (ConfigOptions (..), ConfigRun (..), appConfigR
 import Shikigami.Attestation.PolicyValue (mkCeiling)
 import Shikigami.Decision.Contract
 import Shikigami.Decision.ModelCatalog
+import Shikigami.Fixture.ExamplePack (judgmentDecisionSlot)
+import Shikigami.Fixture.JudgmentExample
 import Shikigami.Log.Correlation (runCorrelationId)
 import Shikigami.Program.Decision
-import Shikigami.Program.Decision.JudgmentExample
 import Shikigami.Program.DecisionRunner
 import Shikigami.Program.Runtime (ProgramRuntime (..))
 import Shikumi.LLM (defaultLLMConfig)

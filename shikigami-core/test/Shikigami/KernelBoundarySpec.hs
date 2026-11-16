@@ -326,7 +326,10 @@ tests =
       testCase "each SDK facade exports exactly its golden list" do
         root <- repositoryRoot
         (policy, _) <- readTree
-        let facades = concat (Map.elems policy.sdkModules)
+        -- The facades are the modules written for the SDK. A whole kernel
+        -- module re-exported beside them is pinned by the api-baseline
+        -- export check, which reads interface files.
+        let facades = filter (\name -> ".Sdk" `Text.isInfixOf` name) (concat (Map.elems policy.sdkModules))
         assertBool "the policy names SDK facades" (not (null facades))
         mapM_
           ( \facade -> do

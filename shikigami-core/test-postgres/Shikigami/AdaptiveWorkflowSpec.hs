@@ -75,6 +75,7 @@ import Shikigami.Execution.Selection (ExecutionSelection (..))
 import Shikigami.Execution.Store qualified as Execution
 import Shikigami.Execution.Transcript qualified as Replay
 import Shikigami.ExecutionTranscriptSpec qualified as Fixture
+import Shikigami.Fixture.ExamplePack (fixtureDecisionServices)
 import Shikigami.Fixture.ExecutionIdentity (fixtureOperationId)
 import Shikigami.Flow.Decision qualified as Decision
 import Shikigami.Flow.Routing qualified as Routing
@@ -262,7 +263,7 @@ scenario fixture loseAck hierarchical directWork handoff = Fixture.withConfigure
   registry <- Provider.newProviderRegistryFrom [provider]
   let behavior = base & #providerRegistry .~ Just registry
       routing = Routing.RoutingRuntime (\_ -> pure Router.catalog) (\_ _ _ -> error "unused routing")
-      services = Decision.builtinDecisionServices catalog & #providers .~ [provider]
+      services = fixtureDecisionServices catalog & #providers .~ [provider]
       dependencies = (Router.routerDeps env behavior routing declarations) & #directory .~ directory & #objectives .~ Just objectives & #coordination .~ Just workers & #decisions .~ services & #deliveryPool .~ Just store.pool & #harness . #maxModelTurns .~ checked (parsePolicyNumber (if hierarchical then 64 else 8)) & #hooks . #afterStepBody .~ (\name -> when (loseAck && name == W.StepName "adaptive-validation") do first <- atomicModifyIORef' lost (\old -> (True, not old)); when first (throwIO (TransientBehaviorFailure "lost adaptive decision acknowledgement")))
       liveDeclarations = [rootRole, leaf, local & #delegates .~ [leaf.name, forbidden.name], forbidden]
       liveHost = Objectives.coordinationHost env settings directory allowAllForTests liveDeclarations defaultDelegationBudget Nothing

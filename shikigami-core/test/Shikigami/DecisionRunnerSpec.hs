@@ -58,10 +58,11 @@ import Shikigami.Behavior.Provider.Coordinate qualified as Coordinate
 import Shikigami.Decision.Contract
 import Shikigami.Decision.ModelAlias qualified as Alias
 import Shikigami.Decision.ModelCatalog
+import Shikigami.Fixture.DecisionExamples qualified as Examples
+import Shikigami.Fixture.ExamplePack (triageDecisionSlot)
 import Shikigami.Log.Correlation (callCorrelationId, runCorrelationId)
 import Shikigami.Prelude ((&), (.~))
 import Shikigami.Program.Decision
-import Shikigami.Program.Decision.Examples qualified as Examples
 import Shikigami.Program.DecisionRunner
 import Shikigami.Program.Runtime (ProgramRuntime (..))
 import Shikumi.Adapter (ToPrompt)

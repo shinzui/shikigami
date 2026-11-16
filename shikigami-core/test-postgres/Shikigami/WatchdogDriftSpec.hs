@@ -59,6 +59,7 @@ import Shikigami.Execution.ResourcesStore qualified as Roots
 import Shikigami.Execution.Selection (ExecutionSelection (..))
 import Shikigami.Execution.Transcript qualified as Owner
 import Shikigami.ExecutionTranscriptSpec qualified as ExecutionFixture
+import Shikigami.Fixture.ExamplePack (fixtureDecisionServices)
 import Shikigami.Flow.Decision qualified as Decision
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.FlowLifecycleSpec (SpikeFlow (..), runFlowBodyWithDecision, spikeRuntime)
@@ -249,7 +250,7 @@ withHarness fixture use = withObjective fixture \env admission objectiveId -> do
             let evidence = (\value -> value & #responseCommitment .~ Evidence.Observed (Evidence.commitmentDigest reply)) <$> response.evidence
             pure (response & #message . #content .~ Vector.singleton (AssistantText (TextContent (decodeUtf8 (Lazy.toStrict (encode reply))))) & #evidence .~ evidence)
           provider = decisionStubProvider & #complete .~ completing & #stream .~ liftCompleteToStream completing
-      use (Harness env runtime (postgresDecisionEvidenceStore store.pool) (Decision.builtinDecisionServices catalog & #providers .~ [provider]) input (readIORef count) (readIORef prompts) (writeIORef replies) (reverse <$> readIORef seen) (\name -> atomicModifyIORef' seen (\values -> (name : values, ()))) objectiveRoot store.pool admission)
+      use (Harness env runtime (postgresDecisionEvidenceStore store.pool) (fixtureDecisionServices catalog & #providers .~ [provider]) input (readIORef count) (readIORef prompts) (writeIORef replies) (reverse <$> readIORef seen) (\name -> atomicModifyIORef' seen (\values -> (name : values, ()))) objectiveRoot store.pool admission)
   where
     scoped :: Objective.ObjectiveId -> Owner.ExecutionSnapshot -> Owner.ExecutionSnapshot
     scoped objective snapshot = snapshot & #objectiveScope .~ Just (Scope.ObjectiveScope V1 snapshot.runId snapshot.identity snapshot.sessionId snapshot.selection.rootId (Just (addUTCTime 3600 snapshot.selection.admittedAt)) (Just snapshot.selection.permittedAliases) (Just objective) (Scope.AgentScope snapshot.selection.assignmentId) Nothing [Scope.InspectObjectives, Scope.ApplyObjectiveCommands] Nothing)

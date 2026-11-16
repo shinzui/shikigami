@@ -27,13 +27,14 @@ import Shikigami.Decision.Answer (answerBlocks)
 import Shikigami.Decision.Contract
 import Shikigami.Decision.Evidence
 import Shikigami.Decision.ModelCatalog
+import Shikigami.Fixture.ExamplePack (fixtureDecisionServices)
+import Shikigami.Fixture.JudgmentExample
 import Shikigami.Fixture.TypeSafe
 import Shikigami.Flow.Decision qualified as Decision
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Log.Correlation (runCorrelationId)
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase, withShikigamiMigratedDatabase)
 import Shikigami.Program.Decision
-import Shikigami.Program.Decision.JudgmentExample
 import Shikigami.Program.DecisionRunner
 import Shikigami.RouterWorkflowSpec qualified as Fixture
 import Shikigami.RunJobs qualified as RunJobs
@@ -59,7 +60,7 @@ tests fixture =
     [ testCase "real queue and restarted worker retain raw and rich committed answers without credentials or executables" $
         withTypeSafeFixture 200 0 fixtureResponse \server ->
           withShikigamiFreshDatabase fixture \connection -> do
-            declaration <- mustRight <$> loadAgent "../agents/proof/shikumi-judgment-example.dhall"
+            declaration <- mustRight <$> loadAgent "../packs/flow-pack-examples/agents/shikumi-judgment-example.dhall"
             tracer <- noopTracer
             behavior <- newBehaviorEnv
             let request =
@@ -70,7 +71,7 @@ tests fixture =
                       lineage = [declaration.name]
                     }
                 catalog = fixtureCatalog server.endpoint
-                services = Decision.builtinDecisionServices catalog
+                services = fixtureDecisionServices catalog
                 routing = Routing.RoutingRuntime (\_ -> pure Fixture.catalog) (\_ _ _ -> error "judgment cannot route")
                 app = AppEnv {connectionSettings = defaultConnectionSettings connection, tracer, metrics = Nothing, store = Nothing}
                 make store selected hooks =
@@ -180,12 +181,12 @@ tests fixture =
         withTypeSafeFixture 200 0 fixtureResponse \server ->
           withShikigamiFreshDatabase fixture \connection ->
             withStore (defaultConnectionSettings connection) \store -> do
-              declaration <- mustRight <$> loadAgent "../agents/proof/shikumi-judgment-example.dhall"
+              declaration <- mustRight <$> loadAgent "../packs/flow-pack-examples/agents/shikumi-judgment-example.dhall"
               tracer <- noopTracer
               behavior <- newBehaviorEnv
               let request = (Fixture.routerJob "typesafe-pending-binding") {agentName = declaration.name, identity = compatibilityIdentity declaration.name, triggerPayload = toJSON fixtureTicket, lineage = [declaration.name]}
                   app = AppEnv {connectionSettings = defaultConnectionSettings connection, tracer, metrics = Nothing, store = Nothing}
-                  selected = Decision.builtinDecisionServices (fixtureCatalog server.endpoint)
+                  selected = fixtureDecisionServices (fixtureCatalog server.endpoint)
                   deps = (Fixture.routerDeps app behavior (Routing.RoutingRuntime (\_ -> pure Fixture.catalog) (\_ _ _ -> error "no routing")) [declaration]) {Agent.decisions = selected, Agent.deliveryPool = Just store.pool}
                   crash = Agent.defaultAgentRunHooks & #beforeStepBody .~ (\(StepName name) -> when (name == "decision-result-judge") (ioError (userError "stop before judgment")))
               _ <- try @SomeException (Agent.runAgentRunWorkflow (deps {Agent.hooks = crash}) request)

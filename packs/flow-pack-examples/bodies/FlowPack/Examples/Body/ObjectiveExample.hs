@@ -1,34 +1,33 @@
 {-# LANGUAGE DataKinds #-}
 
--- | A finite first-objective Flow. Static call sites keep operation identities
+-- | A finite first-objective flow: create an objective, plan one assignment,
+-- record progress and read it back. Static call sites keep operation identities
 -- stable when a step commits to the objective owner before its journal append.
-module Shikigami.Flow.ObjectiveExample (objectiveExample) where
+module FlowPack.Examples.Body.ObjectiveExample (objectiveExample) where
 
 import Data.Aeson (Value, toJSON)
-import Effectful (Eff, (:>))
-import Shikigami.Agent.DeclarationValue (declarationCoordinate)
 import Shikigami.Flow.Objectives qualified as Objectives
+import Shikigami.Flow.Sdk (Eff, declarationCoordinate, (:>))
 import Shikigami.Objective.Command qualified as Command
 import Shikigami.Objective.Operation qualified as Operation
 import Shikigami.Objective.Types
-import Shikigami.Prelude
 
 objectiveExample :: (Objectives.Objectives :> es) => Value -> Eff es Value
 objectiveExample _ = do
-  created <- Objectives.create (declarationCoordinate "example-create") request
+  created <- Objectives.create (declarationCoordinate "examples-create") request
   case created of
     Right Operation.Reply {result = Operation.ObjectiveCreated receipt} -> do
       actor <- Objectives.identity
       case actor of
         Left err -> pure (toJSON (Left err :: Either ObjectiveError Operation.Reply))
         Right owner -> do
-          planned <- Objectives.command (declarationCoordinate "example-plan") receipt.objectiveId receipt.revision (Command.SetAssignments [AssignmentDraft assignment instructions [] owner Pending Nothing Nothing Nothing])
+          planned <- Objectives.command (declarationCoordinate "examples-plan") receipt.objectiveId receipt.revision (Command.SetAssignments [AssignmentDraft assignment instructions [] owner Pending Nothing Nothing Nothing])
           case planned of
             Right Operation.Reply {result = Operation.ObjectiveUpdated planReceipt} -> do
-              progressed <- Objectives.command (declarationCoordinate "example-progress") receipt.objectiveId planReceipt.revision (Command.RecordProgress assignment Working [] [])
+              progressed <- Objectives.command (declarationCoordinate "examples-progress") receipt.objectiveId planReceipt.revision (Command.RecordProgress assignment Working [] [])
               case progressed of
                 Left _ -> pure (toJSON progressed)
-                Right _ -> toJSON <$> Objectives.inspect (declarationCoordinate "example-inspect") receipt.objectiveId 0 20
+                Right _ -> toJSON <$> Objectives.inspect (declarationCoordinate "examples-inspect") receipt.objectiveId 0 20
             _ -> pure (toJSON planned)
     _ -> pure (toJSON created)
   where

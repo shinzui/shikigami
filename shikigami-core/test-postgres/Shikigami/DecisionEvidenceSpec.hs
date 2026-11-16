@@ -35,6 +35,7 @@ import Shikigami.Decision.Contract
 import Shikigami.Decision.Contract qualified as Model
 import Shikigami.Decision.Evidence
 import Shikigami.Decision.ModelAlias qualified as Alias
+import Shikigami.Fixture.ExamplePack (investigationDecisionSlot, triageDecisionSlot)
 import Shikigami.Log.Correlation (callCorrelationId, runCorrelationId)
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Test.Tasty (TestTree, testGroup)

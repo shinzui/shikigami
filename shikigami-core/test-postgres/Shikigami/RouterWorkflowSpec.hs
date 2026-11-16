@@ -58,8 +58,8 @@ import Shikigami.Capability.Provider qualified as CapabilityProvider
 import Shikigami.Directory (DirectorySnapshotVersion, DirectorySourceKind (DirectoryDisabledSource), disabledDirectoryHandle, parseDirectorySnapshotVersion)
 import Shikigami.Duration (parseDuration)
 import Shikigami.Execution.Policy.Types qualified as Harness
+import Shikigami.Fixture.ExamplePack (exampleFlowRegistry)
 import Shikigami.Fixture.SinkHttp (testSinkHttp)
-import Shikigami.Flow.Builtin (builtinFlowRegistry)
 import Shikigami.Flow.Decision qualified as FlowDecision
 import Shikigami.Flow.Initiative qualified as FlowInitiative
 import Shikigami.Flow.Observe qualified as FlowObserve
@@ -347,7 +347,7 @@ routerDeps appEnv behaviorEnv routing agents =
     { AgentWorkflow.appEnv,
       AgentWorkflow.behaviorEnv,
       AgentWorkflow.decisions = FlowDecision.emptyDecisionServices,
-      AgentWorkflow.flows = builtinFlowRegistry,
+      AgentWorkflow.flows = exampleFlowRegistry,
       AgentWorkflow.actionAuthority = allowAllForTests,
       AgentWorkflow.capabilities = CapabilityProvider.emptyCapabilityRuntime,
       AgentWorkflow.coordination = Nothing,

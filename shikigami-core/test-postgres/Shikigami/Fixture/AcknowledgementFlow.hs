@@ -37,6 +37,7 @@ import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Approval (ApprovalChannel (ViaDanwa), ApprovalRequest (..))
 import Shikigami.Agent.Decl (Priority (High, Urgent), RecipientFrom (AreaOwner), SignalType (Alert), Sink (..))
 import Shikigami.Agent.DeclarationValue
+import Shikigami.Fixture.ExamplePack (examplesFixturePack)
 import Shikigami.Flow (DecisionMode (..), FlowDef (..), LifecycleDiagram (..))
 import Shikigami.Flow.Acknowledgement (Ack (..), Acknowledgement, awaitAck)
 import Shikigami.Flow.Builtin (builtinPack)
@@ -90,9 +91,10 @@ fixturePack =
       tasks = []
     }
 
--- | The builtin pack and the fixture pack, as a distribution would compose them.
+-- | The builtin pack, the example fixtures and this fixture pack, as a
+-- distribution would compose them.
 fixtureFlowRegistry :: FlowRegistry
-fixtureFlowRegistry = either (error . show) id (composeFlowRegistry [builtinPack, fixturePack])
+fixtureFlowRegistry = either (error . show) id (composeFlowRegistry [builtinPack, examplesFixturePack, fixturePack])
 
 acknowledgementFlow ::
   (Workflow :> es, Memory :> es, Capability.Sink :> es, Activity :> es, Acknowledgement :> es) =>

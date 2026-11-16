@@ -37,12 +37,12 @@ import Shikigami.Coordination.Decision (adaptiveSlots)
 import Shikigami.Decision.Contract
 import Shikigami.Decision.ModelAlias qualified as Alias
 import Shikigami.Decision.ModelCatalog
+import Shikigami.Fixture.ExamplePack (exampleFlowRegistry, judgmentDecisionSlot, triageDecisionSlot)
+import Shikigami.Fixture.JudgmentExample (judgmentProgram)
 import Shikigami.Fixture.TypeSafe qualified as TypeSafe
 import Shikigami.Flow (FlowDef (..), flowDecisionSlotsFor)
-import Shikigami.Flow.Builtin (builtinFlowRegistry)
 import Shikigami.Flow.Pack (PackFlow (..), RegisteredFlow (..), registeredFlows)
 import Shikigami.Program.Decision
-import Shikigami.Program.Decision.JudgmentExample (judgmentProgram)
 import Shikigami.Trigger.Schedule (parseCron)
 import Shikumi.Program (Program (Embed))
 import Test.Tasty (TestTree, testGroup)
@@ -52,7 +52,7 @@ registered :: RegisteredProgram Text Text
 registered = mustRight (registerProgram "example" "1" "sha256:code" "input/1" "result/1" "validator/1" "derive/1" Null (Embed pure) jsonResultCodec Right Right)
 
 builtinFlows :: [FlowDef]
-builtinFlows = [entry.flow.definition | entry <- registeredFlows builtinFlowRegistry]
+builtinFlows = [entry.flow.definition | entry <- registeredFlows exampleFlowRegistry]
 
 registry :: ProgramRegistry
 registry = mustRight (programRegistry [SomeProgram registered])
@@ -80,7 +80,7 @@ tests =
         assertBool "duplicate operator aliases refused" (isLeft (modelCatalog [binding "triage" "stub-triage", binding "triage" "stub-investigate"])),
       testCase "a TypeSafe binding intersects the actual proof declaration and judgment slot capability" $
         TypeSafe.withTypeSafeFixture 200 0 TypeSafe.fixtureResponse \server -> do
-          declaration <- mustRight <$> loadAgent "../agents/proof/shikumi-judgment-example.dhall"
+          declaration <- mustRight <$> loadAgent "../packs/flow-pack-examples/agents/shikumi-judgment-example.dhall"
           let selected = TypeSafe.fixtureCatalog server.endpoint
               programs = mustRight (programRegistry [SomeProgram judgmentProgram, SomeProgram registered])
               closed = DecisionSlot judgmentDecisionSlot [descriptor (programRef judgmentProgram)] [fixtureModelAlias "judge"]
