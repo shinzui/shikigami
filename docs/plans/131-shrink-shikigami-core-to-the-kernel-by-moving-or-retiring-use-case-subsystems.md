@@ -304,6 +304,11 @@ this Mac through the same operator verbs as before (`watchdog inspect`, `proposa
     public rendering. The builtin pack carries the watchdog's hook for now; nothing about
     the watchdog's behavior changes. The scheduler's enrollment test uses a fixture
     allowance; the refusal texts of the enrollment are now `scheduled ...`.
+  - Operator verbs (2026-11-16). `watchdog inspect|episodes|findings` is an `AdminVerb`
+    over `AdminContext`: settings from `context.settings`, reads through `runStore` in the
+    same repeatable-read, read-only transaction. It mounts after the kernel's verbs, so it
+    moves from before `record` to after it in `shikigami --help`; `cli-shikigami` re-pinned
+    (`help text changed; every pinned option and command is still offered`).
 - [ ] M6: The adaptive-delivery coordinator is confirmed as a kernel primitive and stays in
   `shikigami-core`. Its disposition is recorded, an import check shows it has no Kikan
   service dependency, and a real objective on a local repository receives an adaptive

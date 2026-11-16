@@ -56,10 +56,10 @@ Available commands:
                            as the configured operator
   mandates                 Explicitly admit, inspect, update or cancel finite
                            recurring authority
-  watchdog                 Inspect watchdog coverage, overdue sweeps and
-                           advisory findings
   record                   Read the action record of authority decisions and
                            effects
+  watchdog                 Inspect watchdog coverage, overdue sweeps and
+                           advisory findings
   wf                       Inspect and operate durable workflows
   timer                    Inspect and operate durable timers
   outbox                   Inspect and operate the transactional outbox

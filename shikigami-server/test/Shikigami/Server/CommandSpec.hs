@@ -64,8 +64,8 @@ tests =
                 "workers",
                 "objectives",
                 "mandates",
-                "watchdog",
-                "record"
+                "record",
+                "watchdog"
               ],
       -- A pack's verb is mounted after the kernel's verbs and may not shadow one
       -- (docs/adr/0129).

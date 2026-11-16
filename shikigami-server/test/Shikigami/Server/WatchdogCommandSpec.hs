@@ -18,6 +18,7 @@ import Shikigami.App.Config (AppConfig (..), defaultAppConfig, opaqueSecretText)
 import Shikigami.Duration (remainingDuration)
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Shikigami.Pack.Setting (packSettingsFromList)
+import Shikigami.Server.Command (adminContext)
 import Shikigami.Server.Command.Watchdog (runWatchdogInspect)
 import Shikigami.Watchdog.Grant
 import Shikigami.Watchdog.Observation (PassCompletion (PassIncomplete))
@@ -33,10 +34,10 @@ tests fixture =
   testGroup
     "WatchdogCommand"
     [ testCase "inspect exits two when no completion exists" $ withCommand fixture \_ config _ -> do
-        try @ExitCode (runWatchdogInspect "../agents/proof" (remainingDuration 0) True config) >>= (@?= Left (ExitFailure 2)),
+        try @ExitCode (runWatchdogInspect "../agents/proof" (remainingDuration 0) True (adminContext "watchdog" config)) >>= (@?= Left (ExitFailure 2)),
       testCase "fresh completed ledger exits successfully" $ withCommand fixture \env config settings -> do
         seed env settings
-        try @ExitCode (runWatchdogInspect "../agents/proof" (remainingDuration 0) True config) >>= (@?= Right ()),
+        try @ExitCode (runWatchdogInspect "../agents/proof" (remainingDuration 0) True (adminContext "watchdog" config)) >>= (@?= Right ()),
       testCase "stale completed ledger exits two even with a newer unfinished attempt" $ withCommand fixture \env config settings -> do
         seed env settings
         _ <- right =<< runAppIO env (runTransaction (Tx.sql "UPDATE shikigami.watchdog_sweeps SET opened_at=opened_at-interval '11 minutes',completed_at=completed_at-interval '10 minutes'"))
@@ -44,7 +45,7 @@ tests fixture =
         identifier <- newSweepId
         at <- getCurrentTime
         _ <- right =<< (right =<< runAppIO env (runTransaction (Store.openSweep identifier (Store.SweepOrigin agentRunWorkflowName (WorkflowId "watchdog-new-attempt") at settings.principal) (snapshotGrant grant))))
-        try @ExitCode (runWatchdogInspect "../agents/proof" (remainingDuration 0) True config) >>= (@?= Left (ExitFailure 2))
+        try @ExitCode (runWatchdogInspect "../agents/proof" (remainingDuration 0) True (adminContext "watchdog" config)) >>= (@?= Left (ExitFailure 2))
     ]
 
 withCommand :: DatabaseFixture -> (AppEnv -> AppConfig -> WatchdogSettings -> IO a) -> IO a

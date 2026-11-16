@@ -35,6 +35,7 @@ module Shikigami.Server.Command
     adminPrefs,
     adminSubcommands,
     adminSubcommandsWith,
+    adminContext,
     AdminAction,
     runAdmin,
     runAdminWith,
@@ -94,7 +95,7 @@ import Shikigami.Server.Command.Runs (runRunsShow)
 import Shikigami.Server.Command.StubKanmon (runStubKanmonCmd)
 import Shikigami.Server.Command.StubKawa (runStubKawaCmd)
 import Shikigami.Server.Command.Validate (runValidate)
-import Shikigami.Server.Command.Watchdog (watchdogInfo)
+import Shikigami.Server.Command.Watchdog (watchdogVerb)
 import Shikigami.Server.Command.Workers (runWorkersControl, runWorkersInspect, runWorkersInterrupt, runWorkersSend)
 import Shikigami.StateRevision (StateRevision, parseRevision)
 import Shikigami.Trigger.RequestKey qualified as Addressed
@@ -224,16 +225,16 @@ adminSubcommandsWith packs =
     ("workers", command "workers" workersInfo),
     ("objectives", command "objectives" objectivesInfo),
     ("mandates", command "mandates" mandatesInfo),
-    ("watchdog", command "watchdog" watchdogInfo),
     ("record", command "record" recordInfo)
   ]
     <> [(Text.unpack verb.name, command (Text.unpack verb.name) (mounted verb)) | verb <- packVerbs packs]
   where
     mounted AdminVerb {name, parser} = (\run -> (run . adminContext name, [])) <$> parser
 
--- | Each composed pack's verbs, in composition order (docs/adr/0129).
+-- | The verbs of the use cases still compiled into the core, then each
+-- composed pack's, in composition order (docs/adr/0129).
 packVerbs :: [FlowPack] -> [AdminVerb]
-packVerbs = concatMap (.adminVerbs)
+packVerbs packs = watchdogVerb : concatMap (.adminVerbs) packs
 
 -- | What a pack's verb is given: the reads an operator verb needs, and the one
 -- way to the store, which verifies the schema before it opens.
