@@ -209,7 +209,11 @@ jobKdl requested minutes providerArgs =
         "    timeout " <> quote (Text.pack (show minutes) <> "m"),
         "    output \"capture\"",
         "    output-format \"json\"",
-        "    output-limit 1048576"
+        -- Claude Code's JSON output is the whole event list, whose last event
+        -- holds the final message; a long session exceeds a mebibyte (EP-7's
+        -- MasterPlan step printed 1 MiB), so keep 32 MiB, within Baikai's
+        -- default 64 MiB ceiling.
+        "    output-limit 33554432"
       ]
         <> maybe [] (\m -> ["    model " <> quote (vendorModelIdText m)]) requested.model
         <> maybe [] (\e -> ["    effort " <> quote (effortText e)]) requested.effort
