@@ -235,8 +235,8 @@ runSteps agent base bundle payload parameters variables prefix = go []
                       carried {learned = carried.learned <> learnings, suggestions = carried.suggestions <> toList suggestion}
                     )
                 _ -> ([StepResult key (outcomeLabel outcome) (renderOutcome outcome)], Nothing, carried)
-            Probe {tool, args} ->
-              case mkToolName tool >>= \name -> mkToolStep name (render carried <$> args) 10 of
+            Probe {tool, args, deadlineMinutes} ->
+              case mkToolName tool >>= \name -> mkToolStep name (render carried <$> args) deadlineMinutes of
                 Left problem -> pure ([StepResult key "refused" problem], Just (key <> ": " <> problem), carried)
                 Right requested -> do
                   outcome <- runDeclaredTool (toolStepKey key) requested

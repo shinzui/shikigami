@@ -18,7 +18,8 @@ let Step =
           }
       | Tool :
           { id : Text, tool : Text, args : List Text, deadlineMinutes : Natural }
-      | Probe : { id : Text, tool : Text, args : List Text }
+      | Probe :
+          { id : Text, tool : Text, args : List Text, deadlineMinutes : Natural }
       | Approval : { id : Text, prompt : Text }
       | ForEach : { id : Text, items : Items, item : Text, playbook : Text }
       | RunPlaybook : { id : Text, playbook : Text }

@@ -83,8 +83,8 @@ data PlaybookStep
   | -- | A declared tool that reports through its exit code: any exit is a
     -- result (quoted through @{{steps.ID.output}}@ with the exit code), and
     -- only a refusal, a failure to start, a timeout or an uncertain outcome
-    -- ends the run. The deadline is ten minutes.
-    Probe {id :: !Text, tool :: !Text, args :: ![Text]}
+    -- ends the run.
+    Probe {id :: !Text, tool :: !Text, args :: ![Text], deadlineMinutes :: !Natural}
   | -- | Wait for the operator (the local inbox under the local operator).
     Approval {id :: !Text, prompt :: !Text}
   | -- | Run a sibling playbook once per item, binding the item to the
