@@ -225,6 +225,7 @@ in  { main = "keiro-modernization"
                 , "{{plan.command}}"
                 , "{{plan.blueprint}}"
                 , "{{plan.window}}"
+                , "{{plan.vars}}"
                 , "--batch"
                 ]
               , deadlineMinutes = 240

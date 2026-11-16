@@ -13,16 +13,19 @@ adds anything to the catalog.
    repository. Read the files you need (`flake.nix`, `cabal.project`, the `.cabal` files,
    `.seihou/manifest.json`, `dist-newstyle/cache/plan.json`) with your file tools. You may also
    run `seihou status` and `git grep`.
-2. For a `migrate` blueprint, find the version the build resolves today. Use `--from=<version>`
-   when the manifest has no receipt for that blueprint yet. Otherwise use `--verbose`, which
-   lets Seihou infer the window from the receipts.
-3. Change no file.
+2. For a `migrate` blueprint, find the version of *that blueprint's library* the build
+   resolves today (not a Seihou module's version). Set `window` to `--from=<version>` when the
+   manifest has no receipt for that blueprint yet; otherwise leave it empty, so Seihou infers
+   the window from the receipts.
+3. Set `vars` to the variables the catalog rule names, as one word
+   (`--var=database.policy=disposable`), or leave it empty.
+4. Change no file.
 
 End your answer with exactly one JSON object on its own line:
 
 ```json
-{"selected": [{"key": "keiro-upgrade", "blueprint": "keiro-upgrade", "command": "migrate", "window": "--from=0.22.0.0", "reason": "…"}], "skipped": [{"blueprint": "migrate-keiro-stack", "reason": "…"}]}
+{"selected": [{"key": "keiro-upgrade", "blueprint": "keiro-upgrade", "command": "migrate", "window": "--from=0.22.0.0", "vars": "", "reason": "…"}], "skipped": [{"blueprint": "upgrade-haskell-runtime", "reason": "…"}]}
 ```
 
 `command` is the catalog entry's kind (`run` or `migrate`). For `run`, `window` is always
-`--verbose`. `key` is a short kebab-case name that is unique in the list.
+empty. `key` is a short kebab-case name that is unique in the list.

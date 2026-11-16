@@ -15,7 +15,7 @@
 , { name = "upgrade-haskell-runtime"
   , kind = "migrate"
   , source = "mori://shinzui/seihou-modules"
-  , rule = "the manifest records nix-haskell-flake; the blueprint's own version probe decides each edge"
+  , rule = "only when .seihou/manifest.json already has an upgrade-haskell-runtime receipt (its migrations start at 0.30.0); otherwise skip it and say the operator must adopt the runtime module first"
   }
 , { name = "keiro-upgrade"
   , kind = "migrate"
@@ -30,6 +30,6 @@
 , { name = "migrate-keiro-stack"
   , kind = "run"
   , source = "mori://shinzui/agent-seihou"
-  , rule = "the project is not yet on pg-migrate, Settei and the six-package vertical structure; use database.policy=disposable"
+  , rule = "the project is not yet on pg-migrate, Settei and the six-package vertical structure; set vars to --var=database.policy=disposable"
   }
 ]
