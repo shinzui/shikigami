@@ -34,6 +34,7 @@ module Shikigami.Server.Command
     adminInfoWith,
     adminPrefs,
     adminSubcommands,
+    adminSubcommandsWith,
     AdminAction,
     runAdmin,
     runAdminWith,
@@ -84,7 +85,6 @@ import Shikigami.Server.Command.Mandates
 import Shikigami.Server.Command.ObjectiveTrackers
 import Shikigami.Server.Command.Objectives
 import Shikigami.Server.Command.Ops (opsConfigSources, opsInvocationParser, runOps)
-import Shikigami.Server.Command.Proposals (proposalsVerb)
 import Shikigami.Server.Command.PublishFixture (runPublishFixture)
 import Shikigami.Server.Command.Record (RecordListOptions (..), runRecordList)
 import Shikigami.Server.Command.RenderLifecycle (runRenderLifecycle)
@@ -231,10 +231,9 @@ adminSubcommandsWith packs =
   where
     mounted AdminVerb {name, parser} = (\run -> (run . adminContext name, [])) <$> parser
 
--- | The verbs of the use cases still compiled into the core, then each
--- composed pack's, in composition order (docs/adr/0129).
+-- | Each composed pack's verbs, in composition order (docs/adr/0129).
 packVerbs :: [FlowPack] -> [AdminVerb]
-packVerbs packs = proposalsVerb : concatMap (.adminVerbs) packs
+packVerbs = concatMap (.adminVerbs)
 
 -- | What a pack's verb is given: the reads an operator verb needs, and the one
 -- way to the store, which verifies the schema before it opens.

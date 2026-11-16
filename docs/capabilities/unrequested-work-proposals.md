@@ -7,8 +7,8 @@ provider: "mori://shinzui/shikigami"
 status: "shipped"
 stability: "experimental"
 since: "unreleased"
-packages: ["shikigami-core", "shikigami-workers", "shikigami-migrations", "shikigami-server"]
-interface: ["Shikigami.Flow.Initiative", "Shikigami.Initiative.Settings", "Shikigami.Initiative.Policy", "Shikigami.Initiative.Inspection", "shikigami proposals"]
+packages: ["flow-pack-initiative", "kikan-shikigami", "shikigami-core", "shikigami-workers", "shikigami-migrations"]
+interface: ["FlowPack.Initiative", "propose-work", "initiatives", "kikan-shikigami proposals"]
 tags: ["unrequested-work", "proposals", "standing-policies"]
 generated:
   by: "process:claude-code"
@@ -16,19 +16,19 @@ generated:
 requires: ["CAP-2", "CAP-3"]
 evidence:
   - kind: test
-    resource: "shikigami-workers/test/Shikigami/InitiativeAcceptanceSpec.hs"
+    resource: "packs/flow-pack-initiative/test/FlowPack/Initiative/AcceptanceSpec.hs"
     proves: "All nine IR-21 acceptance cases through real stream intake, run queue, approval resolution and admission."
   - kind: test
-    resource: "shikigami-workers/test/Shikigami/StreamInboxSpec.hs"
+    resource: "packs/flow-pack-initiative/test/FlowPack/Initiative/StreamIntakeSpec.hs"
     proves: "A skip or an evaluation root, candidate and job commit with the inbox row, and roll back together."
   - kind: test
-    resource: "shikigami-core/test/Shikigami/InitiativeAssessmentSpec.hs"
+    resource: "packs/flow-pack-initiative/test/FlowPack/Initiative/AssessmentSpec.hs"
     proves: "Model output selects only among operator-supplied options, and its schema has no authority-bearing field."
   - kind: test
-    resource: "shikigami-core/test-postgres/Shikigami/InitiativePolicySpec.hs"
+    resource: "packs/flow-pack-initiative/test/FlowPack/Initiative/PolicySpec.hs"
     proves: "Install validation, fresh-read revocation, expiry, window and total exhaustion, and digest pinning."
   - kind: example
-    resource: "agents/proof/proposer.dhall"
+    resource: "packs/flow-pack-initiative/agents/proposer.dhall"
     proves: "A stream-triggered proposer declaration."
 ---
 
@@ -42,17 +42,17 @@ By default the proposal parks on the durable approval child with its own expiry.
 
 ## Adopt
 
-Add an observer allowance, promote `agents/proof/proposer.dhall`, and follow [Operating unrequested work](../operations/unrequested-work.md). [Unrequested work](../user/unrequested-work.md) is what a person sees. `shikigami proposals` lists proposals, candidates and admissions, shows usage with exhaustion explicit, prunes old skips, and installs, revokes and lists standing policies.
+The capability ships as the flow pack `packs/flow-pack-initiative` and runs from the `kikan-shikigami` distribution; the stock executables do not offer it. Add an observer allowance, promote `packs/flow-pack-initiative/agents/proposer.dhall`, and follow [Operating unrequested work](../operations/unrequested-work.md). [Unrequested work](../user/unrequested-work.md) is what a person sees. `shikigami proposals` lists proposals, candidates and admissions, shows usage with exhaustion explicit, prunes old skips, and installs, revokes and lists standing policies.
 
 Builds on [CAP-2: Durable trigger intake](durable-trigger-intake.md) and [CAP-3: Program and Skill execution](program-and-skill-execution.md).
 
 ## Evidence
 
-- [InitiativeAcceptanceSpec.hs](../../shikigami-workers/test/Shikigami/InitiativeAcceptanceSpec.hs): All nine IR-21 acceptance cases through real stream intake, run queue, approval resolution and admission.
-- [StreamInboxSpec.hs](../../shikigami-workers/test/Shikigami/StreamInboxSpec.hs): A skip or an evaluation root, candidate and job commit with the inbox row, and roll back together.
-- [InitiativeAssessmentSpec.hs](../../shikigami-core/test/Shikigami/InitiativeAssessmentSpec.hs): Model output selects only among operator-supplied options, and its schema has no authority-bearing field.
-- [InitiativePolicySpec.hs](../../shikigami-core/test-postgres/Shikigami/InitiativePolicySpec.hs): Install validation, fresh-read revocation, expiry, window and total exhaustion, and digest pinning.
-- [proposer.dhall](../../agents/proof/proposer.dhall): A stream-triggered proposer declaration.
+- [AcceptanceSpec.hs](../../packs/flow-pack-initiative/test/FlowPack/Initiative/AcceptanceSpec.hs): All nine IR-21 acceptance cases through real stream intake, run queue, approval resolution and admission.
+- [StreamIntakeSpec.hs](../../packs/flow-pack-initiative/test/FlowPack/Initiative/StreamIntakeSpec.hs): A skip or an evaluation root, candidate and job commit with the inbox row, and roll back together.
+- [AssessmentSpec.hs](../../packs/flow-pack-initiative/test/FlowPack/Initiative/AssessmentSpec.hs): Model output selects only among operator-supplied options, and its schema has no authority-bearing field.
+- [PolicySpec.hs](../../packs/flow-pack-initiative/test/FlowPack/Initiative/PolicySpec.hs): Install validation, fresh-read revocation, expiry, window and total exhaustion, and digest pinning.
+- [proposer.dhall](../../packs/flow-pack-initiative/agents/proposer.dhall): A stream-triggered proposer declaration.
 
 ## Limits
 

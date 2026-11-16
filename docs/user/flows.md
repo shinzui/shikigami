@@ -142,7 +142,9 @@ examplesPack =
       decisionPrograms = [],
       retainedCodecs = [],
       tasks = [],
-      settings = []
+      settings = [],
+      triggers = noTriggerHooks,
+      adminVerbs = []
     }
 
 atRiskCustomerDefinition :: FlowDef
@@ -242,6 +244,43 @@ practice_review.attention_recipients = "architecture-council=recipient_triage"
   from file source config.json (YAML)
 ```
 
+### A stream hook
+
+A matched stream record normally becomes one run job. A pack whose flow observes a stream
+can decide otherwise for the agents that run its flows, by setting `triggers`:
+
+```haskell
+triggers = noTriggerHooks {stream = Just (StreamHook decide)}
+
+decide :: PackSettings -> StreamCandidate -> StreamDisposition
+```
+
+`decide` is pure. It answers `StreamOrdinary` (not this pack's concern: the ordinary job),
+`StreamSkipped` with a bounded reason and a `Transaction ()` that records the skip, or
+`StreamEvaluated` with a resource envelope, an already-owned check and a record of the
+candidate. The stream consumer runs those transactions in its inbox transaction, allocates
+the evaluation root and enqueues the run, so a record still commits exactly one durable
+effect. Only `kikan-shikigami-consume-stream`, or another consumer composed with the pack,
+consults the hook.
+
+### Operator verbs
+
+A pack lists `AdminVerb` values in `adminVerbs`: a name and an `optparse-applicative`
+`ParserInfo (AdminContext -> IO ())`. A composed admin command mounts each after the
+kernel's verbs and refuses a repeated name. A verb never sees the process configuration. It
+is given an `AdminContext`: the validated pack settings, the objective settings with the
+local operator, the workspace catalog, the agent declarations, a directory liveness check,
+and `runStore`, which verifies the schema before it opens the store. `runStore` is rank-2,
+so pattern-match it (`AdminContext {runStore}`) instead of using record-dot.
+
+### Counting
+
+`context.metrics` is a `PackMetrics`: `count event attributes`. The kernel counts it on
+`shikigami.pack.events` and adds the `pack` attribute. Pass bounded tags only, never an
+identifier, observed text or an error message.
+
+`packs/flow-pack-initiative` uses all three, and is the worked example.
+
 ### Composing a pack into an executable
 
 Stock executables compose the builtin pack and nothing else. A *distribution* is a package
@@ -260,8 +299,8 @@ main = runAdminWith [examplesPack]                      -- shikigami-examples
 command and the one-off command, all composed from one list of packs.
 
 The entry points are `agentRunRoleInfoWith` (`Shikigami.Agent.Command`),
-`workerRoleInfoWith` (`Shikigami.Workers.Command`) and `runAdminWith`
-(`Shikigami.Server.Command`). Composition happens once at process start. Two packs with the
+`workerRoleInfoWith` and `consumeStreamRoleInfoWith` (`Shikigami.Workers.Command`) and
+`runAdminWith` (`Shikigami.Server.Command`). Composition happens once at process start. Two packs with the
 same name, flow name, task name or setting key refuse the start and name both owners, and a successful
 start logs `flow.registry.composed` with each pack and its flows.
 

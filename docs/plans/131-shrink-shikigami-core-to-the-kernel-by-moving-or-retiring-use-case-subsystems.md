@@ -257,12 +257,19 @@ this Mac through the same operator verbs as before (`watchdog inspect`, `proposa
     `domain/shikigami/agent-run.keiro`, and both `Workflow.patch` evaluations leave the
     runner. The decision site is `initiative-propose`. The kernel counts a pack's events on
     one instrument, `shikigami.pack.events`, through `FlowRunContext.metrics`.
-  - Remaining: the move itself. `Initiative/*`, `Flow/Initiative`,
-    `Program/Decision/Initiative` and the `proposals` verb go to
-    `packs/flow-pack-initiative` with their tests; `coreUseCaseSettings` loses `initiatives`;
-    the builtin pack loses the flow, the hook and the assessment program; the SDK gains the
-    kernel modules the moved code imports; `kikan-shikigami-consume-stream` is added; the
-    pack gets its golden label inventory; and the real transcript run is made.
+  - The move is made. `Initiative/*`, `Flow/Initiative`, `Program/Decision/Initiative` and
+    the `proposals` verb are `packs/flow-pack-initiative`: ten modules in `bodies`, nine in
+    the library, and a public `test-support` sublibrary holding the proposing fixture. The
+    builtin pack has four flows (`run-declared-tool`, `watchdog-sweep`, `adaptive-delivery`
+    and no proposing flow, hook or assessment program), `coreUseCaseSettings` is empty, and
+    `Initiative` is gone from `kernel.namespaces`. The distribution composes the pack and
+    gains `kikan-shikigami-consume-stream` and a test suite, `kikan-shikigami-test`, for what
+    needs two use cases together. The real transcript run is still to be made.
+  - Suites after the move: shikigami-core-test, shikigami-core-postgres-test,
+    shikigami-server-test and shikigami-agent-test pass; shikigami-workers-test 297 of 298
+    (FRIC-76 only); flow-pack-initiative-test 118; flow-pack-practice-review-test and
+    flow-pack-examples-test pass; kikan-shikigami-test 12. `just kernel-fitness` 7,
+    `just haskell-conventions` and `tests/types/initiative-values.py` pass.
 
 - [ ] M5: `Watchdog` runs from `flow-pack-watchdog` through a kernel schedule-allowance
   hook. A scheduled sweep observes a real local run and `kikan-shikigami watchdog inspect` shows it.
@@ -438,6 +445,50 @@ this Mac through the same operator verbs as before (`watchdog inspect`, `proposa
 
 ## Decision Log
 
+- Decision (M4): Tests that need two use cases together live in the distribution, and the
+  initiative pack publishes its proposing fixture as a `test-support` sublibrary.
+  Rationale: `WatchdogQualificationSpec`, `WatchdogSweepSpec` and one telemetry case in
+  `shikigami-workers-test` drive the watchdog over work the proposing flow admitted, through
+  `Fixture.Proposing`. A kernel test may not depend on a pack, and the fixture cannot stay in
+  the worker package without its use case. They move to `packs/kikan-shikigami/test`
+  (`kikan-shikigami-test`, 12 tests), which is where they belong once the watchdog is a pack
+  too. The fixture needs the worker package, which a pack library may not depend on; a named
+  sublibrary may, and the fitness check holds only the unnamed library and `bodies` to the
+  SDK.
+  Date: 2026-11-16
+- Decision (M4): The kernel's stream-inbox tests exercise the hook with a fixture hook, and
+  the real hook's cases move to the pack.
+  Rationale: seven `StreamInboxSpec` cases drove the consumer through Initiative's ledger.
+  The pack's `StreamIntakeSpec` keeps them, now through `streamIntakeOf` over the composed
+  registry and the pack's validated setting. The kernel keeps four cases with a fixture
+  disposition: a skip commits the pack's record and no job; an evaluation commits a root with
+  the hook's envelope, the pack's record and a job that carries the root; an already-owned
+  observation commits nothing more; and `StreamOrdinary` leaves the ordinary job.
+  Date: 2026-11-16
+- Decision (M4): Final SDK additions for this subsystem. `flow-sdk` re-exports
+  `Shikigami.Activity`, `Shikigami.Activity.Coordinate`, `Shikigami.Agent.{Approval, Decl,
+  DeclarationValue, RunJob}`, `Shikigami.Decision.ModelAlias`, `Shikigami.Duration`,
+  `Shikigami.Execution.{Coordinate, Identity, Resources}`, `Shikigami.Objective.Keys` and
+  `Shikigami.StateRevision`, and the facade adds `awaitAckWithin`, `emitSignalTo`,
+  `TriggerHooks (..)` and `noTriggerHooks`. `pack-sdk` re-exports `Shikigami.Agent.Run.Key`,
+  `Shikigami.Execution.{Quantity, ResourcesStore}` and `Shikigami.Objective.{Association,
+  Reference, Store}`, and the facade adds the stream hook types, `Transaction`,
+  `AdminVerb (..)`, `AdminContext (..)`, `AppEffects` and `PackMetrics (..)`.
+  Rationale: each is imported by moved code. Three are kernel internals the plan flagged as
+  prompts for a narrower function: `Execution.ResourcesStore` (the interpreter allocates the
+  coordinator's root), `Objective.Association` (it registers the coordinator's run with the
+  objective owner) and `Objective.Store` (the policy validator asks whether a principal may
+  create objectives). They are exported whole for now and are named for the curation before
+  the freeze (plan 136, M3), where "fund and launch a coordinator's run" is the candidate
+  kernel operation. `Shikigami.Activity`, `Agent.Decl` and `Agent.RunJob` moved from
+  `pack-sdk` to `flow-sdk`, because a body's vocabulary names them.
+  Date: 2026-11-16
+- Decision (M4): The stock `shikigami` command loses `proposals`, and `cli-shikigami` is
+  re-pinned.
+  Rationale: the plan's stated consequence. `just api-baseline` reported `cli-shikigami
+  BREAKING: shikigami no longer offers: proposals`. The verb is `kikan-shikigami proposals`,
+  with the same commands and options, pinned by the pack's `PackSpec`.
+  Date: 2026-11-16
 - Decision (M4): A pack counts on one kernel instrument, `shikigami.pack.events`, through
   `FlowRunContext.metrics`.
   Rationale: the kernel's metrics record held four `shikigami.initiatives.*` counters. A pack

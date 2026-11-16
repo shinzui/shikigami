@@ -211,7 +211,6 @@ import Shikigami.Directory (DirectorySettings (..))
 import Shikigami.Duration
 import Shikigami.Execution.Capacity qualified as Capacity
 import Shikigami.Execution.Policy.Types qualified as Harness
-import Shikigami.Initiative.Settings (initiativesSetting)
 import Shikigami.Inspection.Settings (InspectionSettings (..))
 import Shikigami.Objective.Tracker.Config (TrackerSettings, defaultTrackerSettings)
 import Shikigami.Objective.Types (ObjectiveSettings, defaultObjectiveSettings)
@@ -888,7 +887,7 @@ appConfigWith settings =
 -- (docs/adr/0129). Every executable accepts them until then. The list only
 -- shrinks.
 coreUseCaseSettings :: [PackSetting]
-coreUseCaseSettings = [initiativesSetting]
+coreUseCaseSettings = []
 
 -- | One pack setting: its raw value read by shape, then validated by the
 -- pack. A refusal names the pack's expectation and never the value.

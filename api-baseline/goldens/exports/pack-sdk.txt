@@ -1,3 +1,14 @@
+Shikigami.Pack.Sdk AdminContext
+Shikigami.Pack.Sdk AdminContext.declarations
+Shikigami.Pack.Sdk AdminContext.objectives
+Shikigami.Pack.Sdk AdminContext.principalActive
+Shikigami.Pack.Sdk AdminContext.repositories
+Shikigami.Pack.Sdk AdminContext.runStore
+Shikigami.Pack.Sdk AdminContext.settings
+Shikigami.Pack.Sdk AdminVerb
+Shikigami.Pack.Sdk AdminVerb.name
+Shikigami.Pack.Sdk AdminVerb.parser
+Shikigami.Pack.Sdk AppEffects
 Shikigami.Pack.Sdk Error
 Shikigami.Pack.Sdk FlowRunContext
 Shikigami.Pack.Sdk FlowRunContext.activity
@@ -24,6 +35,8 @@ Shikigami.Pack.Sdk IOE
 Shikigami.Pack.Sdk Logger
 Shikigami.Pack.Sdk MonadIO|
 Shikigami.Pack.Sdk MonadIO|.liftIO
+Shikigami.Pack.Sdk PackMetrics
+Shikigami.Pack.Sdk PackMetrics.count
 Shikigami.Pack.Sdk PackSetting
 Shikigami.Pack.Sdk PackSetting.description
 Shikigami.Pack.Sdk PackSetting.environment

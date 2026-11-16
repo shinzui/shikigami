@@ -346,15 +346,13 @@ tests fixture =
         atRoot <- doesFileExist "domain/shikigami/agent-run.keiro"
         declared <- TextIO.readFile (if atRoot then "domain/shikigami/agent-run.keiro" else "../domain/shikigami/agent-run.keiro")
         let compiled = [slot.label | entry <- FlowPack.registeredFlows builtinFlowRegistry, slot <- entry.flow.definition.decisionSlots]
-        compiled @?= [mustRight (parseDecisionSlotLabel "drift"), mustRight (parseDecisionSlotLabel "initiative-propose"), mustRight (parseDecisionSlotLabel "adapt")]
+        compiled @?= [mustRight (parseDecisionSlotLabel "drift"), mustRight (parseDecisionSlotLabel "adapt")]
         mapM_
           ( \label -> do
               let (StepName prepare, StepName result) = Decision.decisionStepNames label
               assertBool "prepare declared" (("step " <> prepare) `Text.isInfixOf` declared)
               assertBool "result declared" (("step " <> result) `Text.isInfixOf` declared)
           )
-          -- The proposing flow's site is pack-owned and left the core specification
-          -- with its flow; its labels are pinned by the owning pack's inventory.
           (map Decision.decisionSite ["drift"])
         adaptive <- TextIO.readFile (if atRoot then "domain/shikigami/adaptive-delivery.keiro" else "../domain/shikigami/adaptive-delivery.keiro")
         let (StepName prepare, StepName result) = Decision.decisionStepNames Decision.adaptiveSite

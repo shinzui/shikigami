@@ -13,6 +13,12 @@ module Shikigami.Pack.Sdk
   ( -- * The run a pack interpreter serves
     FlowRunContext (..),
     RunModel (..),
+    PackMetrics (..),
+
+    -- * Admin verbs
+    AdminVerb (..),
+    AdminContext (..),
+    AppEffects,
 
     -- * Trigger intake
     StreamHook (..),
@@ -59,5 +65,6 @@ import Hasql.Transaction (Transaction)
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Error (StoreError)
 import Kiroku.Store.Transaction (runTransaction, runTransactionNoRetry)
-import Shikigami.Flow.Pack (FlowRunContext (..), PackSetting (..), PackSettings, RunModel (..), SettingDefault (..), SettingShape (..), StreamCandidate (..), StreamDisposition (..), StreamEvaluation (..), StreamHook (..), StreamSkip (..), packSettingText, packSettingValue)
+import Shikigami.App (AppEffects)
+import Shikigami.Flow.Pack (AdminContext (..), AdminVerb (..), FlowRunContext (..), PackMetrics (..), PackSetting (..), PackSettings, RunModel (..), SettingDefault (..), SettingShape (..), StreamCandidate (..), StreamDisposition (..), StreamEvaluation (..), StreamHook (..), StreamSkip (..), packSettingText, packSettingValue)
 import Shikigami.Log (Logger, logDebug, logError, logInfo, logWarn)

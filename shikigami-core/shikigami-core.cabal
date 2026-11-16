@@ -192,7 +192,6 @@ library
     Shikigami.Flow.Decision
     Shikigami.Flow.DeclaredTool
     Shikigami.Flow.Delegate
-    Shikigami.Flow.Initiative
     Shikigami.Flow.Objectives
     Shikigami.Flow.Observe
     Shikigami.Flow.Pack
@@ -204,16 +203,6 @@ library
     Shikigami.FormatVersion
     Shikigami.Generated.Conformance
     Shikigami.Health.Ping
-    Shikigami.Initiative.Inspection
-    Shikigami.Initiative.Intake
-    Shikigami.Initiative.Ledger
-    Shikigami.Initiative.Notice
-    Shikigami.Initiative.Policy
-    Shikigami.Initiative.Prefilter
-    Shikigami.Initiative.Settings
-    Shikigami.Initiative.Source
-    Shikigami.Initiative.Template
-    Shikigami.Initiative.Types
     Shikigami.Inspection.Aggregates
     Shikigami.Inspection.Settings
     Shikigami.Integration.Danwa
@@ -309,7 +298,6 @@ library
     Shikigami.Program.Decision.Adaptive
     Shikigami.Program.Decision.Confidence
     Shikigami.Program.Decision.Drift
-    Shikigami.Program.Decision.Initiative
     Shikigami.Program.Decision.Registry
     Shikigami.Program.DecisionRunner
     Shikigami.Program.Registry
@@ -455,7 +443,6 @@ library
     Shikigami.Generated.Structural.Shape.RunTriggerKind
     Shikigami.Generated.StructuralConformance
     Shikigami.Generated.StructuralProjections
-    Shikigami.Initiative.Types.Internal
     Shikigami.Objective.Authority
     Shikigami.Objective.Conversation
     Shikigami.Objective.Tracker.Sql
@@ -626,10 +613,21 @@ library flow-sdk
     shikigami-core,
 
   reexported-modules:
+    Shikigami.Activity,
+    Shikigami.Activity.Coordinate,
+    Shikigami.Agent.Approval,
+    Shikigami.Agent.Decl,
+    Shikigami.Agent.DeclarationValue,
     Shikigami.Agent.Delegate,
     Shikigami.Agent.Name,
     Shikigami.Agent.Principal,
+    Shikigami.Agent.RunJob,
     Shikigami.Decision.Contract,
+    Shikigami.Decision.ModelAlias,
+    Shikigami.Duration,
+    Shikigami.Execution.Coordinate,
+    Shikigami.Execution.Identity,
+    Shikigami.Execution.Resources,
     Shikigami.Flow.Decision,
     Shikigami.Flow.Delegate,
     Shikigami.Flow.Objectives,
@@ -638,6 +636,7 @@ library flow-sdk
     Shikigami.Flow.Sdk.Program,
     Shikigami.FormatVersion,
     Shikigami.Objective.Command,
+    Shikigami.Objective.Keys,
     Shikigami.Objective.Operation,
     Shikigami.Objective.Types,
     Shikigami.Prelude,
@@ -645,6 +644,7 @@ library flow-sdk
     Shikigami.Program.Decision.Confidence,
     Shikigami.Repository,
     Shikigami.Router.Decision,
+    Shikigami.StateRevision,
 
 -- The pack SDK: what a pack's interpreter may import in addition. Only a
 -- pack's main library depends on it; IOE and Store are nameable here and
@@ -657,13 +657,16 @@ library pack-sdk
     shikigami-core,
 
   reexported-modules:
-    Shikigami.Activity,
-    Shikigami.Agent.Decl,
-    Shikigami.Agent.RunJob,
+    Shikigami.Agent.Run.Key,
     Shikigami.App,
     Shikigami.Directory,
+    Shikigami.Execution.Quantity,
+    Shikigami.Execution.ResourcesStore,
     Shikigami.Memory.Access,
     Shikigami.Memory.Scope,
+    Shikigami.Objective.Association,
+    Shikigami.Objective.Reference,
+    Shikigami.Objective.Store,
     Shikigami.Pack.Sdk,
     Shikigami.Sink,
     Shikigami.Sink.Delivery,
@@ -757,9 +760,6 @@ test-suite shikigami-core-test
     Shikigami.Fixture.TypeSafe
     Shikigami.FlowPackSpec
     Shikigami.FormatVersionSpec
-    Shikigami.InitiativeAssessmentSpec
-    Shikigami.InitiativePrefilterSpec
-    Shikigami.InitiativeValueSpec
     Shikigami.KanmonClientSpec
     Shikigami.KeiroSpecificationSpec
     Shikigami.KernelBoundarySpec
@@ -899,10 +899,6 @@ test-suite shikigami-core-postgres-test
     Shikigami.Fixture.TypeSafe
     Shikigami.FlowLifecycleSpec
     Shikigami.GrantStoreSpec
-    Shikigami.InitiativeAssessmentSpec
-    Shikigami.InitiativeInspectionSpec
-    Shikigami.InitiativeLedgerSpec
-    Shikigami.InitiativePolicySpec
     Shikigami.MandateStoreSpec
     Shikigami.ObjectiveCheckpointSpec
     Shikigami.ObjectiveStoreSpec

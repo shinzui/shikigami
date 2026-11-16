@@ -60,8 +60,6 @@ Available commands:
                            advisory findings
   record                   Read the action record of authority decisions and
                            effects
-  proposals                Read proposals, candidates and admissions, and
-                           install or revoke standing policies
   wf                       Inspect and operate durable workflows
   timer                    Inspect and operate durable timers
   outbox                   Inspect and operate the transactional outbox

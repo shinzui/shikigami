@@ -560,6 +560,9 @@ specification with their flows (plan 131, M3): a routing decision journals
 `route-catalog-<site>` and `route-decision-<site>` for the site its flow
 supplies, and the practice-review pack owns its `practice-review-*` labels in
 `packs/flow-pack-practice-review/test/golden/labels.txt`.
+The proposing flow's fifteen labels and its two patch ids,
+`shikigami-initiative-v1` and `shikigami-initiative-admission-v1`, left the same way (plan
+131, M4) and are pinned in `packs/flow-pack-initiative/test/golden/labels.txt`.
 
 Flow capability families include `recall-<label>`, `remember-<label>`, and
 `emit-signal:<label>`. Child identity comes from the governed delegation/approval

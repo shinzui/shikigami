@@ -13,6 +13,15 @@ objectives and metrics hold coordinates and digests.
 
 ## Enable it
 
+Unrequested work ships in the flow pack `packs/flow-pack-initiative`, and runs from the
+`kikan-shikigami` distribution, which composes it: `kikan-shikigami-consume-stream` decides
+at intake which observed records are worth an evaluation, `kikan-shikigami-worker` runs the
+proposing flow, and `kikan-shikigami proposals` is the operator's view. The stock
+`shikigami-*` executables have none of it: they refuse the `initiatives` key as unknown, the
+stock worker refuses the proposer's manifest (`unknown flow propose-work`), the stock stream
+consumer treats a matching record as an ordinary trigger, and `shikigami proposals` is not a
+command.
+
 Observation is off until a principal has an observer allowance. Add one under the
 `initiatives` key or the `SHIKIGAMI_INITIATIVES` environment variable:
 
@@ -46,7 +55,7 @@ Observation is off until a principal has an observer allowance. Add one under th
 
 Then:
 
-1. Copy `agents/proof/proposer.dhall` into `agents/` and change its stream `source` to
+1. Copy `packs/flow-pack-initiative/agents/proposer.dhall` into `agents/` and change its stream `source` to
    `external/intercom` or `external/transcripts`. Give it the principal you listed, active
    in the directory. Observers require a verified principal.
 2. Add the principal to `objectives.agentCreation`, or acceptance is recorded as refused
@@ -84,9 +93,9 @@ proposals without one. Write the terms in a file (see
 [`tests/initiative/policy-fixture.json`](../../tests/initiative/policy-fixture.json)):
 
 ```bash
-cabal run shikigami -- proposals policy install --file policy.json --json
-cabal run shikigami -- proposals policy list --json
-cabal run shikigami -- proposals policy revoke POLICY_ID --expected-revision 0 --json
+cabal run kikan-shikigami:exe:kikan-shikigami -- proposals policy install --file policy.json --json
+cabal run kikan-shikigami:exe:kikan-shikigami -- proposals policy list --json
+cabal run kikan-shikigami:exe:kikan-shikigami -- proposals policy revoke POLICY_ID --expected-revision 0 --json
 ```
 
 These act as the configured local operator. Install refuses a policy that could never
@@ -108,11 +117,11 @@ a reviewable artifact.
 ## Read the ledger
 
 ```bash
-cabal run shikigami -- proposals inspect --json
-cabal run shikigami -- proposals inspect --fail-when-exhausted
-cabal run shikigami -- proposals list --status pending --json
-cabal run shikigami -- proposals candidates --principal agent_shikigami_proposer --json
-cabal run shikigami -- proposals admissions --json
+cabal run kikan-shikigami:exe:kikan-shikigami -- proposals inspect --json
+cabal run kikan-shikigami:exe:kikan-shikigami -- proposals inspect --fail-when-exhausted
+cabal run kikan-shikigami:exe:kikan-shikigami -- proposals list --status pending --json
+cabal run kikan-shikigami:exe:kikan-shikigami -- proposals candidates --principal agent_shikigami_proposer --json
+cabal run kikan-shikigami:exe:kikan-shikigami -- proposals admissions --json
 ```
 
 `inspect` lists every configured observer, so a quiet one shows zero usage and an absent one
@@ -145,7 +154,7 @@ Skips are bounded rows but they accumulate. Remove old ones a batch at a time, a
 operator:
 
 ```bash
-cabal run shikigami -- proposals prune --before 2026-10-01T00:00:00Z --batch 1000 --json
+cabal run kikan-shikigami:exe:kikan-shikigami -- proposals prune --before 2026-10-01T00:00:00Z --batch 1000 --json
 ```
 
 This only deletes `skipped` and `not-actionable` candidates, never an `evaluating` or

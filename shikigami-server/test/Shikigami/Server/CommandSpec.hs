@@ -29,7 +29,8 @@ import Shikigami.App.Config.Load (ConfigOptions (..), ConfigRun (..), Diagnostic
 import Shikigami.Execution.Counter (nextAttempt, noAttempts)
 import Shikigami.Execution.Quantity (ResourceAmount, parseResourceAmount)
 import Shikigami.Execution.Resources qualified as Resources
-import Shikigami.Server.Command (adminInfo, adminPrefs, adminSubcommands, repeatedVerbs)
+import Shikigami.Flow.Pack (AdminVerb (..), FlowPack (..), noTriggerHooks, parseFlowPackName)
+import Shikigami.Server.Command (adminInfo, adminInfoWith, adminPrefs, adminSubcommands, adminSubcommandsWith, repeatedVerbs)
 import Shikigami.Server.Command.Ops (redactDatabaseUrl)
 import Shikigami.Server.Command.ResolveApproval (resolutionResult, resolveApprovalOptionsParser)
 import Shikigami.Server.Command.Resources (resourceView)
@@ -64,8 +65,7 @@ tests =
                 "objectives",
                 "mandates",
                 "watchdog",
-                "record",
-                "proposals"
+                "record"
               ],
       -- A pack's verb is mounted after the kernel's verbs and may not shadow one
       -- (docs/adr/0129).
@@ -89,33 +89,19 @@ tests =
         overdueExitCode True NoSweepYet @?= ExitFailure 2
         overdueExitCode True ScheduleUnknown @?= ExitFailure 2
         overdueExitCode False NoSweepYet @?= ExitSuccess,
-      testCase "proposals verbs parse their documented options" do
-        mapM_
-          ( \args -> case execParserPure adminPrefs adminInfo args of
-              Success (chosen, _) -> assertBool (unwords args) (not (isNothing chosen))
-              _ -> assertBool (unwords args <> " did not parse") False
-          )
-          [ ["proposals", "policy", "install", "--file", "policy.json", "--json"],
-            ["proposals", "policy", "revoke", "shikigami_standing_policy_x", "--expected-revision", "0", "--json"],
-            ["proposals", "policy", "list", "--principal", "agent_p", "--after", "x", "--limit", "5", "--json"],
-            ["proposals", "list", "--principal", "agent_p", "--status", "pending", "--after", "x", "--limit", "5", "--json"],
-            ["proposals", "inspect", "--json", "--fail-when-exhausted"],
-            ["proposals", "candidates", "--principal", "agent_p", "--since", "2026-11-04T00:00:00Z", "--after", "x", "--limit", "5", "--json"],
-            ["proposals", "admissions", "--policy", "x", "--after", "y", "--limit", "5", "--json"],
-            ["proposals", "prune", "--before", "2026-11-04T00:00:00Z", "--batch", "10", "--json"]
-          ],
-      testCase "proposals verbs refuse missing required options" do
-        mapM_
-          ( \args -> case execParserPure adminPrefs adminInfo args of
-              Failure _ -> pure ()
-              _ -> assertBool (unwords args <> " was admitted") False
-          )
-          [ ["proposals", "policy", "install"],
-            ["proposals", "policy", "revoke", "x"],
-            ["proposals", "candidates"],
-            ["proposals", "prune"],
-            ["proposals", "prune", "--before", "yesterday"]
-          ],
+      -- A use case's verbs arrive with its pack (docs/adr/0129): a composed
+      -- admin command mounts them, and the stock command does not have them.
+      testCase "a pack's verb is mounted in a composed admin command and absent from the stock one" do
+        case execParserPure adminPrefs (adminInfoWith [probePack]) ["probe", "inspect", "--json"] of
+          Success (chosen, _) -> assertBool "the pack's verb was selected" (not (isNothing chosen))
+          _ -> assertBool "the pack's verb did not parse" False
+        fmap fst (adminSubcommandsWith [probePack]) @?= fmap fst adminSubcommands <> ["probe"]
+        case execParserPure adminPrefs adminInfo ["probe", "inspect", "--json"] of
+          Failure _ -> pure ()
+          _ -> assertBool "the stock command admitted a pack's verb" False
+        case execParserPure adminPrefs adminInfo ["proposals", "inspect", "--json"] of
+          Failure _ -> pure ()
+          _ -> assertBool "the stock command still has the proposals verb" False,
       testCase "executions inspect accepts bounded history pagination" do
         case execParserPure adminPrefs adminInfo ["executions", "inspect", "execution-1", "--json", "--after", "20", "--limit", "5"] of
           Success (chosen, _) -> assertBool "execution action selected" (not (isNothing chosen))
@@ -392,3 +378,22 @@ fixtureRevision value = either (error . show) id (parseRevision value)
 
 fixtureAmount :: Integer -> ResourceAmount
 fixtureAmount amount = either (error . show) id (parseResourceAmount amount)
+
+-- | A pack that contributes one operator verb and nothing else.
+probePack :: FlowPack
+probePack =
+  FlowPack
+    { name = either (error . show) id (parseFlowPackName "probe"),
+      flows = [],
+      decisionPrograms = [],
+      retainedCodecs = [],
+      tasks = [],
+      settings = [],
+      triggers = noTriggerHooks,
+      adminVerbs =
+        [ AdminVerb
+            { name = "probe",
+              parser = info (subparser (command "inspect" (info (const (pure ()) <$ switch (long "json")) mempty))) mempty
+            }
+        ]
+    }

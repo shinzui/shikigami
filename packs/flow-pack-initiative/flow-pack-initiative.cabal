@@ -1,0 +1,237 @@
+cabal-version: 3.4
+name: flow-pack-initiative
+version: 0.1.0.0
+synopsis: Unrequested work proposals for Shikigami, as a flow pack
+description:
+  An agent observes a stream, notices work nobody asked for and proposes it,
+  and a person or an operator's standing policy decides what starts. The pack
+  holds the propose-work flow, its assessment program, the initiatives
+  setting, the stream hook and the proposals operator verbs. See
+  docs/user/unrequested-work.md and docs/operations/unrequested-work.md.
+
+license: BSD-3-Clause
+build-type: Simple
+extra-source-files: test/golden/labels.txt
+
+common common
+  default-language: GHC2024
+  default-extensions:
+    BlockArguments
+    DeriveAnyClass
+    DuplicateRecordFields
+    MultilineStrings
+    NoFieldSelectors
+    OverloadedLabels
+    OverloadedRecordDot
+    OverloadedStrings
+
+  ghc-options:
+    -Wall
+    -Werror=missing-fields
+    -Wcompat
+    -Widentities
+    -Wincomplete-record-updates
+    -Wincomplete-uni-patterns
+    -Wpartial-fields
+    -Wredundant-constraints
+
+-- The flow body, the capability it is written against, the assessment
+-- program and the vocabulary they share. This component depends on
+-- shikigami-core:flow-sdk and on no other Shikigami component.
+library bodies
+  import: common
+  visibility: private
+  hs-source-dirs: bodies
+  exposed-modules:
+    FlowPack.Initiative.Body.ProposeWork
+    FlowPack.Initiative.Capability
+    FlowPack.Initiative.Notice
+    FlowPack.Initiative.Prefilter
+    FlowPack.Initiative.Program.Assessment
+    FlowPack.Initiative.Reservation
+    FlowPack.Initiative.Settings
+    FlowPack.Initiative.Template
+    FlowPack.Initiative.Types
+    FlowPack.Initiative.Types.Internal
+
+  build-depends:
+    aeson,
+    base,
+    bytestring,
+    containers,
+    generic-lens,
+    keiro,
+    lens,
+    mmzk-typeid,
+    shikigami-core:flow-sdk,
+    shikumi,
+    text,
+    time,
+    uuid,
+    vector,
+
+-- The pack value, the interpreter, the ledger and policy stores, the stream
+-- hook and the operator verbs.
+library
+  import: common
+  hs-source-dirs: src
+  exposed-modules:
+    FlowPack.Initiative
+    FlowPack.Initiative.Command
+    FlowPack.Initiative.Inspection
+    FlowPack.Initiative.Intake
+    FlowPack.Initiative.Ledger
+    FlowPack.Initiative.Policy
+    FlowPack.Initiative.Runtime
+    FlowPack.Initiative.Setting
+    FlowPack.Initiative.Source
+
+  build-depends:
+    aeson,
+    base,
+    bytestring,
+    containers,
+    contravariant-extras,
+    effectful-core,
+    flow-pack-initiative:bodies,
+    generic-lens,
+    hasql,
+    hasql-transaction,
+    keiro,
+    kiroku-store,
+    lens,
+    optparse-applicative,
+    shikigami-core:flow-sdk,
+    shikigami-core:pack-sdk,
+    text,
+    time,
+
+-- The real path from a delivered envelope to a parked proposal, for this
+-- pack's tests and for a distribution's tests that need proposed work. It is
+-- test code: it depends on the worker package, which the pack library may not.
+library test-support
+  import: common
+  visibility: public
+  hs-source-dirs: test-support
+  exposed-modules:
+    FlowPack.Initiative.Fixture.Declarations
+    FlowPack.Initiative.Fixture.Proposing
+
+  build-depends:
+    aeson,
+    aeson-pretty,
+    async,
+    baikai,
+    base,
+    bytestring,
+    containers,
+    directory,
+    effectful,
+    effectful-core,
+    filepath,
+    flow-pack-initiative,
+    flow-pack-initiative:bodies,
+    generic-lens,
+    hasql,
+    hasql-pool,
+    hasql-transaction,
+    hs-opentelemetry-api,
+    hs-opentelemetry-exporter-in-memory,
+    hs-opentelemetry-sdk,
+    http-client,
+    http-types,
+    keiro,
+    keiro-pgmq,
+    kioku-api,
+    kioku-core,
+    kiroku-store,
+    lens,
+    mmzk-typeid,
+    optparse-applicative,
+    pgmq-hasql,
+    settei-env ==0.2.0.0,
+    shibuya-core,
+    shikigami-core,
+    shikigami-migrations:test-support,
+    shikigami-workers,
+    shikumi,
+    shikumi-tools,
+    tasty,
+    tasty-hunit,
+    text,
+    time,
+    unix,
+    uuid,
+    vector,
+
+test-suite flow-pack-initiative-test
+  import: common
+  type: exitcode-stdio-1.0
+  hs-source-dirs: test
+  main-is: Main.hs
+  other-modules:
+    FlowPack.Initiative.AcceptanceSpec
+    FlowPack.Initiative.AdmitProposalSpec
+    FlowPack.Initiative.AssessmentSpec
+    FlowPack.Initiative.AssessmentWorkflowSpec
+    FlowPack.Initiative.InspectionSpec
+    FlowPack.Initiative.LedgerSpec
+    FlowPack.Initiative.PackSpec
+    FlowPack.Initiative.PolicySpec
+    FlowPack.Initiative.PrefilterSpec
+    FlowPack.Initiative.ProposeWorkSpec
+    FlowPack.Initiative.StreamIntakeSpec
+    FlowPack.Initiative.ValueSpec
+
+  ghc-options:
+    -threaded
+    -rtsopts
+    -with-rtsopts=-N
+
+  build-depends:
+    aeson,
+    aeson-pretty,
+    async,
+    baikai,
+    base,
+    bytestring,
+    containers,
+    directory,
+    effectful,
+    effectful-core,
+    filepath,
+    flow-pack-initiative,
+    flow-pack-initiative:bodies,
+    flow-pack-initiative:test-support,
+    generic-lens,
+    hasql,
+    hasql-pool,
+    hasql-transaction,
+    hs-opentelemetry-api,
+    hs-opentelemetry-exporter-in-memory,
+    hs-opentelemetry-sdk,
+    http-client,
+    http-types,
+    keiro,
+    keiro-pgmq,
+    kioku-api,
+    kioku-core,
+    kiroku-store,
+    lens,
+    mmzk-typeid,
+    optparse-applicative,
+    pgmq-hasql,
+    settei-env ==0.2.0.0,
+    shibuya-core,
+    shikigami-core,
+    shikigami-migrations:test-support,
+    shikigami-workers,
+    shikumi,
+    shikumi-tools,
+    tasty,
+    tasty-hunit,
+    text,
+    time,
+    unix,
+    uuid,
+    vector,

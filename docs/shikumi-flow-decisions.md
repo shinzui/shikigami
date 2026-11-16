@@ -296,7 +296,7 @@ snapshots, and child/sink deduplication.
 
 ## Assessing observed text
 
-`Shikigami.Program.Decision.Initiative` registers `shikigami.initiative-assessment`
+`FlowPack.Initiative.Program.Assessment`, in the initiative pack, registers `shikigami.initiative-assessment`
 under the alias `propose`, at the decision site `initiative-propose`. It differs from the other programs
 in two ways worth copying when a decision reads text nobody addressed to the agent.
 

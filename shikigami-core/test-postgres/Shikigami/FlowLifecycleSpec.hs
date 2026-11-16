@@ -118,7 +118,7 @@ tests databaseFixture =
       testCase "a Flow behavior naming an unregistered flow is a declaration error" do
         assertEqual
           "unknown flow is refused, and the message names what is registered"
-          ["unknown flow no-such-flow; registered flows: run-declared-tool, watchdog-sweep, propose-work, adaptive-delivery"]
+          ["unknown flow no-such-flow; registered flows: run-declared-tool, watchdog-sweep, adaptive-delivery"]
           (flowDeclarationErrors builtinFlowRegistry (flowBehaviorAgent (Flow {name = declarationCoordinate ("no-such-flow")})))
         assertEqual
           "a registered flow is accepted"

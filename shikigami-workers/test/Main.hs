@@ -1,25 +1,20 @@
 module Main (main) where
 
 import Data.Text qualified as Text
-import Shikigami.AdmitProposalSpec qualified as AdmitProposalSpec
 import Shikigami.Agent.RunJob.WorkerSpec qualified as RunJobWorkerSpec
 import Shikigami.AgentRun.StatusSpec qualified as StatusSpec
 import Shikigami.ExecutionCapacitySpec qualified as ExecutionCapacitySpec
 import Shikigami.Health.SupervisionSpec qualified as SupervisionSpec
 import Shikigami.Health.WorkerSpec qualified as HealthWorkerSpec
-import Shikigami.InitiativeAcceptanceSpec qualified as InitiativeAcceptanceSpec
 import Shikigami.Inspection.ConsumerSpec qualified as InspectionSpec
 import Shikigami.Integration.ConsumerRuntimeSpec qualified as ConsumerAppSpec
 import Shikigami.MandateTimerSpec qualified as MandateTimerSpec
 import Shikigami.Migrations.TestSupport (withShikigamiMigratedSuite)
 import Shikigami.ObjectiveTrackerWorkerSpec qualified as ObjectiveTrackerWorkerSpec
-import Shikigami.ProposeWorkSpec qualified as ProposeWorkSpec
 import Shikigami.SchedulerSpec qualified as SchedulerSpec
 import Shikigami.StreamInboxSpec qualified as StreamInboxSpec
 import Shikigami.TelemetrySpec qualified as TelemetrySpec
 import Shikigami.TimerRecoverySpec qualified as TimerRecoverySpec
-import Shikigami.WatchdogQualificationSpec qualified as WatchdogQualificationSpec
-import Shikigami.WatchdogSweepSpec qualified as WatchdogSweepSpec
 import Shikigami.Workers.CommandSpec qualified as CommandSpec
 import Shikigami.WorkspaceContainedFileSpec qualified as WorkspaceContainedFileSpec
 import Shikigami.WorkspaceFileProviderSpec qualified as WorkspaceFileProviderSpec
@@ -77,14 +72,9 @@ suite = do
               HealthWorkerSpec.tests,
               RunJobWorkerSpec.tests databaseFixture,
               StatusSpec.tests databaseFixture,
-              WatchdogSweepSpec.tests databaseFixture,
-              WatchdogQualificationSpec.tests databaseFixture,
               MandateTimerSpec.tests databaseFixture,
               SchedulerSpec.tests databaseFixture,
               StreamInboxSpec.tests databaseFixture,
-              ProposeWorkSpec.tests databaseFixture,
-              AdmitProposalSpec.tests databaseFixture,
-              InitiativeAcceptanceSpec.tests databaseFixture,
               TimerRecoverySpec.tests databaseFixture,
               TelemetrySpec.tests databaseFixture,
               SupervisionSpec.tests

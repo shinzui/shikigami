@@ -39,12 +39,14 @@ Workflow
 activityCoordinate
 activityCoordinateText
 awaitAck
+awaitAckWithin
 awaitOne
 currentActivity
 declarationCoordinate
 declarationCoordinateText
 delegate
 emitSignal
+emitSignalTo
 flowPackNameText
 kernelCapabilityFlow
 noTriggerHooks

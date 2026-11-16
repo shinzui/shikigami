@@ -25,12 +25,19 @@ common common
   build-depends:
     base,
     flow-pack-examples,
+    flow-pack-initiative,
     flow-pack-practice-review,
     shikigami-core:flow-sdk,
 
 executable kikan-shikigami-worker
   import: common
   hs-source-dirs: app/worker
+  main-is: Main.hs
+  build-depends: shikigami-workers
+
+executable kikan-shikigami-consume-stream
+  import: common
+  hs-source-dirs: app/consume-stream
   main-is: Main.hs
   build-depends: shikigami-workers
 
@@ -45,3 +52,75 @@ executable kikan-shikigami-agent-run
   hs-source-dirs: app/agent-run
   main-is: Main.hs
   build-depends: shikigami-agent
+
+-- What needs two composed use cases together. It shares no module with the
+-- executables.
+test-suite kikan-shikigami-test
+  type: exitcode-stdio-1.0
+  default-language: GHC2024
+  default-extensions:
+    BlockArguments
+    DeriveAnyClass
+    DuplicateRecordFields
+    MultilineStrings
+    NoFieldSelectors
+    OverloadedLabels
+    OverloadedRecordDot
+    OverloadedStrings
+
+  hs-source-dirs: test
+  main-is: Main.hs
+  other-modules:
+    Kikan.Fixture.ExecutionIdentity
+    Kikan.Fixture.Watchdog
+    Kikan.Fixture.WatchdogExecution
+    Kikan.WatchdogQualificationSpec
+    Kikan.WatchdogSweepSpec
+    Kikan.WatchdogTelemetrySpec
+
+  ghc-options:
+    -Wall
+    -Wcompat
+    -threaded
+    -rtsopts
+    -with-rtsopts=-N
+
+  build-depends:
+    aeson,
+    async,
+    baikai,
+    base,
+    bytestring,
+    containers,
+    directory,
+    effectful,
+    effectful-core,
+    filepath,
+    flow-pack-initiative,
+    flow-pack-initiative:test-support,
+    generic-lens,
+    hasql,
+    hasql-pool,
+    hasql-transaction,
+    hs-opentelemetry-api,
+    hs-opentelemetry-exporter-in-memory,
+    hs-opentelemetry-sdk,
+    keiro,
+    keiro-pgmq,
+    kioku-api,
+    kioku-core,
+    kiroku-store,
+    lens,
+    pgmq-hasql,
+    shibuya-core,
+    shikigami-core,
+    shikigami-migrations:test-support,
+    shikigami-workers,
+    shikumi-tools,
+    tasty,
+    tasty-hunit,
+    text,
+    time,
+    unix,
+    uuid,
+    vector,

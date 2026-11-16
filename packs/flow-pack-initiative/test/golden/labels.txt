@@ -1,0 +1,15 @@
+decision-prepare-initiative-propose
+decision-result-initiative-propose
+emit-signal-initiative-admitted
+initiative-admission-failed
+initiative-admit
+initiative-fund
+initiative-launch
+initiative-open
+initiative-proposal
+initiative-resolve
+initiative-skip
+objectives-initiative-accept
+objectives-initiative-admit
+objectives-initiative-grant
+objectives-initiative-staff

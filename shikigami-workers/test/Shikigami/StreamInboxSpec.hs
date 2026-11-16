@@ -8,13 +8,15 @@ import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as Text
-import Data.Time (UTCTime (..), addUTCTime, fromGregorian, getCurrentTime)
+import Data.Text.Encoding qualified as Text.Encoding
+import Data.Time (UTCTime (..), addUTCTime, diffUTCTime, fromGregorian, getCurrentTime)
 import Data.Vector qualified as Vector
 import Hasql.Decoders qualified as D
 import Hasql.Encoders qualified as E
 import Hasql.Pool qualified as Pool
 import Hasql.Session qualified as Session
 import Hasql.Statement (preparable)
+import Hasql.Transaction qualified as Tx
 import Keiro.Inbox (InboxRow (..), InboxStatus (InboxCompleted), KafkaDeliveryRef (..), lookupInbox)
 import Keiro.Inbox.Kafka (KafkaInboundRecord (..))
 import Keiro.Integration.Event (IntegrationContentType (ApplicationJson), IntegrationEvent (..), encodeJsonIntegrationEvent, integrationHeaders)
@@ -31,16 +33,13 @@ import Shikigami.Agent.Principal (compatibilityIdentity)
 import Shikigami.Agent.Run.Key (RunKey, parseRunKey)
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (AgentWorkflowRoute), runJobWorkflowId)
 import Shikigami.App (AppEnv (..), noopTracer, runAppIO)
-import Shikigami.Directory (DirectoryHandle, Lifecycle (..), PrincipalRecord (..), newDirectoryHandle, refreshDirectory, staticDirectorySource)
+import Shikigami.Directory (DirectoryHandle, Lifecycle (..), PrincipalRecord (..), disabledDirectoryHandle, newDirectoryHandle, refreshDirectory, staticDirectorySource)
 import Shikigami.Directory.Store qualified as DirectoryStore
 import Shikigami.Execution.Identity (executionRootIdText)
 import Shikigami.Execution.Quantity (parseResourceAmount)
 import Shikigami.Execution.Resources (Dimension (..), Envelope (..), Limit (..))
-import Shikigami.Initiative.Intake (streamDisposition)
-import Shikigami.Initiative.Settings (InitiativeSettings)
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
-import Shikigami.Pack.Setting (noPackSettings)
 import Shikigami.RunJobs qualified as RunJobs
 import Shikigami.Trigger.Consumer
   ( DeadLetterId (..),
@@ -57,7 +56,7 @@ import Shikigami.Trigger.Consumer
     processDecodedIntegrationEvent,
   )
 import Shikigami.Trigger.Enqueue (enqueueAddressedRunWithKey, ensureRunQueue, runQueueName)
-import Shikigami.Trigger.Hook (StreamHook (..), StreamIntake, streamIntake)
+import Shikigami.Trigger.Hook (PackDisposition (..), StreamDisposition (..), StreamEvaluation (..), StreamSkip (..))
 import Shikigami.Trigger.RequestKey qualified as Addressed
 import Shikigami.Trigger.Schedule (parseCron)
 import Shikigami.Trigger.Stream (IncludeAgentActors (ExcludeAgentActors, IncludeAgentActors))
@@ -159,42 +158,32 @@ tests databaseFixture =
               assertEqual "source" "stream" ((.detail) runSkip)
               assertEqual "same key the run would use" (fixtureRunKey "stream-run-v2:sha256:d5c5840b1bb985d45b79cb5e3034694f28435fd5ce27e2cc39df39e9db25f667") ((.idempotencyKey) runSkip)
             other -> assertFailure ("expected one stream skip, got " <> show other),
-      testCase "unrelated chatter from an observer commits one bounded skip and no job" do
+      -- A pack's stream hook decides; the consumer commits (docs/adr/0129). The
+      -- owning pack's tests cover a real hook. These hold the kernel's half
+      -- with a fixture hook.
+      testCase "a pack's skip commits its record with the inbox row and enqueues nothing" do
         withFixture databaseFixture \appEnv pool -> do
           ensureQueue pool
-          directory <- observerDirectory
           hits <- newIORef (0 :: Int)
-          disposition <- observed appEnv directory (const (modifyIORef' hits (+ 1))) (chatEvent "chat-1" "act-chat-1" (Aeson.object ["text" .= ("too short" :: Text)]))
+          disposition <- hooked (StreamSkipped StreamSkip {reason = "not-worth-a-run", record = Tx.sql "CREATE TABLE public.fixture_hook_skips (note text); INSERT INTO public.fixture_hook_skips VALUES ('skipped')"}) appEnv (const (modifyIORef' hits (+ 1)))
           assertEqual "the skip is a durable disposition" Enqueued disposition
           assertEqual "nothing was matched for a run" 0 =<< readIORef hits
           assertEqual "no job" [] =<< readRunJobs pool
-          assertEqual "skip row" [("act-chat-1", "skipped", Just "excerpt-too-short", Just "chat-subject", Nothing)] =<< readCandidates pool
-          assertEqual "no root origin" 0 =<< countRows pool "shikigami.execution_root_origins",
-      testCase "an agent-authored envelope is a bounded skip when the guard is lifted and invisible when it is not" do
+          assertEqual "the pack's record committed" 1 =<< countRows pool "public.fixture_hook_skips"
+          assertEqual "no root origin" 0 =<< countRows pool "shikigami.execution_root_origins"
+          assertEqual "inbox row" (Just InboxCompleted) . fmap inboxStatus =<< readInbox appEnv,
+      testCase "a pack's evaluation commits a root, the pack's record and a job that carries the root" do
         withFixture databaseFixture \appEnv pool -> do
           ensureQueue pool
-          directory <- observerDirectory
-          let event = chatEventBy agentActorFixture "fixture/chat" "chat-2" "act-chat-2" (Aeson.object ["text" .= longReport])
-          _ <- observed appEnv directory (const (pure ())) event
-          assertEqual "the feedback guard matches nothing" [] =<< readCandidates pool
-          assertEqual "lifted guard" Enqueued =<< processDecodedActivityObserving Log.silentLogger appEnv directory observerIntake (\_ _ _ -> pure ()) IncludeAgentActors [observerAgent] (const (pure ())) event {messageId = "chat-2b"} (Just deliveryRef)
-          assertEqual "no job" [] =<< readRunJobs pool
-          assertEqual "agent skip without a subject" [("act-chat-2", "skipped", Just "agent-actor", Nothing, Nothing)] =<< readCandidates pool,
-      testCase "a source no adapter recognizes is a bounded skip without a subject" do
-        withFixture databaseFixture \appEnv pool -> do
-          ensureQueue pool
-          directory <- observerDirectory
-          let anySource = observerAgent {trigger = Stream {match = StreamMatch {verb = Nothing, source = Nothing, subjectType = Nothing, verbs = []}}}
-          assertEqual "committed" Enqueued =<< processDecodedActivityObserving Log.silentLogger appEnv directory observerIntake (\_ _ _ -> pure ()) ExcludeAgentActors [anySource] (const (pure ())) (chatEventBy humanActorFixture "external/slack" "chat-6" "act-chat-6" (Aeson.object ["text" .= longReport])) (Just deliveryRef)
-          assertEqual "no job" [] =<< readRunJobs pool
-          assertEqual "skip" [("act-chat-6", "skipped", Just "unsupported-source", Nothing, Nothing)] =<< readCandidates pool,
-      testCase "a bug report from an observer commits one inbox row, root origin, root, candidate and job together" do
-        withFixture databaseFixture \appEnv pool -> do
-          ensureQueue pool
-          directory <- observerDirectory
           hits <- newIORef (0 :: Int)
-          let event = chatEvent "chat-3" "act-chat-3" (Aeson.object ["text" .= longReport])
-          disposition <- observed appEnv directory (const (modifyIORef' hits (+ 1))) event
+          now <- getCurrentTime
+          let evaluation =
+                StreamEvaluation
+                  { envelope = Envelope {limits = Map.fromList [(ActiveWork, Limited (either (error . show) id (parseResourceAmount 1)))], cutoff = addUTCTime 3600 now},
+                    alreadyOwned = pure False,
+                    record = \workflow -> Tx.sql ("CREATE TABLE public.fixture_hook_runs (run text); INSERT INTO public.fixture_hook_runs VALUES ('" <> Text.Encoding.encodeUtf8 (workflowText workflow) <> "')")
+                  }
+          disposition <- hooked (StreamEvaluated evaluation) appEnv (const (modifyIORef' hits (+ 1)))
           assertEqual "committed" Enqueued disposition
           assertEqual "hook ran once" 1 =<< readIORef hits
           jobs <- readRunJobs pool
@@ -204,48 +193,24 @@ tests databaseFixture =
           root <- maybe (assertFailure "the job carries no root") pure job.executionRootId
           assertEqual "origin row names the job's root" [executionRootIdText root] =<< readOriginRoots pool
           (limits, cutoffAt) <- readRootEnvelope pool (executionRootIdText root)
-          assertEqual "the root has the allowance's limits" (Map.fromList [(ActiveWork, Limited (either (error . show) id (parseResourceAmount 1))), (ModelAttempts, Limited (either (error . show) id (parseResourceAmount 1))), (Tokens, ExplicitlyUnbounded), (CostMicroUsd, ExplicitlyUnbounded)]) limits
-          now <- getCurrentTime
-          assertEqual "the cutoff is the receipt instant plus the evaluation window" True (cutoffAt > addUTCTime 3000 now && cutoffAt <= addUTCTime 3600 now)
-          assertEqual "candidate row" [("act-chat-3", "evaluating", Nothing, Just "chat-subject", Just (workflowText (runJobWorkflowId job)))] =<< readCandidates pool
-          assertEqual "inbox row" (Just InboxCompleted) . fmap inboxStatus =<< readInboxFor appEnv "chat-3",
-      testCase "a redelivery under the same message is a duplicate; under another message it starts nothing new" do
+          assertEqual "the root has the hook's limits" (Map.fromList [(ActiveWork, Limited (either (error . show) id (parseResourceAmount 1)))]) limits
+          assertEqual "the root has the hook's cutoff" True (abs (diffUTCTime cutoffAt (addUTCTime 3600 now)) < 1)
+          assertEqual "the pack's record names the run" 1 =<< countRows pool "public.fixture_hook_runs",
+      testCase "an observation the pack already owns commits nothing more" do
         withFixture databaseFixture \appEnv pool -> do
           ensureQueue pool
-          directory <- observerDirectory
-          let event = chatEvent "chat-4" "act-chat-4" (Aeson.object ["text" .= longReport])
-          assertEqual "first" Enqueued =<< observed appEnv directory (const (pure ())) event
-          assertEqual "same message" Duplicate =<< observed appEnv directory (const (pure ())) event
-          assertEqual "same activity, new message" Enqueued =<< observed appEnv directory (const (pure ())) (chatEvent "chat-4b" "act-chat-4" (Aeson.object ["text" .= longReport]))
-          assertEqual "one job" 1 . length =<< readRunJobs pool
-          assertEqual "one root origin" 1 =<< countRows pool "shikigami.execution_root_origins"
-          assertEqual "one candidate" 1 =<< countRows pool "shikigami.initiative_candidates",
-      testCase "a store failure after the root insert rolls everything back and redelivery recovers" do
+          let owned = StreamEvaluation {envelope = Envelope {limits = Map.empty, cutoff = UTCTime (fromGregorian 2030 1 1) 0}, alreadyOwned = pure True, record = \_ -> Tx.sql "SELECT 1/0"}
+          disposition <- hooked (StreamEvaluated owned) appEnv (const (pure ()))
+          assertEqual "committed" Enqueued disposition
+          assertEqual "no job" [] =<< readRunJobs pool
+          assertEqual "no root origin" 0 =<< countRows pool "shikigami.execution_root_origins",
+      testCase "a pack that does not observe for the agent leaves the ordinary job" do
         withFixture databaseFixture \appEnv pool -> do
           ensureQueue pool
-          directory <- observerDirectory
-          dropped <- Pool.use pool (dropQueue runQueueName)
-          assertEqual "queue dropped" (Right True) (either (Left . show) Right dropped)
-          let event = chatEvent "chat-5" "act-chat-5" (Aeson.object ["text" .= longReport])
-          failed <- observed appEnv directory (const (pure ())) event
-          case failed of
-            TransientFailure _ -> pure ()
-            other -> assertFailure ("expected transient failure, got " <> show other)
-          assertEqual "no inbox row" Nothing =<< readInboxFor appEnv "chat-5"
-          assertEqual "no root origin" 0 =<< countRows pool "shikigami.execution_root_origins"
-          assertEqual "no root" 0 =<< countRows pool "shikigami.execution_roots"
-          assertEqual "no candidate" 0 =<< countRows pool "shikigami.initiative_candidates"
-          ensureQueue pool
-          assertEqual "redelivery commits" Enqueued =<< observed appEnv directory (const (pure ())) event
-          assertEqual "one job" 1 . length =<< readRunJobs pool,
-      testCase "an agent without an allowance keeps its exact job bytes even with settings present" do
-        withFixture databaseFixture \appEnv pool -> do
-          ensureQueue pool
-          directory <- directoryWith Active
-          assertEqual "committed" Enqueued =<< processDecodedActivityObserving Log.silentLogger appEnv directory observerIntake (\_ _ _ -> pure ()) ExcludeAgentActors [streamAgent {identity = Just IdentityDecl {principal = declarationCoordinate "agent_risk"}}] (const (pure ())) activityEvent (Just deliveryRef)
+          disposition <- hooked StreamOrdinary appEnv (const (pure ()))
+          assertEqual "committed" Enqueued disposition
           jobs <- readRunJobs pool
-          assertEqual "no root" [Nothing] (map (.executionRootId) jobs)
-          assertEqual "no candidate" 0 =<< countRows pool "shikigami.initiative_candidates",
+          assertEqual "one ordinary job without a root" [Nothing] (map (.executionRootId) jobs),
       testCase "handler failure rolls back both inbox row and message" do
         (withFixture databaseFixture) \appEnv pool -> do
           ensureQueue pool
@@ -332,53 +297,11 @@ tests databaseFixture =
           other -> assertFailure ("expected dead-letter decision, got " <> show other)
     ]
 
-observed :: AppEnv -> DirectoryHandle -> (StreamHit -> IO ()) -> IntegrationEvent -> IO RecordDisposition
-observed appEnv directory onHit event =
-  processDecodedActivityObserving Log.silentLogger appEnv directory observerIntake (\_ _ _ -> pure ()) ExcludeAgentActors [observerAgent] onHit event (Just deliveryRef)
-
-observerDirectory :: IO DirectoryHandle
-observerDirectory = do
-  directory <- newDirectoryHandle (staticDirectorySource [PrincipalRecord {principalId = declarationCoordinate "agent_proposer", handle = declarationCoordinate "proposer", lifecycle = Active}])
-  refreshDirectory directory >>= \case
-    Left problem -> assertFailure (Text.unpack problem)
-    Right () -> pure directory
-
-observerAgent :: AgentDecl
-observerAgent =
-  streamAgent
-    { name = fixtureAgentName "proposer",
-      trigger = Stream {match = StreamMatch {verb = Nothing, source = Just (activityCoordinate "fixture/chat"), subjectType = Nothing, verbs = []}},
-      behavior = Flow {name = declarationCoordinate "propose-work"},
-      identity = Just IdentityDecl {principal = declarationCoordinate "agent_proposer"}
-    }
-
--- | The observer allowances as the consumer consults them: the initiative
--- disposition behind the kernel's stream hook.
-observerIntake :: StreamIntake
-observerIntake = streamIntake "initiative" (const True) noPackSettings (StreamHook (\_ -> streamDisposition (Just observerSettings)))
-
-observerSettings :: InitiativeSettings
-observerSettings =
-  either error id $
-    Aeson.eitherDecode $
-      Aeson.encode $
-        Aeson.object
-          [ "observers"
-              .= [ Aeson.object
-                     [ "principal" .= ("agent_proposer" :: Text),
-                       "sources" .= (["chat-fixture"] :: [Text]),
-                       "minimumExcerptLength" .= (20 :: Int),
-                       "evaluation" .= Aeson.object ["limits" .= Aeson.object ["ActiveWork" .= (1 :: Int), "ModelAttempts" .= (1 :: Int), "Tokens" .= ("unbounded" :: Text), "CostMicroUsd" .= ("unbounded" :: Text)], "cutoff" .= (3600 :: Int)],
-                       "evaluationsPerWindow" .= (10 :: Int),
-                       "proposalsPerWindow" .= (5 :: Int),
-                       "notificationsPerWindow" .= (5 :: Int),
-                       "window" .= (3600 :: Int),
-                       "proposalExpiry" .= (86400 :: Int),
-                       "rejectionSuppression" .= (604800 :: Int),
-                       "notices" .= Aeson.object ["kizashiRecipient" .= ("recipient_ops" :: Text)]
-                     ]
-                 ]
-          ]
+-- | One matched record put to a fixture hook that answers with a fixed
+-- disposition, through the same entry point a composed consumer uses.
+hooked :: StreamDisposition -> AppEnv -> (StreamHit -> IO ()) -> IO RecordDisposition
+hooked disposition appEnv onHit =
+  processDecodedActivityObserving Log.silentLogger appEnv disabledDirectoryHandle (\_ -> Just PackDisposition {pack = "fixture", disposition}) (\_ _ _ -> pure ()) ExcludeAgentActors [streamAgent] onHit activityEvent (Just deliveryRef)
 
 longReport :: Text
 longReport = "Double-clicking checkout charges the card twice on every attempt"

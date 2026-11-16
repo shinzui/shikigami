@@ -364,12 +364,14 @@ Shikigami.Flow.Sdk Workflow
 Shikigami.Flow.Sdk activityCoordinate
 Shikigami.Flow.Sdk activityCoordinateText
 Shikigami.Flow.Sdk awaitAck
+Shikigami.Flow.Sdk awaitAckWithin
 Shikigami.Flow.Sdk awaitOne
 Shikigami.Flow.Sdk currentActivity
 Shikigami.Flow.Sdk declarationCoordinate
 Shikigami.Flow.Sdk declarationCoordinateText
 Shikigami.Flow.Sdk delegate
 Shikigami.Flow.Sdk emitSignal
+Shikigami.Flow.Sdk emitSignalTo
 Shikigami.Flow.Sdk flowPackNameText
 Shikigami.Flow.Sdk kernelCapabilityFlow
 Shikigami.Flow.Sdk noTriggerHooks

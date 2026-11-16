@@ -304,7 +304,7 @@ mutation-tests heni output:
 
 # Check nominal value scopes and opaque construction with the selected compiler.
 domain-value-types:
-    cabal build shikigami-core shikigami-agent:lib:shikigami-agent shikigami-workers:lib:shikigami-workers flow-pack-practice-review:lib:bodies
+    cabal build shikigami-core shikigami-agent:lib:shikigami-agent shikigami-workers:lib:shikigami-workers flow-pack-practice-review:lib:bodies flow-pack-initiative:lib:bodies
     python3 tests/types/revision-domains.py
     python3 tests/types/opaque-values.py
     python3 tests/types/initiative-values.py

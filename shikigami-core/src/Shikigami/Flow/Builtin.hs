@@ -31,12 +31,9 @@ import Shikigami.Flow (DecisionMode (..), FlowDef (..), FlowEffects, LifecycleDi
 import Shikigami.Flow.AdaptiveDelivery (adaptiveDelivery)
 import Shikigami.Flow.DeclaredTool qualified as DeclaredTool
 import Shikigami.Flow.Delegate qualified as Delegate
-import Shikigami.Flow.Initiative (proposeWorkFlow)
 import Shikigami.Flow.Pack
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Flow.Watchdog (watchdogFlowName, watchdogSlots, watchdogSweep)
-import Shikigami.Initiative.Intake (streamDisposition)
-import Shikigami.Initiative.Settings (initiativeSettingsFrom)
 import Shikigami.Program.Decision.Registry (builtinDecisionPrograms, builtinRetainedCodecs)
 import Shikigami.Program.Registry (programRegistry)
 import Shikigami.Router.Decision (RouteDecision (..), RouteOutcome (..), RouteSelection (..))
@@ -51,10 +48,8 @@ builtinPack =
       decisionPrograms = builtinDecisionPrograms,
       retainedCodecs = builtinRetainedCodecs,
       tasks = programRegistry,
-      -- The initiatives setting is declared in 'Shikigami.App.Config' while
-      -- its use case is still compiled into the core.
       settings = [],
-      triggers = noTriggerHooks {stream = Just (StreamHook (streamDisposition . initiativeSettingsFrom))},
+      triggers = noTriggerHooks,
       adminVerbs = []
     }
 
@@ -78,7 +73,6 @@ builtinFlows =
     kernelCapabilityFlow
       FlowDef {name = watchdogFlowName, decisionSlots = watchdogSlots, requiresDefaultModel = DefaultModelOptional, decisionMode = AdvisoryDecisions, lifecycle = LifecycleDiagram "flowchart LR\n Grant --> Observe --> Classify --> Record --> Drift --> Deliver --> Close" []}
       watchdogSweep,
-    proposeWorkFlow,
     kernelCapabilityFlow
       FlowDef
         { name = declarationCoordinate "adaptive-delivery",

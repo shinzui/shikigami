@@ -126,8 +126,17 @@ no library; each `main` passes its packs to `agentRunRoleInfoWith`, `workerRoleI
 `shikigami-migrations:test-support`; its libraries may not.
 
 `packs/kikan-shikigami` is the distribution for organizational use. It composes every pack
-into `kikan-shikigami-worker`, the `kikan-shikigami` admin command and
-`kikan-shikigami-agent-run`, all reading one list in `src-shared/Packs.hs`. The stock
+into `kikan-shikigami-worker`, `kikan-shikigami-consume-stream`, the `kikan-shikigami` admin
+command and `kikan-shikigami-agent-run`, all reading one list in `src-shared/Packs.hs`. Its
+test suite, `kikan-shikigami-test`, holds only what needs two composed use cases together,
+such as the watchdog observing work the initiative pack admitted.
+
+A pack contributes five things through its one `FlowPack` value: `flows`, with decision
+programs and tasks; `settings`, the configuration keys it owns; `triggers`, its say over
+stream intake for the agents that run its flows; `adminVerbs`, its operator verbs; and, at
+run time, events on the kernel's `shikigami.pack.events` counter. A pack may also publish a
+`test-support` sublibrary for tests; that one may depend on the worker package, which the
+pack's own library may not. The stock
 executables run kernel behaviors and declared agents only; a use case that ships as a pack
 runs from the distribution.
 
@@ -141,6 +150,7 @@ one-off package of ADR-3 are unchanged. `packs/flow-pack-examples` and
 | --- | --- | --- | --- |
 | `flow-pack-examples` | `at-risk-customer`, `objective-example`, `shikumi-decision-example`, `shikumi-judgment-example`, `delegation-proof` | none | none |
 | `flow-pack-practice-review` | `architecture-practice-router`, `opentelemetry-practice-review` | `practice_review.attention_recipients` | `shikigami.practice_review_attention`, `shikigami.practice_review_attention_reviews` (migration `0012`), `shikigami.practice_review_identities` (`0032`) |
+| `flow-pack-initiative` | `propose-work` | `initiatives` | `shikigami.initiative_candidates`, `shikigami.initiative_proposals` and the other tables of migrations `0043` and `0044` |
 
 A pack's tables stay in `shikigami-migrations/sql-migrations/`: migrations are one ordered,
 locked chain for one schema, and this table records which pack reads and writes each.

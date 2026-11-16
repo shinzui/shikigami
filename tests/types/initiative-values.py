@@ -11,6 +11,11 @@ CORE_UNITS = [entry["id"] for entry in PLAN["install-plan"]
               if entry["pkg-name"] == "shikigami-core" and entry.get("component-name") == "lib"]
 assert len(CORE_UNITS) == 1, CORE_UNITS
 CORE_UNIT = CORE_UNITS[0]
+# The initiative vocabulary lives in its flow pack; the probes compile against
+# the pack's bodies component beside the core.
+PACK_UNITS = [entry["id"] for entry in PLAN["install-plan"]
+              if entry["pkg-name"] == "flow-pack-initiative" and entry.get("component-name") == "lib:bodies"]
+assert len(PACK_UNITS) == 1, PACK_UNITS
 
 HEADER = '''{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DuplicateRecordFields #-}
@@ -23,7 +28,7 @@ import Data.Coerce (coerce)
 import Data.Text (Text)
 import Data.Time (UTCTime)
 import GHC.Generics qualified as Generics
-import Shikigami.Initiative.Types qualified as Initiative
+import FlowPack.Initiative.Types qualified as Initiative
 import Shikigami.Objective.Keys qualified as Keys
 '''
 
@@ -100,7 +105,7 @@ with tempfile.TemporaryDirectory(prefix='shikigami-initiative-types-') as direct
     def compile_client(body):
         source.write_text(HEADER + body + '\n')
         return subprocess.run(
-            ['cabal', 'exec', '--', 'ghc', '-fno-code', '-package-id', CORE_UNIT, str(source)],
+            ['cabal', 'exec', '--', 'ghc', '-fno-code', '-package-id', CORE_UNIT, '-package-id', PACK_UNITS[0], str(source)],
             cwd=ROOT, capture_output=True, text=True, timeout=120)
 
     result = compile_client(POSITIVE)

@@ -50,11 +50,13 @@ module Shikigami.Flow.Sdk
     remember,
     SinkCapability,
     emitSignal,
+    emitSignalTo,
     Activity,
     currentActivity,
     Acknowledgement,
     Ack (..),
     awaitAck,
+    awaitAckWithin,
     Delegate,
     delegate,
     awaitOne,
@@ -89,8 +91,8 @@ import Shikigami.Agent.Approval (ApprovalChannel (..), ApprovalRequest (..))
 import Shikigami.Agent.Decl (Priority (..), RecipientFrom (..), SignalType (..), Sink (..))
 import Shikigami.Agent.DeclarationValue (DeclarationCoordinate, SignalImportance, declarationCoordinate, declarationCoordinateText, parseSignalImportance)
 import Shikigami.Flow (DecisionMode (..), FlowDef (..), FlowEffects, LifecycleDiagram (..))
-import Shikigami.Flow.Acknowledgement (Ack (..), Acknowledgement, awaitAck)
-import Shikigami.Flow.Capability (Activity, Memory, MemoryQuery (..), currentActivity, emitSignal, recall, remember)
+import Shikigami.Flow.Acknowledgement (Ack (..), Acknowledgement, awaitAck, awaitAckWithin)
+import Shikigami.Flow.Capability (Activity, Memory, MemoryQuery (..), currentActivity, emitSignal, emitSignalTo, recall, remember)
 import Shikigami.Flow.Capability qualified as Capability
 import Shikigami.Flow.Delegate (Delegate, awaitOne, delegate)
 import Shikigami.Flow.Pack (FlowPack (..), FlowPackName, FlowPackNameError (..), PackFlow (..), TriggerHooks (..), flowPackNameText, kernelCapabilityFlow, noTriggerHooks, parseFlowPackName)

@@ -49,7 +49,6 @@ library
     Shikigami.Server.Command.ObjectiveTrackers
     Shikigami.Server.Command.Objectives
     Shikigami.Server.Command.Ops
-    Shikigami.Server.Command.Proposals
     Shikigami.Server.Command.PublishFixture
     Shikigami.Server.Command.Record
     Shikigami.Server.Command.RenderLifecycle
