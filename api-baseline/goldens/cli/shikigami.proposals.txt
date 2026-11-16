@@ -1,9 +1,0 @@
-Invalid argument `proposals'
-
-Usage: shikigami [COMMAND | [--database-url URL] [--json] [--force] 
-                   [--allow-schema-drift] COMMAND] [--config PATH] 
-                 [--set KEY=VALUE] 
-                 [--explain-config | --explain-config-json | --check-config | 
-                   --describe-config | --describe-config-json] [--version]
-
-  shikigami declared-agent runtime: administrative commands
