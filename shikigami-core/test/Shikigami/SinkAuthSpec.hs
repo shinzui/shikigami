@@ -1,8 +1,6 @@
 module Shikigami.SinkAuthSpec (tests) where
 
 import Control.Exception (AsyncException (UserInterrupt), throwIO, try)
-import Danwa.Client qualified as Danwa
-import Danwa.Conversation.Api qualified as Conversation
 import Data.Aeson (Value (String), encode, object)
 import Data.ByteString (ByteString)
 import Data.ByteString.Lazy qualified as LBS
@@ -28,7 +26,6 @@ import Network.HTTP.Types
   )
 import Network.Wai (Application, requestHeaders, responseLBS, strictRequestBody)
 import Network.Wai.Handler.Warp (testWithApplication)
-import Servant.Client (ClientEnv, mkClientEnv, parseBaseUrl)
 import Settei (answer, defaultResolveOptions, resolve)
 import Settei.Env (envSnapshot, environmentSource)
 import Shikigami.App.Config (AppConfig (..), ByteLimit, CredentialRef (..), appConfig, byteLimitBytes, environmentBindings, mkByteLimit)
@@ -46,11 +43,9 @@ import Shikigami.Sink.Http
     HttpFailureReason (..),
     HttpLimits (..),
     newSinkManager,
-    newTypedClientManager,
     postJSON,
     postJSONWithHeaders,
     renderHttpFailure,
-    runDanwaClient,
   )
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
@@ -62,8 +57,7 @@ tests =
     [ headerTests,
       failureTests,
       limitTests,
-      redirectTests,
-      danwaTests
+      redirectTests
     ]
 
 headerTests :: TestTree
@@ -162,49 +156,6 @@ redirectTests =
             readIORef targetCalls >>= (@?= 0)
     ]
 
-danwaTests :: TestTree
-danwaTests =
-  testGroup
-    "danwa servant client"
-    [ testCase "the dedicated manager injects the danwa token" do
-        received <- newIORef []
-        testWithApplication (pure (danwaApplication received danwaResponse)) \port -> do
-          clientEnv <- danwaClientEnv port defaultLimits (Just (staticTokenSource expectedToken))
-          result <- runDanwaClient clientEnv (Danwa.startConversation startConversation)
-          assertRight result
-          headers <- readIORef received
-          lookup hAuthorization headers @?= Just expectedHeader,
-      testCase "danwa response accepts its exact boundary and rejects one byte over" do
-        let exact = padJson 1_024 danwaResponse
-            over = padJson 1_025 danwaResponse
-            limits = limitsAt 1_024 1_024
-        testWithApplication (pure (danwaApplicationDiscardHeaders exact)) \port -> do
-          clientEnv <- danwaClientEnv port limits Nothing
-          runDanwaClient clientEnv (Danwa.startConversation startConversation) >>= assertRight
-        testWithApplication (pure (danwaApplicationDiscardHeaders over)) \port -> do
-          clientEnv <- danwaClientEnv port limits Nothing
-          runDanwaClient clientEnv (Danwa.startConversation startConversation) >>= \case
-            Left (PermanentHttpFailure (ResponseTooLarge limit)) -> byteLimit limit @?= 1_024
-            Left other -> assertFailure ("expected an oversized danwa response, got " <> show other)
-            Right _ -> assertFailure "an oversized danwa response succeeded",
-      testCase "danwa rejects an oversized generated request before the stub sees it" do
-        calls <- newIORef (0 :: Int)
-        let limits = limitsAt 1_024 1_024
-            oversized =
-              Conversation.StartConversationRequest
-                { Conversation.startedBy = Text.replicate 2_000 "a",
-                  Conversation.kind = "thread",
-                  Conversation.parentConversationId = Nothing
-                }
-        testWithApplication (pure (countRequests calls)) \port -> do
-          clientEnv <- danwaClientEnv port limits Nothing
-          runDanwaClient clientEnv (Danwa.startConversation oversized) >>= \case
-            Left (PermanentHttpFailure RequestTooLarge {}) -> pure ()
-            Left other -> assertFailure ("expected an oversized danwa request, got " <> show other)
-            Right _ -> assertFailure "an oversized danwa request succeeded"
-          readIORef calls >>= (@?= 0)
-    ]
-
 expectedToken :: BearerToken
 expectedToken = tokenFromConfig rawToken
 
@@ -244,32 +195,6 @@ testEnv source httpLimits = do
   manager <- newSinkManager
   pure HttpEnv {manager, token = source, limits = httpLimits}
 
-danwaClientEnv :: Int -> HttpLimits -> Maybe TokenSource -> IO ClientEnv
-danwaClientEnv port httpLimits source = do
-  manager <- newTypedClientManager httpLimits source
-  case parseBaseUrl (Text.unpack (localBaseUrl port)) of
-    Nothing -> assertFailure "failed to parse the danwa base URL"
-    Just base -> pure (mkClientEnv manager base)
-
-startConversation :: Conversation.StartConversationRequest
-startConversation =
-  Conversation.StartConversationRequest
-    { Conversation.startedBy = "part_agent_test",
-      Conversation.kind = "thread",
-      Conversation.parentConversationId = Nothing
-    }
-
-danwaResponse :: LBS.ByteString
-danwaResponse =
-  "{\"conversationId\":\"conv_stub\",\"status\":\"active\",\"kind\":\"thread\",\"startedBy\":\"part_agent_test\",\"parentConversationId\":\"\"}"
-
-padJson :: Int -> LBS.ByteString -> LBS.ByteString
-padJson size bytes
-  | remaining < 0 = error "fixture JSON exceeds its requested size"
-  | otherwise = bytes <> LBS.replicate (fromIntegral remaining) 32
-  where
-    remaining = size - fromIntegral (LBS.length bytes)
-
 recordHeaders :: IORef [Header] -> Application
 recordHeaders received request respond = do
   _ <- strictRequestBody request
@@ -296,16 +221,6 @@ sizedResponse size _request respond = respond (responseLBS status200 [] (LBS.rep
 redirectApplication :: Int -> Application
 redirectApplication port _request respond =
   respond (responseLBS status302 [(hLocation, baseUrlBytes port)] "")
-
-danwaApplication :: IORef [Header] -> LBS.ByteString -> Application
-danwaApplication received body request respond = do
-  _ <- strictRequestBody request
-  writeIORef received (requestHeaders request)
-  respond (responseLBS status200 [(hContentType, "application/json")] body)
-
-danwaApplicationDiscardHeaders :: LBS.ByteString -> Application
-danwaApplicationDiscardHeaders body _request respond =
-  respond (responseLBS status200 [(hContentType, "application/json")] body)
 
 localBaseUrl :: Int -> Text
 localBaseUrl port = "http://127.0.0.1:" <> Text.pack (show port)

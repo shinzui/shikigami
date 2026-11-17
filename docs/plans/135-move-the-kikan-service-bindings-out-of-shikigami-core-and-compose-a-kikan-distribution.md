@@ -735,6 +735,17 @@ These came from read-only research on 2026-11-15, before implementation.
   kernel by M3. M6, which owns the rule that no stanza of a stock package depends on a Kikan
   client, renames that runner and moves its Danwa cases to the binding.
   Date: 2026-11-17
+- Decision: (M6, enforcement, 2026-11-17) The kernel boundary check enforces the end state:
+  no stanza of the seven stock packages may depend on a library in `kikanClientLibraries`
+  (the plan's list plus `shomei-servant` and `shibuya-kafka-adapter`), and no Haskell source
+  of the seven, test suites included, may import a module under `Kikan.`, `Danwa.`, `Rei.`
+  or `Shomei.`. Synthetic inputs prove both: a planted `import Rei.Client` and a planted
+  `rei-api-client` in a test stanza each fail with the route to the binding. To get there
+  the kernel's servant runner lost its Danwa name (`runDanwaClient` is `runTypedClient`,
+  with `runTypedClientWithHeaders` and `classifyTypedClientError`; behavior unchanged) and
+  `SinkAuthSpec`'s three Danwa-client cases moved to the binding as
+  `Kikan.Shikigami.Binding.TypedClientSpec`. Both measurement commands print 0.
+  Date: 2026-11-17
 
 
 ## Outcomes & Retrospective

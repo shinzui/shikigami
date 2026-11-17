@@ -26,7 +26,7 @@ where
 
 import Data.Aeson (FromJSON (..), withObject, withText, (.:))
 import Data.Aeson qualified as Aeson
-import Data.List (sort)
+import Data.List (isPrefixOf, sort)
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Maybe (mapMaybe)
@@ -96,7 +96,10 @@ data KernelInputs = KernelInputs
     -- | What each module of the adaptive coordinator imports. The coordinator
     -- is a kernel primitive on the strength of depending on no Kikan service
     -- (plan 131, M6), so that claim is checked and not only recorded.
-    coordinatorImports :: ![(Text, [Text])]
+    coordinatorImports :: ![(Text, [Text])],
+    -- | What every Haskell source of the seven stock packages imports, by
+    -- repository-relative path (plan 135, M6).
+    stockImports :: ![(FilePath, [Text])]
   }
   deriving stock (Eq, Show)
 
@@ -124,6 +127,10 @@ data KernelViolation
     SdkExportsDrifted !Text ![Text]
   | -- | (coordinator module, the Kikan binding module it imports)
     CoordinatorImportsBinding !Text !Text
+  | -- | (stanza of a stock package, the Kikan client or stream library it names)
+    StockDependsOnKikanClient !Text !Text
+  | -- | (stock source file, the Kikan module it imports)
+    StockImportsKikan !FilePath !Text
   deriving stock (Eq, Show)
 
 -- | The adaptive coordinator: the modules that stay in the kernel as a
@@ -139,6 +146,24 @@ isCoordinatorModule name =
 isBindingModule :: Text -> Bool
 isBindingModule name =
   any (`Text.isPrefixOf` name) ["Kikan.", "Danwa.", "Rei.", "Shomei."]
+
+-- | The client and stream libraries of the Kikan services. The stock
+-- packages link none of them in any stanza: only the Kikan binding and the
+-- distribution do (plan 135, M6).
+kikanClientLibraries :: [Text]
+kikanClientLibraries =
+  [ "danwa-api",
+    "danwa-client",
+    "kikan-en-client",
+    "kikan-en-contract",
+    "rei-api-client",
+    "rei-api-contract",
+    "shomei-client",
+    "shomei-servant",
+    "kafka-effectful",
+    "hw-kafka-client",
+    "shibuya-kafka-adapter"
+  ]
 
 -- ── The rules ───────────────────────────────────────────────────────────────
 
@@ -161,7 +186,14 @@ kernelViolations policy inputs =
         Just found <- [Map.lookup component inputs.sdkExports],
         sort found /= sort pinned
       ],
-      [CoordinatorImportsBinding owner imported | (owner, imports) <- inputs.coordinatorImports, isCoordinatorModule owner, imported <- imports, isBindingModule imported]
+      [CoordinatorImportsBinding owner imported | (owner, imports) <- inputs.coordinatorImports, isCoordinatorModule owner, imported <- imports, isBindingModule imported],
+      [ StockDependsOnKikanClient (package <> ":" <> stanzaLabel stanza) dependency
+      | (package, packageStanzas) <- inputs.stock,
+        stanza <- packageStanzas,
+        dependency <- dependencyName <$> stanza.dependencies,
+        dependency `elem` kikanClientLibraries
+      ],
+      [StockImportsKikan path imported | (path, imports) <- inputs.stockImports, imported <- imports, isBindingModule imported]
     ]
   where
     modules = mapMaybe (\path -> (path,) <$> moduleOf path) inputs.sources
@@ -214,6 +246,11 @@ rootOf moduleName = case Text.splitOn "." moduleName of
   ("Shikigami" : root : _) -> Just root
   _ -> Nothing
 
+-- | The package a dependency entry names, without its component or version
+-- bounds: @rei-api-client >=0.2 && <0.3@ names @rei-api-client@.
+dependencyName :: Text -> Text
+dependencyName = Text.takeWhile (\c -> c /= ':' && c /= ' ' && c /= '>' && c /= '<' && c /= '=' && c /= '^') . Text.strip
+
 -- | @shikigami-core:flow-sdk@ names the package @shikigami-core@.
 packageOf :: Text -> Text
 packageOf = Text.takeWhile (/= ':')
@@ -254,6 +291,10 @@ renderKernelViolation policy = \case
     "shikigami-core:" <> component <> " re-exports " <> Text.intercalate ", " found <> ", which differs from kernel.sdkModules."
   CoordinatorImportsBinding owner imported ->
     owner <> " imports " <> imported <> ". The adaptive coordinator is a kernel primitive because it depends on no Kikan service; reach the service through a capability, or record a new disposition."
+  StockDependsOnKikanClient stanza dependency ->
+    stanza <> " depends on " <> dependency <> "; the stock packages link no Kikan client or stream library. Put the code that needs it in packs/kikan-shikigami-binding, behind a kernel port."
+  StockImportsKikan path imported ->
+    Text.pack path <> " imports " <> imported <> "; no stock module knows a Kikan service. The Kikan binding implements the kernel's ports (docs/plans/135)."
   where
     leaving = \case
       LeavingToPack -> "to a flow pack"
@@ -293,7 +334,17 @@ readTree = do
     mapM
       (\(path, name) -> (name,) . importedModules <$> TIO.readFile (sourceRoot </> path))
       [(path, name) | path <- sources, Just name <- [moduleOf path], isCoordinatorModule name]
-  pure (ownership.kernel, KernelInputs {sources, stock = fmap parseStanzas <$> stockFiles, outOfCore, sdkExports, reviewedRoots, coordinatorImports})
+  stockSources <- concat <$> mapM (stockHaskellSources root) expectedPackages
+  stockImports <- mapM (\path -> (makeRelative root path,) . importedModules <$> TIO.readFile path) stockSources
+  pure (ownership.kernel, KernelInputs {sources, stock = fmap parseStanzas <$> stockFiles, outOfCore, sdkExports, reviewedRoots, coordinatorImports, stockImports})
+
+-- | Every Haskell source of one stock package: each top-level directory but a
+-- local database cluster, the build tree, SQL migrations and C sources.
+stockHaskellSources :: FilePath -> Text -> IO [FilePath]
+stockHaskellSources root package = do
+  let directory = root </> Text.unpack package
+  entries <- listDirectory directory
+  concat <$> mapM (haskellSources . (directory </>)) [entry | entry <- sort entries, entry `notElem` ["db", "dist-newstyle", "sql-migrations", "cbits"]]
 
 -- | The modules a source file imports, qualified or not.
 importedModules :: Text -> [Text]
@@ -376,6 +427,19 @@ tests =
         kernelViolations synthetic (planted "Shikigami.Program.Decision.Adaptive") @?= [CoordinatorImportsBinding "Shikigami.Program.Decision.Adaptive" "Kikan.Shikigami.Binding.Conversation", CoordinatorImportsBinding "Shikigami.Program.Decision.Adaptive" "Danwa.Client"]
         kernelViolations synthetic (planted "Shikigami.Agent.Run") @?= []
         assertBool "the refusal says why it is a primitive" ("depends on no Kikan service" `Text.isInfixOf` renderKernelViolation synthetic (CoordinatorImportsBinding "Shikigami.Coordination.Workflow" "Kikan.Shikigami.Binding.Conversation")),
+      -- No stock stanza links a Kikan client and no stock module imports one
+      -- (plan 135, M6). The real tree holds; a planted import or dependency
+      -- fails with the route out, so the rule cannot pass vacuously.
+      testCase "the stock packages link no Kikan client and import no Kikan module" do
+        (_, inputs) <- readTree
+        assertBool "the walk found the stock sources" (length inputs.stockImports > 500)
+        assertBool "the walk read the stock test suites too" (any (("shikigami-core/test-postgres/" `isPrefixOf`) . fst) inputs.stockImports)
+        let plantedImport = fixture {stockImports = [("shikigami-core/src/Shikigami/Agent/Run.hs", ["Shikigami.Prelude", "Rei.Client"])]}
+            plantedDependency = fixture {stock = [("shikigami-core", [Stanza "test-suite" "shikigami-core-test" ["base", "rei-api-client >=0.2"]])]}
+        kernelViolations synthetic plantedImport @?= [StockImportsKikan "shikigami-core/src/Shikigami/Agent/Run.hs" "Rei.Client"]
+        kernelViolations synthetic fixture @?= []
+        kernelViolations synthetic plantedDependency @?= [StockDependsOnKikanClient "shikigami-core:test-suite shikigami-core-test" "rei-api-client"]
+        assertBool "the refusal names the binding" ("packs/kikan-shikigami-binding" `Text.isInfixOf` renderKernelViolation synthetic (StockDependsOnKikanClient "shikigami-core:library" "danwa-client")),
       testCase "each SDK facade exports exactly its golden list" do
         root <- repositoryRoot
         (policy, _) <- readTree
@@ -445,7 +509,8 @@ tests =
           outOfCore = [],
           sdkExports = Map.empty,
           reviewedRoots = Set.fromList ["Agent", "Watchdog", "DanwaConversation"],
-          coordinatorImports = [("Shikigami.Coordination.Workflow", ["Shikigami.Coordination.Runtime", "Shikigami.Flow.Decision"])]
+          coordinatorImports = [("Shikigami.Coordination.Workflow", ["Shikigami.Coordination.Runtime", "Shikigami.Flow.Decision"])],
+          stockImports = [("shikigami-core/src/Shikigami/Agent/Run.hs", ["Shikigami.Prelude", "Kiroku.Store.Effect"])]
         }
     library = Stanza "library"
     goodPack =

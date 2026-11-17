@@ -11,9 +11,9 @@ module Shikigami.Sink.Http
     newSinkManager,
     newTypedClientManager,
     unauthenticatedHttpEnv,
-    classifyDanwaClientError,
-    runDanwaClient,
-    runDanwaClientWithHeaders,
+    classifyTypedClientError,
+    runTypedClient,
+    runTypedClientWithHeaders,
     httpFailureIsPermanent,
     renderHttpFailure,
     postJSONWithHeaders,
@@ -239,32 +239,34 @@ classifyStatus code
 
 -- | Convert servant-client failures without retaining its request, response
 -- body, arbitrary headers, or exception rendering.
-classifyDanwaClientError :: ClientError -> HttpFailure
-classifyDanwaClientError = \case
+classifyTypedClientError :: ClientError -> HttpFailure
+classifyTypedClientError = \case
   FailureResponse _ response -> classifyStatus (statusCode (responseStatusCode response))
   DecodeFailure {} -> PermanentHttpFailure InvalidResponse
   UnsupportedContentType {} -> PermanentHttpFailure InvalidResponse
   InvalidContentTypeHeader {} -> PermanentHttpFailure InvalidResponse
-  ConnectionError wrapped -> classifyDanwaException wrapped
+  ConnectionError wrapped -> classifyTypedClientException wrapped
 
--- | Run one generated Danwa action while catching both servant errors and the
+-- | Run one generated servant-client action (a service binding's typed
+-- client, Danwa's for one) while catching both servant errors and the
 -- private policy exceptions that manager hooks may throw before http-client has
 -- entered its own exception wrapper.
-runDanwaClient :: ClientEnv -> ClientM a -> IO (Either HttpFailure a)
-runDanwaClient clientEnv action =
+runTypedClient :: ClientEnv -> ClientM a -> IO (Either HttpFailure a)
+runTypedClient clientEnv action =
   trySynchronous (runClientM action clientEnv) <&> \case
-    Left wrapped -> Left (classifyDanwaException wrapped)
-    Right (Left failure) -> Left (classifyDanwaClientError failure)
+    Left wrapped -> Left (classifyTypedClientException wrapped)
+    Right (Left failure) -> Left (classifyTypedClientError failure)
     Right (Right value) -> Right value
 
--- | Run one generated Danwa action with dispatch-scoped W3C trace headers.
+-- | Run one generated servant-client action with dispatch-scoped W3C trace
+-- headers.
 --
 -- The 'ClientEnv' override is local to this call, so concurrent deliveries
 -- cannot leak context into one another. Only the two W3C propagation headers
 -- are accepted; authentication remains owned by the host-scoped manager hook.
-runDanwaClientWithHeaders :: [Header] -> ClientEnv -> ClientM a -> IO (Either HttpFailure a)
-runDanwaClientWithHeaders extraHeaders clientEnv =
-  runDanwaClient
+runTypedClientWithHeaders :: [Header] -> ClientEnv -> ClientM a -> IO (Either HttpFailure a)
+runTypedClientWithHeaders extraHeaders clientEnv =
+  runTypedClient
     clientEnv
       { makeClientRequest = \baseUrl request -> do
           outgoing <- makeClientRequest clientEnv baseUrl request
@@ -279,13 +281,13 @@ runDanwaClientWithHeaders extraHeaders clientEnv =
     traceHeaders = filter ((`elem` traceHeaderNames) . fst) extraHeaders
     traceHeaderNames = ["traceparent", "tracestate"]
 
-classifyDanwaException :: SomeException -> HttpFailure
-classifyDanwaException wrapped =
+classifyTypedClientException :: SomeException -> HttpFailure
+classifyTypedClientException wrapped =
   case fromException wrapped of
-    Just (DanwaCredentialUnavailable failure) -> TransientHttpFailure (CredentialUnavailable failure)
-    Just (DanwaRequestTooLarge actual limit) -> PermanentHttpFailure (RequestTooLarge actual limit)
-    Just (DanwaResponseTooLarge limit) -> PermanentHttpFailure (ResponseTooLarge limit)
-    Just DanwaRequestSizeUnknown -> PermanentHttpFailure RequestSizeUnknown
+    Just (TypedClientCredentialUnavailable failure) -> TransientHttpFailure (CredentialUnavailable failure)
+    Just (TypedClientRequestTooLarge actual limit) -> PermanentHttpFailure (RequestTooLarge actual limit)
+    Just (TypedClientResponseTooLarge limit) -> PermanentHttpFailure (ResponseTooLarge limit)
+    Just TypedClientRequestSizeUnknown -> PermanentHttpFailure RequestSizeUnknown
     Nothing -> TransientHttpFailure TransportFailure
 
 -- | Convert only synchronous failures. Workflow cancellation and process-level
@@ -299,28 +301,28 @@ trySynchronous action =
         Nothing -> pure (Left failure)
     Right value -> pure (Right value)
 
-data DanwaManagerFailure
-  = DanwaCredentialUnavailable !CredentialFailure
-  | DanwaRequestTooLarge !Integer !ByteLimit
-  | DanwaResponseTooLarge !ByteLimit
-  | DanwaRequestSizeUnknown
+data TypedClientFailure
+  = TypedClientCredentialUnavailable !CredentialFailure
+  | TypedClientRequestTooLarge !Integer !ByteLimit
+  | TypedClientResponseTooLarge !ByteLimit
+  | TypedClientRequestSizeUnknown
 
-instance Show DanwaManagerFailure where
+instance Show TypedClientFailure where
   show = \case
-    DanwaCredentialUnavailable failure -> "danwa credential unavailable: " <> show failure
-    DanwaRequestTooLarge actual limit -> "danwa request is " <> show actual <> " bytes; limit is " <> show (byteLimitBytes limit)
-    DanwaResponseTooLarge limit -> "danwa response exceeds " <> show (byteLimitBytes limit) <> " bytes"
-    DanwaRequestSizeUnknown -> "danwa request size is unknown"
+    TypedClientCredentialUnavailable failure -> "typed client credential unavailable: " <> show failure
+    TypedClientRequestTooLarge actual limit -> "typed client request is " <> show actual <> " bytes; limit is " <> show (byteLimitBytes limit)
+    TypedClientResponseTooLarge limit -> "typed client response exceeds " <> show (byteLimitBytes limit) <> " bytes"
+    TypedClientRequestSizeUnknown -> "typed client request size is unknown"
 
-instance Exception DanwaManagerFailure
+instance Exception TypedClientFailure
 
-newDanwaManager :: HttpLimits -> Maybe TokenSource -> IO Manager
-newDanwaManager httpLimits source =
+newTypedManager :: HttpLimits -> Maybe TokenSource -> IO Manager
+newTypedManager httpLimits source =
   newManager
     baseSettings
       { managerResponseTimeout = responseTimeoutMicro 30_000_000,
-        managerModifyRequest = managerModifyRequest baseSettings >=> configureDanwaRequest httpLimits source,
-        managerModifyResponse = managerModifyResponse baseSettings >=> boundDanwaResponse ((.responseBytes) httpLimits)
+        managerModifyRequest = managerModifyRequest baseSettings >=> configureTypedRequest httpLimits source,
+        managerModifyResponse = managerModifyResponse baseSettings >=> boundTypedResponse ((.responseBytes) httpLimits)
       }
   where
     baseSettings = tlsManagerSettings
@@ -329,16 +331,16 @@ newDanwaManager httpLimits source =
 -- client. One credential scope owns each manager; a client never supplies a
 -- serialized header or inherits a token for another endpoint.
 newTypedClientManager :: HttpLimits -> Maybe TokenSource -> IO Manager
-newTypedClientManager = newDanwaManager
+newTypedClientManager = newTypedManager
 
-configureDanwaRequest :: HttpLimits -> Maybe TokenSource -> Request -> IO Request
-configureDanwaRequest httpLimits source request = do
-  checkedBody <- checkDanwaRequestBody ((.requestBytes) httpLimits) (requestBody request)
+configureTypedRequest :: HttpLimits -> Maybe TokenSource -> Request -> IO Request
+configureTypedRequest httpLimits source request = do
+  checkedBody <- checkTypedRequestBody ((.requestBytes) httpLimits) (requestBody request)
   headers <- case source of
     Nothing -> pure (filter ((/= hAuthorization) . fst) (requestHeaders request))
     Just TokenSource {fetchToken} ->
       fetchToken >>= \case
-        Left failure -> throwIO (DanwaCredentialUnavailable failure)
+        Left failure -> throwIO (TypedClientCredentialUnavailable failure)
         Right bearer -> pure ((hAuthorization, renderAuthHeader bearer) : filter ((/= hAuthorization) . fst) (requestHeaders request))
   pure
     request
@@ -347,21 +349,21 @@ configureDanwaRequest httpLimits source request = do
         redirectCount = 0
       }
 
-checkDanwaRequestBody :: ByteLimit -> RequestBody -> IO RequestBody
-checkDanwaRequestBody limit body = case body of
+checkTypedRequestBody :: ByteLimit -> RequestBody -> IO RequestBody
+checkTypedRequestBody limit body = case body of
   RequestBodyLBS bytes -> checked (toInteger (LBS.length bytes)) body
   RequestBodyBS bytes -> checked (toInteger (BS.length bytes)) body
   RequestBodyBuilder size _ -> checked (toInteger size) body
   RequestBodyStream size _ -> checked (toInteger size) body
-  RequestBodyStreamChunked _ -> throwIO DanwaRequestSizeUnknown
-  RequestBodyIO build -> build >>= checkDanwaRequestBody limit
+  RequestBodyStreamChunked _ -> throwIO TypedClientRequestSizeUnknown
+  RequestBodyIO build -> build >>= checkTypedRequestBody limit
   where
     checked actual original
-      | actual > toInteger (byteLimitBytes limit) = throwIO (DanwaRequestTooLarge actual limit)
+      | actual > toInteger (byteLimitBytes limit) = throwIO (TypedClientRequestTooLarge actual limit)
       | otherwise = pure original
 
-boundDanwaResponse :: ByteLimit -> Response BodyReader -> IO (Response BodyReader)
-boundDanwaResponse limit response = do
+boundTypedResponse :: ByteLimit -> Response BodyReader -> IO (Response BodyReader)
+boundTypedResponse limit response = do
   totalRef <- newIORef 0
   let original = responseBody response
       bounded = do
@@ -369,6 +371,6 @@ boundDanwaResponse limit response = do
         total <- readIORef totalRef
         let next = total + BS.length chunk
         if next > byteLimitBytes limit
-          then throwIO (DanwaResponseTooLarge limit)
+          then throwIO (TypedClientResponseTooLarge limit)
           else writeIORef totalRef next >> pure chunk
   pure response {responseBody = bounded}

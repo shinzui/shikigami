@@ -29,7 +29,7 @@ import Servant.Client (ClientEnv)
 import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Principal (AgentIdentity, identityText)
 import Shikigami.Prelude
-import Shikigami.Sink.Http (HttpFailure, renderHttpFailure, runDanwaClientWithHeaders)
+import Shikigami.Sink.Http (HttpFailure, renderHttpFailure, runTypedClientWithHeaders)
 import Shikigami.Sink.Types (DeliveryGuard (..))
 
 data DanwaError
@@ -101,7 +101,7 @@ postText clientEnv cfg content = do
 postReplyWithHeaders :: ClientEnv -> [Header] -> DanwaConfig -> DeclarationCoordinate "danwa-participant" -> DanwaTarget -> Text -> IO (Either DanwaError (DeclarationCoordinate "danwa-message"))
 postReplyWithHeaders clientEnv headers _cfg author (DanwaTarget {conversationId = cid, parentMessageId = parent}) content = do
   result <-
-    runDanwaClientWithHeaders headers clientEnv $
+    runTypedClientWithHeaders headers clientEnv $
       case parent of
         Nothing ->
           Danwa.postMessage
@@ -156,7 +156,7 @@ tryIO = try
 startJoinedConversation :: ClientEnv -> [Header] -> DanwaConfig -> IO (Either DanwaError (DeclarationCoordinate "danwa-conversation"))
 startJoinedConversation clientEnv headers cfg = do
   started <-
-    runDanwaClientWithHeaders headers clientEnv $
+    runTypedClientWithHeaders headers clientEnv $
       Danwa.startConversation
         Conv.StartConversationRequest
           { Conv.startedBy = declarationCoordinateText ((.agentParticipant) cfg),
@@ -167,7 +167,7 @@ startJoinedConversation clientEnv headers cfg = do
     Left failure -> pure (Left (DanwaHttpError failure))
     Right Conv.ConversationResponse {Conv.conversationId = cid} -> do
       joined <-
-        runDanwaClientWithHeaders headers clientEnv $
+        runTypedClientWithHeaders headers clientEnv $
           Danwa.joinConversation
             cid
             Conv.JoinConversationRequest

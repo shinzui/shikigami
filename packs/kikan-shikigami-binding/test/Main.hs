@@ -8,6 +8,7 @@ import Kikan.Shikigami.Binding.IntakeSpec qualified as IntakeSpec
 import Kikan.Shikigami.Binding.KanmonClientSpec qualified as KanmonClientSpec
 import Kikan.Shikigami.Binding.OutputDispatchSpec qualified as OutputDispatchSpec
 import Kikan.Shikigami.Binding.SinkHonestySpec qualified as SinkHonestySpec
+import Kikan.Shikigami.Binding.TypedClientSpec qualified as TypedClientSpec
 import Kikan.Shikigami.Binding.WorkspaceActionProofSpec qualified as WorkspaceActionProofSpec
 import Shikigami.Authority.Adapter (AuthorityAdapter (..))
 import Shikigami.Flow.Builtin (builtinPack)
@@ -36,6 +37,7 @@ main =
           KanmonClientSpec.tests,
           ApprovalNotificationSpec.tests,
           IntakeSpec.tests,
-          ConversationSpec.tests
+          ConversationSpec.tests,
+          TypedClientSpec.tests
         ]
     )

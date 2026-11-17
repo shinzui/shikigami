@@ -192,6 +192,7 @@ test-suite kikan-shikigami-binding-test
     Kikan.Shikigami.Binding.KanmonClientSpec
     Kikan.Shikigami.Binding.OutputDispatchSpec
     Kikan.Shikigami.Binding.SinkHonestySpec
+    Kikan.Shikigami.Binding.TypedClientSpec
     Kikan.Shikigami.Binding.WorkspaceActionProofSpec
 
   build-depends:

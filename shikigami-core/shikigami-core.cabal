@@ -798,8 +798,6 @@ test-suite shikigami-core-test
     base,
     bytestring,
     containers,
-    danwa-api,
-    danwa-client,
     dhall,
     directory,
     effectful,
