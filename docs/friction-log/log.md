@@ -2,6 +2,42 @@
 
 ## 2026-11-17
 
+* **Addition**: FRIC-111 records nuisance interface friction with mori://shinzui/shikigami: A campaign coding agent follows the operator's own Claude Code hooks and instructions
+
+
+* **Addition**: FRIC-110 records nuisance tooling friction with https://cabal.readthedocs.io/: A Tasty pattern with spaces cannot be passed through cabal test --test-options
+
+
+* **Addition**: FRIC-109 records nuisance tooling friction with mori://shinzui/shikigami: keiro-gate reports the generated layer stale whenever shikigami-core/src has uncommitted edits
+
+
+* **Addition**: FRIC-108 records slowdown tooling friction with mori://shinzui/shikigami: A capacity-deferred execution delivery is silent
+
+
+* **Addition**: FRIC-107 records nuisance documentation friction with mori://shinzui/shikigami: Playbook runs report a stub model provider and an unexplained minute budget
+
+
+* **Addition**: FRIC-106 records nuisance interface friction with mori://shinzui/shikigami: A probe's output in a step template carries its exit line
+
+
+* **Addition**: FRIC-105 records detour interface friction with mori://shinzui/shikigami: A foreground run exits before its approval ask reaches the local inbox
+
+
+* **Addition**: FRIC-104 records slowdown interface friction with mori://shinzui/shikigami: A run's environment failures are stored as learnings and recalled by later runs
+
+
+* **Addition**: FRIC-103 records detour interface friction with mori://shinzui/shikigami: Workspace placement cannot be chosen at the grant prompt or declared by a campaign
+
+
+* **Addition**: FRIC-102 records detour interface friction with mori://shinzui/shikigami: A declaration grant can be confirmed only by a run in a terminal
+
+
+* **Addition**: FRIC-101 records detour environment friction with mori://shinzui/shikigami: The Baikai provider-argument ceiling refuses a coding agent only after the run's probes
+
+
+* **Addition**: FRIC-100 records detour tooling friction with mori://shinzui/shikigami: A local playbook run finds a missing helper executable only when a step runs it
+
+
 * **Update**: FRIC-99 resolved: A capacity deadlock, not a missing wake. ADR-132 makes a stopped process instance release its runtime permits, and the scenario passes at capacity one.
 
 
