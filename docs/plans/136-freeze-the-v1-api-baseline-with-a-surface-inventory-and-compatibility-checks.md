@@ -150,6 +150,25 @@ It owns that plan's fourth acceptance test, "Baseline", and its "Public surfaces
 
 ## Decision Log
 
+- Decision: (M3, 2026-11-17) Four surfaces join the inventory in report mode, each in the
+  kernel freeze: `kernel-ports` (EP-8's `Shikigami.Approval.Channel`, `Shikigami.Authority`,
+  `Shikigami.Authority.Adapter`, `Shikigami.Output`, `Shikigami.Output.Registration`,
+  `Shikigami.Record`), `pack-service-ports` (EP-10's `Shikigami.Agent.Conversation.Channel`
+  and `Shikigami.Objective.Tracker.Provider`), `kikan-output-helpers` (the export list of
+  `kikan-shikigami-binding:outputs`) and `kikan-output-dhall` (the binding's
+  `dhall/Outputs.dhall`, with a corpus of the three Kikan sample declarations under
+  `api-baseline/corpus/kikan`). The distribution's default output is not a separate surface:
+  no check kind observes a composition's default, and `run.admitted` records it per run.
+  `ExportList.component` accepts `package:library` for a sublibrary, whose interfaces Cabal
+  writes under `l/<library>/build/<library>`.
+  Date: 2026-11-17
+- Decision: (M3) `pin` refuses a schema entry whose pinned hash is empty, and writes the
+  inventory beside itself and renames it. Pinning `kikan-output-dhall` with an empty hash had
+  truncated `surfaces.dhall` to zero bytes: replacing the empty string failed after the file
+  was opened for writing. A regression test pins an empty hash into a scratch inventory and
+  requires the file unchanged.
+  Date: 2026-11-17
+
 - Decision: `cli-shikigami` was re-pinned on 2026-11-16 after `shikigami danwa-spike` was
   removed, the first breaking finding the inventory recorded.
   Rationale: the removal is an approved removal of plan 131 (M1), whose Decision Log holds the

@@ -25,7 +25,7 @@ import Data.Text.Encoding qualified as TextEncoding
 import Data.Text.IO qualified as TextIO
 import Shikigami.Agent.Loader (LoadError (..), loadAgent)
 import Shikigami.Api.OpenApi (renderOpenApi, shikigamiOpenApi)
-import System.Directory (createDirectoryIfMissing, doesFileExist, listDirectory)
+import System.Directory (createDirectoryIfMissing, doesFileExist, listDirectory, renameFile)
 import System.Exit (ExitCode (..))
 import System.FilePath (takeBaseName, takeDirectory, (<.>), (</>))
 import System.Process (readProcessWithExitCode)
@@ -95,10 +95,19 @@ pinSurface inventory surface = case surface.check of
       Left problem -> pure (Left (schema <> " does not evaluate, so there is nothing to pin:\n" <> problem))
       Right current
         | current == hash -> pure (Right [])
+        -- An empty pin cannot be found as text, and replacing the empty
+        -- string would rewrite every position of the inventory.
+        | Text.null hash -> pure (Left ("the entry's pinned hash is empty; write a placeholder such as \"unpinned\" as its hash and pin again"))
         | otherwise -> do
             contents <- TextIO.readFile inventory
             if hash `Text.isInfixOf` contents
-              then TextIO.writeFile inventory (Text.replace hash current contents) >> pure (Right [inventory])
+              then do
+                -- Write beside it and rename, so a failure never leaves the
+                -- inventory truncated.
+                let staged = inventory <> ".pinning"
+                TextIO.writeFile staged (Text.replace hash current contents)
+                renameFile staged inventory
+                pure (Right [inventory])
               else pure (Left ("the inventory does not contain the pinned hash " <> hash <> " as text"))
   JournalCodec {corpus, goldens} -> do
     files <- corpusFiles (Text.unpack corpus)
@@ -156,12 +165,17 @@ interfaceExports component moduleName = do
           else Left ("ghc --show-iface " <> Text.pack interface <> " failed: " <> Text.pack err)
   where
     relative = Text.unpack (Text.replace "." "/" moduleName) <.> "hi"
+    -- @package@ names a main library; @package:library@ a sublibrary, whose
+    -- interfaces Cabal writes under the package's @l/<library>/build/<library>@.
+    (packageName, library) = case Text.breakOn ":" component of
+      (name, "") -> (name, Nothing)
+      (name, rest) -> (name, Just (Text.unpack (Text.drop 1 rest)))
     interfaceFiles = do
       let build = "dist-newstyle" </> "build"
       architectures <- listOrEmpty build
       compilers <- concat <$> mapM (\architecture -> map ((build </> architecture) </>) <$> listOrEmpty (build </> architecture)) architectures
-      packages <- concat <$> mapM (\compiler -> map (compiler </>) . filter (Text.isPrefixOf (component <> "-") . Text.pack) <$> listOrEmpty compiler) compilers
-      let paths = [package </> "build" </> relative | package <- packages]
+      packages <- concat <$> mapM (\compiler -> map (compiler </>) . filter (Text.isPrefixOf (packageName <> "-") . Text.pack) <$> listOrEmpty compiler) compilers
+      let paths = [maybe (package </> "build") (\name -> package </> "l" </> name </> "build" </> name) library </> relative | package <- packages]
       filterExisting paths
     listOrEmpty directory = either (const []) id <$> (try (listDirectory directory) :: IO (Either IOException [FilePath]))
     filterExisting = fmap concat . mapM (\path -> (\exists -> [path | exists]) <$> doesFileExist path)

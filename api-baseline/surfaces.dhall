@@ -15,6 +15,12 @@ let masterPlan =
 let packPlan =
       "docs/plans/130-move-the-extension-boundary-out-of-shikigami-core-with-flow-packs-and-an-architecture-fitness-check.md"
 
+let portsPlan =
+      "docs/plans/133-give-the-kernel-its-own-action-record-output-approval-and-trigger-contracts-with-local-adapters.md"
+
+let bindingPlan =
+      "docs/plans/135-move-the-kikan-service-bindings-out-of-shikigami-core-and-compose-a-kikan-distribution.md"
+
 let baselinePlan =
       "docs/plans/136-freeze-the-v1-api-baseline-with-a-surface-inventory-and-compatibility-checks.md"
 
@@ -154,6 +160,72 @@ in  [ { name = "agent-declaration"
             { component = "shikigami-core"
             , modules = [ "Shikigami.Pack.Sdk" ]
             , pinned = "api-baseline/goldens/exports/pack-sdk.txt"
+            }
+      , freeze = S.Freeze.Kernel
+      , enforcement = S.Enforcement.Report
+      }
+    , { name = "kernel-ports"
+      , owner = portsPlan
+      , stability = S.Stability.Provisional
+      , rule =
+          "A port type, constructor or function an adapter can name stays exported with the same meaning; new ones may be added."
+      , check =
+          S.Check.ExportList
+            { component = "shikigami-core"
+            , modules =
+              [ "Shikigami.Approval.Channel"
+              , "Shikigami.Authority"
+              , "Shikigami.Authority.Adapter"
+              , "Shikigami.Output"
+              , "Shikigami.Output.Registration"
+              , "Shikigami.Record"
+              ]
+            , pinned = "api-baseline/goldens/exports/kernel-ports.txt"
+            }
+      , freeze = S.Freeze.Kernel
+      , enforcement = S.Enforcement.Report
+      }
+    , { name = "pack-service-ports"
+      , owner = bindingPlan
+      , stability = S.Stability.Provisional
+      , rule =
+          "A tracker-provider or conversation-channel name a pack can implement stays exported with the same meaning; new ones may be added."
+      , check =
+          S.Check.ExportList
+            { component = "shikigami-core"
+            , modules =
+              [ "Shikigami.Agent.Conversation.Channel"
+              , "Shikigami.Objective.Tracker.Provider"
+              ]
+            , pinned = "api-baseline/goldens/exports/pack-service-ports.txt"
+            }
+      , freeze = S.Freeze.Kernel
+      , enforcement = S.Enforcement.Report
+      }
+    , { name = "kikan-output-helpers"
+      , owner = bindingPlan
+      , stability = S.Stability.Provisional
+      , rule =
+          "A typed Kikan output configuration or helper a flow body can import stays exported with the same meaning; new ones may be added."
+      , check =
+          S.Check.ExportList
+            { component = "kikan-shikigami-binding:outputs"
+            , modules = [ "Kikan.Shikigami.Binding.Outputs" ]
+            , pinned = "api-baseline/goldens/exports/kikan-output-helpers.txt"
+            }
+      , freeze = S.Freeze.Kernel
+      , enforcement = S.Enforcement.Report
+      }
+    , { name = "kikan-output-dhall"
+      , owner = bindingPlan
+      , stability = S.Stability.Provisional
+      , rule =
+          "A declaration that builds a Kikan output with the binding's Dhall helpers keeps loading; new helpers may be added."
+      , check =
+          S.Check.DhallSchema
+            { schema = "packs/kikan-shikigami-binding/dhall/Outputs.dhall"
+            , hash = "sha256:6595877baa3b7cb0e96ae9731e6db610eef3bdfcf5522b952af432a63b0d020f"
+            , corpus = "api-baseline/corpus/kikan"
             }
       , freeze = S.Freeze.Kernel
       , enforcement = S.Enforcement.Report

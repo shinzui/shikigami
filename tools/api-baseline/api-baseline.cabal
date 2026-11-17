@@ -77,6 +77,8 @@ test-suite api-baseline-test
     base,
     bytestring,
     containers,
+    directory,
+    filepath,
     tasty,
     tasty-hunit,
     text,

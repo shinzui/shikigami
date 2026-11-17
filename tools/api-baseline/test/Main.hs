@@ -9,6 +9,7 @@ import ApiBaseline.Check.JournalCodec (encodeGolden, journalCodecFindings)
 import ApiBaseline.Check.KeiroGate (keiroGateFindings)
 import ApiBaseline.Check.OpenApi (OpenApiChange (..), openApiChanges)
 import ApiBaseline.Exposure (Exposure (..), exposureCounts, importedModules, parseExposedModules)
+import ApiBaseline.Run (pinSurface)
 import ApiBaseline.Types
 import Data.Aeson (Value, object, (.=))
 import Data.List.NonEmpty (NonEmpty ((:|)))
@@ -16,6 +17,9 @@ import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as Text
+import Data.Text.IO qualified as TextIO
+import System.Directory (createDirectoryIfMissing, removeDirectoryRecursive)
+import System.FilePath ((</>))
 import Test.Tasty (TestTree, defaultMain, testGroup)
 import Test.Tasty.HUnit (assertBool, testCase, (@?=))
 
@@ -24,7 +28,7 @@ main =
   defaultMain
     ( testGroup
         "api-baseline"
-        [verdictTests, schemaTests, codecTests, openApiTests, cliTests, exportTests, gateTests, exposureTests]
+        [verdictTests, schemaTests, codecTests, openApiTests, cliTests, exportTests, gateTests, exposureTests, pinTests]
     )
 
 severities :: [Finding] -> [Severity]
@@ -272,3 +276,35 @@ exposureTests =
           "  exposed-modules:",
           "    Shikigami.Inspection.Store"
         ]
+
+-- | Pinning a schema rewrites one hash inside the inventory, so it must never
+-- damage the inventory when the pin cannot be found.
+pinTests :: TestTree
+pinTests =
+  testGroup
+    "pin"
+    [ testCase "an empty pinned hash is refused and leaves the inventory intact" do
+        -- Relative, as every inventory path is.
+        let scratch = "api-baseline-pin-test.scratch"
+        createDirectoryIfMissing True scratch
+        let schema = scratch </> "Schema.dhall"
+            inventory = scratch </> "surfaces.dhall"
+            original = "[ { hash = \"\" } ]\n"
+            surface =
+              Surface
+                { name = "fixture",
+                  owner = "fixture",
+                  stability = Provisional,
+                  rule = "fixture",
+                  check = DhallSchema {schema = Text.pack schema, hash = "", corpus = Text.pack scratch},
+                  freeze = Kernel,
+                  enforcement = Report
+                }
+        TextIO.writeFile schema "{ field = 1 }"
+        TextIO.writeFile inventory original
+        result <- pinSurface inventory surface
+        after <- TextIO.readFile inventory
+        removeDirectoryRecursive scratch
+        assertBool ("the empty pin was accepted: " <> show result) (either (Text.isInfixOf "empty") (const False) result)
+        after @?= original
+    ]
