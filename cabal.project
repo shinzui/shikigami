@@ -11,6 +11,7 @@ packages:
   packs/flow-pack-watchdog
   packs/flow-pack-practice-review
   packs/examples-distribution
+  packs/kikan-shikigami-binding
   packs/kikan-shikigami
   tools/api-baseline
 

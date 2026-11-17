@@ -125,11 +125,19 @@ no library; each `main` passes its packs to `agentRunRoleInfoWith`, `workerRoleI
 `runAdminWith`. A pack's test suite may depend on `shikigami-core` and on
 `shikigami-migrations:test-support`; its libraries may not.
 
-`packs/kikan-shikigami` is the distribution for organizational use. It composes every pack
-into `kikan-shikigami-worker`, `kikan-shikigami-scheduler`, `kikan-shikigami-consume-stream`, the `kikan-shikigami` admin
+`packs/kikan-shikigami` is the distribution for organizational use. It composes the Kikan
+binding and every pack into `kikan-shikigami-worker`, `kikan-shikigami-scheduler`, `kikan-shikigami-consume-stream`, the `kikan-shikigami` admin
 command and `kikan-shikigami-agent-run`, all reading one list in `src-shared/Packs.hs`. Its
 test suite, `kikan-shikigami-test`, holds only what needs two composed use cases together,
 such as the watchdog observing work the initiative pack admitted.
+
+`packs/kikan-shikigami-binding` is the *Kikan binding*: the one pack that knows Kikan's
+services. It is held to the same rule as any pack library (the two SDK components, nothing a
+light package forbids), and [plan 135](../plans/135-move-the-kikan-service-bindings-out-of-shikigami-core-and-compose-a-kikan-distribution.md)
+moves the Kikan-En authority, the Kikan outputs and approval channels, the Rei tracker
+provider, the Danwa conversation loop and the Kawa intake into it from `shikigami-core`.
+`kikan-shikigami flows` lists it under `packs:` with what it contributes; the stock
+`shikigami flows` does not list it.
 
 A pack contributes six things through its one `FlowPack` value: `flows`, with decision
 programs and tasks; `settings`, the configuration keys it owns; `triggers`, its say over

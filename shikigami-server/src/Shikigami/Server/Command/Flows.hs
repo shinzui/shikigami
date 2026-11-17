@@ -6,6 +6,7 @@
 module Shikigami.Server.Command.Flows
   ( composeOrDie,
     renderFlowLines,
+    renderPackLines,
     runFlows,
   )
 where
@@ -55,4 +56,28 @@ renderFlowLines registry = map line entries
     slots declared = Text.intercalate "," [decisionSlotLabelText slot.label | slot <- declared]
 
 runFlows :: [FlowPack] -> IO ()
-runFlows packs = composeOrDie packs >>= traverse_ TIO.putStrLn . renderFlowLines
+runFlows packs = do
+  registry <- composeOrDie packs
+  traverse_ TIO.putStrLn (renderFlowLines registry <> ["", "packs:"] <> renderPackLines (builtinPack : packs))
+
+-- | One line per composed pack with what it contributes, so a pack that runs
+-- no flow of its own, such as the Kikan binding, still shows that it is
+-- composed.
+renderPackLines :: [FlowPack] -> [Text]
+renderPackLines packs = map line packs
+  where
+    width = maximum (0 : [Text.length (flowPackNameText pack.name) | pack <- packs])
+    line pack = "  " <> Text.justifyLeft width ' ' (flowPackNameText pack.name) <> "  " <> contributions pack
+    contributions pack = case filter (not . Text.null) (parts pack) of
+      [] -> "no contributions"
+      found -> Text.intercalate "; " found
+    parts pack =
+      [ counted "flows" (length pack.flows),
+        counted "programs" (length pack.decisionPrograms),
+        counted "tasks" (length pack.tasks),
+        named "settings" [setting.key | setting <- pack.settings],
+        named "verbs" [verb.name | verb <- pack.adminVerbs],
+        named "gauges" [gauge.name | gauge <- pack.gauges]
+      ]
+    counted label n = if n == 0 then "" else label <> ": " <> Text.pack (show n)
+    named label names = if null names then "" else label <> ": " <> Text.intercalate ", " names

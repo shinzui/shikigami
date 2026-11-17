@@ -28,6 +28,7 @@ common common
     flow-pack-initiative,
     flow-pack-practice-review,
     flow-pack-watchdog,
+    kikan-shikigami-binding,
     shikigami-core:flow-sdk,
 
 executable kikan-shikigami-worker

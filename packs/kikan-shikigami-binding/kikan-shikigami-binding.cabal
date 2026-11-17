@@ -1,0 +1,67 @@
+cabal-version: 3.4
+name: kikan-shikigami-binding
+version: 0.1.0.0
+synopsis: The Kikan service bindings of Shikigami
+description:
+  Every piece of Shikigami that knows a Kikan service: the Kikan-En
+  authority, the Kawa, Kizashi, Rei, Danwa and channel outputs, the Danwa and
+  Kizashi approval channels, the Rei tracker provider, the Danwa conversation
+  loop and the Kawa stream and event intake. It is one flow pack value. The
+  Kikan distribution (kikan-shikigami) composes it with the kernel; the stock
+  executables never do. See docs/plans/135 and docs/architecture/packages.md.
+
+license: BSD-3-Clause
+build-type: Simple
+
+common common
+  default-language: GHC2024
+  default-extensions:
+    BlockArguments
+    DeriveAnyClass
+    DuplicateRecordFields
+    MultilineStrings
+    NoFieldSelectors
+    OverloadedLabels
+    OverloadedRecordDot
+    OverloadedStrings
+
+  ghc-options:
+    -Wall
+    -Werror=missing-fields
+    -Wcompat
+    -Widentities
+    -Wincomplete-record-updates
+    -Wincomplete-uni-patterns
+    -Wpartial-fields
+    -Wredundant-constraints
+
+-- The binding. Like any pack library it may depend on the two SDK components
+-- of shikigami-core and on no other Shikigami component, and on nothing a
+-- light package forbids (the kernel boundary check enforces both).
+library
+  import: common
+  hs-source-dirs: src
+  exposed-modules:
+    Kikan.Shikigami.Binding
+
+  build-depends:
+    base,
+    shikigami-core:flow-sdk,
+    shikigami-core:pack-sdk,
+
+test-suite kikan-shikigami-binding-test
+  import: common
+  type: exitcode-stdio-1.0
+  hs-source-dirs: test
+  main-is: Main.hs
+  ghc-options:
+    -threaded
+    -rtsopts
+    -with-rtsopts=-N
+
+  build-depends:
+    base,
+    kikan-shikigami-binding,
+    shikigami-core,
+    tasty,
+    tasty-hunit,

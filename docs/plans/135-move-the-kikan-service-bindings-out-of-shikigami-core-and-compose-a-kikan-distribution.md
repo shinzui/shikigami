@@ -27,6 +27,11 @@ provenance:
       at: 2026-11-15T15:08:44Z
       mode: "update"
       note: "Distribution default output kawa.digest; no change to first-freeze surfaces (user decisions 2026-11-15)"
+    - model: "claude-opus-5-5"
+      harness: "claude-code"
+      at: 2026-11-17T05:37:04Z
+      mode: "implement"
+      note: "M1 implemented: binding package, distribution composition, flows pack lines, inventory"
 ---
 
 # Move the Kikan service bindings out of shikigami-core and compose a Kikan distribution
@@ -67,10 +72,17 @@ service where one runs on this Mac.
 
 ## Progress
 
-- [ ] M1: The binding and distribution packages exist and build. `kikan-shikigami-binding`
+- [x] M1: The binding and distribution packages exist and build. `kikan-shikigami-binding`
   depends only on `shikigami-core:flow-sdk` and `shikigami-core:pack-sdk`; the fitness check
   knows both packages; `kikan-shikigami flows` lists the composed packs. The local service
-  inventory is recorded with what actually starts on this Mac.
+  inventory is recorded with what actually starts on this Mac. (2026-11-17: `cabal build
+  kikan-shikigami-binding kikan-shikigami` succeeds; `kikan-shikigami flows` prints
+  `kikan-binding    no contributions` under `packs:` and `shikigami flows` does not list it;
+  the kernel boundary case "the Kikan binding is held to the SDK, and no stock package
+  depends on it" refuses a binding that depends on `shikigami-workers` or `kafka-effectful`
+  and a stock executable that depends on the binding; 19/19 of `package architecture` and
+  `kernel boundary` pass. The inventory below is read-only; starting a sibling's stack is
+  deferred to the milestone that needs it, with the user's approval.)
 - [ ] M2: The Kikan-En authority adapter runs from the binding. `shikigami-core` no longer
   imports `Kikan.En.*` or `Shomei.*`, the `kawaSource` field is gone from the authority
   port, and a distribution worker authorizes a real action against a locally started
@@ -120,6 +132,23 @@ These came from read-only research on 2026-11-15, before implementation.
   `docs/capabilities/local-integration-fixtures.md` states that `stub-kawa` and
   `stub-kanmon` "are development fixtures, not production replacements".
 
+
+- Observation: (M1 inventory, 2026-11-17, read-only.) No sibling repository's
+  `process-compose.yaml` starts its service. Each starts only its own PostgreSQL on a Unix
+  socket under the repository (`pg_ctl start ... -c listen_addresses=''`) and runs
+  `just create-database`; Kawa's also starts ClickHouse. The service itself is a separate
+  executable. Built servers found under each checkout's `dist-newstyle`: Shomei
+  (`shomei-server`, `shomei-migrate`), Kawa (`kawa-server`, `kawa-read-server`,
+  `kawa-migrate`), Kizashi (`kizashi`, `kizashi-migrate`), Danwa (`danwa-server`,
+  `danwa-worker`, `danwa-migrate`) and Rei (`rei-api`, `rei-migrations`). Kikan-En
+  (`just start-server`), Kanmon and Meibo have no build. The global Redpanda answers at
+  `127.0.0.1:9092` (`rpk cluster info`). So a real run is possible for Rei (this repository's
+  `tests/objective-trackers/run-rei.sh`), and plausible for Shomei, Kawa, Kizashi and Danwa
+  once each one's database is created and migrated; Kikan-En needs a build first, and the
+  M2 acceptance falls back to the loopback fixture authority
+  (`tests/objective-tracking/fixture`) unless it is built.
+  Evidence: `find <checkout>/dist-newstyle/build -path '*/x/*' -perm -u+x` per service;
+  `grep command: <checkout>/process-compose.yaml`.
 
 ## Decision Log
 
@@ -193,6 +222,25 @@ These came from read-only research on 2026-11-15, before implementation.
   changes the stock role set, so it is the last move and is recorded in the ADR. See "What
   the deployed roles lose" in Plan of Work.
   Date: 2026-11-15
+- Decision: The binding is a plain `FlowPack` value, `kikanBinding`, not an
+  `IO FlowPack` built from a `KikanBindingConfig`. A registration that needs settings (the
+  authority, the output adapters) carries a builder that takes the validated
+  `PackSettings`, the way a `PackGauge` already does, so every role entry point keeps
+  taking `[FlowPack]` and no `PackSource` is introduced.
+  Rationale: EP-5 and EP-6 landed only `[FlowPack]`, and pack settings are validated by the
+  executable's configuration loader before anything runs. A pure value also lets
+  `kikan-shikigami flows` and `validate` list the binding without loading configuration.
+  Date: 2026-11-17
+- Decision: `kikan-shikigami-server` is added when a milestone gives it something to
+  compose (M4, when the server's tracker runtime takes providers from packs), not in M1.
+  `shikigami-server` has no `...With` entry point and nothing in the binding needs it yet.
+  Rationale: ADR-1; an executable identical to the stock one proves nothing.
+  Date: 2026-11-17
+- Decision: `flows` gains a `packs:` block, one line per composed pack listing what it
+  contributes (flows, programs, tasks, settings, verbs, gauges, and the binding's
+  registrations as they land). A pack with no flow, such as the binding, otherwise never
+  appears. This changes `shikigami flows` output, a second-freeze admin surface.
+  Date: 2026-11-17
 - Decision: The development stubs (`stub-kawa`, `stub-kanmon`, `publish-fixture`) move to
   the distribution's admin executable.
   Rationale: They are fixtures for Kikan services. The stock admin command should not offer

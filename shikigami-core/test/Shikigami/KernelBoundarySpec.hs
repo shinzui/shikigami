@@ -408,6 +408,17 @@ tests =
                 PackEscapesSdk "shikigami-ledger" "warp",
                 BodyEscapesFlowSdk "shikigami-ledger" "shikigami-core:pack-sdk"
               ],
+      -- The Kikan binding is a pack like any other (plan 135): it reaches the
+      -- kernel through the two SDK components only, links no runtime role,
+      -- and no stock package may compose it.
+      testCase "the Kikan binding is held to the SDK, and no stock package depends on it" do
+        let binding extra = OutOfCorePackage "kikan-shikigami-binding" [library "" (["base", "shikigami-core:flow-sdk", "shikigami-core:pack-sdk"] <> extra), Stanza "test-suite" "kikan-shikigami-binding-test" ["base", "kikan-shikigami-binding", "shikigami-core"]]
+            kikanDistribution = OutOfCorePackage "kikan-shikigami" [Stanza "executable" "kikan-shikigami-worker" ["base", "shikigami-workers", "kikan-shikigami-binding"]]
+        kernelViolations synthetic (fixture {outOfCore = [binding [], kikanDistribution]}) @?= []
+        kernelViolations synthetic (fixture {outOfCore = [binding ["shikigami-workers", "kafka-effectful"], kikanDistribution]})
+          @?= [PackEscapesSdk "kikan-shikigami-binding" "shikigami-workers", PackEscapesSdk "kikan-shikigami-binding" "kafka-effectful"]
+        kernelViolations synthetic (fixture {stock = [("shikigami-workers", [Stanza "executable" "shikigami-worker" ["base", "kikan-shikigami-binding"]])], outOfCore = [binding []]})
+          @?= [StockDependsOnPack "shikigami-workers:executable shikigami-worker" "kikan-shikigami-binding"],
       testCase "a stock package never depends on a pack, and the SDK re-exports stay pinned" do
         let stockOnPack = fixture {stock = [("shikigami-agent", [library "" ["base", "flow-pack-ledger"]])], outOfCore = [goodPack]}
         kernelViolations synthetic stockOnPack @?= [StockDependsOnPack "shikigami-agent:library" "flow-pack-ledger"]
