@@ -1,8 +1,14 @@
 # Per-action authorization operations
 
-Shikigami fails closed at every protected external-IO boundary. Enabling Kikan authorization is a
-grouped configuration change: partial trust material is rejected during configuration resolution,
-and the default `disabled` mode authorizes no provider, tool, or sink action.
+Shikigami fails closed at every protected external-IO boundary. The default `disabled` mode
+authorizes no provider, tool, or sink action. Kikan-En authorization is part of the Kikan
+distribution: the Kikan binding (`packs/kikan-shikigami-binding`) registers the authority
+`kikan` and owns the settings below, so only the distribution's executables
+(`kikan-shikigami-worker`, `kikan-shikigami-workspace-supervisor`, `kikan-shikigami`) accept
+them. A stock executable refuses these keys as unknown, and refuses
+`authorization.actions.mode=kikan` at start with a message naming `kikan-shikigami-worker`.
+With `mode=kikan`, the distribution refuses to start until all seven settings are present and
+valid, naming each missing key and never a value.
 
 The owning services and contracts are:
 
@@ -14,7 +20,7 @@ The owning services and contracts are:
 
 ## Required configuration
 
-Set all of these values for the worker:
+Set all of these values for the distribution's worker (the keys are unchanged from before the move):
 
 | Key | Environment variable | Meaning |
 |---|---|---|

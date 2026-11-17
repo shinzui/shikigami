@@ -107,6 +107,7 @@ import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..))
 import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Principal (AgentIdentity, ResolvedAgentIdentity)
 import Shikigami.App (AppEffects, AppEnv)
+import Shikigami.Authority.Adapter (AuthorityAdapter (..))
 import Shikigami.Behavior.Compatibility (renderResponseCompatibilityError, validateResponseRequest)
 import Shikigami.Behavior.Run (BehaviorEnv (..), completeBehaviorRequest)
 import Shikigami.Decision.Contract (DecisionFailure)
@@ -167,7 +168,10 @@ data FlowPack = FlowPack
     -- | The operator verbs the pack adds to the admin command.
     adminVerbs :: ![AdminVerb],
     -- | Levels the worker's telemetry sampler reads for the pack.
-    gauges :: ![PackGauge]
+    gauges :: ![PackGauge],
+    -- | Authorities the pack registers, each under the
+    -- @authorization.actions.mode@ value that selects it (plan 135).
+    authorities :: ![AuthorityAdapter]
   }
 
 -- | One level a pack wants sampled: how stale its last result is, how deep
@@ -297,6 +301,7 @@ data FlowRegistryError
   | DuplicateFlowName !(DeclarationCoordinate "flow") !FlowPackName !FlowPackName
   | DuplicateTaskName !Text !FlowPackName !FlowPackName
   | DuplicateSettingKey !Text !FlowPackName !FlowPackName
+  | DuplicateAuthorityMode !Text !FlowPackName !FlowPackName
   | DecisionProgramsRejected !DecisionFailure
   | ResultCodecsRejected !DecisionFailure
   deriving stock (Eq, Show)
@@ -310,6 +315,8 @@ renderFlowRegistryError = \case
     "program task " <> task <> " is contributed by both pack " <> flowPackNameText first <> " and pack " <> flowPackNameText second
   DuplicateSettingKey key first second ->
     "setting " <> key <> " is declared by both pack " <> flowPackNameText first <> " and pack " <> flowPackNameText second
+  DuplicateAuthorityMode mode first second ->
+    "authority " <> mode <> " is registered by both pack " <> flowPackNameText first <> " and pack " <> flowPackNameText second
   DecisionProgramsRejected failure -> "the composed decision programs were refused: " <> Text.pack (show failure)
   ResultCodecsRejected failure -> "the composed result codecs were refused: " <> Text.pack (show failure)
 
@@ -317,7 +324,7 @@ renderFlowRegistryError = \case
 -- first, so one failed start names everything an operator must fix.
 composeFlowRegistry :: [FlowPack] -> Either (NonEmpty FlowRegistryError) FlowRegistry
 composeFlowRegistry composed =
-  case NonEmpty.nonEmpty (packErrors <> flowErrors <> taskErrors <> settingErrors <> programErrors <> codecErrors) of
+  case NonEmpty.nonEmpty (packErrors <> flowErrors <> taskErrors <> settingErrors <> authorityErrors <> programErrors <> codecErrors) of
     Just errors -> Left errors
     Nothing -> case (programsResult, codecsResult) of
       (Right programs, Right codecs) -> Right FlowRegistry {packs = packNames, entries, taskEntries, hooks = [(pack.name, pack.triggers) | pack <- composed], gaugeEntries = [(pack.name, gauge) | pack <- composed, gauge <- pack.gauges], programs, codecs}
@@ -331,6 +338,7 @@ composeFlowRegistry composed =
     flowErrors = [DuplicateFlowName name first second | (name, first, second) <- repeated [(entry.flow.definition.name, entry.pack) | entry <- entries]]
     taskErrors = [DuplicateTaskName name first second | (name, first, second) <- repeated [(taskName task, pack) | (pack, task) <- taskEntries]]
     settingErrors = [DuplicateSettingKey key first second | (key, first, second) <- repeated [(setting.key, pack.name) | pack <- composed, setting <- pack.settings]]
+    authorityErrors = [DuplicateAuthorityMode mode first second | (mode, first, second) <- repeated [(adapter.mode, pack.name) | pack <- composed, adapter <- pack.authorities]]
     programsResult = Decision.programRegistry (concatMap (.decisionPrograms) composed)
     codecsResult = Decision.resultCodecRegistry (concatMap (.retainedCodecs) composed)
     programErrors = either (pure . DecisionProgramsRejected) (const []) programsResult

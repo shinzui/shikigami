@@ -16,11 +16,15 @@ module Shikigami.Pack.Setting
     SettingShape (..),
     SettingDefault (..),
     PackSettings,
+    PackSecret,
+    revealPackSecret,
     noPackSettings,
     packSettingsFromList,
+    packSettingsWithSecrets,
     packSettingsToList,
     packSettingValue,
     packSettingText,
+    packSettingSecret,
   )
 where
 
@@ -37,6 +41,12 @@ data SettingShape
   | -- | A structured value: a mapping in a YAML file, or JSON text in a flag or
     -- an environment variable.
     JsonSetting
+  | -- | One scalar, taken as text, that is never displayed: @--describe-config@
+    -- and @--explain-config@ redact it, 'PackSettings' never shows it, and
+    -- 'packSettingValue' does not return it. A pack reads it with
+    -- 'packSettingSecret'. The validator receives a JSON string and must not
+    -- echo it.
+    SecretTextSetting
   deriving stock (Eq, Show)
 
 -- | The value a setting takes when no source supplies one, with the rule name
@@ -68,23 +78,44 @@ data PackSetting = PackSetting
 
 -- | The validated values of the composed packs' settings, by key. Opaque so
 -- that a value can only arrive through the configuration loader or a test's
--- explicit 'packSettingsFromList'.
-newtype PackSettings = PackSettings (Map Text Value)
-  deriving stock (Eq, Show)
+-- explicit 'packSettingsFromList'. Secret values are kept apart and shown
+-- only as their key.
+data PackSettings = PackSettings !(Map Text Value) !(Map Text PackSecret)
+  deriving stock (Eq)
+
+instance Show PackSettings where
+  showsPrec precedence (PackSettings values secrets) =
+    showParen (precedence > 10) (showString "PackSettings " . showsPrec 11 values . showString " " . showsPrec 11 ((,"<redacted>" :: Text) <$> Map.keys secrets))
+
+-- | The value of a 'SecretTextSetting'. It has no 'Show' instance.
+newtype PackSecret = PackSecret Text
+  deriving stock (Eq)
+
+revealPackSecret :: PackSecret -> Text
+revealPackSecret (PackSecret value) = value
 
 noPackSettings :: PackSettings
-noPackSettings = PackSettings Map.empty
+noPackSettings = PackSettings Map.empty Map.empty
 
 packSettingsFromList :: [(Text, Value)] -> PackSettings
-packSettingsFromList = PackSettings . Map.fromList
+packSettingsFromList values = PackSettings (Map.fromList values) Map.empty
 
+-- | Public values and secret values, by key.
+packSettingsWithSecrets :: [(Text, Value)] -> [(Text, Text)] -> PackSettings
+packSettingsWithSecrets values secrets = PackSettings (Map.fromList values) (PackSecret <$> Map.fromList secrets)
+
+-- | The public values only.
 packSettingsToList :: PackSettings -> [(Text, Value)]
-packSettingsToList (PackSettings values) = Map.toAscList values
+packSettingsToList (PackSettings values _) = Map.toAscList values
 
 -- | The validated value of one key; 'Nothing' when no composed pack declared
--- it, or when it is optional and unset.
+-- it, or when it is optional and unset. A secret key is never returned here.
 packSettingValue :: Text -> PackSettings -> Maybe Value
-packSettingValue key (PackSettings values) = Map.lookup key values
+packSettingValue key (PackSettings values _) = Map.lookup key values
+
+-- | The value of a 'SecretTextSetting'.
+packSettingSecret :: Text -> PackSettings -> Maybe PackSecret
+packSettingSecret key (PackSettings _ secrets) = Map.lookup key secrets
 
 -- | The value of a 'TextSetting'.
 packSettingText :: Text -> PackSettings -> Maybe Text

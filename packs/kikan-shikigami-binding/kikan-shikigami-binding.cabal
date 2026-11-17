@@ -43,11 +43,24 @@ library
   hs-source-dirs: src
   exposed-modules:
     Kikan.Shikigami.Binding
+    Kikan.Shikigami.Binding.Authority
 
   build-depends:
+    aeson,
     base,
+    containers,
+    en-biscuit,
+    http-client-tls,
+    kikan-en-client,
+    kikan-en-contract,
+    servant-client,
     shikigami-core:flow-sdk,
     shikigami-core:pack-sdk,
+    shomei-client,
+    shomei-servant,
+    text,
+    time,
+    uuid,
 
 test-suite kikan-shikigami-binding-test
   import: common
@@ -59,9 +72,26 @@ test-suite kikan-shikigami-binding-test
     -rtsopts
     -with-rtsopts=-N
 
+  other-modules:
+    Kikan.Shikigami.Binding.AuthoritySpec
+    Kikan.Shikigami.Binding.Fixture.ExecutionIdentity
+    Kikan.Shikigami.Binding.WorkspaceActionProofSpec
+
   build-depends:
+    aeson,
     base,
+    biscuit-haskell,
+    containers,
+    en-biscuit,
+    en-core,
+    generic-lens,
+    keiro,
+    kikan-en-client,
+    kikan-en-contract,
     kikan-shikigami-binding,
     shikigami-core,
     tasty,
     tasty-hunit,
+    text,
+    time,
+    uuid,

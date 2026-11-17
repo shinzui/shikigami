@@ -1,6 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 
-module Shikigami.WorkspaceActionProofSpec (tests) where
+module Kikan.Shikigami.Binding.WorkspaceActionProofSpec (tests) where
 
 import Auth.Biscuit (toPublic)
 import Data.Aeson (toJSON)
@@ -25,11 +25,12 @@ import En.Tuple (ObjectRef (..), Subject (SubjectId))
 import Keiro.Workflow.Types (WorkflowId (..))
 import Kikan.En.Action qualified as Kikan
 import Kikan.En.Client (newActionProofVerifier, verifyIssuedAction)
+import Kikan.Shikigami.Binding.Authority (KikanEnMapping (..), toAgentAction)
+import Kikan.Shikigami.Binding.Fixture.ExecutionIdentity (fixtureAttemptId, fixtureOperationId, fixtureRootId)
 import Shikigami.Activity.Coordinate (activityCoordinate)
 import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (AgentIdentity (..), mkAgentPrincipal)
 import Shikigami.Authority (Action)
-import Shikigami.Authority.KikanEn (KikanEnMapping (..), toAgentAction)
 import Shikigami.Execution.AssignmentKey (AssignmentKey, parseAssignmentKey)
 import Shikigami.Execution.Claim qualified as Claim
 import Shikigami.Execution.Coordinate qualified as ExecutionValue
@@ -38,7 +39,6 @@ import Shikigami.Execution.Payload (PayloadDigest, parsePayloadByteCount, parseP
 import Shikigami.Execution.Runner
 import Shikigami.Execution.ToolPosition (ToolPosition, parseToolPosition)
 import Shikigami.Execution.Transcript (ExecutionId (..), NextWork (..), PayloadRef (..), executionIdentity)
-import Shikigami.Fixture.ExecutionIdentity (fixtureAttemptId, fixtureOperationId, fixtureRootId)
 import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Prelude (Lens', lens, (&), (.~))
 import Shikigami.Repository (RepositoryId, repositoryId, repositoryIdText)

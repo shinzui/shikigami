@@ -44,7 +44,8 @@ examplesPack =
       settings = [],
       triggers = noTriggerHooks,
       adminVerbs = [],
-      gauges = []
+      gauges = [],
+      authorities = []
     }
 
 definition :: Text -> Text -> [DecisionSlot] -> DefaultModelRequirement -> FlowDef

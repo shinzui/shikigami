@@ -209,9 +209,6 @@
       "Workspace": "kernel"
     },
     "frozenModules": [
-      "Shikigami.Authority.KikanEn",
-      "Shikigami.Authority.KikanEn.Config",
-      "Shikigami.Authority.KikanEn.Settings",
       "Shikigami.DanwaConversation.Generated.WorkflowFacts",
       "Shikigami.DanwaConversation.Generated.WorkflowRuntime",
       "Shikigami.Flow.Builtin",
@@ -278,6 +275,9 @@
         "Shikigami.Agent.Workflow.Name",
         "Shikigami.App",
         "Shikigami.Approval.Observation",
+        "Shikigami.Authority",
+        "Shikigami.Authority.Adapter",
+        "Shikigami.Behavior.Error",
         "Shikigami.Directory",
         "Shikigami.Execution.ResourcesStore",
         "Shikigami.ExecutionDriver.Generated.WorkflowRuntime",

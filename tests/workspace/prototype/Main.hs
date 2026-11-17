@@ -36,6 +36,7 @@ import GHC.Stack (HasCallStack, callStack, prettyCallStack)
 import Hasql.Transaction (Transaction)
 import Keiro.Workflow.Types (WorkflowId (..))
 import Kikan.En.Action qualified as Kikan
+import Kikan.Shikigami.Binding.Authority (KikanEnSettings (..), authoritySettings, kikanAuthorityAdapter, loadKikanEnSettings)
 import Kiroku.Store.Connection (defaultConnectionSettings)
 import Kiroku.Store.Transaction (runTransaction)
 import Network.HTTP.Types (status200, status403, status404)
@@ -45,9 +46,9 @@ import Qualification (integrationCase)
 import Shikigami.Agent.Principal (AgentIdentity (VerifiedIdentity), identityText, mkAgentPrincipal)
 import Shikigami.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
 import Shikigami.App.Config (AppConfig (..), Role (AdminRole), revealSecretText)
-import Shikigami.App.Config.Load (ConfigOptions (..), DiagnosticMode (NoDiagnostic), requireDatabaseUrl, runAppConfig)
+import Shikigami.App.Config.Load (ConfigOptions (..), DiagnosticMode (NoDiagnostic), requireDatabaseUrl, runAppConfigWith)
 import Shikigami.Authority (Authority)
-import Shikigami.Authority.KikanEn.Config (buildConfiguredAuthority)
+import Shikigami.Authority.Configured (buildConfiguredAuthority)
 import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Directory (DirectoryRuntime (..), identityLifecycleAdmission, startDirectory)
 import Shikigami.Execution.AssignmentKey (AssignmentKey, parseAssignmentKey)
@@ -181,12 +182,12 @@ nativeProvision configFile specFile = do
   spec <- requireRight . Aeson.eitherDecodeStrict @NativeSpec =<< Bytes.readFile specFile
   checkPrefix spec.directory
   unless (spec.format == 1) (fail "unsupported fixture format")
-  config <- runAppConfig AdminRole (ConfigOptions [configFile] [] [] NoDiagnostic)
+  config <- runAppConfigWith authoritySettings AdminRole (ConfigOptions [configFile] [] [] NoDiagnostic)
   connection <- revealSecretText <$> requireDatabaseUrl "workspace-linux-fixture" config
   tracer <- noopTracer
   let env = AppEnv {connectionSettings = defaultConnectionSettings connection, tracer, metrics = Nothing, store = Nothing}
   logger <- Log.newStderrLogger Log.Info
-  authorizer <- requireRight =<< buildConfiguredAuthority logger config
+  authorizer <- requireRight =<< buildConfiguredAuthority [kikanAuthorityAdapter] logger config
   directory <- requireRight =<< startDirectory Log.silentLogger config.directorySettings
   principal <- VerifiedIdentity <$> requireRight (mkAgentPrincipal "agent_01h000000000000000triage")
   let source = spec.directory </> "source"
@@ -284,11 +285,11 @@ checkName name = unless (not (null name) && length name <= 40 && all (\c -> c >=
 withRuntime :: FilePath -> (AppEnv -> Authority -> (ExecutionSnapshot -> IO (Either Text.Text ())) -> ProcessClient -> IO a) -> IO a
 withRuntime configFile use = do
   _ <- requireRight =<< Systemd.systemdBootIdentity
-  config <- runAppConfig AdminRole (ConfigOptions [configFile] [] [] NoDiagnostic)
+  config <- runAppConfigWith authoritySettings AdminRole (ConfigOptions [configFile] [] [] NoDiagnostic)
   connection <- revealSecretText <$> requireDatabaseUrl "workspace-linux-fixture" config
   tracer <- noopTracer
   let env = AppEnv {connectionSettings = defaultConnectionSettings connection, tracer, metrics = Nothing, store = Nothing}
-  authorizer <- requireRight =<< buildConfiguredAuthority Log.silentLogger config
+  authorizer <- requireRight =<< buildConfiguredAuthority [kikanAuthorityAdapter] Log.silentLogger config
   directory <- requireRight =<< startDirectory Log.silentLogger config.directorySettings
   socket <- maybe (fail "fixture supervisor configuration missing") (pure . (.socketPath)) config.workspaceSupervisorSettings
   use env authorizer (identityLifecycleAdmission directory.handle . (.identity)) (ProcessClient socket ((either (error . show) id . parseRpcPeerUserId) 0) ((either (error . show) id . parseRpcRequestSeconds) 5) ((either (error . show) id . parseRpcWaitSeconds) 60))
@@ -323,7 +324,7 @@ prepareCase config prefix name mode = do
   where
     currentIdentity identity = do
       -- The callback intentionally uses the fresh configured directory handle.
-      resolved <- runAppConfig AdminRole (ConfigOptions [config] [] [] NoDiagnostic)
+      resolved <- runAppConfigWith authoritySettings AdminRole (ConfigOptions [config] [] [] NoDiagnostic)
       directory <- requireRight =<< startDirectory Log.silentLogger resolved.directorySettings
       identityLifecycleAdmission directory.handle identity
 

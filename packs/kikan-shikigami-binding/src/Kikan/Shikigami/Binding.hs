@@ -14,6 +14,7 @@ module Kikan.Shikigami.Binding
   )
 where
 
+import Kikan.Shikigami.Binding.Authority (authoritySettings, kikanAuthorityAdapter)
 import Shikigami.Flow.Sdk
 
 kikanBindingName :: FlowPackName
@@ -29,8 +30,10 @@ kikanBinding =
       decisionPrograms = [],
       retainedCodecs = [],
       tasks = [],
-      settings = [],
+      -- The Kikan-En authority's settings keep their kernel-era keys.
+      settings = authoritySettings,
       triggers = noTriggerHooks,
       adminVerbs = [],
-      gauges = []
+      gauges = [],
+      authorities = [kikanAuthorityAdapter]
     }

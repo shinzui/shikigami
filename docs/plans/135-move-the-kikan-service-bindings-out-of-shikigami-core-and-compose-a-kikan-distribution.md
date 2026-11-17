@@ -83,10 +83,22 @@ service where one runs on this Mac.
   and a stock executable that depends on the binding; 19/19 of `package architecture` and
   `kernel boundary` pass. The inventory below is read-only; starting a sibling's stack is
   deferred to the milestone that needs it, with the user's approval.)
-- [ ] M2: The Kikan-En authority adapter runs from the binding. `shikigami-core` no longer
+- [x] M2: The Kikan-En authority adapter runs from the binding. `shikigami-core` no longer
   imports `Kikan.En.*` or `Shomei.*`, the `kawaSource` field is gone from the authority
   port, and a distribution worker authorizes a real action against a locally started
-  Kikan-En and Shomei, or the recorded fallback is used.
+  Kikan-En and Shomei, or the recorded fallback is used. (2026-11-17: fallback used, since
+  the user chose no sibling stacks. `Kikan.Shikigami.Binding.Authority` registers `kikan`;
+  0 stock modules import `Kikan.En` or `Shomei` (15 -> 3 files for all four Kikan roots;
+  17 -> 10 Kikan dependency lines in `shikigami-core.cabal`). `kikan-shikigami-worker`
+  ran `agents/proof/portable-note.dhall` (stub behavior provider) against the loopback
+  fixture authority and `stub-kawa`: the record holds `run.admitted` (outputs `kawa.digest`,
+  composition default), `authority.decided emit_output` with `decidedBy: service:kikan-en`,
+  `output.delivered` and `run.finished`, and `kikan-shikigami record check` reports
+  K1 K2/K3 K4 K5 K6 K8 hold. The stock `shikigami-worker` refuses `mode=kikan` at start
+  naming `kikan-shikigami-worker`, and refuses the Kikan-En keys as unknown (exit 4).
+  Binding tests 11/11 including `toAgentAction` over every `Action` constructor; core
+  866/866; workers 301/301 with the known Git-provider load flake passing alone; server
+  108/108; distribution 10/10.)
 - [ ] M3: The five output adapters and the two approval channels run from the binding, and
   the distribution registers `kawa.digest` as its default output. A declared agent's outputs
   reach their services through the distribution worker, a declaration with no outputs gets a
@@ -149,6 +161,14 @@ These came from read-only research on 2026-11-15, before implementation.
   (`tests/objective-tracking/fixture`) unless it is built.
   Evidence: `find <checkout>/dist-newstyle/build -path '*/x/*' -perm -u+x` per service;
   `grep command: <checkout>/process-compose.yaml`.
+
+- Observation: Declared tools already reach Kikan-En. The kernel `Action` has no
+  `RunDeclaredTool` constructor: a declared tool is `UseCapability (InvokeTool ...)` and maps
+  to `invoke_capability_tool`. Only `LaunchCodingAgent` has no Kikan-En action. Kikan-En
+  already carries IR-3 (MCP tool invocation) and IR-4 (`run_external_job`), and none for a
+  coding-agent launch.
+  Evidence: `toAgentAction` in `packs/kikan-shikigami-binding/src/Kikan/Shikigami/Binding/Authority.hs`;
+  `ls $(mori path mori://shinzui/kikan-en)/docs/improvement-requests`.
 
 ## Decision Log
 
@@ -240,6 +260,57 @@ These came from read-only research on 2026-11-15, before implementation.
   contributes (flows, programs, tasks, settings, verbs, gauges, and the binding's
   registrations as they land). A pack with no flow, such as the binding, otherwise never
   appears. This changes `shikigami flows` output, a second-freeze admin surface.
+  Date: 2026-11-17
+- Decision: (M2) The kernel selects an authority by name from what the composed packs
+  register. `FlowPack` gains `authorities :: [AuthorityAdapter]`
+  (`Shikigami.Authority.Adapter`: a `mode` and a `build :: AuthorityContext -> IO (Either
+  Text Authority)`), `composeFlowRegistry` refuses two packs that register one mode, and
+  `Shikigami.Authority.Configured.buildConfiguredAuthority` takes the adapters.
+  `ActionAuthorizationConfig` becomes `ActionAuthorizationDisabled | ActionAuthorizationBy
+  Text`; `authorization.actions.mode` stays a kernel key and accepts `disabled` or a
+  lowercase name. The seven Kikan-En keys are the binding's pack settings with the same keys
+  and environment variables. This extends EP-5's `FlowPack`; no parallel type.
+  Rationale: the plan's "registry of authorities by name", with the binding a plain value
+  (see the M1 decision).
+  Date: 2026-11-17
+- Decision: (M2) Pack settings gain a secret shape, `SecretTextSetting`. Its value is
+  stored apart in `PackSettings` (whose `Show` prints only the key), is never returned by
+  `packSettingValue`, has no default and no renderer, and is read with
+  `packSettingSecret`/`revealPackSecret`. `Shikigami.Pack.Sdk` exports the three names.
+  Rationale: the Shomei client secret had to move with its owner, and a public pack setting
+  would have printed it in `--explain-config`. The core test "a secret pack setting is
+  readable by its pack and never displayed" plants a token and checks every diagnostic
+  mode and `show`.
+  Date: 2026-11-17
+- Decision: (M2) `AuthorityContext` carries the deployment's Kawa source
+  (`sinks.kawa.source_segment`) only until M3. The Kikan-En mapping needs it for
+  `DispatchKawa`, and the key is a kernel key until M3 moves `sinks.*` to the binding; then
+  the field leaves the context and the binding reads its own setting. The authority port
+  itself (`Shikigami.Authority`) already had no `kawaSource`: EP-8 had placed it in the
+  adapter's `KikanEnMapping`.
+  Date: 2026-11-17
+- Decision: (M2) Every stock role that builds the authority takes it from its packs: the
+  worker and its `--workspace-*` maintenance action, the admin `workers` verb, and the
+  workspace supervisor, which gains `workspaceSupervisorRoleInfoWith` and a distribution
+  executable `kikan-shikigami-workspace-supervisor`. The optional Linux fixture
+  `tests/workspace/prototype` composes `[kikanAuthorityAdapter]` and loads
+  `authoritySettings`. With `mode=kikan` and settings missing, the refusal now comes from
+  the adapter at start (naming each missing key), not from configuration resolution.
+  Rationale: no Kikan feature lost; the supervisor would otherwise have lost Kikan-En.
+  Date: 2026-11-17
+- Decision: (M2) `pack-sdk` re-exports three more kernel modules: `Shikigami.Authority`
+  (the port the adapter implements), `Shikigami.Authority.Adapter` (its registration) and
+  `Shikigami.Behavior.Error` (`boundedBehaviorDetail`, the redaction every refusal detail
+  passes through). `flow-sdk` and `pack-sdk` were re-pinned (`FlowPack.authorities`; the
+  secret names); both changes are additive.
+  Date: 2026-11-17
+- Decision: (M2) Pre-release recheck, 2026-11-17. M2 changed
+  `shikigami-core/src/Shikigami/Flow/Pack.hs` and `Flow/Builtin.hs` (a record field, not a
+  workflow body) and nothing under `Agent/` or `domain/`. The four facts of ADR-27: no
+  journal that must resume (run 7a28975f in the development database is the user's open
+  decision and was not touched; scratch databases were used); no stored payload needing an
+  old codec (no codec changed); no external wire consumer; `git tag --list` prints nothing.
+  The MasterPlan records no EP-11 baseline gate, so the exception stands.
   Date: 2026-11-17
 - Decision: The development stubs (`stub-kawa`, `stub-kanmon`, `publish-fixture`) move to
   the distribution's admin executable.

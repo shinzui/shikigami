@@ -1,6 +1,9 @@
 module Main (main) where
 
 import Kikan.Shikigami.Binding (kikanBinding)
+import Kikan.Shikigami.Binding.AuthoritySpec qualified as AuthoritySpec
+import Kikan.Shikigami.Binding.WorkspaceActionProofSpec qualified as WorkspaceActionProofSpec
+import Shikigami.Authority.Adapter (AuthorityAdapter (..))
 import Shikigami.Flow.Builtin (builtinPack)
 import Shikigami.Flow.Pack (FlowPack (..), composeFlowRegistry, flowPackNameText, registeredFlows)
 import Test.Tasty (defaultMain, testGroup)
@@ -16,5 +19,8 @@ main =
             case composeFlowRegistry [builtinPack, kikanBinding] of
               Left _ -> assertFailure "the binding refused to compose"
               Right registry -> length (registeredFlows registry) @?= either (const (-1)) (length . registeredFlows) (composeFlowRegistry [builtinPack])
+            fmap (.mode) kikanBinding.authorities @?= ["kikan"],
+          AuthoritySpec.tests,
+          WorkspaceActionProofSpec.tests
         ]
     )

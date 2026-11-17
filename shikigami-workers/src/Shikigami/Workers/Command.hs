@@ -43,6 +43,7 @@ module Shikigami.Workers.Command
     workerRoleInfo,
     workerRoleInfoWith,
     workspaceSupervisorRoleInfo,
+    workspaceSupervisorRoleInfoWith,
     schedulerRoleInfo,
     schedulerRoleInfoWith,
     consumeStreamRoleInfo,
@@ -293,11 +294,11 @@ danwaAgentOption =
 -- Bounded maintenance stays in the resource-owning worker binary; the embedded
 -- server hook cannot interpret the application's Kioku effect row.
 workerAction :: [FlowPack] -> Parser (AppConfig -> IO ())
-workerAction packs = workspaceMaintenanceAction <|> resumeAction packs
+workerAction packs = workspaceMaintenanceAction packs <|> resumeAction packs
 
-workspaceMaintenanceAction :: Parser (AppConfig -> IO ())
-workspaceMaintenanceAction =
-  runWorkspaceMaintenance
+workspaceMaintenanceAction :: [FlowPack] -> Parser (AppConfig -> IO ())
+workspaceMaintenanceAction packs =
+  runWorkspaceMaintenance (concatMap (.authorities) packs)
     <$> strOption (long "workspace-actor" <> metavar "PRINCIPAL" <> help "Active principal requiring fresh exact maintenance authority")
     <*> ( (ListWorkspaces <$> (flag' () (long "workspace-list" <> help "List at most 20 retained workspaces") *> optional (strOption (long "workspace-after" <> metavar "RESOURCE"))))
             <|> (CleanupWorkspace <$> strOption (long "workspace-cleanup" <> metavar "RESOURCE" <> help "Remove the exact terminal workspace files and scratch; retain receipts"))
@@ -318,9 +319,15 @@ resumeAction packs =
 
 -- Socket activation and factual receipt recovery have an independent lifetime.
 workspaceSupervisorRoleInfo :: RoleInfo
-workspaceSupervisorRoleInfo =
+workspaceSupervisorRoleInfo = workspaceSupervisorRoleInfoWith []
+
+-- | The workspace supervisor composed with packs, so it decides protected
+-- actions with the authority a pack registers (the Kikan binding's, under
+-- the Kikan distribution).
+workspaceSupervisorRoleInfoWith :: [FlowPack] -> RoleInfo
+workspaceSupervisorRoleInfoWith packs =
   RoleInfo
     "shikigami-workspace-supervisor"
     WorkspaceSupervisorRole
-    []
-    (withConfigOptions "shikigami-workspace-supervisor" "Supervise governed workspace processes and recover original receipts" (pure runWorkspaceSupervisor) (pure []))
+    (concatMap (.settings) packs)
+    (withConfigOptions "shikigami-workspace-supervisor" "Supervise governed workspace processes and recover original receipts" (pure (runWorkspaceSupervisor (concatMap (.authorities) packs))) (pure []))

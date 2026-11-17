@@ -27,7 +27,7 @@ import Shikigami.App.Config (ActionAuthorizationConfig (ActionAuthorizationDisab
 import Shikigami.App.Config qualified as Config
 import Shikigami.App.Config.Load (requireDatabaseUrl)
 import Shikigami.Authority (Authority, recordedIn)
-import Shikigami.Authority.KikanEn.Config (buildConfiguredAuthority)
+import Shikigami.Authority.Configured (buildConfiguredAuthority)
 import Shikigami.Behavior.Provider (newBehaviorEnvFor)
 import Shikigami.Behavior.Run (withProgramTasks)
 import Shikigami.CodingAgent.Workflow (CodingAgentRunners)
@@ -35,7 +35,7 @@ import Shikigami.Directory (DirectoryRuntime (..))
 import Shikigami.Duration
 import Shikigami.Execution.Capacity qualified as Capacity
 import Shikigami.Flow.Builtin (builtinPack)
-import Shikigami.Flow.Pack (FlowPack, FlowRegistry, PackMetrics (..), composeFlowRegistryOrExit, decisionServices, flowDeclarationErrors, flowPackNameText, lookupTask)
+import Shikigami.Flow.Pack (FlowPack (..), FlowRegistry, PackMetrics (..), composeFlowRegistryOrExit, decisionServices, flowDeclarationErrors, flowPackNameText, lookupTask)
 import Shikigami.Health.Worker (LoopName (OutboxLoop, QueueLoop, TelemetryLoop, TimerLoop), loopStaleAfter, loopStaleness, newHeartbeatsWithStaleness, serveProbesWith)
 import Shikigami.Inspection.Consumer (consumerInspection)
 import Shikigami.Inspection.Store (withObservedStore)
@@ -140,7 +140,7 @@ runWorkerCmdWith packs resumeBudget config = do
         newSinkHttp httpLimits (credentialsFromConfig config) danwaConfig >>= \case
           Left failure -> refuseInvalidSinkHttp logger failure
           Right clients -> pure clients
-      actionAuthority <- recordedIn logger (Just shikigamiMetrics) storePool <$> buildActionAuthorizer logger config
+      actionAuthority <- recordedIn logger (Just shikigamiMetrics) storePool <$> buildActionAuthorizer packs logger config
       codingAgents <- workerCodingAgents logger shikigamiMetrics storePool config agents
       let policy =
             ApprovalPolicySnapshot
@@ -284,7 +284,7 @@ refuseInvalidSinkHttp logger failure = do
 workerTierAdmission :: AppConfig -> Either String ()
 workerTierAdmission config = case (config.trustTier, config.actionAuthorization) of
   (MultiTenant, ActionAuthorizationDisabled) ->
-    Left "shikigami-worker: refusing to start; trust.tier=multi-tenant requires authorization.actions.mode=kikan"
+    Left "shikigami-worker: refusing to start; trust.tier=multi-tenant requires an authority (authorization.actions.mode other than disabled, such as kikan under the Kikan distribution)"
   _ -> Right ()
 
 -- | The coding-agent runners of this worker's tier.
@@ -297,9 +297,11 @@ workerCodingAgents logger metrics pool config agents = case config.trustTier of
     pure (queuedCodingAgents LocalOperatorPaths {approvalsFile, stateDirectory} (observedRecord logger (Just metrics) (postgresRecord pool)) agents)
   _ -> pure AgentWorkflow.noCodingAgents
 
-buildActionAuthorizer :: Log.Logger -> AppConfig -> IO Authority
-buildActionAuthorizer logger config =
-  buildConfiguredAuthority logger config >>= either (Exit.die . Text.unpack) pure
+-- | The authority @authorization.actions.mode@ selects from the composed
+-- packs; a mode no pack registers refuses to start.
+buildActionAuthorizer :: [FlowPack] -> Log.Logger -> AppConfig -> IO Authority
+buildActionAuthorizer packs logger config =
+  buildConfiguredAuthority (concatMap (.authorities) packs) logger config >>= either (Exit.die . ("shikigami-worker: refusing to start; " <>) . Text.unpack) pure
 
 -- | Refuse to boot when a loaded manifest declares a behavior this build cannot
 -- run, naming every offender.

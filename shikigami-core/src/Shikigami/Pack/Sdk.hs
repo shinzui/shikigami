@@ -37,8 +37,11 @@ module Shikigami.Pack.Sdk
     SettingShape (..),
     SettingDefault (..),
     PackSettings,
+    PackSecret,
     packSettingValue,
     packSettingText,
+    packSettingSecret,
+    revealPackSecret,
 
     -- * Interpreting a pack capability
     IOE,
@@ -72,3 +75,4 @@ import Kiroku.Store.Transaction (runTransaction, runTransactionNoRetry)
 import Shikigami.App (AppEffects)
 import Shikigami.Flow.Pack (AdminContext (..), AdminVerb (..), FlowRunContext (..), PackGauge (..), PackMetrics (..), PackSetting (..), PackSettings, RunModel (..), ScheduleCandidate (..), ScheduleHook (..), ScheduledAllowance (..), SettingDefault (..), SettingShape (..), StreamCandidate (..), StreamDisposition (..), StreamEvaluation (..), StreamHook (..), StreamSkip (..), packSettingText, packSettingValue)
 import Shikigami.Log (Logger, logDebug, logError, logInfo, logWarn)
+import Shikigami.Pack.Setting (PackSecret, packSettingSecret, revealPackSecret)

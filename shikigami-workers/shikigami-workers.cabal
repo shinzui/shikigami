@@ -108,8 +108,6 @@ library
     keiro,
     keiro-ops-http,
     keiro-pgmq,
-    kikan-en-client,
-    kikan-en-contract,
     kioku-api,
     kioku-core,
     kiroku-metrics,

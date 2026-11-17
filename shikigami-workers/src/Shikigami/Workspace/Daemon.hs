@@ -11,7 +11,8 @@ import Shikigami.App.Config (AppConfig (..), revealSecretText)
 import Shikigami.App.Config.Load (requireDatabaseUrl)
 import Shikigami.Attestation.Resolve qualified as Profile
 import Shikigami.Authority (recordedIn)
-import Shikigami.Authority.KikanEn.Config (buildConfiguredAuthority)
+import Shikigami.Authority.Adapter (AuthorityAdapter)
+import Shikigami.Authority.Configured (buildConfiguredAuthority)
 import Shikigami.Directory (DirectoryRuntime (..), identityLifecycleAdmission, startDirectory)
 import Shikigami.Execution.SelectionRuntime (currentExecutionAuthority)
 import Shikigami.Execution.Transcript (ExecutionSnapshot (..))
@@ -29,8 +30,8 @@ import Shikigami.Workspace.Settings (WorkspaceSupervisorSettings (..))
 import Shikigami.Workspace.Supervisor (SupervisorRuntime (..), systemdSupervisorBackend)
 import System.Exit (exitFailure)
 
-runWorkspaceSupervisor :: AppConfig -> IO ()
-runWorkspaceSupervisor config = do
+runWorkspaceSupervisor :: [AuthorityAdapter] -> AppConfig -> IO ()
+runWorkspaceSupervisor authorities config = do
   -- Adoption consumes LISTEN_* before telemetry or application threads start.
   settings <- maybe exitFailure pure config.workspaceSupervisorSettings
   acquired <- getSystemdListener settings.socketPath
@@ -51,7 +52,7 @@ runWorkspaceSupervisor config = do
       withObservedStore tracer connections \store storeMetrics -> do
         registerRuntimeCatalog store
         withInspectionRuntime config.inspection logger connections store storeMetrics [] \_ -> do
-          authorizer <- recordedIn logger (Just shikigamiMetrics) (StoreConnection.pool store) <$> (buildConfiguredAuthority logger config >>= either (const (refuse "workspace.supervisor.authorization_invalid")) pure)
+          authorizer <- recordedIn logger (Just shikigamiMetrics) (StoreConnection.pool store) <$> (buildConfiguredAuthority authorities logger config >>= either (const (refuse "workspace.supervisor.authorization_invalid")) pure)
           directory <- startDirectory logger config.directorySettings >>= either (const (refuse "workspace.supervisor.directory_invalid")) pure
           let appEnv = AppEnv {connectionSettings = connections, tracer, metrics, store = Just store}
               resolveProfile profile version = do

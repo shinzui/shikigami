@@ -7,6 +7,7 @@ IOE
 Logger
 PackGauge (..)
 PackMetrics (..)
+PackSecret
 PackSetting (..)
 PackSettings
 RunModel (..)
@@ -29,8 +30,10 @@ logDebug
 logError
 logInfo
 logWarn
+packSettingSecret
 packSettingText
 packSettingValue
 reinterpret
+revealPackSecret
 runTransaction
 runTransactionNoRetry

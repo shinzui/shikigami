@@ -34,5 +34,6 @@ initiativePack =
       -- consumer commits for it.
       triggers = noTriggerHooks {stream = Just (StreamHook (streamDisposition . initiativeSettingsFrom))},
       adminVerbs = [proposalsVerb],
-      gauges = []
+      gauges = [],
+      authorities = []
     }

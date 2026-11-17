@@ -92,7 +92,8 @@ fixturePack =
       settings = [],
       triggers = noTriggerHooks,
       adminVerbs = [],
-      gauges = []
+      gauges = [],
+      authorities = []
     }
 
 -- | The builtin pack, the example fixtures and this fixture pack, as a

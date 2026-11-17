@@ -20,7 +20,7 @@ import Shikigami.Record (TierLabel, mkTierLabel)
 data TrustTier
   = -- | The operator, on their own machine, is the authority.
     LocalOperator
-  | -- | The authority selected by @authorization.actions.mode@ under the
+  | -- | The authority @authorization.actions.mode@ selects from the composed packs under the
     -- composition's containment, as each executable does today.
     Contained
   | -- | 'Contained' with a configured service authority required.

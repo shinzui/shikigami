@@ -155,7 +155,8 @@ tests =
           settings = [],
           triggers,
           adminVerbs = [],
-          gauges = []
+          gauges = [],
+          authorities = []
         }
     observingPack = packWith "observing" "observed-flow" noTriggerHooks {stream = Just (StreamHook \_ _ -> StreamSkipped StreamSkip {reason = "not-worth-a-run", record = pure ()})}
     plainPack = packWith "plain" "plain-flow" noTriggerHooks

@@ -1,6 +1,7 @@
 {-# LANGUAGE DataKinds #-}
 
--- | The Kikan-En adapter of the kernel authority port.
+-- | The Kikan-En adapter of the kernel authority port, registered by the
+-- Kikan binding under @authorization.actions.mode=kikan@ (plan 135, M2).
 --
 -- It maps a kernel 'Action' onto Kikan-En's closed 'AgentAction', asks the
 -- Kikan-En service with a Shomei machine token, and returns an allow only
@@ -8,11 +9,19 @@
 -- Kikan-En has no constructor for is refused with 'PolicyDenied'; it is never
 -- mapped onto a different Kikan action.
 --
--- This module and its children are the only Shikigami modules that import
--- the Kikan-En contract. EP-10 of MasterPlan 22 moves them into the Kikan
--- binding package. Proof and bearer-token bytes never leave this module.
-module Shikigami.Authority.KikanEn
-  ( KikanEnMapping (..),
+-- This module is the only Shikigami module that imports the Kikan-En
+-- contract. Proof and bearer-token bytes never leave it. Its settings keep
+-- the keys and environment variables they had in the kernel, so an existing
+-- configuration file works unchanged with the Kikan distribution.
+module Kikan.Shikigami.Binding.Authority
+  ( -- * The registration
+    kikanAuthorityAdapter,
+    authoritySettings,
+    KikanEnSettings (..),
+    loadKikanEnSettings,
+
+    -- * The adapter
+    KikanEnMapping (..),
     UnmappedAction (..),
     unmappedActionText,
     toAgentAction,
@@ -21,16 +30,23 @@ module Shikigami.Authority.KikanEn
   )
 where
 
-import Data.Aeson ((.=))
+import Data.Aeson (Value (String), (.=))
+import Data.Bifunctor (first)
+import Data.Either (isRight)
 import Data.List.NonEmpty (NonEmpty (..))
+import Data.Maybe (isNothing)
+import Data.Set (Set)
+import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Time (UTCTime, getCurrentTime)
 import Data.UUID qualified as UUID
 import Data.UUID.V4 qualified as UUID.V4
+import En.Biscuit.Keys (IssuerKeySet, parseIssuerKeySetText)
 import Kikan.En.Action
   ( ActionProblem (..),
     ActionProofError (..),
+    ActionSchemaHash,
     AgentAction (..),
     AuthorizeActionError (..),
     AuthorizeActionRequest (..),
@@ -42,6 +58,7 @@ import Kikan.En.Action
     actionValueErrorText,
     agentPrincipalText,
     consistencyTokenText,
+    mkActionSchemaHash,
     mkAgentPrincipal,
     mkAutonomyContext,
     mkCapabilityTarget,
@@ -56,16 +73,121 @@ import Kikan.En.Action
     requestIdText,
   )
 import Kikan.En.Action qualified as Kikan
-import Kikan.En.Client (KikanEnClient, authorizeAgentAction)
-import Servant.Client (ClientEnv)
+import Kikan.En.Client (KikanEnClient, authorizeAgentAction, newActionProofVerifier, newKikanEnClient)
+import Network.HTTP.Client.TLS (newTlsManager)
+import Servant.Client (ClientEnv, mkClientEnv, parseBaseUrl)
 import Shikigami.Activity.Coordinate (ActivityCoordinate, activityCoordinateText)
-import Shikigami.Agent.DeclarationValue (DeclarationCoordinate, declarationCoordinateText)
+import Shikigami.Agent.DeclarationValue (DeclarationCoordinate, declarationCoordinate, declarationCoordinateText)
 import Shikigami.Authority hiding (mkCapabilityTarget)
+import Shikigami.Authority.Adapter (AuthorityAdapter (..), AuthorityContext (..))
 import Shikigami.Behavior.Error (boundedBehaviorDetail)
-import Shikigami.Log qualified as Log
+import Shikigami.Pack.Sdk (Logger, PackSetting (..), PackSettings, SettingShape (..), logInfo, packSettingSecret, packSettingText, revealPackSecret)
 import Shomei.Client qualified as Shomei
 import Shomei.OAuth.Result (OAuthResult (..), TokenSuccess (..))
 import Shomei.Servant.OAuth (TokenResponse (..))
+
+-- ── The registration ────────────────────────────────────────────────────────
+
+-- | The Kikan-En authority, selected by @authorization.actions.mode=kikan@.
+kikanAuthorityAdapter :: AuthorityAdapter
+kikanAuthorityAdapter = AuthorityAdapter {mode = "kikan", build}
+  where
+    build AuthorityContext {logger, settings, kawaSource} = case loadKikanEnSettings settings of
+      Left problem -> pure (Left problem)
+      Right KikanEnSettings {kikanBaseUrl, shomeiBaseUrl, shomeiClientId, shomeiClientSecret, issuerPublicKeys, acceptedSchemaHashes, callerId} ->
+        case (parseBaseUrl (Text.unpack kikanBaseUrl), parseBaseUrl (Text.unpack shomeiBaseUrl)) of
+          (Right kikanBase, Right shomeiBase) -> do
+            manager <- newTlsManager
+            let verifier = newActionProofVerifier issuerPublicKeys acceptedSchemaHashes (const (pure False))
+                client = newKikanEnClient (mkClientEnv manager kikanBase) verifier
+                tokenSource = shomeiClientCredentialsToken (mkClientEnv manager shomeiBase) shomeiClientId shomeiClientSecret
+            pure (Right (kikanEnAuthority logger callerId KikanEnMapping {kawaSource} client tokenSource))
+          _ -> pure (Left "invalid Kikan-En or Shomei authorization base URL")
+
+-- | What the Kikan-En authority is configured with. The client secret is
+-- revealed only here, at the Shomei boundary.
+data KikanEnSettings = KikanEnSettings
+  { kikanBaseUrl :: !Text,
+    shomeiBaseUrl :: !Text,
+    shomeiClientId :: !(DeclarationCoordinate "oauth-client"),
+    shomeiClientSecret :: !Text,
+    issuerPublicKeys :: !IssuerKeySet,
+    acceptedSchemaHashes :: !(Set ActionSchemaHash),
+    callerId :: !Text
+  }
+
+kikanEnBaseUrlKey, shomeiBaseUrlKey, shomeiClientIdKey, shomeiClientSecretKey, issuerPublicKeysKey, schemaHashesKey, callerIdKey :: Text
+kikanEnBaseUrlKey = "authorization.actions.kikan_en.base_url"
+shomeiBaseUrlKey = "authorization.actions.shomei.base_url"
+shomeiClientIdKey = "authorization.actions.shomei.client_id"
+shomeiClientSecretKey = "credentials.authorization.actions.shomei.client_secret"
+issuerPublicKeysKey = "authorization.actions.en.issuer_public_keys"
+schemaHashesKey = "authorization.actions.en.schema_hashes"
+callerIdKey = "authorization.actions.caller_id"
+
+-- | The settings the binding declares for the authority. Each is optional to
+-- the loader, so a distribution executable that runs without Kikan-En starts;
+-- @mode=kikan@ then requires all seven ('loadKikanEnSettings').
+authoritySettings :: [PackSetting]
+authoritySettings =
+  [ text kikanEnBaseUrlKey "SHIKIGAMI_ACTION_KIKAN_EN_BASE_URL" "Base URL of Kikan-En's action authorization service" "an http(s) base URL" baseUrl,
+    text shomeiBaseUrlKey "SHIKIGAMI_ACTION_SHOMEI_BASE_URL" "Base URL of the Shomei OAuth2 service" "an http(s) base URL" baseUrl,
+    text shomeiClientIdKey "SHIKIGAMI_ACTION_SHOMEI_CLIENT_ID" "Shomei service-account client id used for Kikan authorization" "a non-empty client id" nonEmpty,
+    setting SecretTextSetting shomeiClientSecretKey "SHIKIGAMI_ACTION_SHOMEI_CLIENT_SECRET" "Shomei client secret used only at the OAuth2 client_credentials boundary" "a non-empty secret" nonEmpty,
+    text issuerPublicKeysKey "SHIKIGAMI_ACTION_EN_ISSUER_PUBLIC_KEYS" "Comma-separated En Biscuit issuer public keys as key-id:hex" "a non-empty key-id:64-hex En Biscuit public-key set" (fmap (const ()) . parseIssuerKeySetText),
+    text schemaHashesKey "SHIKIGAMI_ACTION_EN_SCHEMA_HASHES" "Comma-separated accepted Kikan-En action schema hashes" "one or more comma-separated canonical schema hashes" (fmap (const ()) . parseSchemaHashes),
+    text callerIdKey "SHIKIGAMI_ACTION_CALLER_ID" "Bounded public caller identity written to action authorization audit logs" "a non-empty caller id" nonEmpty
+  ]
+  where
+    text = setting TextSetting
+    setting shape key environment description expectation check =
+      PackSetting
+        { key,
+          environment,
+          description,
+          expectation,
+          shape,
+          whenAbsent = Nothing,
+          validate = \case
+            String value -> first (const expectation) (check value)
+            _ -> Left expectation
+        }
+    nonEmpty value = if Text.null (Text.strip value) then Left () else Right ()
+    baseUrl value = if isRight (parseBaseUrl (Text.unpack value)) then Right () else Left ()
+
+parseSchemaHashes :: Text -> Either Text (Set ActionSchemaHash)
+parseSchemaHashes value = do
+  let pieces = filter (not . Text.null) (Text.strip <$> Text.splitOn "," value)
+  hashes <- traverse (first actionValueErrorText . mkActionSchemaHash) pieces
+  if null hashes then Left "no schema hash" else Right (Set.fromList hashes)
+
+-- | All seven settings, or the keys that are unset or invalid. Never prints
+-- a value.
+loadKikanEnSettings :: PackSettings -> Either Text KikanEnSettings
+loadKikanEnSettings settings =
+  case (fetch kikanEnBaseUrlKey, fetch shomeiBaseUrlKey, fetch shomeiClientIdKey, secret, fetch issuerPublicKeysKey >>= parsed parseIssuerKeySetText, fetch schemaHashesKey >>= parsed parseSchemaHashes, fetch callerIdKey) of
+    (Just kikanBaseUrl, Just shomeiBaseUrl, Just clientId, Just shomeiClientSecret, Just issuerPublicKeys, Just acceptedSchemaHashes, Just callerId) ->
+      Right KikanEnSettings {kikanBaseUrl, shomeiBaseUrl, shomeiClientId = declarationCoordinate clientId, shomeiClientSecret, issuerPublicKeys, acceptedSchemaHashes, callerId}
+    _ ->
+      Left
+        ( "the Kikan-En authority needs "
+            <> Text.intercalate ", " [key | (key, missing) <- presence, missing]
+        )
+  where
+    fetch key = packSettingText key settings
+    secret = revealPackSecret <$> packSettingSecret shomeiClientSecretKey settings
+    parsed parse = either (const Nothing) Just . parse
+    presence =
+      [ (kikanEnBaseUrlKey, isNothing (fetch kikanEnBaseUrlKey)),
+        (shomeiBaseUrlKey, isNothing (fetch shomeiBaseUrlKey)),
+        (shomeiClientIdKey, isNothing (fetch shomeiClientIdKey)),
+        (shomeiClientSecretKey, isNothing secret),
+        (issuerPublicKeysKey, isNothing (fetch issuerPublicKeysKey >>= parsed parseIssuerKeySetText)),
+        (schemaHashesKey, isNothing (fetch schemaHashesKey >>= parsed parseSchemaHashes)),
+        (callerIdKey, isNothing (fetch callerIdKey))
+      ]
+
+-- ── The adapter ─────────────────────────────────────────────────────────────
 
 -- | What the adapter adds to a kernel action to name the Kikan-En target.
 newtype KikanEnMapping = KikanEnMapping
@@ -111,7 +233,7 @@ toAgentAction KikanEnMapping {kawaSource} now = \case
 -- 'shomeiClientCredentialsToken'; keeping it injected permits bounded caching
 -- and deterministic tests without weakening proof verification.
 kikanEnAuthority ::
-  Log.Logger ->
+  Logger ->
   Text ->
   KikanEnMapping ->
   KikanEnClient ->
@@ -189,14 +311,14 @@ shomeiClientCredentialsToken env clientId clientSecret =
     Right OAuthUnavailable {} -> pure (Left "Shomei token service is unavailable")
 
 logDecision ::
-  Log.Logger ->
+  Logger ->
   Text ->
   Action ->
   Maybe AuthorizeActionRequest ->
   Either AuthorityFailure (Decision, (Text, Text)) ->
   IO ()
 logDecision logger callerId requested request result =
-  Log.logInfo
+  logInfo
     logger
     "agent_action.authorization"
     ( [ "caller" .= callerId,

@@ -22,6 +22,7 @@ import FixtureIdentity (fixtureRootId)
 import GHC.Generics (Generic)
 import GHC.Stack (HasCallStack, callStack, prettyCallStack)
 import Keiro.Workflow.Types (WorkflowId (..))
+import Kikan.Shikigami.Binding.Authority (KikanEnSettings (..), authoritySettings, kikanAuthorityAdapter, loadKikanEnSettings)
 import Kioku.Id (genSessionId)
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
 import Kiroku.Store.Transaction (runTransaction)
@@ -31,9 +32,9 @@ import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (AgentIdentity, identityText)
 import Shikigami.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
 import Shikigami.App.Config (AppConfig (..), Role (AdminRole), revealSecretText)
-import Shikigami.App.Config.Load (ConfigOptions (..), DiagnosticMode (NoDiagnostic), requireDatabaseUrl, runAppConfig)
+import Shikigami.App.Config.Load (ConfigOptions (..), DiagnosticMode (NoDiagnostic), requireDatabaseUrl, runAppConfigWith)
 import Shikigami.Authority (Authority)
-import Shikigami.Authority.KikanEn.Config (buildConfiguredAuthority)
+import Shikigami.Authority.Configured (buildConfiguredAuthority)
 import Shikigami.Behavior.Skill (SkillDir (..))
 import Shikigami.Behavior.StubProvider (stubModel)
 import Shikigami.Capability.Overlay (emptyResolvedCapabilitySet)
@@ -98,11 +99,11 @@ data Qualification = Qualification
 withQualification :: FilePath -> FilePath -> (Qualification -> IO a) -> IO a
 withQualification configFile prefix use = do
   initial <- right . Aeson.eitherDecodeStrict @Ready =<< Bytes.readFile (prefix </> "native-ready.json")
-  config <- runAppConfig AdminRole (ConfigOptions [configFile] [] [] NoDiagnostic)
+  config <- runAppConfigWith authoritySettings AdminRole (ConfigOptions [configFile] [] [] NoDiagnostic)
   connection <- revealSecretText <$> requireDatabaseUrl "workspace-qualification" config
   tracer <- noopTracer
   let env = AppEnv {connectionSettings = defaultConnectionSettings connection, tracer, metrics = Nothing, store = Nothing}
-  authorizer <- right =<< buildConfiguredAuthority Log.silentLogger config
+  authorizer <- right =<< buildConfiguredAuthority [kikanAuthorityAdapter] Log.silentLogger config
   directory <- right =<< startDirectory Log.silentLogger config.directorySettings
   socket <- maybe (fail "qualification socket absent") (pure . (.socketPath)) config.workspaceSupervisorSettings
   principal <- right (identityText initial.binding.request.owner)

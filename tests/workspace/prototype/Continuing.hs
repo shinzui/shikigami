@@ -17,6 +17,7 @@ import Data.Time (addUTCTime, getCurrentTime)
 import FixtureIdentity (fixtureOperationId, fixtureRootId)
 import GHC.Generics (Generic)
 import Keiro.Workflow.Types (WorkflowId (..))
+import Kikan.Shikigami.Binding.Authority (kikanAuthorityAdapter)
 import Kioku.Id (genSessionId)
 import Kiroku.Store.Transaction (runTransaction)
 import Qualification
@@ -162,10 +163,10 @@ continuingCase config prefix stage = withQualification config prefix \q -> case 
     intent <- right . Aeson.eitherDecodeStrict @TransferIntent =<< Bytes.readFile (prefix </> "continuing-intent.json")
     -- The real administrative path reconstructs its admitted parent scope,
     -- authenticates the private supervisor and recovers objective ownership.
-    runWorkersControl (fixtureOperationId "native-operator-reconcile") (ReconcileWorker item.session) q.config
+    runWorkersControl [kikanAuthorityAdapter] (fixtureOperationId "native-operator-reconcile") (ReconcileWorker item.session) q.config
     outcome <- right =<< run q.env (Handoff.resumeHandoff (transferServices q item) item.session)
     unless (outcome == Handoff.HandoffEstablished intent.newOwner intent.newEpoch) (fail "real ownership recovery did not establish successor")
-    runWorkersControl (fixtureOperationId "native-operator-reconcile") (ReconcileWorker item.session) q.config
+    runWorkersControl [kikanAuthorityAdapter] (fixtureOperationId "native-operator-reconcile") (ReconcileWorker item.session) q.config
     repeated <- right =<< run q.env (Handoff.resumeHandoff (transferServices q item) item.session)
     unless (repeated == outcome) (fail "duplicate ownership recovery differs")
     access <- sessionAccess q item

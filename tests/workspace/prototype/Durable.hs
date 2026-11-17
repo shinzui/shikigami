@@ -25,6 +25,7 @@ import Effectful (Eff)
 import FixtureIdentity (fixtureRootId)
 import GHC.Generics (Generic)
 import Keiro.Workflow (WorkflowId (..), WorkflowOutcome (..), loadStepIndex)
+import Kikan.Shikigami.Binding.Authority (KikanEnSettings (..), authoritySettings, kikanAuthorityAdapter, loadKikanEnSettings)
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Activity.Coordinate
@@ -40,9 +41,9 @@ import Shikigami.Agent.RunJob
 import Shikigami.Agent.Workflow qualified as Agent
 import Shikigami.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
 import Shikigami.App.Config (AppConfig (..), Role (AdminRole), revealSecretText)
-import Shikigami.App.Config.Load (ConfigOptions (..), DiagnosticMode (NoDiagnostic), requireDatabaseUrl, runAppConfig)
+import Shikigami.App.Config.Load (ConfigOptions (..), DiagnosticMode (NoDiagnostic), requireDatabaseUrl, runAppConfigWith)
 import Shikigami.Attestation.Resolve (ProfileResolutionError (UnknownProfile))
-import Shikigami.Authority.KikanEn.Config (buildConfiguredAuthority)
+import Shikigami.Authority.Configured (buildConfiguredAuthority)
 import Shikigami.Behavior.Run (newBehaviorEnv)
 import Shikigami.Behavior.StubProvider (stubApiProvider)
 import Shikigami.Capability.Overlay (CapabilityDescriptor (..))
@@ -101,11 +102,11 @@ data Ready = Ready {binding :: !WorkspaceBinding, admission :: !WorkspaceAdmissi
 workflowCase :: FilePath -> FilePath -> String -> IO ()
 workflowCase configFile prefix stage = do
   initial <- right . Aeson.eitherDecodeStrict @Ready =<< Bytes.readFile (prefix </> "native-ready.json")
-  config <- runAppConfig AdminRole (ConfigOptions [configFile] [] [] NoDiagnostic)
+  config <- runAppConfigWith authoritySettings AdminRole (ConfigOptions [configFile] [] [] NoDiagnostic)
   connection <- revealSecretText <$> requireDatabaseUrl "workspace-workflow-fixture" config
   tracer <- noopTracer
   let env = AppEnv {connectionSettings = defaultConnectionSettings connection, tracer, metrics = Nothing, store = Nothing}
-  authorizer <- right =<< buildConfiguredAuthority Log.silentLogger config
+  authorizer <- right =<< buildConfiguredAuthority [kikanAuthorityAdapter] Log.silentLogger config
   directory <- right =<< startDirectory Log.silentLogger config.directorySettings
   withStore env.connectionSettings \store -> do
     principal <- right (identityText initial.binding.request.owner)

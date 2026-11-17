@@ -50,7 +50,8 @@ builtinPack =
       settings = [],
       triggers = noTriggerHooks,
       adminVerbs = [],
-      gauges = []
+      gauges = [],
+      authorities = []
     }
 
 -- | The builtin pack alone, composed. It cannot fail for a reviewed build, so

@@ -152,17 +152,10 @@ nested under `kafka`.
 | `credentials.sinks.kizashi.token` | *(none — secret)* | `SHIKIGAMI_KIZASHI_TOKEN` | Optional bearer token sent only to the configured kizashi host. |
 | `credentials.sinks.kanmon.token` | *(none — secret)* | `SHIKIGAMI_KANMON_TOKEN` | Optional bearer token authenticating Shikigami to Kanmon; it is not a provider credential. |
 | `credentials.sinks.danwa.token` | *(none — secret)* | `SHIKIGAMI_DANWA_TOKEN` | Optional bearer token sent only to the configured danwa host. |
-| `trust.tier` | `contained` | `SHIKIGAMI_TRUST_TIER` | Who decides a run's actions: `contained` keeps each executable's configured authority; `multi-tenant` additionally requires `authorization.actions.mode=kikan` in the worker; `local-operator` makes the operator the authority in the two one-off commands and is refused by the worker ([ADR-124](../adr/0124-authority-is-selected-by-trust-tier-and-the-local-operator-grants-a-declaration-once.md)). |
+| `trust.tier` | `contained` | `SHIKIGAMI_TRUST_TIER` | Who decides a run's actions: `contained` keeps each executable's configured authority; `multi-tenant` additionally requires an authority (`authorization.actions.mode` other than `disabled`, such as `kikan` under the Kikan distribution) in the worker; `local-operator` makes the operator the authority in the two one-off commands and is refused by the worker ([ADR-124](../adr/0124-authority-is-selected-by-trust-tier-and-the-local-operator-grants-a-declaration-once.md)). |
 | `trust.local_operator.approvals_file` | `$XDG_CONFIG_HOME/shikigami/local-operator.dhall` | `SHIKIGAMI_TRUST_LOCAL_OPERATOR_APPROVALS_FILE` | The explicit local-operator approvals file (`schema/LocalOperator.dhall`); a missing file is empty. |
 | `trust.local_operator.state_dir` | `$XDG_STATE_HOME/shikigami` | `SHIKIGAMI_TRUST_LOCAL_OPERATOR_STATE_DIR` | Where confirmed local-operator grants are stored, outside every workspace. |
-| `authorization.actions.mode` | `disabled` | `SHIKIGAMI_ACTION_AUTHORIZATION_MODE` | `disabled` authorizes no protected external action; `kikan` requires the complete trust group below. |
-| `authorization.actions.kikan_en.base_url` | *(none)* | `SHIKIGAMI_ACTION_KIKAN_EN_BASE_URL` | Kikan-En base URL, required in `kikan` mode. |
-| `authorization.actions.shomei.base_url` | *(none)* | `SHIKIGAMI_ACTION_SHOMEI_BASE_URL` | Shomei base URL, required in `kikan` mode. |
-| `authorization.actions.shomei.client_id` | *(none)* | `SHIKIGAMI_ACTION_SHOMEI_CLIENT_ID` | Shomei machine client id, required in `kikan` mode. |
-| `credentials.authorization.actions.shomei.client_secret` | *(none — secret)* | `SHIKIGAMI_ACTION_SHOMEI_CLIENT_SECRET` | Shomei machine secret, required and redacted in `kikan` mode. |
-| `authorization.actions.en.issuer_public_keys` | *(none)* | `SHIKIGAMI_ACTION_EN_ISSUER_PUBLIC_KEYS` | En Biscuit verifier keyset, required in `kikan` mode. |
-| `authorization.actions.en.schema_hashes` | *(none)* | `SHIKIGAMI_ACTION_EN_SCHEMA_HASHES` | Accepted Kikan schema hashes, required in `kikan` mode. |
-| `authorization.actions.caller_id` | *(none)* | `SHIKIGAMI_ACTION_CALLER_ID` | Public audit caller id, required in `kikan` mode. |
+| `authorization.actions.mode` | `disabled` | `SHIKIGAMI_ACTION_AUTHORIZATION_MODE` | `disabled` authorizes no protected external action. Any other value names an authority a composed pack registers; `kikan` is registered by the Kikan distribution, whose binding owns the `authorization.actions.kikan_en.*`, `shomei.*`, `en.*` and `caller_id` keys ([Per-action authorization operations](action-authorization.md)). A stock executable refuses those keys and a mode it does not compose. |
 | `delegation.default_budget` | `16` | `SHIKIGAMI_DELEGATION_DEFAULT_BUDGET` | Root-run descendant budget when the declaration supplies none (0–1000). |
 | `conversation.idle_timeout_seconds` | `1800` | `SHIKIGAMI_CONVERSATION_IDLE_TIMEOUT_SECONDS` | End a rotating conversation epoch after this idle wait. |
 | `http.request_max_bytes` | `8388608` | `SHIKIGAMI_HTTP_REQUEST_MAX_BYTES` | Encoded outbound sink request limit in bytes (1024–67108864). |
@@ -220,8 +213,8 @@ precedence and redaction instead of being read behind Settei's back by the clien
 
 ## Choosing a model provider
 
-`behavior.provider` and `authorization.actions.mode` are the two conditional parts of the
-surface. The authorization trust group is documented in
+`behavior.provider` is the conditional part of the surface. The Kikan-En authorization
+settings belong to the Kikan distribution and are documented in
 [Per-action authorization operations](action-authorization.md). The behavior provider's
 default is a deliberate fiction. Left alone it selects the **stub**: a provider that loads
 the skill, builds the same request a real model would get, and answers with a fixed

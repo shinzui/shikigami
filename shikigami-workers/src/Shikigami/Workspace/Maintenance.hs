@@ -9,7 +9,8 @@ import Shikigami.Agent.Principal (AgentIdentity (VerifiedIdentity), mkAgentPrinc
 import Shikigami.App (AppEnv (..), noopTracer)
 import Shikigami.App.Config (AppConfig (..), revealSecretText)
 import Shikigami.App.Config.Load (requireDatabaseUrl)
-import Shikigami.Authority.KikanEn.Config (buildConfiguredAuthority)
+import Shikigami.Authority.Adapter (AuthorityAdapter)
+import Shikigami.Authority.Configured (buildConfiguredAuthority)
 import Shikigami.Directory (DirectoryRuntime (..), identityLifecycleAdmission, startDirectory)
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations (verifyShikigamiMigrations)
@@ -23,8 +24,8 @@ import System.Exit (exitFailure)
 data WorkspaceMaintenance = ListWorkspaces !(Maybe Text) | CleanupWorkspace !Text
   deriving stock (Eq, Show)
 
-runWorkspaceMaintenance :: Text -> WorkspaceMaintenance -> AppConfig -> IO ()
-runWorkspaceMaintenance actor operation config = do
+runWorkspaceMaintenance :: [AuthorityAdapter] -> Text -> WorkspaceMaintenance -> AppConfig -> IO ()
+runWorkspaceMaintenance authorities actor operation config = do
   logger <- Log.newStderrLogger Log.Info
   let refuse :: IO a
       refuse = Log.logError logger "workspace.maintenance.refused" [] >> exitFailure
@@ -33,7 +34,7 @@ runWorkspaceMaintenance actor operation config = do
   connection <- revealSecretText <$> requireDatabaseUrl "shikigami-worker" config
   verifyShikigamiMigrations connection
   tracer <- noopTracer
-  authorizer <- buildConfiguredAuthority logger config >>= either (const refuse) pure
+  authorizer <- buildConfiguredAuthority authorities logger config >>= either (const refuse) pure
   directory <- startDirectory logger config.directorySettings >>= either (const refuse) pure
   let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connection, tracer, metrics = Nothing, store = Nothing}
       runtime = MaintenanceRuntime appEnv settings.storageRoot authorizer (identityLifecycleAdmission directory.handle) (pure ())

@@ -9,12 +9,9 @@ import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Time (UTCTime (..), fromGregorian)
 import Keiro.Workflow (WorkflowId (..))
-import Kikan.En.Action qualified as Kikan
-import Shikigami.Activity.Coordinate (activityCoordinate)
 import Shikigami.Agent.DeclarationValue (declarationCoordinate)
 import Shikigami.Agent.Name (mkAgentName)
 import Shikigami.Authority
-import Shikigami.Authority.KikanEn (KikanEnMapping (..), UnmappedAction (..), toAgentAction)
 import Shikigami.Record
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
@@ -25,8 +22,7 @@ tests =
     "Authority"
     [ vocabularyTests,
       portTests,
-      recordedTests,
-      kikanMappingTests
+      recordedTests
     ]
 
 principal :: Principal
@@ -130,36 +126,6 @@ recordedTests =
         fmap (.action) result @?= Right connect
         fmap (recordKindText . fst . recordEntry . (.entry)) <$> events >>= (@?= ["observer.saw"])
     ]
-
-kikanMappingTests :: TestTree
-kikanMappingTests =
-  testGroup
-    "Kikan-En mapping"
-    [ testCase "capability operations map one to one" do
-        fmap Kikan.actionTag (mapped connect) @?= Right "connect_capability"
-        fmap Kikan.actionTag (mapped invoke) @?= Right "invoke_capability_tool"
-        fmap (Kikan.canonicalResourceText . Kikan.actionResource) (mapped invoke) @?= Right "capability_tool:shikigami.workspace@1/admit-sha256-abc",
-      testCase "each Kikan output kind maps to its action" do
-        fmap Kikan.actionTag (mapped (output "kawa.digest" ("ticket" :| ["ticket.received"]))) @?= Right "dispatch_kawa"
-        fmap (Kikan.canonicalResourceText . Kikan.actionResource) (mapped (output "kawa.digest" ("ticket" :| ["ticket.received"]))) @?= Right "kawa_source:shinzui/shikigami"
-        fmap Kikan.actionTag (mapped (output "kizashi.signal" ("person-nadeem" :| []))) @?= Right "dispatch_kizashi"
-        fmap Kikan.actionTag (mapped (output "rei.action" ("intention_1" :| []))) @?= Right "act_on_intention"
-        fmap Kikan.actionTag (mapped (output "danwa.conversation" ("thread-1" :| []))) @?= Right "attach_danwa"
-        fmap Kikan.actionTag (mapped (output "channel.egress" ("slack" :| ["C123"]))) @?= Right "dispatch_channel",
-      testCase "an output Kikan-En has no action for is unmapped, never substituted" do
-        case mapped (output "local.report" ("report" :| [])) of
-          Left NoKikanAction {} -> pure ()
-          other -> assertFailure ("expected NoKikanAction, got " <> show other)
-        case mapped (output "channel.egress" ("slack" :| [])) of
-          Left NoKikanAction {} -> pure ()
-          other -> assertFailure ("a malformed channel target must not map: " <> show other),
-      testCase "a target Kikan-En rejects is an invalid target" do
-        case mapped (output "kizashi.signal" ("person:nadeem" :| [])) of
-          Left InvalidKikanTarget {} -> pure ()
-          other -> assertFailure ("expected InvalidKikanTarget, got " <> show other)
-    ]
-  where
-    mapped = toAgentAction KikanEnMapping {kawaSource = activityCoordinate "shinzui/shikigami"} (UTCTime (fromGregorian 2026 11 15) 0)
 
 field :: Text -> Value -> Maybe Text
 field name = \case

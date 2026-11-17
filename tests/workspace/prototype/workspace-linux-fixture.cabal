@@ -50,6 +50,7 @@ executable shikigami-workspace-prototype
     keiro,
     kikan-en-client,
     kikan-en-contract,
+    kikan-shikigami-binding,
     kioku-api,
     kioku-core,
     kiroku-store,

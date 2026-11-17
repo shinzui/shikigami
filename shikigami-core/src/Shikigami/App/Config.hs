@@ -128,13 +128,6 @@ module Shikigami.App.Config
     openaiApiKeyKey,
     typesafeApiKeyKey,
     actionAuthorizationModeKey,
-    actionKikanBaseUrlKey,
-    actionShomeiBaseUrlKey,
-    actionShomeiClientIdKey,
-    actionShomeiClientSecretKey,
-    actionIssuerPublicKeysKey,
-    actionSchemaHashesKey,
-    actionCallerIdKey,
     kawaTokenKey,
     kizashiTokenKey,
     kanmonTokenKey,
@@ -181,7 +174,6 @@ import Data.Text qualified as Text
 import Data.Text.Encoding qualified as TE
 import Data.Time (NominalDiffTime, nominalDiffTimeToSeconds, secondsToNominalDiffTime)
 import Data.Vector qualified as Vector
-import En.Biscuit.Keys (IssuerKeySet, parseIssuerKeySetText)
 import GHC.Generics (Generic)
 import Pgmq (QueueName, parseQueueName, queueNameToText)
 import Settei
@@ -201,7 +193,6 @@ import Shikigami.Agent.Decl
     mkDelegationBudget,
   )
 import Shikigami.Agent.DeclarationValue
-import Shikigami.Authority.KikanEn.Settings (ActionSchemaHash, actionSchemaHashText, mkActionSchemaHash)
 import Shikigami.Behavior.StubProvider (stubModel)
 import Shikigami.Decision.Contract (DecisionFailure, ModelAlias, modelAliasText)
 import Shikigami.Decision.ModelCatalog qualified as Decision
@@ -212,7 +203,7 @@ import Shikigami.Execution.Policy.Types qualified as Harness
 import Shikigami.Inspection.Settings (InspectionSettings (..))
 import Shikigami.Objective.Tracker.Config (TrackerSettings, defaultTrackerSettings)
 import Shikigami.Objective.Types (ObjectiveSettings, defaultObjectiveSettings)
-import Shikigami.Pack.Setting (PackSetting (..), PackSettings, SettingDefault (..), SettingShape (..), noPackSettings, packSettingsFromList)
+import Shikigami.Pack.Setting (PackSetting (..), PackSettings, SettingDefault (..), SettingShape (..), noPackSettings, packSettingsWithSecrets)
 import Shikigami.RuntimePolicy
 import Shikigami.Sink.Permission (SinkKind)
 import Shikigami.Trigger.Schedule (CatchUpPolicy (..))
@@ -341,25 +332,20 @@ renderProviderChoice = \case
   ChooseOpenAI -> "openai"
   ChooseResponses -> "openai-responses"
 
+-- | Which authority decides protected actions under the deployment tiers.
+-- @disabled@ fails every protected action closed. Any other value names an
+-- authority a composed pack registers (the Kikan binding registers @kikan@);
+-- the authority's own settings belong to that pack, and an executable that
+-- composes no such pack refuses to start ('Shikigami.Authority.Configured').
 data ActionAuthorizationConfig
   = ActionAuthorizationDisabled
-  | KikanActionAuthorization
-      { kikanBaseUrl :: !Text,
-        shomeiBaseUrl :: !Text,
-        shomeiClientId :: !(DeclarationCoordinate "oauth-client"),
-        shomeiClientSecret :: !SecretText,
-        issuerPublicKeys :: !IssuerKeySet,
-        acceptedSchemaHashes :: !(Set ActionSchemaHash),
-        callerId :: !Text
-      }
-  deriving stock (Generic, Eq)
-
-data ActionAuthorizationChoice = DisableActionAuthorization | UseKikanActionAuthorization
+  | ActionAuthorizationBy !Text
   deriving stock (Generic, Eq, Show)
 
-renderActionAuthorizationChoice :: ActionAuthorizationChoice -> Text
-renderActionAuthorizationChoice DisableActionAuthorization = "disabled"
-renderActionAuthorizationChoice UseKikanActionAuthorization = "kikan"
+renderActionAuthorizationConfig :: ActionAuthorizationConfig -> Text
+renderActionAuthorizationConfig = \case
+  ActionAuthorizationDisabled -> "disabled"
+  ActionAuthorizationBy mode -> mode
 
 -- | Every Anthropic Messages model in baikai's generated catalog.
 --
@@ -841,22 +827,7 @@ renderJson = TE.decodeUtf8 . LBS.toStrict . Aeson.encode
 
 actionAuthorizationConfig :: Config ActionAuthorizationConfig
 actionAuthorizationConfig =
-  maybe ActionAuthorizationDisabled build
-    <$> whenEq
-      (withDefault actionAuthorizationModeSetting (constant "action-authorization-disabled" "Protected external IO fails closed until Kikan trust material is configured" DisableActionAuthorization))
-      UseKikanActionAuthorization
-      ( (,,,,,,)
-          <$> required actionKikanBaseUrlSetting
-          <*> required actionShomeiBaseUrlSetting
-          <*> required actionShomeiClientIdSetting
-          <*> required actionShomeiClientSecretSetting
-          <*> required actionIssuerPublicKeysSetting
-          <*> required actionSchemaHashesSetting
-          <*> required actionCallerIdSetting
-      )
-  where
-    build (kikanBaseUrl, shomeiBaseUrl, shomeiClientId, shomeiClientSecret, issuerPublicKeys, acceptedSchemaHashes, callerId) =
-      KikanActionAuthorization {kikanBaseUrl, shomeiBaseUrl, shomeiClientId, shomeiClientSecret, issuerPublicKeys, acceptedSchemaHashes, callerId}
+  withDefault actionAuthorizationModeSetting (constant "action-authorization-disabled" "Protected external IO fails closed until an authority is configured" ActionAuthorizationDisabled)
 
 -- | Directory mode is conditional so file mode cannot resolve without a path,
 -- while disabled deployments are not asked for a meaningless one.
@@ -877,7 +848,7 @@ directorySettingsConfig =
 -- required. With no setting this is 'appConfig'.
 appConfigWith :: [PackSetting] -> Config AppConfig
 appConfigWith settings =
-  (\config values -> config & #packSettings .~ packSettingsFromList (catMaybes values))
+  (\config values -> config & #packSettings .~ toPackSettings (catMaybes values))
     <$> kernelAppConfig
     <*> traverse packSettingConfig (coreUseCaseSettings <> settings)
 
@@ -887,21 +858,35 @@ appConfigWith settings =
 coreUseCaseSettings :: [PackSetting]
 coreUseCaseSettings = []
 
+-- | A pack setting's validated value: shown, or a secret that never is.
+data PackValue = PublicPackValue !Aeson.Value | SecretPackValue !Text
+
+toPackSettings :: [(Text, PackValue)] -> PackSettings
+toPackSettings entries =
+  packSettingsWithSecrets [(key, value) | (key, PublicPackValue value) <- entries] [(key, value) | (key, SecretPackValue value) <- entries]
+
 -- | One pack setting: its raw value read by shape, then validated by the
--- pack. A refusal names the pack's expectation and never the value.
-packSettingConfig :: PackSetting -> Config (Maybe (Text, Aeson.Value))
+-- pack. A refusal names the pack's expectation and never the value. A secret
+-- has no default and no renderer, so no command prints it.
+packSettingConfig :: PackSetting -> Config (Maybe (Text, PackValue))
 packSettingConfig setting =
-  fmap (setting.key,) <$> case setting.whenAbsent of
-    Nothing -> optional declared
-    Just absent -> Just <$> withDefault declared (constant absent.rule absent.reason absent.value)
+  fmap (setting.key,) <$> case setting.shape of
+    SecretTextSetting -> optional (secretSetting (stableKey setting.key) setting.description (decoder decodeSecret))
+    _ ->
+      fmap PublicPackValue <$> case setting.whenAbsent of
+        Nothing -> optional declared
+        Just absent -> Just <$> withDefault declared (constant absent.rule absent.reason absent.value)
   where
     declared = publicSettingWithRenderer (stableKey setting.key) setting.description (decoder decodeValue) renderValue
     refusal key = decodeFailure key setting.expectation
     decodeValue key raw = do
       value <- first (const (refusal key)) case setting.shape of
-        TextSetting -> Aeson.String <$> runDecoder textDecoder key raw
         JsonSetting -> runDecoder jsonDecoder key raw
+        _ -> Aeson.String <$> runDecoder textDecoder key raw
       bimap (const (refusal key)) (const value) (setting.validate value)
+    decodeSecret key raw = do
+      value <- first (const (refusal key)) (runDecoder textDecoder key raw)
+      bimap (const (refusal key)) (const (SecretPackValue value)) (setting.validate (Aeson.String value))
     renderValue = \case
       Aeson.String text -> text
       other -> renderJson other
@@ -1361,50 +1346,25 @@ trustTierKey = stableKey "trust.tier"
 trustApprovalsFileKey = stableKey "trust.local_operator.approvals_file"
 trustStateDirectoryKey = stableKey "trust.local_operator.state_dir"
 
-actionAuthorizationModeSetting :: Setting ActionAuthorizationChoice
+actionAuthorizationModeSetting :: Setting ActionAuthorizationConfig
 actionAuthorizationModeSetting =
   publicSettingWithRenderer
     actionAuthorizationModeKey
-    "Per-action authorization mode: disabled fails protected IO closed; kikan enables verified Kikan-En decisions"
-    (enumDecoder [("disabled", DisableActionAuthorization), ("kikan", UseKikanActionAuthorization)])
-    renderActionAuthorizationChoice
-
-actionKikanBaseUrlSetting, actionShomeiBaseUrlSetting, actionCallerIdSetting :: Setting Text
-actionShomeiClientIdSetting :: Setting (DeclarationCoordinate "oauth-client")
-actionKikanBaseUrlSetting = publicSettingWithRenderer actionKikanBaseUrlKey "Base URL of Kikan-En's action authorization service" textDecoder id
-actionShomeiBaseUrlSetting = publicSettingWithRenderer actionShomeiBaseUrlKey "Base URL of the Shomei OAuth2 service" textDecoder id
-
-actionShomeiClientIdSetting = publicSettingWithRenderer actionShomeiClientIdKey "Shomei service-account client id used for Kikan authorization" (declarationCoordinate <$> textDecoder) declarationCoordinateText
-
-actionCallerIdSetting = publicSettingWithRenderer actionCallerIdKey "Bounded public caller identity written to action authorization audit logs" textDecoder id
-
-actionShomeiClientSecretSetting :: Setting SecretText
-actionShomeiClientSecretSetting =
-  secretSetting actionShomeiClientSecretKey "Shomei client secret used only at the OAuth2 client_credentials boundary" (SecretText <$> textDecoder)
-
-actionIssuerPublicKeysSetting :: Setting IssuerKeySet
-actionIssuerPublicKeysSetting =
-  publicSettingWithRenderer
-    actionIssuerPublicKeysKey
-    "Comma-separated En Biscuit issuer public keys as key-id:hex"
-    (decoder (\key raw -> runDecoder textDecoder key raw >>= first (const (decodeFailure key "a non-empty key-id:64-hex En Biscuit public-key set")) . parseIssuerKeySetText))
-    (const "<configured public key set>")
-
-actionSchemaHashesSetting :: Setting (Set ActionSchemaHash)
-actionSchemaHashesSetting =
-  publicSettingWithRenderer
-    actionSchemaHashesKey
-    "Comma-separated accepted Kikan-En action schema hashes"
-    (decoder decodeHashes)
-    (Text.intercalate "," . fmap actionSchemaHashText . Set.toAscList)
+    "Per-action authorization: disabled fails protected IO closed; any other value names an authority a composed pack registers (kikan: the Kikan distribution)"
+    (decoder decodeMode)
+    renderActionAuthorizationConfig
   where
-    decodeHashes key raw = do
+    decodeMode key raw = do
       value <- runDecoder textDecoder key raw
-      let pieces = filter (not . Text.null) (Text.strip <$> Text.splitOn "," value)
-      hashes <- traverse (first (const (decodeFailure key "one or more comma-separated canonical schema hashes")) . mkActionSchemaHash) pieces
-      if null hashes
-        then Left (decodeFailure key "one or more comma-separated canonical schema hashes")
-        else Right (Set.fromList hashes)
+      case value of
+        "disabled" -> Right ActionAuthorizationDisabled
+        mode
+          | not (Text.null mode),
+            Text.length mode <= 32,
+            Text.all (\c -> isAlphaNum c || c == '-') mode,
+            Text.toLower mode == mode ->
+              Right (ActionAuthorizationBy mode)
+        _ -> Left (decodeFailure key "disabled, or the lowercase name of an authority a composed pack registers")
 
 -- ── Stable keys ─────────────────────────────────────────────────────────────
 
@@ -1556,15 +1516,8 @@ kanmonTokenKey = stableKey "credentials.sinks.kanmon.token"
 danwaTokenKey :: Key
 danwaTokenKey = stableKey "credentials.sinks.danwa.token"
 
-actionAuthorizationModeKey, actionKikanBaseUrlKey, actionShomeiBaseUrlKey, actionShomeiClientIdKey, actionShomeiClientSecretKey, actionIssuerPublicKeysKey, actionSchemaHashesKey, actionCallerIdKey :: Key
+actionAuthorizationModeKey :: Key
 actionAuthorizationModeKey = stableKey "authorization.actions.mode"
-actionKikanBaseUrlKey = stableKey "authorization.actions.kikan_en.base_url"
-actionShomeiBaseUrlKey = stableKey "authorization.actions.shomei.base_url"
-actionShomeiClientIdKey = stableKey "authorization.actions.shomei.client_id"
-actionShomeiClientSecretKey = stableKey "credentials.authorization.actions.shomei.client_secret"
-actionIssuerPublicKeysKey = stableKey "authorization.actions.en.issuer_public_keys"
-actionSchemaHashesKey = stableKey "authorization.actions.en.schema_hashes"
-actionCallerIdKey = stableKey "authorization.actions.caller_id"
 
 -- | Every key this declaration accepts, in schema order.
 --
@@ -1698,14 +1651,7 @@ kernelEnvironmentBindings =
     binding (EnvName "SHIKIGAMI_TRUST_TIER") trustTierKey,
     binding (EnvName "SHIKIGAMI_TRUST_LOCAL_OPERATOR_APPROVALS_FILE") trustApprovalsFileKey,
     binding (EnvName "SHIKIGAMI_TRUST_LOCAL_OPERATOR_STATE_DIR") trustStateDirectoryKey,
-    binding (EnvName "SHIKIGAMI_ACTION_AUTHORIZATION_MODE") actionAuthorizationModeKey,
-    binding (EnvName "SHIKIGAMI_ACTION_KIKAN_EN_BASE_URL") actionKikanBaseUrlKey,
-    binding (EnvName "SHIKIGAMI_ACTION_SHOMEI_BASE_URL") actionShomeiBaseUrlKey,
-    binding (EnvName "SHIKIGAMI_ACTION_SHOMEI_CLIENT_ID") actionShomeiClientIdKey,
-    binding (EnvName "SHIKIGAMI_ACTION_SHOMEI_CLIENT_SECRET") actionShomeiClientSecretKey,
-    binding (EnvName "SHIKIGAMI_ACTION_EN_ISSUER_PUBLIC_KEYS") actionIssuerPublicKeysKey,
-    binding (EnvName "SHIKIGAMI_ACTION_EN_SCHEMA_HASHES") actionSchemaHashesKey,
-    binding (EnvName "SHIKIGAMI_ACTION_CALLER_ID") actionCallerIdKey
+    binding (EnvName "SHIKIGAMI_ACTION_AUTHORIZATION_MODE") actionAuthorizationModeKey
   ]
 
 -- ── Which binary needs what ─────────────────────────────────────────────────

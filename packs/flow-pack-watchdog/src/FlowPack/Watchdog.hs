@@ -26,5 +26,6 @@ watchdogPack =
       settings = [watchdogSetting],
       triggers = noTriggerHooks {schedule = Just watchdogScheduleHook},
       adminVerbs = [watchdogVerb],
-      gauges = [sweepAgeGauge]
+      gauges = [sweepAgeGauge],
+      authorities = []
     }

@@ -69,6 +69,7 @@ import Shikigami.App.Config.Load
     usageExitCode,
   )
 import Shikigami.App.Version (versionOption)
+import Shikigami.Authority.Adapter (AuthorityAdapter)
 import Shikigami.Directory qualified as Directory
 import Shikigami.Execution.Identity (parseExecutionRootId, parseOperationId)
 import Shikigami.Flow.Pack (AdminContext (..), AdminVerb (..), FlowPack (..))
@@ -220,7 +221,7 @@ adminSubcommandsWith packs =
     ("runs", command "runs" runsInfo),
     ("resources", command "resources" resourcesInfo),
     ("executions", command "executions" executionsInfo),
-    ("workers", command "workers" workersInfo),
+    ("workers", command "workers" (workersInfo (concatMap (.authorities) packs))),
     ("objectives", command "objectives" objectivesInfo),
     ("mandates", command "mandates" mandatesInfo),
     ("record", command "record" recordInfo)
@@ -341,8 +342,8 @@ trackersInfo = info (subparser commands <**> helper) (progDesc "Inspect tracker 
     history kind = (\objective selected cursor count format -> (runTrackerHistory kind objective selected cursor count format, [])) <$> identifier <*> binding <*> after <*> limit <*> json
     operation = (\objective key format -> (runTrackerOperation objective key format, [])) <$> identifier <*> strArgument (metavar "OPERATION") <*> json
 
-workersInfo :: ParserInfo AdminAction
-workersInfo = info (subparser commands <**> helper) (progDesc "Inspect continuing workers and issue scoped, explicitly keyed commands")
+workersInfo :: [AuthorityAdapter] -> ParserInfo AdminAction
+workersInfo authorities = info (subparser commands <**> helper) (progDesc "Inspect continuing workers and issue scoped, explicitly keyed commands")
   where
     commands =
       command "inspect" (info (inspect <**> helper) (progDesc "Show bounded session, assignment and handoff metadata"))
@@ -365,14 +366,14 @@ workersInfo = info (subparser commands <**> helper) (progDesc "Inspect continuin
         <*> option messagePositionReader (long "after" <> value beforeMessages <> metavar "SEQUENCE")
         <*> option auto (long "limit" <> value 10 <> metavar "COUNT" <> help "Assignment page size (1-20)")
         <*> switch (long "json")
-    send = (\key op rev owner input -> action (runWorkersSend key op rev owner input)) <$> session <*> operation <*> revision <*> epoch <*> instruction
-    interrupt = (\key op rev owner assignment input -> action (runWorkersInterrupt key op rev owner assignment input)) <$> session <*> operation <*> revision <*> epoch <*> strOption (long "assignment" <> metavar "ASSIGNMENT") <*> instruction
-    cancel = (\key op rev owner -> action (runWorkersControl op (CancelWorker (workerSessionId key) rev owner))) <$> session <*> operation <*> revision <*> epoch
-    transfer = (\key op rev owner provider resource target -> action (runWorkersControl op (TransferWorker (workerSessionId key) rev owner (WorkspaceRef (workspaceCoordinate provider) (workspaceCoordinate resource)) target))) <$> session <*> operation <*> revision <*> epoch <*> strOption (long "workspace-provider" <> metavar "PROVIDER") <*> strOption (long "workspace-resource" <> metavar "RESOURCE") <*> option agentReader (long "target" <> metavar "AGENT")
-    reconcile = (\key op -> action (runWorkersControl op (ReconcileWorker (workerSessionId key)))) <$> session <*> operation
-    integrate = (\key op -> action (runWorkersControl op (IntegrateWorkerEvents (workerSessionId key)))) <$> session <*> operation
+    send = (\key op rev owner input -> action (runWorkersSend authorities key op rev owner input)) <$> session <*> operation <*> revision <*> epoch <*> instruction
+    interrupt = (\key op rev owner assignment input -> action (runWorkersInterrupt authorities key op rev owner assignment input)) <$> session <*> operation <*> revision <*> epoch <*> strOption (long "assignment" <> metavar "ASSIGNMENT") <*> instruction
+    cancel = (\key op rev owner -> action (runWorkersControl authorities op (CancelWorker (workerSessionId key) rev owner))) <$> session <*> operation <*> revision <*> epoch
+    transfer = (\key op rev owner provider resource target -> action (runWorkersControl authorities op (TransferWorker (workerSessionId key) rev owner (WorkspaceRef (workspaceCoordinate provider) (workspaceCoordinate resource)) target))) <$> session <*> operation <*> revision <*> epoch <*> strOption (long "workspace-provider" <> metavar "PROVIDER") <*> strOption (long "workspace-resource" <> metavar "RESOURCE") <*> option agentReader (long "target" <> metavar "AGENT")
+    reconcile = (\key op -> action (runWorkersControl authorities op (ReconcileWorker (workerSessionId key)))) <$> session <*> operation
+    integrate = (\key op -> action (runWorkersControl authorities op (IntegrateWorkerEvents (workerSessionId key)))) <$> session <*> operation
     reconcileCheckpoint =
-      (\key op rev owner previous objective assignment criteria statement -> action (runWorkersControl op (ReconcileWorkerCheckpoint (workerSessionId key) rev owner previous (CheckpointRevalidation objective assignment criteria statement))))
+      (\key op rev owner previous objective assignment criteria statement -> action (runWorkersControl authorities op (ReconcileWorkerCheckpoint (workerSessionId key) rev owner previous (CheckpointRevalidation objective assignment criteria statement))))
         <$> session
         <*> operation
         <*> revision

@@ -396,5 +396,6 @@ probePack =
               parser = info (subparser (command "inspect" (info (const (pure ()) <$ switch (long "json")) mempty))) mempty
             }
         ],
-      gauges = []
+      gauges = [],
+      authorities = []
     }

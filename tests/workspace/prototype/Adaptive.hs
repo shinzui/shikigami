@@ -50,6 +50,7 @@ import Hasql.Statement (preparable)
 import Hasql.Transaction qualified as Tx
 import Keiro.Workflow qualified as W
 import Keiro.Workflow.Resume (WorkflowDef (..), resumeWorkflowsOnce)
+import Kikan.Shikigami.Binding.Authority (KikanEnSettings (..), authoritySettings, kikanAuthorityAdapter, loadKikanEnSettings)
 import Kioku.Id (genSessionId)
 import Kiroku.Store.Connection (KirokuStore (..), withStore)
 import Kiroku.Store.Transaction (runTransaction)
@@ -68,10 +69,10 @@ import Shikigami.AgentRun.Ledger qualified as Ledger
 import Shikigami.AgentRun.RequestKey (parseRequestKey)
 import Shikigami.App (AppEnv (..))
 import Shikigami.App.Config
-import Shikigami.App.Config.Load (ConfigOptions (..), DiagnosticMode (NoDiagnostic), runAppConfig)
+import Shikigami.App.Config.Load (ConfigOptions (..), DiagnosticMode (NoDiagnostic), runAppConfigWith)
 import Shikigami.Attestation.Resolve (ProfileResolutionError (UnknownProfile))
 import Shikigami.Authority (Authority, Decision (..), actionResource, observeDecisions)
-import Shikigami.Authority.KikanEn.Config (buildConfiguredAuthority)
+import Shikigami.Authority.Configured (buildConfiguredAuthority)
 import Shikigami.Behavior.Provider (newBehaviorEnvFor, providerCallFor, validateProviderSelection)
 import Shikigami.Behavior.Provider.Coordinate (providerCoordinateText)
 import Shikigami.Behavior.Run (BehaviorEnv (..), newBehaviorEnv)
@@ -217,7 +218,7 @@ adaptiveCase config prefix requestedStage = withQualification config prefix \ori
       q = original & #env .~ env & #authorizer .~ (if live then recordAuthority prefix original.authorizer else original.authorizer)
       settings = defaultObjectiveSettings & #enabled .~ ObjectivesEnabled
       own = key "delivery"
-      callerName = if live then case q.config.actionAuthorization of KikanActionAuthorization {callerId} -> callerId; _ -> error "live authority absent" else "workspace-fixture"
+      callerName = if live then case loadKikanEnSettings q.config.packSettings of Right KikanEnSettings {callerId} -> callerId; _ -> error "live authority absent" else "workspace-fixture"
       caller = checked (parseCallerId callerName)
       owner = O.ObjectiveHost settings (pure (Right (VerifiedCaller caller))) q.authorizer (\_ _ -> pure (Left ObjectiveDenied)) (\_ _ -> pure (Left ObjectiveDenied)) (\_ -> pure (Left ObjectiveInvalidEvidence))
       command goal operation change = do
@@ -656,8 +657,8 @@ validateLiveConfig config settings roles = do
     (R.CostMicroUsd, _) -> fail "HTTP invoice ceilings cannot be enforced"
     (_, Just (R.Limited amount)) | amountUnits amount > 0 -> pure ()
     _ -> fail "live enforceable limits must be finite and positive"
-  case config.actionAuthorization of
-    KikanActionAuthorization {kikanBaseUrl, shomeiBaseUrl, callerId}
+  case (config.actionAuthorization, loadKikanEnSettings config.packSettings) of
+    (ActionAuthorizationBy "kikan", Right KikanEnSettings {kikanBaseUrl, shomeiBaseUrl, callerId})
       | all (Text.isPrefixOf "https://") [kikanBaseUrl, shomeiBaseUrl], callerId /= "workspace-fixture" -> pure ()
     _ -> fail "live qualification requires explicit production authorization over HTTPS"
   case config.behaviorProvider of
@@ -704,9 +705,9 @@ recordAuthority prefix =
 livePreflight :: FilePath -> FilePath -> IO ()
 livePreflight configPath limitsPath = do
   settings <- readLiveSettings limitsPath
-  config <- runAppConfig AdminRole (ConfigOptions [configPath] [] [] NoDiagnostic)
+  config <- runAppConfigWith authoritySettings AdminRole (ConfigOptions [configPath] [] [] NoDiagnostic)
   void (validateLiveConfig config settings ["adaptive", "producer", "producer-review", "consumer", "consumer-review"])
-  built <- buildConfiguredAuthority Log.silentLogger config
+  built <- buildConfiguredAuthority [kikanAuthorityAdapter] Log.silentLogger config
   either (const (fail "live authorizer configuration refused")) (const (putStrLn "PASS live configuration preflight; no model dispatch")) built
 
 -- Exercise the actual CLI, including environment isolation and secret redaction.
@@ -771,6 +772,6 @@ liveControls fixturePath = do
   putStrLn ("PASS " <> show (length cases) <> " native live preflight controls; no model dispatch")
 
 liveAuthorityIdentity :: AppConfig -> Aeson.Value
-liveAuthorityIdentity config = case config.actionAuthorization of
-  KikanActionAuthorization {kikanBaseUrl, shomeiBaseUrl, callerId} -> Aeson.object ["kikanBaseUrl" .= kikanBaseUrl, "shomeiBaseUrl" .= shomeiBaseUrl, "callerId" .= callerId]
+liveAuthorityIdentity config = case loadKikanEnSettings config.packSettings of
+  Right KikanEnSettings {kikanBaseUrl, shomeiBaseUrl, callerId} -> Aeson.object ["kikanBaseUrl" .= kikanBaseUrl, "shomeiBaseUrl" .= shomeiBaseUrl, "callerId" .= callerId]
   _ -> Aeson.Null

@@ -103,7 +103,6 @@ import Shikigami.Trigger.Stream (IncludeAgentActors (IncludeAgentActors), matche
 import Shikigami.TypeSafeDecisionSpec qualified as TypeSafeDecisionSpec
 import Shikigami.WireCompatSpec qualified as WireCompatSpec
 import Shikigami.WorkerSessionPositionSpec qualified as WorkerSessionPositionSpec
-import Shikigami.WorkspaceActionProofSpec qualified as WorkspaceActionProofSpec
 import Shikigami.WorkspaceAdapterSpec qualified as WorkspaceAdapterSpec
 import Shikigami.WorkspaceCatalogSpec qualified as WorkspaceCatalogSpec
 import Shikigami.WorkspaceInstructionsSpec qualified as WorkspaceInstructionsSpec
@@ -125,7 +124,6 @@ main =
           WorkspaceInstructionsSpec.tests,
           WorkspaceProcessPolicySpec.tests,
           WorkspaceAdapterSpec.tests,
-          WorkspaceActionProofSpec.tests,
           AgentLoaderSpec.tests,
           ApprovalNotificationSpec.tests,
           ObjectiveSpec.tests,

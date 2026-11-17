@@ -40,6 +40,7 @@ Shikigami.Pack.Sdk PackGauge.name
 Shikigami.Pack.Sdk PackGauge.sample
 Shikigami.Pack.Sdk PackMetrics
 Shikigami.Pack.Sdk PackMetrics.count
+Shikigami.Pack.Sdk PackSecret
 Shikigami.Pack.Sdk PackSetting
 Shikigami.Pack.Sdk PackSetting.description
 Shikigami.Pack.Sdk PackSetting.environment
@@ -66,6 +67,7 @@ Shikigami.Pack.Sdk SettingDefault.rule
 Shikigami.Pack.Sdk SettingDefault.value
 Shikigami.Pack.Sdk SettingShape
 Shikigami.Pack.Sdk SettingShape.JsonSetting
+Shikigami.Pack.Sdk SettingShape.SecretTextSetting
 Shikigami.Pack.Sdk SettingShape.TextSetting
 Shikigami.Pack.Sdk Store
 Shikigami.Pack.Sdk StoreError
@@ -93,8 +95,10 @@ Shikigami.Pack.Sdk logDebug
 Shikigami.Pack.Sdk logError
 Shikigami.Pack.Sdk logInfo
 Shikigami.Pack.Sdk logWarn
+Shikigami.Pack.Sdk packSettingSecret
 Shikigami.Pack.Sdk packSettingText
 Shikigami.Pack.Sdk packSettingValue
 Shikigami.Pack.Sdk reinterpret
+Shikigami.Pack.Sdk revealPackSecret
 Shikigami.Pack.Sdk runTransaction
 Shikigami.Pack.Sdk runTransactionNoRetry

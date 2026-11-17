@@ -17,7 +17,8 @@ import Shikigami.App (AppEnv (..), noopTracer, runAppIO)
 import Shikigami.App.Config (AppConfig (..), revealSecretText)
 import Shikigami.App.Config.Load (requireDatabaseUrl)
 import Shikigami.Authority (Authority)
-import Shikigami.Authority.KikanEn.Config (buildConfiguredAuthority)
+import Shikigami.Authority.Adapter (AuthorityAdapter)
+import Shikigami.Authority.Configured (buildConfiguredAuthority)
 import Shikigami.Directory (DirectoryRuntime (..))
 import Shikigami.Directory qualified as Directory
 import Shikigami.Execution.Identity (OperationId)
@@ -45,22 +46,22 @@ runWorkersInspect key after limit _asJson config = do
     Right (Right Nothing) -> die "worker session was not found"
     _ -> die "worker session inspection was refused; verify the catalog and page bounds"
 
-runWorkersSend :: Text -> OperationId -> StateRevision "worker-session" -> StateRevision "worker-owner" -> FilePath -> AppConfig -> IO ()
-runWorkersSend session key revision epoch path config = do
+runWorkersSend :: [AuthorityAdapter] -> Text -> OperationId -> StateRevision "worker-session" -> StateRevision "worker-owner" -> FilePath -> AppConfig -> IO ()
+runWorkersSend authorities session key revision epoch path config = do
   instruction <- readInstruction path
-  runWorkersControl key (SendWorker (workerSessionId session) revision epoch instruction) config
+  runWorkersControl authorities key (SendWorker (workerSessionId session) revision epoch instruction) config
 
-runWorkersInterrupt :: Text -> OperationId -> StateRevision "worker-session" -> StateRevision "worker-owner" -> Text -> FilePath -> AppConfig -> IO ()
-runWorkersInterrupt session key revision epoch assignment path config = do
+runWorkersInterrupt :: [AuthorityAdapter] -> Text -> OperationId -> StateRevision "worker-session" -> StateRevision "worker-owner" -> Text -> FilePath -> AppConfig -> IO ()
+runWorkersInterrupt authorities session key revision epoch assignment path config = do
   instruction <- readInstruction path
   checkedAssignment <- either (die . Text.unpack) pure (parseAssignmentId assignment)
-  runWorkersControl key (InterruptWorker (workerSessionId session) revision epoch checkedAssignment instruction) config
+  runWorkersControl authorities key (InterruptWorker (workerSessionId session) revision epoch checkedAssignment instruction) config
 
-runWorkersControl :: OperationId -> WorkerCommand -> AppConfig -> IO ()
-runWorkersControl key command config = do
+runWorkersControl :: [AuthorityAdapter] -> OperationId -> WorkerCommand -> AppConfig -> IO ()
+runWorkersControl authorities key command config = do
   env <- environment "workers control" config
   directory <- Directory.startDirectory Log.silentLogger config.directorySettings >>= either (const (die "worker control directory unavailable")) pure
-  authorizer <- buildConfiguredAuthority Log.silentLogger config >>= either (die . Text.unpack) pure
+  authorizer <- buildConfiguredAuthority authorities Log.silentLogger config >>= either (die . Text.unpack) pure
   -- A recorded session is an authoritative scope source for control of that
   -- session. This cannot create another task or mint another root.
   let session = sessionOf command
