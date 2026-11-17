@@ -2,7 +2,8 @@
 
 -- | Shared, short-transaction admission. Tickets are retained operation/attempt
 -- identities. A live permit never expires merely because a clock or process
--- lease elapsed: the owning executor must settle or reconcile its work.
+-- lease elapsed: the owning executor must settle or reconcile its work, or its
+-- process instance must have factually stopped (ADR 0132).
 module Shikigami.Execution.Capacity
   ( CapacityLimit,
     parseCapacityLimit,
@@ -15,16 +16,18 @@ module Shikigami.Execution.Capacity
     registerTx,
     admitTx,
     releaseTx,
+    stoppedTicketsTx,
+    reclaimTx,
     inspectTx,
     reconfigureTx,
     configureTx,
   )
 where
 
-import Contravariant.Extras (contrazip2)
+import Contravariant.Extras (contrazip2, contrazip3)
 import Data.Aeson (FromJSON (..), ToJSON (..))
 import Data.Aeson qualified as Aeson
-import Data.Int (Int64)
+import Data.Int (Int32, Int64)
 import Data.Text qualified as Text
 import Hasql.Decoders qualified as D
 import Hasql.Encoders qualified as E
@@ -32,6 +35,7 @@ import Hasql.Statement (Statement, preparable)
 import Hasql.Transaction (Transaction)
 import Hasql.Transaction qualified as Tx
 import Shikigami.Execution.Claim
+import Shikigami.Execution.Instance (ExecutorInstance, executorInstanceNumber, instanceLockNamespace)
 import Shikigami.Prelude
 import Shikigami.StateRevision
 
@@ -109,9 +113,11 @@ registerTx root ticket
 
 -- | True grants only the exact owner supplied here. An expired *undispatched*
 -- execution claim can transfer this permit in the same transaction as its new
--- claim/fence. Dispatched work never reaches that transfer branch.
-admitTx :: Text -> ClaimOwner -> Maybe ClaimOwner -> Transaction (Either CapacityError Bool)
-admitTx ticket owner previousOwner =
+-- claim/fence. Dispatched work never reaches that transfer branch. A granted
+-- permit records the claimant's process instance, when it has one, so the
+-- permit can be reclaimed after that process stops.
+admitTx :: Text -> ClaimOwner -> Maybe ClaimOwner -> Maybe ExecutorInstance -> Transaction (Either CapacityError Bool)
+admitTx ticket owner previousOwner claimant =
   control >>= \case
     Left err -> pure (Left err)
     Right (maximum, _, turn) -> do
@@ -120,7 +126,7 @@ admitTx ticket owner previousOwner =
         Nothing -> pure (Left CapacityConflict)
         Just (_, "settled", _) -> pure (Right False)
         Just (_, "active", Just actual) | actual == claimOwnerText owner || Just actual == (claimOwnerText <$> previousOwner) -> do
-          Tx.statement (ticket, claimOwnerText owner) (preparable "UPDATE shikigami.execution_capacity_tickets SET owner=$2 WHERE ticket_key=$1 AND phase='active'" (contrazip2 text text) D.noResult)
+          Tx.statement (ticket, claimOwnerText owner, instanceParam) (preparable "UPDATE shikigami.execution_capacity_tickets SET owner=$2,instance_id=$3 WHERE ticket_key=$1 AND phase='active'" (contrazip3 text text instanceEncoder) D.noResult)
           pure (Right True)
         Just (_, "active", Just _) -> pure (Right False)
         Just (root, "waiting", Nothing) -> do
@@ -132,11 +138,40 @@ admitTx ticket owner previousOwner =
               if turn == maxBound
                 then pure (Left CapacityUnavailable)
                 else do
-                  Tx.statement (ticket, claimOwnerText owner) (preparable "UPDATE shikigami.execution_capacity_tickets SET phase='active',owner=$2 WHERE ticket_key=$1 AND phase='waiting'" (contrazip2 text text) D.noResult)
+                  Tx.statement (ticket, claimOwnerText owner, instanceParam) (preparable "UPDATE shikigami.execution_capacity_tickets SET phase='active',owner=$2,instance_id=$3 WHERE ticket_key=$1 AND phase='waiting'" (contrazip3 text text instanceEncoder) D.noResult)
                   Tx.statement () (preparable "UPDATE shikigami.execution_capacity SET turn=turn+1 WHERE singleton" E.noParams D.noResult)
                   Tx.statement (root, turn + 1) (preparable "UPDATE shikigami.execution_capacity_roots SET last_turn=$2 WHERE root_key=$1" (contrazip2 text integer) D.noResult)
                   pure (Right True)
         _ -> pure (Left CapacityCorrupt)
+  where
+    instanceParam = executorInstanceNumber <$> claimant
+
+-- | Active tickets whose process instance has stopped. PostgreSQL releases an
+-- instance's session lock only when its process's session ends, so taking the
+-- lock here (held to the end of this transaction) is the stop acknowledgement.
+-- A ticket without an instance is never listed. The caller decides which of
+-- these permits may be reclaimed, since only it knows each attempt's phase.
+stoppedTicketsTx :: Transaction (Either CapacityError [Text])
+stoppedTicketsTx =
+  control >>= \case
+    Left err -> pure (Left err)
+    Right _ -> Right <$> Tx.statement (fromIntegral instanceLockNamespace) stoppedTickets
+
+-- | Release a permit whose instance 'stoppedTicketsTx' listed in this same
+-- transaction. The stopped owner can no longer settle it, so the release does
+-- not check the owner; a later settlement by any owner finds it settled.
+reclaimTx :: Text -> Transaction (Either CapacityError ())
+reclaimTx ticket =
+  control >>= \case
+    Left err -> pure (Left err)
+    Right _ -> do
+      stored <- Tx.statement ticket getTicket
+      case stored of
+        Just (_, "active", Just _) -> do
+          Tx.statement ticket (preparable "UPDATE shikigami.execution_capacity_tickets SET phase='settled',owner=NULL,instance_id=NULL WHERE ticket_key=$1 AND phase='active'" text D.noResult)
+          pure (Right ())
+        Just (_, "settled", _) -> pure (Right ())
+        _ -> pure (Left CapacityConflict)
 
 -- Owner/fence validation belongs to the same transaction in the caller. A
 -- queued cancellation has no owner and can retire only an unstarted ticket.
@@ -149,7 +184,7 @@ releaseTx ticket owner =
       case stored of
         Just (_, "settled", Nothing) -> pure (Right ())
         Just (_, phase, actual) | (phase == "waiting" && actual == Nothing) || (phase == "active" && actual == (claimOwnerText <$> owner) && isJust owner) -> do
-          Tx.statement ticket (preparable "UPDATE shikigami.execution_capacity_tickets SET phase='settled',owner=NULL WHERE ticket_key=$1" text D.noResult)
+          Tx.statement ticket (preparable "UPDATE shikigami.execution_capacity_tickets SET phase='settled',owner=NULL,instance_id=NULL WHERE ticket_key=$1" text D.noResult)
           pure (Right ())
         _ -> pure (Left CapacityConflict)
 
@@ -193,6 +228,12 @@ text = E.param (E.nonNullable E.text)
 
 integer :: E.Params Int64
 integer = E.param (E.nonNullable E.int8)
+
+instanceEncoder :: E.Params (Maybe Int32)
+instanceEncoder = E.param (E.nullable E.int4)
+
+stoppedTickets :: Statement Int64 [Text]
+stoppedTickets = preparable "SELECT ticket_key FROM shikigami.execution_capacity_tickets WHERE phase='active' AND instance_id IS NOT NULL AND pg_try_advisory_xact_lock($1::integer,instance_id) ORDER BY sequence" integer (D.rowList (D.column (D.nonNullable D.text)))
 
 getTicket :: Statement Text (Maybe (Text, Text, Maybe Text))
 getTicket = preparable "SELECT root_key,phase,owner FROM shikigami.execution_capacity_tickets WHERE ticket_key=$1 FOR UPDATE" text (D.rowMaybe ((,,) <$> D.column (D.nonNullable D.text) <*> D.column (D.nonNullable D.text) <*> D.column (D.nullable D.text)))

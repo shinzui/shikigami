@@ -846,6 +846,9 @@ M2, now composes the distribution but strands its run after its injected kill.
 Friction: FRIC-98 (`cabal build all` leaves test suites unbuilt) is accepted with the
 by-name build as the workaround; FRIC-99 (the continuity scenario's restart-recovery
 defect) stays logged for a follow-up that investigates the stranded execution.
+(2026-11-17, after completion: FRIC-99 is resolved by
+[ADR-132](../adr/0132-a-stopped-process-instance-releases-its-runtime-permits.md), and
+`shikigami-objective-fixture` now reads the Kikan configuration with the binding's settings.)
 
 Lessons. A portability check is evidence about the adapters as they were when it ran; when
 an adapter moves (here, Kawa onto the outbox) the check has to run again, and it is the

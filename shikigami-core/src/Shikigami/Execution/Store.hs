@@ -32,6 +32,7 @@ module Shikigami.Execution.Store
     loadModelReplayWindow,
     refuseUndispatchedExecutionAttempt,
     claimExecutionAttempt,
+    claimExecutionAttemptAs,
     releaseStoppedExecutionAttempt,
     startExecutionAttempt,
     checkStartedExecutionAttempt,
@@ -101,6 +102,7 @@ import Shikigami.Execution.Catalog (withLiveExecution)
 import Shikigami.Execution.Claim
 import Shikigami.Execution.Coordinate
 import Shikigami.Execution.Identity (AttemptId, ExecutionRootId, OperationId, attemptIdText, executionRootIdText, operationIdText)
+import Shikigami.Execution.Instance (ExecutorInstance)
 import Shikigami.Execution.Observation
 import Shikigami.Execution.Payload
 import Shikigami.Execution.Policy (ContextView (..), ModelOperationInput (..), validateTerminalOutput, validateToolInvocation)
@@ -782,8 +784,17 @@ refuseUndispatchedExecutionAttempt identity expected reference = catchExecutionW
   now <- liftIO getCurrentTime
   abandonExecutionAttempt (ReplayAccess reference.executionId identity now) expected reference
 
+-- | A claim with no process instance. Its permit is never reclaimed, so this
+-- suits in-process claimants (tests); executors claim through
+-- 'claimExecutionAttemptAs'.
 claimExecutionAttempt :: (ExecutionEffects es) => ReplayAccess -> StateRevision "execution" -> Attempt.JobReference -> ClaimOwner -> Int -> Eff es (Either ExecutionError Attempt.ClaimResult)
-claimExecutionAttempt access@(ReplayAccess execution _ _) expected reference owner seconds = catchExecutionWith id do
+claimExecutionAttempt = claimExecutionAttemptAs Nothing
+
+-- | Claim under the claimant's process instance. Before admission, the claim
+-- reclaims the permits that stopped instances left behind (ADR 0132), so a
+-- killed executor cannot hold capacity that its own recovery needs.
+claimExecutionAttemptAs :: (ExecutionEffects es) => Maybe ExecutorInstance -> ReplayAccess -> StateRevision "execution" -> Attempt.JobReference -> ClaimOwner -> Int -> Eff es (Either ExecutionError Attempt.ClaimResult)
+claimExecutionAttemptAs claimant access@(ReplayAccess execution _ _) expected reference owner seconds = catchExecutionWith id do
   unless (reference.format == V1 && reference.executionId == execution && seconds >= 1 && seconds <= 3600) (throwIO (ExecutionAbort AttemptConflict))
   (_, binding) <- readMetadata (getExecution execution)
   previous <- readMetadata (readRows (attemptKey reference.attemptId) selectExecutionAttempt) >>= maybe (throwIO (ExecutionAbort AttemptMissing)) pure
@@ -812,9 +823,10 @@ claimExecutionAttempt access@(ReplayAccess execution _ _) expected reference own
             unless (current == previous && (current.phase == Attempt.AwaitingDispatch || (current.phase == Attempt.Claimed && maybe False (instant >=) current.expiresAt))) (throwE AttemptClaimLost)
             -- Old accepted attempts are enrolled on first claim. The same
             -- transaction replaces only a verified expired undispatched claim.
+            lift reclaimStoppedPermits
             registered <- lift (Capacity.registerTx (capacityRoot actualBinding execution) (capacityTicket reference.attemptId))
             either (throwE . capacityFailure) pure registered
-            admitted <- lift (Capacity.admitTx (capacityTicket reference.attemptId) owner current.owner)
+            admitted <- lift (Capacity.admitTx (capacityTicket reference.attemptId) owner current.owner claimant)
             permit <- either (throwE . capacityFailure) pure admitted
             unless permit (throwE ExecutionCapacityUnavailable)
             pure (state, current, instant)
@@ -1180,6 +1192,19 @@ capacityFailure = \case
   Capacity.CapacityCorrupt -> CorruptReplay
   Capacity.CapacityConflict -> AttemptClaimLost
   Capacity.CapacityUnavailable -> ExecutionCapacityUnavailable
+
+-- | Reclaim the runtime permits of attempts whose process instance has
+-- stopped. Root usage stays charged: only the stopped executor's occupancy is
+-- released. An undispatched claim keeps its permit, because its next claim
+-- transfers it from the expired owner; a ticket naming no retained attempt is
+-- left alone.
+reclaimStoppedPermits :: Transaction ()
+reclaimStoppedPermits = do
+  stopped <- Capacity.stoppedTicketsTx >>= either (abort . capacityFailure) pure
+  forM_ stopped \ticket -> forM_ (Text.stripPrefix "attempt:" ticket) \key ->
+    readRows key selectExecutionAttempt >>= \case
+      Just attempt | attempt.phase `notElem` [Attempt.AwaitingDispatch, Attempt.Claimed] -> Capacity.reclaimTx ticket >>= either (abort . capacityFailure) pure
+      _ -> pure ()
 
 releaseCapacity :: Attempt.ExecutionAttempt -> Transaction ()
 releaseCapacity attempt = do

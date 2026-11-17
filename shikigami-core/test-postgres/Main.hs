@@ -13,6 +13,7 @@ import Shikigami.DecisionWorkflowSpec qualified as DecisionWorkflowSpec
 import Shikigami.DeclaredToolFlowSpec qualified as DeclaredToolFlowSpec
 import Shikigami.DelegationBudgetSpec qualified as DelegationBudgetSpec
 import Shikigami.DirectoryStoreSpec qualified as DirectoryStoreSpec
+import Shikigami.ExecutionInstanceSpec qualified as ExecutionInstanceSpec
 import Shikigami.ExecutionResourcesSpec qualified as ExecutionResourcesSpec
 import Shikigami.ExecutionSelectionWorkflowSpec qualified as ExecutionSelectionWorkflowSpec
 import Shikigami.ExecutionTranscriptSpec qualified as ExecutionTranscriptSpec
@@ -70,6 +71,7 @@ suite = withShikigamiMigratedSuite \databaseFixture ->
           DecisionWorkflowSpec.tests databaseFixture,
           TypeSafeDecisionWorkflowSpec.tests databaseFixture,
           DelegationBudgetSpec.tests databaseFixture,
+          ExecutionInstanceSpec.tests databaseFixture,
           ExecutionResourcesSpec.tests databaseFixture,
           ExecutionSelectionWorkflowSpec.tests databaseFixture,
           ExecutionTranscriptSpec.tests databaseFixture,

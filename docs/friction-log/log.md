@@ -2,6 +2,9 @@
 
 ## 2026-11-17
 
+* **Update**: FRIC-99 resolved: A capacity deadlock, not a missing wake. ADR-132 makes a stopped process instance release its runtime permits, and the scenario passes at capacity one.
+
+
 * **Update**: FRIC-98 accepted: Accepted at EP-10 completion: the by-name build is the documented workaround and recurred once more.
 
 

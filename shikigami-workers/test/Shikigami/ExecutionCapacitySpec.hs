@@ -143,7 +143,7 @@ register :: AppEnv -> Text -> Text -> IO ()
 register env root ticket = right =<< run env (registerTx root ticket)
 
 claim :: AppEnv -> Text -> Text -> Maybe ClaimOwner -> IO Bool
-claim env ticket key previous = right =<< run env (admitTx ticket (owner key) previous)
+claim env ticket key previous = right =<< run env (admitTx ticket (owner key) previous Nothing)
 
 settle :: AppEnv -> Text -> Text -> IO ()
 settle env ticket key = right =<< run env (releaseTx ticket (Just (owner key)))
@@ -251,7 +251,7 @@ rootCapacityClaimProcess ticket = do
                   Left (R.ResourceExhausted R.ActiveWork) -> pure (Right "root-exhausted")
                   Left err -> Tx.condemn >> pure (Left (Text.pack (show err)))
                   Right _ ->
-                    admitTx ticket (owner ("process:" <> ticket)) Nothing >>= \case
+                    admitTx ticket (owner ("process:" <> ticket)) Nothing Nothing >>= \case
                       Right True -> pure (Right "granted")
                       Right False -> Tx.condemn >> pure (Right "retry")
                       Left err -> Tx.condemn >> pure (Left (Text.pack (show err)))

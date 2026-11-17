@@ -155,6 +155,7 @@ library internal
     Shikigami.Execution.Executor
     Shikigami.Execution.Foreground
     Shikigami.Execution.Identity
+    Shikigami.Execution.Instance
     Shikigami.Execution.Live
     Shikigami.Execution.Observation
     Shikigami.Execution.Payload
@@ -1150,6 +1151,7 @@ test-suite shikigami-core-postgres-test
     Shikigami.DeclaredToolFlowSpec
     Shikigami.DelegationBudgetSpec
     Shikigami.DirectoryStoreSpec
+    Shikigami.ExecutionInstanceSpec
     Shikigami.ExecutionResourcesSpec
     Shikigami.ExecutionSelectionWorkflowSpec
     Shikigami.ExecutionTranscriptSpec

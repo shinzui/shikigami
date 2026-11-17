@@ -150,9 +150,26 @@ export SHIKIGAMI_WORKER_CAPACITY='{"execution":1,"advances":2,"expectedRevision"
 ```
 
 Existing permits drain without cancellation or duplicate work. A trusted executor releases its runtime permit after its local dispatch has
-returned or unwound. Dispatched attempts without that stop acknowledgement
-retain occupancy until factual reconciliation; lease expiry alone cannot free
-them. Unknown root usage remains authoritative even after local execution stops
+returned or unwound. A process that dies cannot do that, so each process claims
+under an enrolled instance and holds a PostgreSQL session lock on it while any of
+its executors is in flight ([ADR-132](../adr/0132-a-stopped-process-instance-releases-its-runtime-permits.md)).
+When that lock is free, none of the instance's executors is running, and the next
+claim reclaims the runtime permits of its dispatched attempts. Otherwise,
+dispatched attempts retain occupancy until factual reconciliation; lease expiry
+alone cannot free them. While executing, a process therefore holds one database
+connection outside its pool. To see which permits are held and by which instance:
+
+```sql
+SELECT t.ticket_key, t.phase, t.instance_id, i.started_at
+FROM shikigami.execution_capacity_tickets t
+LEFT JOIN shikigami.execution_instances i USING (instance_id)
+WHERE t.phase = 'active';
+```
+
+A worker that logs `execution.instance.lost` has lost its lock connection and
+re-takes the lock on a fresh one for its next executor. A worker that logs
+`execution.instance.refused` could not enroll, and claims without an instance,
+whose permits only settlement releases. Unknown root usage remains authoritative even after local execution stops
 or runtime capacity is increased. Capacity
 pressure acknowledges only the current queue delivery; the accepted driver's
 bounded timer repairs delivery of the same reference, without spending a provider

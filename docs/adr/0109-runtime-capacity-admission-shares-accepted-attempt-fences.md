@@ -2,7 +2,7 @@
 
 Date: 2026-11-03
 
-Status: accepted
+Status: accepted. Amended by [ADR-132](0132-a-stopped-process-instance-releases-its-runtime-permits.md): a stopped process instance is a stop acknowledgement.
 
 ## Context
 

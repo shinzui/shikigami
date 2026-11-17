@@ -32,7 +32,7 @@ import Data.Vector qualified as Vector
 import Effectful (Eff, runEff)
 import Effectful.Error.Static (runErrorNoCallStack)
 import Shikigami.Agent.Principal (AgentIdentity)
-import Shikigami.App (AppEffects, AppEnv, runAppIO)
+import Shikigami.App (AppEffects, AppEnv (..), runAppIO)
 import Shikigami.Behavior.Compatibility (validateResponseRequest)
 import Shikigami.Behavior.Run (BehaviorEnv (..), completeBehaviorRequest)
 import Shikigami.Decision.Contract (DecisionOutcome, versionedDigest)
@@ -40,6 +40,7 @@ import Shikigami.Duration
 import Shikigami.Execution.Attempt qualified as Attempt
 import Shikigami.Execution.Claim
 import Shikigami.Execution.Identity (OperationId, operationIdText)
+import Shikigami.Execution.Instance (withExecutorInstance)
 import Shikigami.Execution.Policy
 import Shikigami.Execution.Policy.Limits (policyNumber)
 import Shikigami.Execution.Resources (Admission (..))
@@ -109,22 +110,26 @@ executeAcceptedAttemptWithDecision runDecision env@ExecutionRuntime {withTools} 
                 Left err -> pure (Left err)
                 Right (snapshot, freshState) -> do
                   owner <- claimOwnerFor <$> UUID.nextRandom
-                  claim <- runExecutionStore env (Store.claimExecutionAttempt permit freshState.revision reference owner (max 1 (min 3500 (floor (durationTime env.timeoutSeconds))) + 30))
-                  case claim of
-                    Right Attempt.AttemptFinished -> publish
-                    Right Attempt.AttemptBusy -> waitFor current.expiresAt
-                    Right Attempt.AttemptNeedsReconciliation -> case current.owner of
-                      Nothing -> pure (Left AttemptClaimLost)
-                      Just formerOwner -> do
-                        let oldClaim = Attempt.AttemptClaim reference formerOwner current.generation
-                        result <- runExecutionStore env (Store.markExecutionAttemptUncertain permit freshState.revision oldClaim)
-                        case result of Right _ -> publish; Left err -> pure (Left err)
-                    -- The accepted driver owns the retained ticket and bounded timer
-                    -- repair. Capacity pressure is not a failed provider delivery.
-                    Left ExecutionCapacityUnavailable -> pure (Right ExecutorDeferred)
-                    Left ResourceAdmissionRefused {} -> owned (Store.refuseUndispatchedExecutionAttempt identity freshState.revision reference) >>= \case Right _ -> publish; Left err -> pure (Left err)
-                    Left err -> pure (Left err)
-                    Right (Attempt.ClaimGranted lease) -> runClaim permit snapshot lease
+                  -- The claim and its run hold this process's instance lock, so a
+                  -- crash frees the permit for reclamation (ADR 0132). Without an
+                  -- instance the claim still proceeds and only settlement releases it.
+                  withExecutorInstance (env.appEnv.connectionSettings ^. #connString) \claimant -> do
+                    claim <- runExecutionStore env (Store.claimExecutionAttemptAs claimant permit freshState.revision reference owner (max 1 (min 3500 (floor (durationTime env.timeoutSeconds))) + 30))
+                    case claim of
+                      Right Attempt.AttemptFinished -> publish
+                      Right Attempt.AttemptBusy -> waitFor current.expiresAt
+                      Right Attempt.AttemptNeedsReconciliation -> case current.owner of
+                        Nothing -> pure (Left AttemptClaimLost)
+                        Just formerOwner -> do
+                          let oldClaim = Attempt.AttemptClaim reference formerOwner current.generation
+                          result <- runExecutionStore env (Store.markExecutionAttemptUncertain permit freshState.revision oldClaim)
+                          case result of Right _ -> publish; Left err -> pure (Left err)
+                      -- The accepted driver owns the retained ticket and bounded timer
+                      -- repair. Capacity pressure is not a failed provider delivery.
+                      Left ExecutionCapacityUnavailable -> pure (Right ExecutorDeferred)
+                      Left ResourceAdmissionRefused {} -> owned (Store.refuseUndispatchedExecutionAttempt identity freshState.revision reference) >>= \case Right _ -> publish; Left err -> pure (Left err)
+                      Left err -> pure (Left err)
+                      Right (Attempt.ClaimGranted lease) -> runClaim permit snapshot lease
     (Left err, _) -> pure (Left err)
     (_, Left err) -> pure (Left err)
     _ -> pure (Right ExecutorInvalidReference)

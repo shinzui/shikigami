@@ -1245,6 +1245,11 @@ the kernel baseline.
   which predates this initiative, had not run since EP-10 M2. Composed with the
   distribution, it strands its run after its injected kill (FRIC-99); the scenario is
   restart-recovery qualification, outside the initiative's scope.
+  Resolved 2026-11-17: the run was not stranded but deadlocked on runtime capacity. The killed
+  worker's dispatched attempt kept the only permit that its own recovery needed.
+  [ADR-132](../adr/0132-a-stopped-process-instance-releases-its-runtime-permits.md) makes a
+  stopped process instance release its permits, and the unmodified scenario passes at the
+  default capacity of one.
 
 ## Decision Log
 
