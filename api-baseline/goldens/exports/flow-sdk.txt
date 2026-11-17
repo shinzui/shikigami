@@ -283,6 +283,7 @@ Shikigami.Flow.Sdk FlowPack
 Shikigami.Flow.Sdk FlowPack.adminVerbs
 Shikigami.Flow.Sdk FlowPack.approvalChannels
 Shikigami.Flow.Sdk FlowPack.authorities
+Shikigami.Flow.Sdk FlowPack.conversationChannels
 Shikigami.Flow.Sdk FlowPack.decisionPrograms
 Shikigami.Flow.Sdk FlowPack.flows
 Shikigami.Flow.Sdk FlowPack.gauges

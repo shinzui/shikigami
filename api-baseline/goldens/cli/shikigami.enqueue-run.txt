@@ -6,8 +6,8 @@ Usage: shikigami enqueue-run AGENT [--stdin | --payload JSON|-] [--conversation]
 Available options:
   --stdin                  Read JSON payload from stdin (up to 4 MiB)
   --payload JSON|-         JSON payload, or - to read stdin
-  --conversation           Route the job as a danwa conversation turn instead of
-                           an agent run
+  --conversation           Route the job as a conversation turn, read by the
+                           agent's conversation channel, instead of an agent run
   --key TEXT               Idempotency key; defaults to one derived from the
                            agent and payload
   --workspace DIR|mori://… Repository the run works in; a local-operator worker
