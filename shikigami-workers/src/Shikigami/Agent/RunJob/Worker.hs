@@ -42,6 +42,7 @@ import Keiro.Workflow (WorkflowId (..), WorkflowOutcome (..))
 import OpenTelemetry.Trace.Core qualified as Otel
 import Shibuya.Telemetry.Effect (SpanArguments, SpanKind (..), addAttribute, runTracing, withSpan')
 import Shikigami.Agent.Conversation qualified as Conversation
+import Shikigami.Agent.Conversation.Channel (ConversationChannel (..), InboundMessage, channelForAgent)
 import Shikigami.Agent.Decl (AgentDecl (..))
 import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Name (agentNameText)
@@ -58,7 +59,7 @@ import Shikigami.Duration
 import Shikigami.Execution.Attempt qualified as Execution
 import Shikigami.Execution.Executor qualified as Executor
 import Shikigami.Execution.Request (ExecutionContext (..))
-import Shikigami.Integration.Danwa (AddressedMessage)
+import Shikigami.Flow.Pack (registeredConversationChannels)
 import Shikigami.Log qualified as Log
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.RunJobs (runJob)
@@ -227,12 +228,13 @@ nominalMicroseconds duration =
 -- | Which workflow one delivery is for, decided from the producer's declared
 -- route and never from the payload's shape.
 data RunRoute
-  = ConversationRoute !AddressedMessage
+  = -- | A conversation turn. Its payload is read by the channel the agent
+    -- converses in, once the agent is known ('runConversationAgent').
+    ConversationRoute !Aeson.Value
   | AgentRunRoute
   | ExecutionRoute !Execution.JobReference
-  | -- | The producer declared a conversation but its payload is not an
-    -- addressed message. That is a producer bug, and running the other workflow
-    -- instead would hide it.
+  | -- | The producer declared a route its payload cannot carry. That is a
+    -- producer bug, and running the other workflow instead would hide it.
     RouteError !Text
 
 -- | The pure routing decision. Payload decoding validates the declared route; it
@@ -243,16 +245,15 @@ routeRunJob job = case (.routeKind) job of
   ExecutionOperationRoute -> case Aeson.fromJSON job.triggerPayload of
     Aeson.Success reference -> ExecutionRoute reference
     Aeson.Error _ -> RouteError "execution job reference is invalid"
-  ConversationWorkflowRoute ->
-    case Aeson.fromJSON ((.triggerPayload) job) of
-      Aeson.Success addressed -> ConversationRoute addressed
-      Aeson.Error err -> RouteError (Text.pack err)
+  ConversationWorkflowRoute -> case job.triggerPayload of
+    payload@(Aeson.Object _) -> ConversationRoute payload
+    _ -> RouteError "conversation job payload is not an object"
 
 dispatchRunJob :: WorkerEnv -> RunJob -> IO JobOutcome
 dispatchRunJob env job = do
   let route = routeRunJob job
   case route of
-    ConversationRoute addressed -> runConversationAgent env job addressed
+    ConversationRoute payload -> runConversationAgent env job payload
     AgentRunRoute -> runOneAgent env job
     ExecutionRoute reference ->
       AgentWorkflow.executeAcceptedOperation (agentRunDeps env) job.identity reference >>= \case
@@ -281,9 +282,11 @@ dispatchRunJob env job = do
 routeErrorJobOutcome :: Text -> JobOutcome
 routeErrorJobOutcome = deadOutcome "invalid_route_payload"
 
--- | Drive one turn of a conversation agent.
-runConversationAgent :: WorkerEnv -> RunJob -> AddressedMessage -> IO JobOutcome
-runConversationAgent env job addressed =
+-- | Drive one turn of a conversation agent. The agent's channel reads the
+-- payload; an agent no composed channel serves, or a payload its channel
+-- refuses, is a permanent producer error and dead-letters.
+runConversationAgent :: WorkerEnv -> RunJob -> Aeson.Value -> IO JobOutcome
+runConversationAgent env job payload =
   case find ((== ((.agentName) job)) . (.name)) ((.agents) env) of
     Nothing -> do
       let detail = "unknown agent " <> (agentNameText ((.agentName) job))
@@ -298,72 +301,87 @@ runConversationAgent env job addressed =
           "reason" .= ("unknown_agent" :: Text)
         ]
       pure (deadOutcome "unknown_agent" detail)
-    Just decl -> do
-      let execution =
-            if isNothing job.executionRootId && isNothing job.executionRequest && isNothing job.executionPermissions
-              then Nothing
-              else Just (ExecutionContext job.executionRootId job.executionRequest job.executionPermissions)
-      result <- Conversation.submitConversationTurnWithExecution (conversationEnv env) decl (job ^. #identity) execution addressed
-      case result of
-        Left (Conversation.ConversationTransientFailure err) -> do
-          runMetric Metrics.recordRunFailed env job
-          runMetric Metrics.recordRunRetried env job
-          jobLog
-            env
-            job
-            Log.Error
-            "worker.conversation.retried"
-            [ "error" .= err,
-              "reason" .= ("transient_conversation_failure" :: Text)
-            ]
-          pure ()
-        Left (Conversation.ConversationPermanentFailure err) -> do
-          runMetric Metrics.recordRunFailed env job
-          runMetric Metrics.recordRunDeadLettered env job
-          jobLog
-            env
-            job
-            Log.Error
-            "worker.conversation.dead_lettered"
-            [ "error" .= err,
-              "reason" .= ("permanent_conversation_failure" :: Text)
-            ]
-          pure ()
-        Left (Conversation.ConversationTerminalFailure err) -> do
-          runMetric Metrics.recordRunFailed env job
-          runMetric Metrics.recordRunDeadLettered env job
-          jobLog
-            env
-            job
-            Log.Error
-            "worker.conversation.dead_lettered"
-            [ "error" .= err,
-              "reason" .= ("terminal_conversation_failure" :: Text)
-            ]
-          pure ()
-        -- Info, not error. A message arriving while the agent is still answering
-        -- the previous one is the routine shape of a busy conversation, not a
-        -- fault; it is redelivered by the queue's retry policy as backpressure.
-        -- Logging it at error level -- which is what happened before this arm
-        -- existed, because a busy conversation was indistinguishable from a
-        -- transient failure -- makes the ordinary case look like an incident.
-        Left (Conversation.ConversationBusy detail) ->
-          do
-            runMetric Metrics.recordRunFailed env job
-            runMetric Metrics.recordRunRetried env job
-            jobLog
-              env
-              job
-              Log.Info
-              "worker.conversation.redelivered"
-              [ "detail" .= detail,
-                "reason" .= ("conversation_busy" :: Text)
-              ]
-        Right Conversation.ConversationAccepted -> jobLog env job Log.Info "worker.conversation.accepted" []
-        Right (Conversation.ConversationCompleted _) -> do
-          runMetric Metrics.recordRunCompleted env job
-          jobLog env job Log.Info "worker.conversation.completed" []
-      pure (conversationJobOutcome result)
+    Just decl -> case channelForAgent (registeredConversationChannels env.flows) decl of
+      Nothing -> routeError (noConversationChannel decl)
+      Just channel -> case channel.decodeMessage payload of
+        Left problem -> routeError problem
+        Right message -> runConversationTurn env job decl message
+  where
+    routeError detail = do
+      runMetric Metrics.recordRunFailed env job
+      runMetric Metrics.recordRunDeadLettered env job
+      jobLog env job Log.Error "worker.job.dead_lettered" ["error" .= detail, "reason" .= ("invalid_route_payload" :: Text)]
+      pure (routeErrorJobOutcome detail)
+    noConversationChannel decl =
+      "agent " <> agentNameText decl.name <> " declares no event type a conversation channel here serves"
+
+runConversationTurn :: WorkerEnv -> RunJob -> AgentDecl -> InboundMessage -> IO JobOutcome
+runConversationTurn env job decl addressed = do
+  let execution =
+        if isNothing job.executionRootId && isNothing job.executionRequest && isNothing job.executionPermissions
+          then Nothing
+          else Just (ExecutionContext job.executionRootId job.executionRequest job.executionPermissions)
+  result <- Conversation.submitConversationTurnWithExecution (conversationEnv env) decl (job ^. #identity) execution addressed
+  case result of
+    Left (Conversation.ConversationTransientFailure err) -> do
+      runMetric Metrics.recordRunFailed env job
+      runMetric Metrics.recordRunRetried env job
+      jobLog
+        env
+        job
+        Log.Error
+        "worker.conversation.retried"
+        [ "error" .= err,
+          "reason" .= ("transient_conversation_failure" :: Text)
+        ]
+      pure ()
+    Left (Conversation.ConversationPermanentFailure err) -> do
+      runMetric Metrics.recordRunFailed env job
+      runMetric Metrics.recordRunDeadLettered env job
+      jobLog
+        env
+        job
+        Log.Error
+        "worker.conversation.dead_lettered"
+        [ "error" .= err,
+          "reason" .= ("permanent_conversation_failure" :: Text)
+        ]
+      pure ()
+    Left (Conversation.ConversationTerminalFailure err) -> do
+      runMetric Metrics.recordRunFailed env job
+      runMetric Metrics.recordRunDeadLettered env job
+      jobLog
+        env
+        job
+        Log.Error
+        "worker.conversation.dead_lettered"
+        [ "error" .= err,
+          "reason" .= ("terminal_conversation_failure" :: Text)
+        ]
+      pure ()
+    -- Info, not error. A message arriving while the agent is still answering
+    -- the previous one is the routine shape of a busy conversation, not a
+    -- fault; it is redelivered by the queue's retry policy as backpressure.
+    -- Logging it at error level -- which is what happened before this arm
+    -- existed, because a busy conversation was indistinguishable from a
+    -- transient failure -- makes the ordinary case look like an incident.
+    Left (Conversation.ConversationBusy detail) ->
+      do
+        runMetric Metrics.recordRunFailed env job
+        runMetric Metrics.recordRunRetried env job
+        jobLog
+          env
+          job
+          Log.Info
+          "worker.conversation.redelivered"
+          [ "detail" .= detail,
+            "reason" .= ("conversation_busy" :: Text)
+          ]
+    Right Conversation.ConversationAccepted -> jobLog env job Log.Info "worker.conversation.accepted" []
+    Right (Conversation.ConversationCompleted _) -> do
+      runMetric Metrics.recordRunCompleted env job
+      jobLog env job Log.Info "worker.conversation.completed" []
+  pure (conversationJobOutcome result)
 
 -- | Run a resolved agent through the durable agent-run workflow and dispatch
 -- its sinks.

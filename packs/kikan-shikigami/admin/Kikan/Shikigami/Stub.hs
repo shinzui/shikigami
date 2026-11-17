@@ -39,7 +39,8 @@ stubsPack =
       authorities = [],
       outputs = [],
       approvalChannels = [],
-      trackerProviders = []
+      trackerProviders = [],
+      conversationChannels = []
     }
 
 -- | @stub-kawa --port <n> [--republish-topic <t>] [--broker <host:port>]@.

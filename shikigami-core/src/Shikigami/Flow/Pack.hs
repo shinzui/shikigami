@@ -73,6 +73,7 @@ module Shikigami.Flow.Pack
     registeredFlowNames,
     lookupFlow,
     lookupTask,
+    registeredConversationChannels,
     decisionProgramRegistry,
     resultCodecRegistry,
     decisionServices,
@@ -104,6 +105,7 @@ import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Error (StoreError)
 import Shikigami.Activity (ActivityEnvelope)
 import Shikigami.Agent.Approval (ApprovalChannel, approvalChannelText)
+import Shikigami.Agent.Conversation.Channel (ConversationChannel (..), ConversationChannels, mkConversationChannels, noConversationChannels)
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..))
 import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Principal (AgentIdentity, ResolvedAgentIdentity)
@@ -185,7 +187,10 @@ data FlowPack = FlowPack
     approvalChannels :: ![ApprovalChannelRegistration],
     -- | Objective tracker providers the pack installs, by adapter revision
     -- (plan 135, M4).
-    trackerProviders :: ![TrackerProviderRegistration]
+    trackerProviders :: ![TrackerProviderRegistration],
+    -- | Conversation services the pack connects the kernel's conversation
+    -- loop to (plan 135, M5).
+    conversationChannels :: ![ConversationChannel]
   }
 
 -- | One level a pack wants sampled: how stale its last result is, how deep
@@ -310,7 +315,8 @@ data FlowRegistry = FlowRegistry
     hooks :: ![(FlowPackName, TriggerHooks)],
     gaugeEntries :: ![(FlowPackName, PackGauge)],
     programs :: !ProgramRegistry,
-    codecs :: !ResultCodecRegistry
+    codecs :: !ResultCodecRegistry,
+    conversations :: !ConversationChannels
   }
 
 data FlowRegistryError
@@ -322,6 +328,8 @@ data FlowRegistryError
   | DuplicateOutputKind !OutputKind !FlowPackName !FlowPackName
   | DuplicateApprovalChannel !ApprovalChannel !FlowPackName !FlowPackName
   | DuplicateTrackerProvider !ProviderRevision !FlowPackName !FlowPackName
+  | -- | A channel name or event type two packs both claim.
+    DuplicateConversationChannel !Text !FlowPackName !FlowPackName
   | DecisionProgramsRejected !DecisionFailure
   | ResultCodecsRejected !DecisionFailure
   deriving stock (Eq, Show)
@@ -343,6 +351,8 @@ renderFlowRegistryError = \case
     "approval channel " <> approvalChannelText channel <> " is registered by both pack " <> flowPackNameText first <> " and pack " <> flowPackNameText second
   DuplicateTrackerProvider revision first second ->
     "objective tracker provider " <> coordinateText revision <> " is installed by both pack " <> flowPackNameText first <> " and pack " <> flowPackNameText second
+  DuplicateConversationChannel claim first second ->
+    "conversation channel " <> claim <> " is registered by both pack " <> flowPackNameText first <> " and pack " <> flowPackNameText second
   DecisionProgramsRejected failure -> "the composed decision programs were refused: " <> Text.pack (show failure)
   ResultCodecsRejected failure -> "the composed result codecs were refused: " <> Text.pack (show failure)
 
@@ -350,10 +360,10 @@ renderFlowRegistryError = \case
 -- first, so one failed start names everything an operator must fix.
 composeFlowRegistry :: [FlowPack] -> Either (NonEmpty FlowRegistryError) FlowRegistry
 composeFlowRegistry composed =
-  case NonEmpty.nonEmpty (packErrors <> flowErrors <> taskErrors <> settingErrors <> authorityErrors <> outputErrors <> channelErrors <> trackerErrors <> programErrors <> codecErrors) of
+  case NonEmpty.nonEmpty (packErrors <> flowErrors <> taskErrors <> settingErrors <> authorityErrors <> outputErrors <> channelErrors <> trackerErrors <> conversationErrors <> programErrors <> codecErrors) of
     Just errors -> Left errors
     Nothing -> case (programsResult, codecsResult) of
-      (Right programs, Right codecs) -> Right FlowRegistry {packs = packNames, entries, taskEntries, hooks = [(pack.name, pack.triggers) | pack <- composed], gaugeEntries = [(pack.name, gauge) | pack <- composed, gauge <- pack.gauges], programs, codecs}
+      (Right programs, Right codecs) -> Right FlowRegistry {packs = packNames, entries, taskEntries, hooks = [(pack.name, pack.triggers) | pack <- composed], gaugeEntries = [(pack.name, gauge) | pack <- composed, gauge <- pack.gauges], programs, codecs, conversations = either (const noConversationChannels) id (mkConversationChannels (concatMap (.conversationChannels) composed))}
       -- Both failures are already reported above; this arm is unreachable.
       _ -> Left (NonEmpty.fromList (programErrors <> codecErrors))
   where
@@ -368,6 +378,12 @@ composeFlowRegistry composed =
     outputErrors = [DuplicateOutputKind kind first second | (kind, first, second) <- repeated [(registration.kind, pack.name) | pack <- composed, registration <- pack.outputs]]
     channelErrors = [DuplicateApprovalChannel channel first second | (channel, first, second) <- repeated [(registration.channel, pack.name) | pack <- composed, registration <- pack.approvalChannels]]
     trackerErrors = [DuplicateTrackerProvider revision first second | (revision, first, second) <- repeated [(registration.revision, pack.name) | pack <- composed, registration <- pack.trackerProviders]]
+    conversationErrors =
+      [ DuplicateConversationChannel claim first second
+      | (claim, first, second) <-
+          repeated [(channel.name, pack.name) | pack <- composed, channel <- pack.conversationChannels]
+            <> repeated [(channel.eventType, pack.name) | pack <- composed, channel <- pack.conversationChannels]
+      ]
     programsResult = Decision.programRegistry (concatMap (.decisionPrograms) composed)
     codecsResult = Decision.resultCodecRegistry (concatMap (.retainedCodecs) composed)
     programErrors = either (pure . DecisionProgramsRejected) (const []) programsResult
@@ -426,6 +442,11 @@ scheduleIntakeOf registry settings candidate = do
   entry <- lookupFlow registry flowName
   ScheduleHook decide <- lookup entry.pack registry.hooks >>= (.schedule)
   pure PackAllowance {pack = flowPackNameText entry.pack, allowance = decide settings candidate}
+
+-- | The composed conversation channels. Every name and event type is unique,
+-- which composition checked.
+registeredConversationChannels :: FlowRegistry -> ConversationChannels
+registeredConversationChannels registry = registry.conversations
 
 -- | Every composed pack's gauges, with their pack, in composition order.
 registeredGauges :: FlowRegistry -> [(FlowPackName, PackGauge)]

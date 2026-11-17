@@ -46,7 +46,9 @@ import Network.HTTP.Types (status200, status500)
 import Network.Wai qualified as Wai
 import Network.Wai.Handler.Warp (testWithApplication)
 import Shikigami.Agent.Conversation qualified as Conversation
+import Shikigami.Agent.Conversation.Channel (InboundMessage (..))
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..))
+import Shikigami.Agent.Decl qualified as ConversationDecl
 import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (compatibilityIdentity)
@@ -83,6 +85,7 @@ import Shikigami.Execution.SelectionStore qualified as Calls
 import Shikigami.Execution.Store qualified as Durable
 import Shikigami.Execution.Transcript qualified as Replay
 import Shikigami.ExecutionDriver.Generated.WorkflowRuntime qualified as DriverGenerated
+import Shikigami.Fixture.Conversation (fixtureChannels, fixtureEventType)
 import Shikigami.Fixture.ExamplePack (exampleFlowRegistry, fixtureDecisionServices)
 import Shikigami.Fixture.ExecutionIdentity (fixtureAttemptId, fixtureOperationId, fixtureRootId)
 import Shikigami.Fixture.Outputs (unreachableOutputs)
@@ -90,7 +93,6 @@ import Shikigami.Fixture.RawOutput (danwaConversationKind)
 import Shikigami.Flow.Decision qualified as Decision
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.FormatVersion (FormatVersion (V1))
-import Shikigami.Integration.Danwa (AddressedMessage (..))
 import Shikigami.Log.Correlation (runCorrelationId)
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Shikigami.Prelude ((&), (.~))
@@ -396,7 +398,7 @@ tests fixture =
         withRuntime fixture \app store base -> withHttp \bindings observed -> do
           now <- getCurrentTime
           root <- seed app now []
-          let declaration = workerDecl
+          let declaration = workerDecl & #trigger .~ ConversationDecl.Event (declarationCoordinate fixtureEventType)
               dependencies = workflowDeps app store base (mustRight (modelCatalog bindings)) declaration
               env =
                 Conversation.ConversationEnv
@@ -411,11 +413,12 @@ tests fixture =
                     idleTimeout = (either (error . show) id (parseDuration (1800))),
                     agents = [declaration],
                     outputs = unreachableOutputs,
+                    channels = fixtureChannels,
                     grants = StaticGrants (Map.singleton (compatibilityIdentity (either (error . show) id (mkAgentName "router"))) (Set.singleton danwaConversationKind)),
                     directory = dependencies.directory
                   }
               context = ExecutionContext (Just root) (Just (ExecutionRequest (Just (fixtureModelAlias "worker-a")) Nothing Nothing)) (Just (map fixtureModelAlias ["worker-a"]))
-              message n = AddressedMessage (declarationCoordinate "conv_selection") (declarationCoordinate ("message" <> Text.pack (show n))) Nothing (declarationCoordinate "human") ("request-" <> Text.pack (show n)) (declarationCoordinate "participant") (declarationCoordinate ("emb" <> Text.pack (show n))) (declarationCoordinate "human") now
+              message n = InboundMessage (declarationCoordinate "conv_selection") (declarationCoordinate ("message" <> Text.pack (show n))) Nothing (declarationCoordinate "human") ("request-" <> Text.pack (show n)) (declarationCoordinate "participant") now
           _ <- expectRight =<< run app Catalog.registerProjectionCatalog
           ensureRunQueue store.pool >>= expectRight
           let firstMessage = message (1 :: Int)

@@ -38,5 +38,6 @@ initiativePack =
       authorities = [],
       outputs = [],
       approvalChannels = [],
-      trackerProviders = []
+      trackerProviders = [],
+      conversationChannels = []
     }

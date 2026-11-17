@@ -648,6 +648,54 @@ These came from read-only research on 2026-11-15, before implementation.
   The stock `shikigami` command loses `publish-fixture`, a breaking change to the
   provisional `cli-shikigami` surface, re-pinned in the same commit.
   Date: 2026-11-17
+- Decision: (M5, conversation, 2026-11-17, the user's decision) The conversation loop stays in
+  the kernel with a channel port, instead of moving to the binding as Milestone 5 proposed.
+  `Shikigami.Agent.Conversation` runs on most of the agent-run runtime (the execution driver
+  and selection, objectives, the worker session, memory, grants and outputs), and the
+  objective subsystem uses its session index; only the addressed-message decoder, its event
+  type and the reply output were Danwa's. The kernel now has `InboundMessage` and
+  `ConversationChannel {name, eventType, decodeMessage, replyOutput}` in
+  `Shikigami.Agent.Conversation.Channel` (re-exported by `pack-sdk`), registered through
+  `FlowPack.conversationChannels` and composed into the `FlowRegistry`
+  (`registeredConversationChannels`, duplicate names or event types refused). An agent
+  converses in the channel whose event type its `Trigger.Event` declares: the event consumer
+  routes it to `ConversationWorkflowRoute` by that lookup, and the worker decodes the job's
+  payload through the agent's channel, dead-lettering an agent no channel serves or a payload
+  its channel refuses. A turn for an agent with no channel is refused before any workflow
+  starts. The binding registers the Danwa channel (`Kikan.Shikigami.Binding.Conversation`,
+  which now owns `AddressedMessage`), replying with a `danwa.conversation` output.
+  Rationale: moving the family would have needed a `FlowPack.workflows` field, a
+  pack-registered run route replacing the closed `RunRouteKind` (a durable-wire change),
+  pack-registered timer kinds and a binding re-coupled to kernel internals, all of which
+  EP-11 would then freeze. A channel is one small port, the same shape approvals already
+  have, and keeps the binding on the SDK. No `workflows` field and no route registry are
+  added; the keiro-scaffold prototype for generating the family into the binding is moot.
+  Date: 2026-11-17
+- Decision: (M5) The pre-release recheck of ADR-27, 2026-11-17, before the conversation
+  change: `git tag --list` prints nothing; the development database holds no
+  `shikigami.danwa-conversation` workflow and no `shikigami.conversation_sessions` row (one
+  `shikigami.agent-run` is running, which this change does not touch); no stored payload
+  needs the old codec, since no conversation journal exists; there are no external wire
+  consumers. The MasterPlan's Decision Log records no EP-11 baseline gate, so the exception
+  holds. Under it the workflow is renamed `DanwaConversation` / `shikigami.danwa-conversation`
+  to `Conversation` / `shikigami.conversation` (operation `RunConversation`, generated
+  modules `Shikigami.Conversation.Generated.*`), and its Danwa-spelled durable strings become
+  the kernel's: the workflow id base `conversation:`, the turn ids `conversation:user:` and
+  `conversation:assistant:` (which the objective subsystem reads), and the reply intent
+  `conversation-reply:`. `InboundMessage` journals the old key set minus Danwa's
+  `embellishmentId` and `mentionedBy`, so an old journal would still decode.
+  `just keiro-diff HEAD` before the commit reported exactly: "ADDITIVE: Conversation
+  workflow Conversation: new workflow" and "BREAKING: DanwaConversation workflow
+  DanwaConversation: workflow removed while in-flight journals and outcomes may still
+  require its decoder [WorkflowShapeChanged]", with "replay-neutral: stored-data replay is
+  unchanged by this diff". That finding is the accepted evidence of the reset.
+  Date: 2026-11-17
+- Decision: (M5) `shikigami-core`'s library and PostgreSQL suite drop `danwa-api` and
+  `danwa-client`; its unit suite keeps them for now, because `SinkAuthSpec` exercises the
+  servant runner `Shikigami.Sink.Http.runDanwaClient`, a Danwa-named helper left in the
+  kernel by M3. M6, which owns the rule that no stanza of a stock package depends on a Kikan
+  client, renames that runner and moves its Danwa cases to the binding.
+  Date: 2026-11-17
 
 
 ## Outcomes & Retrospective
@@ -951,6 +999,13 @@ suite and its `objective-tracker-rei-tests` flag to the binding. Drop `rei-api-c
 
 At the end of this milestone the Danwa conversation workflow and the Kafka consumers run
 only from the distribution.
+
+Revised 2026-11-17, by the user's decision: the conversation workflow stays in the kernel
+with a channel port, and only its Danwa part (the addressed-message decoder and the reply
+output) moves to the binding, as the Danwa conversation channel. The intake splits at the
+broker: the record intake stays in `shikigami-workers` and the Kafka transport moves. The
+Decision Log entries dated 2026-11-17 for M5 record both; the paragraphs below are the
+original proposal.
 
 The conversation loop is `Shikigami.Agent.Conversation` (1,529 lines), its session index and
 `Shikigami.Integration.Danwa`. It is a second durable workflow family beside `AgentRun`,

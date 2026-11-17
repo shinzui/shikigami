@@ -71,7 +71,7 @@ import Shikigami.AgentRun.Generated.WorkflowRuntime qualified as AgentRun
 import Shikigami.App (AppEnv (..))
 import Shikigami.Approval.Generated.WorkflowRuntime qualified as Approval
 import Shikigami.ContinuingWorker.Generated.WorkflowRuntime qualified as ContinuingWorker
-import Shikigami.DanwaConversation.Generated.WorkflowRuntime qualified as DanwaConversation
+import Shikigami.Conversation.Generated.WorkflowRuntime qualified as DanwaConversation
 import Shikigami.Execution.Capacity (RuntimeLimits (..), capacityLimit, defaultRuntimeLimits)
 import Shikigami.ExecutionDriver.Generated.WorkflowRuntime qualified as Execution
 import Shikigami.RecurringCheckpointCycle.Generated.WorkflowRuntime qualified as MandateCycle

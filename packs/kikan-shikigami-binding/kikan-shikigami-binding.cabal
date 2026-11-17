@@ -65,6 +65,7 @@ library
     Kikan.Shikigami.Binding
     Kikan.Shikigami.Binding.Approval
     Kikan.Shikigami.Binding.Authority
+    Kikan.Shikigami.Binding.Conversation
     Kikan.Shikigami.Binding.Output
     Kikan.Shikigami.Binding.Output.Config
     Kikan.Shikigami.Binding.Output.Danwa
@@ -185,6 +186,7 @@ test-suite kikan-shikigami-binding-test
   other-modules:
     Kikan.Shikigami.Binding.ApprovalNotificationSpec
     Kikan.Shikigami.Binding.AuthoritySpec
+    Kikan.Shikigami.Binding.ConversationSpec
     Kikan.Shikigami.Binding.Fixture.ExecutionIdentity
     Kikan.Shikigami.Binding.IntakeSpec
     Kikan.Shikigami.Binding.KanmonClientSpec

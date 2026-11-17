@@ -72,7 +72,8 @@ practiceReviewPackWith runtime =
       authorities = [],
       outputs = [],
       approvalChannels = [],
-      trackerProviders = []
+      trackerProviders = [],
+      conversationChannels = []
     }
 
 routerDefinition :: FlowDef

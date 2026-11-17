@@ -65,7 +65,7 @@ conversationAuthority host access conversation turn operation = do
         -- Conversation records the addressed message under this stable user
         -- turn key; the execution owner derives its assignment from the same
         -- workflow/message pair. Another turn in this session is insufficient.
-        message <- maybe (Left ObjectiveDenied) Right (Text.stripPrefix "danwa:user:" (turnReferenceText turn))
+        message <- maybe (Left ObjectiveDenied) Right (Text.stripPrefix "conversation:user:" (turnReferenceText turn))
         unless (not (Text.null message) && snapshot.selection.assignmentId == conversationAssignmentIdFor snapshot.runId.unWorkflowId message) (Left ObjectiveDenied)
         pure (ConversationAuthority access snapshot.identity (ConversationOrigin conversation turn (runReference snapshot.runId.unWorkflowId) operation))
 

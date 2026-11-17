@@ -1,6 +1,6 @@
 module Main (main) where
 
-import Data.Aeson (eitherDecode, object)
+import Data.Aeson (object)
 import Data.Generics.Labels ()
 import Data.Text (Text)
 import Data.Time (UTCTime (..), fromGregorian, secondsToDiffTime)
@@ -8,7 +8,6 @@ import Shikigami.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
 import Shikigami.Activity.Coordinate
 import Shikigami.AdaptiveProposalSpec qualified as AdaptiveProposalSpec
 import Shikigami.Agent.Decl (StreamMatch (..))
-import Shikigami.Agent.DeclarationValue
 import Shikigami.AgentLoaderSpec qualified as AgentLoaderSpec
 import Shikigami.AgentRunValueSpec qualified as AgentRunValueSpec
 import Shikigami.AgentValueSpec qualified as AgentValueSpec
@@ -38,7 +37,6 @@ import Shikigami.ExecutionResourcesSpec qualified as ExecutionResourcesSpec
 import Shikigami.ExecutionSelectionSpec qualified as ExecutionSelectionSpec
 import Shikigami.FlowPackSpec qualified as FlowPackSpec
 import Shikigami.FormatVersionSpec qualified as FormatVersionSpec
-import Shikigami.Integration.Danwa (AddressedMessage (..), addressedMessageEventType)
 import Shikigami.KeiroSpecificationSpec qualified as KeiroSpecificationSpec
 import Shikigami.KernelBoundarySpec qualified as KernelBoundarySpec
 import Shikigami.LocalHostSpec qualified as LocalHostSpec
@@ -77,7 +75,7 @@ main =
   defaultMain
     ( testGroup
         "shikigami"
-        [ testGroup "Trigger" [scheduleTests, streamTests, danwaIntegrationTests],
+        [ testGroup "Trigger" [scheduleTests, streamTests],
           AgentValueSpec.tests,
           AgentRunValueSpec.tests,
           PayloadValueSpec.tests,
@@ -201,35 +199,4 @@ streamTests =
         assertBool "agent actor excluded" (not (matchesStream matchAll (envelopeWith "agent" "intention.declared" "shinzui/rei" "intention"))),
       testCase "opt-in includes agent actors" $
         assertBool "agent actor included with opt-in" (matchesStreamWith IncludeAgentActors matchAll (envelopeWith "agent" "intention.declared" "shinzui/rei" "intention"))
-    ]
-
-danwaIntegrationTests :: TestTree
-danwaIntegrationTests =
-  testGroup
-    "DanwaIntegration"
-    [ testCase "decodes the public addressed-message payload" do
-        let payload =
-              """
-              {"conversationId":"conv_public_1","messageId":"msg_public_1","parentMessageId":null,
-               "author":"part_human_test","content":"please help","agentParticipantId":"part_agent_test",
-               "embellishmentId":"emb_public_1","mentionedBy":"part_human_test",
-               "occurredAt":"2026-06-27T00:00:00Z"}
-              """
-        case eitherDecode @AddressedMessage payload of
-          Left err -> assertBool ("decode failed: " <> err) False
-          Right msg ->
-            msg
-              @?= AddressedMessage
-                { conversationId = (declarationCoordinate "conv_public_1"),
-                  messageId = (declarationCoordinate "msg_public_1"),
-                  parentMessageId = Nothing,
-                  author = (declarationCoordinate "part_human_test"),
-                  content = "please help",
-                  agentParticipantId = (declarationCoordinate "part_agent_test"),
-                  embellishmentId = (declarationCoordinate "emb_public_1"),
-                  mentionedBy = (declarationCoordinate "part_human_test"),
-                  occurredAt = UTCTime (fromGregorian 2026 6 27) 0
-                },
-      testCase "uses Danwa's public integration event type" $
-        addressedMessageEventType @?= "danwa.message-addressed-to-agent"
     ]

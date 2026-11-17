@@ -23,7 +23,7 @@ import Shikigami.AgentRun.Generated.WorkflowFacts qualified as AgentRun
 import Shikigami.Approval.Generated.WorkflowFacts qualified as Approval
 import Shikigami.CodingAgentStep.Generated.WorkflowFacts qualified as CodingAgentStep
 import Shikigami.ContinuingWorker.Generated.WorkflowFacts qualified as ContinuingWorker
-import Shikigami.DanwaConversation.Generated.WorkflowFacts qualified as DanwaConversation
+import Shikigami.Conversation.Generated.WorkflowFacts qualified as Conversation
 import Shikigami.DeclaredToolStep.Generated.WorkflowFacts qualified as DeclaredToolStep
 import Shikigami.ExecutionDriver.Generated.WorkflowFacts qualified as ExecutionDriver
 import Shikigami.RecurringCheckpointCycle.Generated.WorkflowFacts qualified as RecurringCheckpointCycle
@@ -58,7 +58,7 @@ serviceConformanceFacts =
     <> [("workflow/Approval/" <> fact, value) | (fact, value) <- Approval.workflowFactValues]
     <> [("workflow/CodingAgentStep/" <> fact, value) | (fact, value) <- CodingAgentStep.workflowFactValues]
     <> [("workflow/ContinuingWorker/" <> fact, value) | (fact, value) <- ContinuingWorker.workflowFactValues]
-    <> [("workflow/DanwaConversation/" <> fact, value) | (fact, value) <- DanwaConversation.workflowFactValues]
+    <> [("workflow/Conversation/" <> fact, value) | (fact, value) <- Conversation.workflowFactValues]
     <> [("workflow/DeclaredToolStep/" <> fact, value) | (fact, value) <- DeclaredToolStep.workflowFactValues]
     <> [("workflow/ExecutionDriver/" <> fact, value) | (fact, value) <- ExecutionDriver.workflowFactValues]
     <> [("workflow/RecurringCheckpointCycle/" <> fact, value) | (fact, value) <- RecurringCheckpointCycle.workflowFactValues]

@@ -364,5 +364,6 @@ probePack =
       authorities = [],
       outputs = [],
       approvalChannels = [],
-      trackerProviders = []
+      trackerProviders = [],
+      conversationChannels = []
     }

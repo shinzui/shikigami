@@ -2,7 +2,7 @@
 
 -- | The keyed conversation-to-session index.
 --
--- A danwa conversation runs as one durable workflow, and every turn of it has to
+-- A conversation runs as one durable workflow, and every turn of it has to
 -- answer the same question: which kioku session am I recording into? Before this
 -- module the answer came from 'Kioku.Session.getByScope' — every session the
 -- agent has ever had — followed by a linear scan for one whose @subjectRef@

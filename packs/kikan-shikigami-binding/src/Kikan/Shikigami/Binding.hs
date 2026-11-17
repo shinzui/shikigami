@@ -2,7 +2,7 @@
 -- (docs/plans/135-move-the-kikan-service-bindings-out-of-shikigami-core-and-compose-a-kikan-distribution.md).
 --
 -- The kernel owns the ports (authority, outputs, approval channels, triggers,
--- tracker providers); this pack registers the Kikan adapter behind each one.
+-- tracker providers, conversation channels); this pack registers the Kikan adapter behind each one.
 -- It is a plain value, like every pack: a registration that needs settings is
 -- built from the validated 'PackSettings' when an executable starts, so the
 -- role entry points keep taking @[FlowPack]@. The Kikan distribution
@@ -16,6 +16,7 @@ where
 
 import Kikan.Shikigami.Binding.Approval (kikanApprovalChannels)
 import Kikan.Shikigami.Binding.Authority (authoritySettings, kikanAuthorityAdapter)
+import Kikan.Shikigami.Binding.Conversation (danwaChannel)
 import Kikan.Shikigami.Binding.Output (kikanOutputRegistrations)
 import Kikan.Shikigami.Binding.Settings (serviceSettings)
 import Kikan.Shikigami.Binding.Tracker.Rei (reiTrackerProvider)
@@ -43,5 +44,6 @@ kikanBinding =
       authorities = [kikanAuthorityAdapter],
       outputs = kikanOutputRegistrations,
       approvalChannels = kikanApprovalChannels,
-      trackerProviders = [reiTrackerProvider]
+      trackerProviders = [reiTrackerProvider],
+      conversationChannels = [danwaChannel]
     }

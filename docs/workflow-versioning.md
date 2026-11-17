@@ -119,7 +119,7 @@ are in plan 131.
 
 ## What a durable workflow is, and why editing one is not like editing ordinary code
 
-Shikigami runs each agent run and each Danwa conversation as a **durable
+Shikigami runs each agent run and each conversation as a **durable
 workflow**: an ordinary Haskell computation (an `effectful` `Eff` program) that
 is executed through keiro's runner rather than called directly. The runner's job
 is to make the computation survive a crash.
@@ -543,7 +543,7 @@ computed label families; a duplicated line-number census quickly becomes stale.
 | Workflow | Declaration | Generated facts | Runtime body |
 | --- | --- | --- | --- |
 | `shikigami.agent-run` | [Agent run](../domain/shikigami/agent-run.keiro) | [AgentRun facts](../shikigami-core/src/Shikigami/AgentRun/Generated/WorkflowFacts.hs) | [Workflow.hs](../shikigami-core/src/Shikigami/Agent/Workflow.hs) |
-| `shikigami.danwa-conversation` | [Conversation](../domain/shikigami/conversation.keiro) | [DanwaConversation facts](../shikigami-core/src/Shikigami/DanwaConversation/Generated/WorkflowFacts.hs) | [Conversation.hs](../shikigami-core/src/Shikigami/Agent/Conversation.hs) |
+| `shikigami.conversation` | [Conversation](../domain/shikigami/conversation.keiro) | [Conversation facts](../shikigami-core/src/Shikigami/Conversation/Generated/WorkflowFacts.hs) | [Conversation.hs](../shikigami-core/src/Shikigami/Agent/Conversation.hs) |
 | `shikigami.approval` | [Approval](../domain/shikigami/approval.keiro) | [Approval facts](../shikigami-core/src/Shikigami/Approval/Generated/WorkflowFacts.hs) | [Approval/Workflow.hs](../shikigami-core/src/Shikigami/Agent/Approval/Workflow.hs) |
 | `shikigami.execution` | [Execution driver](../domain/shikigami/execution-driver.keiro) | [ExecutionDriver facts](../shikigami-core/src/Shikigami/ExecutionDriver/Generated/WorkflowFacts.hs) | [Execution/Driver.hs](../shikigami-core/src/Shikigami/Execution/Driver.hs) |
 | `shikigami.worker-session` | [Continuing worker](../domain/shikigami/continuing-worker.keiro) | [ContinuingWorker facts](../shikigami-core/src/Shikigami/ContinuingWorker/Generated/WorkflowFacts.hs) | [WorkerSession/Workflow.hs](../shikigami-core/src/Shikigami/WorkerSession/Workflow.hs) |
@@ -571,8 +571,10 @@ and are pinned in `packs/flow-pack-watchdog/test/golden/labels.txt`.
 Flow capability families include `recall-<label>`, `remember-<label>`, and
 `emit-signal:<label>`. Child identity comes from the governed delegation/approval
 call site. Conversation rotation uses static per-turn labels and has no legacy
-message-id or ordinal journal branch. `danwa-reply:<messageId>` identifies a sink intent rather than
-a workflow journal step.
+message-id or ordinal journal branch. `conversation-reply:<messageId>` identifies a sink intent rather
+than a workflow journal step. The conversation workflow was `shikigami.danwa-conversation` until
+plan 135 M5 made it the kernel's, with Danwa as one conversation channel; the rename was a
+pre-release baseline reset with no instance in flight.
 
 Keiro writes reserved patch, terminal, generation, sleep, awakeable, and child
 records as well. Their definitions belong to `mori://shinzui/keiro`, at

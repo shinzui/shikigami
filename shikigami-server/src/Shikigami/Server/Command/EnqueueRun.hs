@@ -32,8 +32,9 @@ import System.IO (hPutStrLn, stderr)
 -- kioku store's hasql pool.
 --
 -- The route is declared, not inferred: without @--conversation@ the job runs the
--- durable agent-run workflow, and with it the job is a danwa conversation turn
--- whose payload must decode as an addressed message.
+-- durable agent-run workflow, and with it the job is a conversation turn whose
+-- payload the agent's conversation channel must accept (under the Kikan
+-- distribution, a Danwa addressed message).
 --
 -- The idempotency key is derived from the agent and the payload unless @--key@
 -- supplies one, so invoking this twice for the same logical event produces one

@@ -66,7 +66,7 @@ import Shikigami.Duration
 import Shikigami.Execution.Capacity (RuntimeLimits)
 import Shikigami.Execution.Policy.Types (HarnessPolicy)
 import Shikigami.Flow.Decision qualified as FlowDecision
-import Shikigami.Flow.Pack (FlowPackName, FlowRegistry, PackMetrics, scheduleIntakeOf)
+import Shikigami.Flow.Pack (FlowPackName, FlowRegistry, PackMetrics, registeredConversationChannels, scheduleIntakeOf)
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Health.Worker (Heartbeats, LoopName (DirectoryLoop), LoopStaleness, beat, loopStaleness)
 import Shikigami.Inspection.Consumer (ConsumerInspection)
@@ -282,6 +282,7 @@ conversationEnv env =
       Conversation.agents = (.agents) env,
       Conversation.grants = envGrants env,
       Conversation.outputs = env.outputs,
+      Conversation.channels = registeredConversationChannels env.flows,
       Conversation.directory = envDirectory env
     }
 

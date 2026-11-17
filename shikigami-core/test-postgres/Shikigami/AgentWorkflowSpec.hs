@@ -61,6 +61,7 @@ import Network.Wai (Application, pathInfo, requestMethod, responseLBS, strictReq
 import Shikigami.Agent.Approval (ApprovalDecision (..), ApprovalEnv (..), ApprovalPolicySnapshot (..), ApprovalRequest (..), ApprovalRequirement (..), approvalTimeoutFireAction, autoApprovePolicy, configuredApprovalChannel, defaultApprovalEnv, mkApprovalChannel, resolveApproval, reviewRequestIdText)
 import Shikigami.Agent.Approval.Workflow qualified as ApprovalWorkflow
 import Shikigami.Agent.Conversation qualified as Conversation
+import Shikigami.Agent.Conversation.Channel (InboundMessage (..))
 import Shikigami.Agent.Conversation.SessionIndex qualified as SessionIndex
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), IdentityDecl (..), ProfileRequirement (..), RecordPolicy (..), Trigger (..), defaultDelegationBudget, defaultMemoryPolicy, mkDelegationBudget, mkRecallLimit)
 import Shikigami.Agent.DeclarationValue
@@ -117,13 +118,13 @@ import Shikigami.Execution.SelectionRuntime (assignmentIdFor)
 import Shikigami.Execution.Transcript qualified as Replay
 import Shikigami.ExecutionSelectionWorkflowSpec qualified as ExecutionFixture
 import Shikigami.Fixture.AcknowledgementFlow (acknowledgementFlowName, fixtureFlowRegistry)
+import Shikigami.Fixture.Conversation (fixtureChannels, fixtureEventType)
 import Shikigami.Fixture.ExecutionIdentity (fixtureRootId)
 import Shikigami.Fixture.Outputs (capturingApprovalChannel, capturingOutputs, unreachableOutputs)
 import Shikigami.Fixture.RawOutput (kawaDigest, kawaDigestKind, rawOutput)
 import Shikigami.Flow.Decision qualified as FlowDecision
 import Shikigami.Flow.Pack (noPackMetrics)
 import Shikigami.Flow.Routing qualified as Routing
-import Shikigami.Integration.Danwa (AddressedMessage (..), addressedMessageEventType)
 import Shikigami.Log qualified as Log
 import Shikigami.Log.Correlation (runCorrelationId)
 import Shikigami.Memory.Access (agentActor, shikigamiMemorySpace)
@@ -874,8 +875,8 @@ tests databaseFixture =
                 case (firstTurn, secondTurn) of
                   (Right firstResult, Right secondResult) -> do
                     assertEqual "second human turn reuses the first kioku session" ((.sessionId) firstResult) ((.sessionId) secondResult)
-                    assertBool "first reply is represented by a durable outbox message" ("outbox:danwa-conversation:conv_thread_1:danwa-reply:msg_human_1" `Text.isPrefixOf` declarationCoordinateText ((.replyMessageId) firstResult))
-                    assertBool "second reply is represented by a durable outbox message" ("outbox:danwa-conversation:conv_thread_1:danwa-reply:msg_human_2" `Text.isPrefixOf` declarationCoordinateText ((.replyMessageId) secondResult))
+                    assertBool "first reply is represented by a durable outbox message" ("outbox:conversation:conv_thread_1:conversation-reply:msg_human_1" `Text.isPrefixOf` declarationCoordinateText ((.replyMessageId) firstResult))
+                    assertBool "second reply is represented by a durable outbox message" ("outbox:conversation:conv_thread_1:conversation-reply:msg_human_2" `Text.isPrefixOf` declarationCoordinateText ((.replyMessageId) secondResult))
 
                     turns <- runAppIO appEnv (Session.getTurns shikigamiMemorySpace ((.sessionId) firstResult))
                     case turns of
@@ -918,9 +919,9 @@ tests databaseFixture =
                     assertEqual "generation 0 holds exactly one turn result" 1 (length (filter (== "turn-result") (Map.keys firstKeys)))
                     assertEqual "generation 1 holds exactly one turn result" 1 (length (filter (== "turn-result") (Map.keys secondKeys)))
 
-                    -- danwa-reply names the outbox row, not a journal step.
-                    assertBool "the first reply is not journaled as a separate sink step" (not (any ("danwa-reply" `Text.isPrefixOf`) (Map.keys firstKeys)))
-                    assertBool "the second reply is not journaled as a separate sink step" (not (any ("danwa-reply" `Text.isPrefixOf`) (Map.keys secondKeys)))
+                    -- conversation-reply names the outbox row, not a journal step.
+                    assertBool "the first reply is not journaled as a separate sink step" (not (any ("conversation-reply" `Text.isPrefixOf`) (Map.keys firstKeys)))
+                    assertBool "the second reply is not journaled as a separate sink step" (not (any ("conversation-reply" `Text.isPrefixOf`) (Map.keys secondKeys)))
 
                     -- The await label lost its ordinal with everything else: a
                     -- generation arms exactly one next-message promise.
@@ -933,10 +934,10 @@ tests databaseFixture =
                 tracer <- noopTracer
                 behaviorEnv <- newBehaviorEnv
                 let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
-                    env = testConversationEnv appEnv behaviorEnv [missingTaskDecl]
+                    env = testConversationEnv appEnv behaviorEnv [conversingMissingTask]
 
-                firstFailure <- Conversation.runConversationTurn env missingTaskDecl permanentConversationMessage
-                replayed <- Conversation.runConversationTurn env missingTaskDecl permanentConversationMessage
+                firstFailure <- Conversation.runConversationTurn env conversingMissingTask permanentConversationMessage
+                replayed <- Conversation.runConversationTurn env conversingMissingTask permanentConversationMessage
                 assertBool
                   ("first turn returns the permanent detail: " <> show firstFailure)
                   (either (Text.isInfixOf "unknown task" . Conversation.conversationTurnFailureDetail) (const False) firstFailure)
@@ -950,7 +951,7 @@ tests databaseFixture =
                 tracer <- noopTracer
                 behaviorEnv <- newBehaviorEnv
                 let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
-                    declaration = capabilityDecl "conversation-overlay" (Skill {path = declarationCoordinate ("unused")}) [workspaceReadId] (Just overlayIdentity) []
+                    declaration = conversing (capabilityDecl "conversation-overlay" (Skill {path = declarationCoordinate ("unused")}) [workspaceReadId] (Just overlayIdentity) [])
                     env = testConversationEnv appEnv behaviorEnv [declaration]
                     message = permanentConversationMessage
 
@@ -1272,9 +1273,9 @@ tests databaseFixture =
                 tracer <- noopTracer
                 behaviorEnv <- newBehaviorEnv
                 let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
-                    env = testConversationEnv appEnv behaviorEnv [missingTaskDecl]
+                    env = testConversationEnv appEnv behaviorEnv [conversingMissingTask]
 
-                failed <- Conversation.runConversationTurn env missingTaskDecl permanentConversationMessage
+                failed <- Conversation.runConversationTurn env conversingMissingTask permanentConversationMessage
                 assertBool
                   ("the turn should fail permanently, got " <> show failed)
                   (either (Text.isInfixOf "unknown task" . Conversation.conversationTurnFailureDetail) (const False) failed)
@@ -1736,7 +1737,7 @@ tests databaseFixture =
                 let registry = Registry.workflowRegistry deps (testConversationEnv appEnv behaviorEnv [conversationDecl])
                 assertEqual
                   "production registry covers all ten families"
-                  ["shikigami.adaptive-delivery", "shikigami.agent-run", "shikigami.approval", "shikigami.coding-agent-step", "shikigami.danwa-conversation", "shikigami.declared-tool-step", "shikigami.execution", "shikigami.recurring-checkpoint-cycle", "shikigami.recurring-objective", "shikigami.worker-session"]
+                  ["shikigami.adaptive-delivery", "shikigami.agent-run", "shikigami.approval", "shikigami.coding-agent-step", "shikigami.conversation", "shikigami.declared-tool-step", "shikigami.execution", "shikigami.recurring-checkpoint-cycle", "shikigami.recurring-objective", "shikigami.worker-session"]
                   (map unWorkflowName (Map.keys registry))
                 driveApprovalChildToPark appEnv deps
                 pending <- runAppIO appEnv countPendingAwakeables
@@ -2184,10 +2185,10 @@ onlyApprovalChild appEnv runJob = do
 -- the interesting differences between them are the agent list and the idle
 -- window, not the six fields they all share.
 -- | One generation's step index for the given epoch of a conversation.
-conversationStepKeys :: AppEnv -> AddressedMessage -> Int -> IO (Map Text Value)
+conversationStepKeys :: AppEnv -> InboundMessage -> Int -> IO (Map Text Value)
 conversationStepKeys = conversationStepKeysAt 0
 
-conversationStepKeysAt :: Int -> AppEnv -> AddressedMessage -> Int -> IO (Map Text Value)
+conversationStepKeysAt :: Int -> AppEnv -> InboundMessage -> Int -> IO (Map Text Value)
 conversationStepKeysAt epoch appEnv msg generation = do
   loaded <- runAppIO appEnv (loadStepIndex Conversation.conversationWorkflowName (Conversation.conversationWorkflowId epoch msg) generation)
   case loaded of
@@ -2215,6 +2216,7 @@ testConversationEnvIdle idleWindow appEnv behaviorEnv conversationAgents =
       Conversation.harness = Harness.defaultHarnessPolicy,
       Conversation.idleTimeout = either (error . show) id (parseDuration idleWindow),
       Conversation.outputs = unreachableOutputs,
+      Conversation.channels = fixtureChannels,
       Conversation.agents = conversationAgents,
       Conversation.grants = StaticGrants defaultGrantTable,
       Conversation.directory = disabledDirectoryHandle
@@ -2826,80 +2828,78 @@ collectionSupervisorDecl =
 
 conversationDecl :: AgentDecl
 conversationDecl =
-  (decl & #trigger .~ (Event {eventType = declarationCoordinate (addressedMessageEventType)}) & #outputs .~ ([(rawOutput "danwa.conversation" ["topic" .= ("support" :: Text)])]))
+  conversing decl & #outputs .~ ([(rawOutput "danwa.conversation" ["topic" .= ("support" :: Text)])])
+
+-- | An agent that converses in the fixture channel: its event trigger names
+-- the channel's event type (plan 135, M5).
+conversing :: AgentDecl -> AgentDecl
+conversing = #trigger .~ Event {eventType = declarationCoordinate fixtureEventType}
+
+conversingMissingTask :: AgentDecl
+conversingMissingTask = conversing missingTaskDecl
 
 withRecordPolicy :: RecordPolicy -> AgentDecl -> AgentDecl
 withRecordPolicy recordPolicy = #memory . #recordPolicy .~ recordPolicy
 
-firstAddressedMessage :: AddressedMessage
+firstAddressedMessage :: InboundMessage
 firstAddressedMessage =
-  AddressedMessage
+  InboundMessage
     { conversationId = (declarationCoordinate "conv_thread_1"),
       messageId = (declarationCoordinate "msg_human_1"),
       parentMessageId = Nothing,
       author = (declarationCoordinate "part_human_test"),
       content = "first question",
       agentParticipantId = (declarationCoordinate "part_agent_test"),
-      embellishmentId = (declarationCoordinate "emb_human_1"),
-      mentionedBy = (declarationCoordinate "part_human_test"),
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0
     }
 
-secondAddressedMessage :: AddressedMessage
+secondAddressedMessage :: InboundMessage
 secondAddressedMessage =
-  AddressedMessage
+  InboundMessage
     { conversationId = (declarationCoordinate "conv_thread_1"),
       messageId = (declarationCoordinate "msg_human_2"),
       parentMessageId = Just (declarationCoordinate "msg_human_1"),
       author = (declarationCoordinate "part_human_test"),
       content = "follow up",
       agentParticipantId = (declarationCoordinate "part_agent_test"),
-      embellishmentId = (declarationCoordinate "emb_human_2"),
-      mentionedBy = (declarationCoordinate "part_human_test"),
       occurredAt = UTCTime (fromGregorian 2026 6 27) 1
     }
 
 -- | The Nth human message of one long conversation.
-conversationMessageNumbered :: Int -> AddressedMessage
+conversationMessageNumbered :: Int -> InboundMessage
 conversationMessageNumbered n =
-  AddressedMessage
+  InboundMessage
     { conversationId = (declarationCoordinate "conv_rotation"),
       messageId = declarationCoordinate ("msg_rotation_" <> Text.pack (show n)),
       parentMessageId = if n == 1 then Nothing else Just (declarationCoordinate ("msg_rotation_" <> Text.pack (show (n - 1)))),
       author = (declarationCoordinate "part_human_test"),
       content = "question " <> Text.pack (show n),
       agentParticipantId = (declarationCoordinate "part_agent_test"),
-      embellishmentId = declarationCoordinate ("emb_rotation_" <> Text.pack (show n)),
-      mentionedBy = (declarationCoordinate "part_human_test"),
       occurredAt = UTCTime (fromGregorian 2026 6 27) (fromIntegral n)
     }
 
 -- | A third human message in the same thread as 'firstAddressedMessage'.
-thirdAddressedMessage :: AddressedMessage
+thirdAddressedMessage :: InboundMessage
 thirdAddressedMessage =
-  AddressedMessage
+  InboundMessage
     { conversationId = (declarationCoordinate "conv_thread_1"),
       messageId = (declarationCoordinate "msg_human_3"),
       parentMessageId = Just (declarationCoordinate "msg_human_2"),
       author = (declarationCoordinate "part_human_test"),
       content = "third question",
       agentParticipantId = (declarationCoordinate "part_agent_test"),
-      embellishmentId = (declarationCoordinate "emb_human_3"),
-      mentionedBy = (declarationCoordinate "part_human_test"),
       occurredAt = UTCTime (fromGregorian 2026 6 27) 2
     }
 
-permanentConversationMessage :: AddressedMessage
+permanentConversationMessage :: InboundMessage
 permanentConversationMessage =
-  AddressedMessage
+  InboundMessage
     { conversationId = (declarationCoordinate "conv_permanent"),
       messageId = (declarationCoordinate "msg_permanent"),
       parentMessageId = Nothing,
       author = (declarationCoordinate "part_human_test"),
       content = "exercise permanent failure",
       agentParticipantId = (declarationCoordinate "part_agent_test"),
-      embellishmentId = (declarationCoordinate "emb_permanent"),
-      mentionedBy = (declarationCoordinate "part_human_test"),
       occurredAt = UTCTime (fromGregorian 2026 6 27) 0
     }
 

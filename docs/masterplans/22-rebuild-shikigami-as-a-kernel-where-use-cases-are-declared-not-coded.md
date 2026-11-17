@@ -1353,6 +1353,17 @@ the kernel baseline.
   one repository. A worker serves many agents, and a playbook step selects its own
   repository.
   Date: 2026-11-15
+- Decision: The conversation loop is a kernel primitive with a conversation-channel port, and
+  Danwa is one channel in the Kikan binding (EP-10 M5). No pack contributes a workflow
+  family: the `workflows` pack field the 2026-11-15 entry moved to EP-10 is not added, and
+  `RunRouteKind` stays closed. `FlowPack` gains `conversationChannels` instead, and the
+  workflow is renamed `shikigami.conversation` under the pre-release exception.
+  Rationale: The user decided this on 2026-11-17. Like the adaptive coordinator, the
+  conversation loop runs on most of the agent-run runtime and only three small pieces of it
+  were Danwa's. A channel is one port, shaped like an approval channel, where moving the
+  family would have added a workflow field, a route registry and timer registration for
+  EP-11 to freeze.
+  Date: 2026-11-17
 
 
 ## Outcomes & Retrospective

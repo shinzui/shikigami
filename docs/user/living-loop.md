@@ -185,7 +185,9 @@ $ cabal run kikan-shikigami-worker -- --agents agents \
 ```
 
 The sample `agents/danwa-heartbeat.dhall` listens for
-`danwa.message-addressed-to-agent` and replies through `DanwaConversation`. Shikigami only
+`danwa.message-addressed-to-agent`, which the Kikan binding's Danwa conversation channel serves, and
+replies through a `danwa.conversation` output. Run the worker as `kikan-shikigami-worker`: the stock
+worker registers no conversation channel. Shikigami only
 uses Danwa's public integration topic and HTTP API in this path. It never reads Danwa's
 database, event store, read models, or outbox tables.
 

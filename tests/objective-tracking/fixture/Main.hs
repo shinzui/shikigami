@@ -22,7 +22,6 @@ import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, wit
 import Network.HTTP.Types (status200, status403, status404)
 import Network.Wai (Application, pathInfo, requestHeaders, responseLBS, strictRequestBody)
 import Network.Wai.Handler.Warp (defaultSettings, runSettings, setHost, setPort)
-import Shikigami.Agent.DeclarationValue (declarationCoordinate)
 import Shikigami.Agent.Name (mkAgentName)
 import Shikigami.Agent.Principal (AgentIdentity (VerifiedIdentity), mkAgentPrincipal)
 import Shikigami.Agent.Run.Key (parseRunKey)
@@ -30,7 +29,6 @@ import Shikigami.Agent.RunJob (RunRouteKind (ConversationWorkflowRoute))
 import Shikigami.App.Config (Role (AdminRole), revealSecretText)
 import Shikigami.App.Config.Load (ConfigOptions (..), DiagnosticMode (NoDiagnostic), requireDatabaseUrl, runAppConfig)
 import Shikigami.Authority (OutputKind, mkOutputKind)
-import Shikigami.Integration.Danwa (AddressedMessage (..))
 import Shikigami.Sink.GrantStore (upsertGrant)
 import Shikigami.Trigger.Enqueue (addressedRunJob, enqueueRunJob)
 import System.Directory (doesFileExist)
@@ -50,8 +48,21 @@ main =
     ["enqueue-conversation", configFile, conversation, message, content] -> withFixtureStore configFile \store -> do
       now <- getCurrentTime
       let actor = VerifiedIdentity (checked (mkAgentPrincipal "agent_01h000000000000000triage"))
-          addressed = AddressedMessage (declarationCoordinate (Text.pack conversation)) (declarationCoordinate (Text.pack message)) Nothing (declarationCoordinate "human") (Text.pack content) (declarationCoordinate "fixture-participant") (declarationCoordinate ("fixture-envelope-" <> Text.pack message)) (declarationCoordinate "human") now
-          job = addressedRunJob now actor (checked (mkAgentName "triage")) ConversationWorkflowRoute (Aeson.toJSON addressed) (checked (parseRunKey ("ir13-conversation-" <> Text.pack message)))
+          -- Danwa's public addressed-message payload, which the Kikan
+          -- distribution's Danwa channel reads (plan 135, M5).
+          addressed =
+            Aeson.object
+              [ ("conversationId", Aeson.toJSON conversation),
+                ("messageId", Aeson.toJSON message),
+                ("parentMessageId", Aeson.Null),
+                ("author", "human"),
+                ("content", Aeson.toJSON content),
+                ("agentParticipantId", "fixture-participant"),
+                ("embellishmentId", Aeson.toJSON ("fixture-envelope-" <> message)),
+                ("mentionedBy", "human"),
+                ("occurredAt", Aeson.toJSON now)
+              ]
+          job = addressedRunJob now actor (checked (mkAgentName "triage")) ConversationWorkflowRoute addressed (checked (parseRunKey ("ir13-conversation-" <> Text.pack message)))
       void (requireRight =<< enqueueRunJob store.pool job)
       putStrLn "conversation turn enqueued through the production producer"
     ["grant-conversation", configFile] -> withFixtureStore configFile \store -> do

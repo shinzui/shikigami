@@ -18,7 +18,7 @@
     "DeclaredToolStep",
     "ContinuingWorker",
     "Coordination",
-    "DanwaConversation",
+    "Conversation",
     "Decision",
     "Delegation",
     "Directory",
@@ -150,7 +150,7 @@
       "CodingAgentStep": "kernel",
       "ContinuingWorker": "kernel",
       "Coordination": "kernel",
-      "DanwaConversation": "kikan-binding",
+      "Conversation": "kernel",
       "Decision": "kernel",
       "DeclaredTool": "kernel",
       "DeclaredToolStep": "kernel",
@@ -167,7 +167,6 @@
       "Generated": "kernel",
       "Health": "kernel",
       "Inspection": "kernel",
-      "Integration": "kernel",
       "Log": "kernel",
       "Mandate": "kernel",
       "MandateLifecycle": "kernel",
@@ -208,8 +207,6 @@
       "Workspace": "kernel"
     },
     "frozenModules": [
-      "Shikigami.DanwaConversation.Generated.WorkflowFacts",
-      "Shikigami.DanwaConversation.Generated.WorkflowRuntime",
       "Shikigami.Flow.Builtin"
     ],
     "sdkModules": {
@@ -262,6 +259,7 @@
       ],
       "pack-sdk": [
         "Shikigami.Agent.Approval.Workflow",
+        "Shikigami.Agent.Conversation.Channel",
         "Shikigami.Agent.Loader",
         "Shikigami.Agent.Run.Key",
         "Shikigami.Agent.Workflow.Name",

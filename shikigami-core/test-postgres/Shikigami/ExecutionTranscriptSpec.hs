@@ -1791,10 +1791,10 @@ objectiveConversationOriginCase fixture = withConfiguredFixture fixture configur
   resolved <- expectRight (resolveAgentIdentity snapshot.identity)
   let context = shikigamiWriteContext resolved
       conversation = mustRight (Objective.parseConversationRef "origin-conversation")
-      turn = Objective.turnReference "danwa:user:origin-message"
+      turn = Objective.turnReference "conversation:user:origin-message"
       baseHost = objectiveSourceHost snapshot.identity
   _ <- expectRight =<< run env (Memory.startWithContext context (StartSessionData snapshot.sessionId shikigamiMemorySpace (agentActor resolved) Nothing (mustRight (identityText snapshot.identity)) "conversation" (agentScope resolved) (Just (Objective.conversationRefText conversation)) Nothing Nothing 0 now))
-  _ <- expectRight =<< run env (Memory.recordTurnWithContext context (RecordTurnData snapshot.sessionId shikigamiMemorySpace (agentActor resolved) "danwa:user:origin-message" 0 "user" "create an objective" Nothing Nothing Nothing now))
+  _ <- expectRight =<< run env (Memory.recordTurnWithContext context (RecordTurnData snapshot.sessionId shikigamiMemorySpace (agentActor resolved) "conversation:user:origin-message" 0 "user" "create an objective" Nothing Nothing Nothing now))
   run env (ConversationIndex.rememberConversationSession (Objective.conversationRefText conversation) (idText snapshot.sessionId) now)
   (response, assistant) <- commitToolRequest env snapshot access
   invocation <- case toolInvocations assistant of first : _ -> pure first; [] -> assertFailure "tool request expected"
@@ -1807,8 +1807,8 @@ objectiveConversationOriginCase fixture = withConfiguredFixture fixture configur
   assertBool "origin lookup never admits a missing turn" (case missing of Left Objective.ObjectiveDenied -> True; _ -> False)
   admitted <- expectRight =<< run env (Objective.admitConversationTurn baseHost runId turn conversation)
   admitted.binding @?= Nothing
-  _ <- expectRight =<< run env (Memory.recordTurnWithContext context (RecordTurnData snapshot.sessionId shikigamiMemorySpace (agentActor resolved) "danwa:user:previous-message" 1 "user" "earlier work" Nothing Nothing Nothing now))
-  let priorTurn = Objective.turnReference "danwa:user:previous-message"
+  _ <- expectRight =<< run env (Memory.recordTurnWithContext context (RecordTurnData snapshot.sessionId shikigamiMemorySpace (agentActor resolved) "conversation:user:previous-message" 1 "user" "earlier work" Nothing Nothing Nothing now))
+  let priorTurn = Objective.turnReference "conversation:user:previous-message"
   _ <- expectRight =<< run env (Objective.admitConversationTurn baseHost runId priorTurn conversation)
   unrelated <- run env (Origin.conversationAuthority baseHost access conversation priorTurn key)
   assertBool "another admitted turn in the same session is not this execution's origin" (case unrelated of Left Objective.ObjectiveDenied -> True; _ -> False)

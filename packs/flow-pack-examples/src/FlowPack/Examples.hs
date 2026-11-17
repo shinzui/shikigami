@@ -48,7 +48,8 @@ examplesPack =
       authorities = [],
       outputs = [],
       approvalChannels = [],
-      trackerProviders = []
+      trackerProviders = [],
+      conversationChannels = []
     }
 
 definition :: Text -> Text -> [DecisionSlot] -> DefaultModelRequirement -> FlowDef

@@ -41,8 +41,8 @@ data TriggerKind = TriggeredBySchedule | TriggeredByStream | TriggeredByEvent | 
 data RunRouteKind
   = -- | Run the durable agent-run workflow.
     AgentWorkflowRoute
-  | -- | Drive one turn of a danwa conversation. The trigger payload must decode
-    -- as an addressed message; a payload that does not is a producer bug and
+  | -- | Drive one turn of a conversation. The agent's conversation channel
+    -- decodes the trigger payload; a payload it refuses is a producer bug and
     -- dead-letters rather than falling back to the other workflow.
     ConversationWorkflowRoute
   | -- | Execute an already accepted operation/attempt; the payload grants no authority.

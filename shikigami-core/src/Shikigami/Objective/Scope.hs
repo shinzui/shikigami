@@ -88,11 +88,11 @@ matchesExecution :: ObjectiveScope -> WorkflowId -> AgentIdentity -> SessionId -
 matchesExecution scope run identity session root aliases assignment =
   validScope scope && scope.runId == run && scope.identity == identity && scope.sessionId == session && scope.rootId == root && scope.permittedAliases == Just aliases && case scope.source of
     AgentScope bound -> bound == assignment
-    ConversationScope bound _ turn -> bound == assignment && maybe False (\message -> not (Text.null message) && bound == conversationAssignmentIdFor run.unWorkflowId message) (Text.stripPrefix "danwa:user:" (turnReferenceText turn))
+    ConversationScope bound _ turn -> bound == assignment && maybe False (\message -> not (Text.null message) && bound == conversationAssignmentIdFor run.unWorkflowId message) (Text.stripPrefix "conversation:user:" (turnReferenceText turn))
     FlowScope {} -> False
 
 validSource :: ScopeSource -> Bool
 validSource = \case
   AgentScope _ -> True
-  ConversationScope _ _ turn -> maybe False (not . Text.null) (Text.stripPrefix "danwa:user:" (turnReferenceText turn))
+  ConversationScope _ _ turn -> maybe False (not . Text.null) (Text.stripPrefix "conversation:user:" (turnReferenceText turn))
   FlowScope (WorkflowName name) _ -> not (Text.null name)

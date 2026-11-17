@@ -8,7 +8,7 @@ status: "shipped"
 stability: "experimental"
 since: "unreleased"
 packages: ["shikigami-core", "shikigami-workers", "shikigami-migrations"]
-interface: ["Shikigami.Integration.Danwa", "Shikigami.Agent.Conversation", "kikan-shikigami-consume-events"]
+interface: ["Shikigami.Agent.Conversation", "Shikigami.Agent.Conversation.Channel", "Kikan.Shikigami.Binding.Conversation", "kikan-shikigami-consume-events"]
 tags: ["addressed-conversations"]
 generated:
   by: "process:shikigami-capabilities-bootstrap"
@@ -21,6 +21,9 @@ evidence:
   - kind: module
     resource: "shikigami-core/src/Shikigami/Agent/Conversation.hs"
     proves: "Bounded one-turn generations, session restoration, and typed turn failures."
+  - kind: test
+    resource: "packs/kikan-shikigami-binding/test/Kikan/Shikigami/Binding/ConversationSpec.hs"
+    proves: "The Danwa channel reads Danwa's addressed-message payload into the kernel's message and replies with a valid danwa.conversation output."
   - kind: example
     resource: "agents/danwa-heartbeat.dhall"
     proves: "An event-triggered conversation declaration."
@@ -30,11 +33,11 @@ evidence:
 
 ## Provides
 
-The integration consumer decodes the public addressed-message envelope and routes it to a conversation workflow. The runtime restores the session, records user and assistant turns, replies through the external conversation API, and uses `continueAsNew` after each turn. Between-turn idle timeout ends an epoch; a later message starts a linked session.
+The conversation workflow is the kernel's (`shikigami.conversation`); a pack connects it to a chat service with a conversation channel (`Shikigami.Agent.Conversation.Channel`) that names the integration event addressing an agent, reads its payload into the kernel's message, and names the reply output. The Kikan binding's Danwa channel is the one that ships (plan 135, M5). An agent whose `Trigger.Event` names a channel's event type takes a conversation turn: the integration consumer routes it to the conversation workflow, and the worker decodes the payload through that channel. The runtime restores the session, records user and assistant turns, replies through the external conversation API, and uses `continueAsNew` after each turn. Between-turn idle timeout ends an epoch; a later message starts a linked session.
 
 ## Adopt
 
-Declare the addressed event type and consume its public topic, following [Triggers](../user/triggers.md). Configure conversation endpoint, credentials, policy, and workers. Intake does not read another service's private database.
+Declare the addressed event type and consume its public topic with the Kikan distribution's `kikan-shikigami-consume-events`, following [Triggers](../user/triggers.md); the stock composition registers no conversation channel and refuses a conversation turn for an agent no channel serves. Configure conversation endpoint, credentials, policy, and workers. Intake does not read another service's private database.
 
 Builds on [CAP-2: Durable trigger intake](durable-trigger-intake.md), [CAP-3: Program and Skill execution](program-and-skill-execution.md).
 
@@ -42,6 +45,7 @@ Builds on [CAP-2: Durable trigger intake](durable-trigger-intake.md), [CAP-3: Pr
 
 - [AgentWorkflowSpec.hs](../../shikigami-core/test-postgres/Shikigami/AgentWorkflowSpec.hs): Conversation parking, live-generation delivery, per-turn rotation, idle timeout, epoch lineage, and overlay refusal.
 - [Conversation.hs](../../shikigami-core/src/Shikigami/Agent/Conversation.hs): Bounded one-turn generations, session restoration, and typed turn failures.
+- [ConversationSpec.hs](../../packs/kikan-shikigami-binding/test/Kikan/Shikigami/Binding/ConversationSpec.hs): The Danwa channel's decoding and reply.
 - [danwa-heartbeat.dhall](../../agents/danwa-heartbeat.dhall): An event-triggered conversation declaration.
 
 ## Limits

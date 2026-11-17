@@ -42,7 +42,7 @@ import Shikigami.App.Config.Load (requireDatabaseUrl, withConfigOptions)
 import Shikigami.App.Role (RoleInfo (..))
 import Shikigami.Directory (DirectoryRuntime (..))
 import Shikigami.Flow.Builtin (builtinPack)
-import Shikigami.Flow.Pack (FlowPack (..), composeFlowRegistryOrExit, streamIntakeOf)
+import Shikigami.Flow.Pack (FlowPack (..), composeFlowRegistryOrExit, registeredConversationChannels, streamIntakeOf)
 import Shikigami.Health.Supervision (superviseLoops)
 import Shikigami.Health.Worker
   ( Heartbeats,
@@ -84,9 +84,9 @@ consumeStreamRoleInfo packs =
           streamConsumerSources
     }
 
--- | @kikan-shikigami-consume-events@. Event agents have no pack hook, so the
--- packs contribute only their settings, which the shared configuration file
--- may carry.
+-- | @kikan-shikigami-consume-events@, composed with the distribution's packs
+-- so that an agent whose event type a pack's conversation channel serves (the
+-- binding's Danwa channel) takes a conversation turn.
 consumeEventsRoleInfo :: [FlowPack] -> RoleInfo
 consumeEventsRoleInfo packs =
   RoleInfo
@@ -97,7 +97,7 @@ consumeEventsRoleInfo packs =
         withConfigOptions
           "kikan-shikigami-consume-events"
           "Consume public integration events, match Event triggers, and enqueue run jobs"
-          (pure runConsumeEvents)
+          (pure (runConsumeEvents packs))
           (sourcesOf [agentsOption, brokerOption, eventsTopicOption, eventsGroupOption])
     }
 
@@ -175,13 +175,14 @@ runConsumeStream packs config = do
         (superviseLoops logger ((ConsumerLoop, consumerLoop) : directoryLoops))
 
 -- | Consume public integration events and enqueue matching @Trigger.Event@
--- agents. Use this for danwa's @danwa.message-addressed.v1@ topic.
+-- agents. Use this for danwa's @danwa.message-addressed.v1@ topic, where the
+-- binding's Danwa channel turns an addressed message into a conversation turn.
 --
 -- Broker, topic, consumer group and manifest directory come from
 -- @kafka.broker@, @kafka.events.topic@, @kafka.groups.events@ and
 -- @agents.directory@.
-runConsumeEvents :: AppConfig -> IO ()
-runConsumeEvents config = do
+runConsumeEvents :: [FlowPack] -> AppConfig -> IO ()
+runConsumeEvents packs config = do
   logger <- Log.newStderrLogger Log.Info
   let broker = (.kafkaBroker) config
       topic = (.kafkaEventsTopic) config
@@ -234,7 +235,8 @@ runConsumeEvents config = do
           ((ConsumerLoop, loopStaleAfter ConsumerLoop) : directoryLoopRegistration ((.directorySettings) config))
       DirectoryRuntime {handle = directory, refresher = directoryRefresher} <-
         startProcessDirectory logger registry ((.directorySettings) config)
-      let consumerLoop = subscribeIntegrationEventStream logger (consumerSupervisor registry) shikigamiMetrics appEnv directory cfg agents onHit
+      flows <- composeFlowRegistryOrExit logger "kikan-shikigami-consume-events" (builtinPack : packs)
+      let consumerLoop = subscribeIntegrationEventStream logger (consumerSupervisor registry) shikigamiMetrics appEnv directory (registeredConversationChannels flows) cfg agents onHit
           directoryLoops = maybe [] (pure . (DirectoryLoop,)) directoryRefresher
       serveProbesWith
         logger

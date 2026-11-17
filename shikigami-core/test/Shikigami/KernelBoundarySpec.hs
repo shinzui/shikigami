@@ -132,13 +132,13 @@ isCoordinatorModule :: Text -> Bool
 isCoordinatorModule name =
   "Shikigami.Coordination." `Text.isPrefixOf` name || name `elem` ["Shikigami.Flow.AdaptiveDelivery", "Shikigami.Program.Decision.Adaptive"]
 
--- | The Kikan service code still compiled into the core: the Danwa
--- conversation trigger and loop, which EP-10 M5 moves. The output clients and
--- the authority left for @kikan-shikigami-binding@ (plan 135, M2 and M3), where
--- the package dependency rule covers them.
+-- | A module of the Kikan binding or of a Kikan service's client. No Kikan
+-- service code is compiled into the core any more (plan 135, M2 to M5), so
+-- the coordinator could only reach one through a new dependency, which the
+-- package rules refuse first; this rule still names the import.
 isBindingModule :: Text -> Bool
 isBindingModule name =
-  name == "Shikigami.Integration.Danwa" || "Shikigami.DanwaConversation." `Text.isPrefixOf` name
+  any (`Text.isPrefixOf` name) ["Kikan.", "Danwa.", "Rei.", "Shomei."]
 
 -- ── The rules ───────────────────────────────────────────────────────────────
 
@@ -356,7 +356,10 @@ tests =
         (policy, inputs) <- readTree
         let roots = Set.fromList (mapMaybe (\path -> moduleOf path >>= rootOf) inputs.sources)
         Map.keysSet policy.namespaces @?= roots
-        assertBool "something is leaving" (any (/= Kernel) (Map.elems policy.namespaces)),
+        -- Every namespace is kernel since the conversation loop's Danwa part
+        -- left (plan 135, M5): the leaving and frozen rules are proven on the
+        -- synthetic inputs below, and hold again for whatever leaves next.
+        filter (/= Kernel) (Map.elems policy.namespaces) @?= [],
       -- Adding a name to an SDK facade is a reviewed diff: the golden file
       -- changes with it. EP-11 reuses this as the SDK's compatibility check.
       -- The adaptive coordinator stays in the kernel because it needs no Kikan
@@ -365,14 +368,14 @@ tests =
       testCase "the adaptive coordinator imports no Kikan binding module" do
         (_, inputs) <- readTree
         assertBool "the walk found the coordinator" (length inputs.coordinatorImports > 5)
-        let planted owner = fixture {coordinatorImports = [(owner, ["Shikigami.Flow.Decision", "Shikigami.Integration.Danwa", "Shikigami.DanwaConversation.Loop"])]}
+        let planted owner = fixture {coordinatorImports = [(owner, ["Shikigami.Flow.Decision", "Kikan.Shikigami.Binding.Conversation", "Danwa.Client"])]}
         kernelViolations synthetic (planted "Shikigami.Coordination.Workflow")
-          @?= [ CoordinatorImportsBinding "Shikigami.Coordination.Workflow" "Shikigami.Integration.Danwa",
-                CoordinatorImportsBinding "Shikigami.Coordination.Workflow" "Shikigami.DanwaConversation.Loop"
+          @?= [ CoordinatorImportsBinding "Shikigami.Coordination.Workflow" "Kikan.Shikigami.Binding.Conversation",
+                CoordinatorImportsBinding "Shikigami.Coordination.Workflow" "Danwa.Client"
               ]
-        kernelViolations synthetic (planted "Shikigami.Program.Decision.Adaptive") @?= [CoordinatorImportsBinding "Shikigami.Program.Decision.Adaptive" "Shikigami.Integration.Danwa", CoordinatorImportsBinding "Shikigami.Program.Decision.Adaptive" "Shikigami.DanwaConversation.Loop"]
+        kernelViolations synthetic (planted "Shikigami.Program.Decision.Adaptive") @?= [CoordinatorImportsBinding "Shikigami.Program.Decision.Adaptive" "Kikan.Shikigami.Binding.Conversation", CoordinatorImportsBinding "Shikigami.Program.Decision.Adaptive" "Danwa.Client"]
         kernelViolations synthetic (planted "Shikigami.Agent.Run") @?= []
-        assertBool "the refusal says why it is a primitive" ("depends on no Kikan service" `Text.isInfixOf` renderKernelViolation synthetic (CoordinatorImportsBinding "Shikigami.Coordination.Workflow" "Shikigami.Integration.Danwa")),
+        assertBool "the refusal says why it is a primitive" ("depends on no Kikan service" `Text.isInfixOf` renderKernelViolation synthetic (CoordinatorImportsBinding "Shikigami.Coordination.Workflow" "Kikan.Shikigami.Binding.Conversation")),
       testCase "each SDK facade exports exactly its golden list" do
         root <- repositoryRoot
         (policy, _) <- readTree

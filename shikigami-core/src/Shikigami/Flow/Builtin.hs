@@ -54,7 +54,8 @@ builtinPack =
       authorities = [],
       outputs = [],
       approvalChannels = [],
-      trackerProviders = []
+      trackerProviders = [],
+      conversationChannels = []
     }
 
 -- | The builtin pack alone, composed. It cannot fail for a reviewed build, so

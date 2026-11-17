@@ -61,6 +61,7 @@ import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Name (AgentName, agentNameText)
 import Shikigami.Agent.Principal (AgentIdentity (..), AgentPrincipal, compatibilityIdentity, mkAgentPrincipal, resolveAgentIdentity)
 
+import Shikigami.Agent.Conversation.Channel (ConversationChannels, channelForAgent, noConversationChannels)
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (..), TriggerKind (TriggeredByEvent))
 import Shikigami.Agent.RunJob qualified as RunJob
 import Shikigami.App (AppEnv (..), runAppIO)
@@ -69,7 +70,6 @@ import Shikigami.Directory.Store (RunSkip (..), SkipStage (TriggerStage), record
 import Shikigami.Execution.Identity (ExecutionRootId, newExecutionRootId)
 import Shikigami.Execution.Resources qualified as Resources
 import Shikigami.Execution.ResourcesStore (allocateRootForWorkflowTx)
-import Shikigami.Integration.Danwa qualified as Danwa
 import Shikigami.Log qualified as Log
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.Trigger.Enqueue (enqueueRunJobTx, envelopeOccurredAt, integrationRunKey, runJobFromEnvelopeWithIdentity)
@@ -171,24 +171,27 @@ processIntegrationEventRecord ::
   KafkaInboundRecord ->
   IO RecordDisposition
 processIntegrationEventRecord appEnv =
-  processIntegrationEventRecordWithDirectory Log.silentLogger appEnv Directory.disabledDirectoryHandle
+  processIntegrationEventRecordWithDirectory Log.silentLogger appEnv Directory.disabledDirectoryHandle noConversationChannels
 
+-- | The channels decide which event agents take a conversation turn rather
+-- than an ordinary run: those whose event type a channel serves.
 processIntegrationEventRecordWithDirectory ::
   Log.Logger ->
   AppEnv ->
   Directory.DirectoryHandle ->
+  ConversationChannels ->
   QueueName ->
   [AgentDecl] ->
   (EventHit -> IO ()) ->
   KafkaInboundRecord ->
   IO RecordDisposition
-processIntegrationEventRecordWithDirectory logger appEnv directory queue agents onHit record =
+processIntegrationEventRecordWithDirectory logger appEnv directory channels queue agents onHit record =
   case integrationEventFromKafka record of
     Left err -> persistPoison appEnv queue record (Text.pack (show err))
     Right (event, delivery) ->
       case decodeJsonIntegrationEvent event of
         Left err -> persistPoison appEnv queue record (Text.pack (show err))
-        Right payloadValue -> processIntegrationEvent logger appEnv directory agents onHit event (Just delivery) payloadValue
+        Right payloadValue -> processIntegrationEvent logger appEnv directory channels agents onHit event (Just delivery) payloadValue
 
 -- | Process an already decoded transport event. An invalid activity payload is
 -- transient here because this broker-free entry point has no raw delivery to
@@ -295,35 +298,37 @@ processDecodedIntegrationEvent ::
   Maybe KafkaDeliveryRef ->
   IO RecordDisposition
 processDecodedIntegrationEvent appEnv =
-  processDecodedIntegrationEventWithDirectory Log.silentLogger appEnv Directory.disabledDirectoryHandle
+  processDecodedIntegrationEventWithDirectory Log.silentLogger appEnv Directory.disabledDirectoryHandle noConversationChannels
 
 processDecodedIntegrationEventWithDirectory ::
   Log.Logger ->
   AppEnv ->
   Directory.DirectoryHandle ->
+  ConversationChannels ->
   [AgentDecl] ->
   (EventHit -> IO ()) ->
   IntegrationEvent ->
   Maybe KafkaDeliveryRef ->
   IO RecordDisposition
-processDecodedIntegrationEventWithDirectory logger appEnv directory agents onHit event kafka =
+processDecodedIntegrationEventWithDirectory logger appEnv directory channels agents onHit event kafka =
   case decodeJsonIntegrationEvent event of
     Left err -> pure (TransientFailure (Text.pack (show err)))
-    Right payloadValue -> processIntegrationEvent logger appEnv directory agents onHit event kafka payloadValue
+    Right payloadValue -> processIntegrationEvent logger appEnv directory channels agents onHit event kafka payloadValue
 
 processIntegrationEvent ::
   Log.Logger ->
   AppEnv ->
   Directory.DirectoryHandle ->
+  ConversationChannels ->
   [AgentDecl] ->
   (EventHit -> IO ()) ->
   IntegrationEvent ->
   Maybe KafkaDeliveryRef ->
   Value ->
   IO RecordDisposition
-processIntegrationEvent logger appEnv directory agents onHit event kafka payloadValue = do
+processIntegrationEvent logger appEnv directory channels agents onHit event kafka payloadValue = do
   receivedAt <- getCurrentTime
-  prepared <- prepareEventHits directory receivedAt agents payloadValue event
+  prepared <- prepareEventHits directory channels receivedAt agents payloadValue event
   attempt <-
     Exception.try @NotifierStartError $
       runAppIO appEnv $
@@ -491,8 +496,8 @@ streamMatchOf agent = case agent ^. #trigger of
   Stream {match = streamMatch} -> Just streamMatch
   _ -> Nothing
 
-prepareEventHits :: Directory.DirectoryHandle -> UTCTime -> [AgentDecl] -> Value -> IntegrationEvent -> IO [PreparedTrigger EventHit]
-prepareEventHits directory receivedAt agents payloadValue event =
+prepareEventHits :: Directory.DirectoryHandle -> ConversationChannels -> UTCTime -> [AgentDecl] -> Value -> IntegrationEvent -> IO [PreparedTrigger EventHit]
+prepareEventHits directory channels receivedAt agents payloadValue event =
   traverse
     prepare
     [ agent
@@ -509,10 +514,10 @@ prepareEventHits directory receivedAt agents payloadValue event =
                 triggerKind = TriggeredByEvent,
                 objective = Nothing,
                 repository = Nothing,
-                routeKind = eventRouteOf agent,
+                routeKind = eventRouteOf channels agent,
                 occurredAt = receivedAt,
                 triggerPayload = payloadValue,
-                idempotencyKey = integrationRunKey (agent ^. #name) (eventRouteOf agent) event,
+                idempotencyKey = integrationRunKey (agent ^. #name) (eventRouteOf channels agent) event,
                 parentSessionId = Nothing,
                 parentRunWorkflowId = Nothing,
                 delegationDepth = Nothing,
@@ -619,11 +624,12 @@ eventTriggerTypeOf agent = case agent ^. #trigger of
   _ -> Nothing
 
 -- | The declared event type is the honest source of the conversation/agent-run
--- distinction: an agent that subscribes to @danwa.message-addressed-to-agent@ is
--- asking for a conversation turn, and every other event trigger is an ordinary
--- agent run. Deciding here, where the declaration is in scope, is what lets the
--- worker stop guessing from the payload's shape.
-eventRouteOf :: AgentDecl -> RunRouteKind
-eventRouteOf agent
-  | eventTriggerTypeOf agent == Just Danwa.addressedMessageEventType = ConversationWorkflowRoute
+-- distinction: an agent that subscribes to an event type a conversation
+-- channel serves (Danwa's @danwa.message-addressed-to-agent@, under the Kikan
+-- distribution) is asking for a conversation turn, and every other event
+-- trigger is an ordinary agent run. Deciding here, where the declaration is in
+-- scope, is what lets the worker stop guessing from the payload's shape.
+eventRouteOf :: ConversationChannels -> AgentDecl -> RunRouteKind
+eventRouteOf channels agent
+  | Just _ <- channelForAgent channels agent = ConversationWorkflowRoute
   | otherwise = AgentWorkflowRoute

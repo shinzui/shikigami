@@ -53,6 +53,7 @@ import Shibuya.Core.Ingested (Message (..))
 import Shibuya.Core.Types (Cursor (..), Envelope (..))
 import Shibuya.Policy (Concurrency (Serial), OrderingPolicy (StrictInOrder))
 import Shibuya.Telemetry.Effect (runTracing)
+import Shikigami.Agent.Conversation.Channel (ConversationChannels)
 import Shikigami.Agent.Decl (AgentDecl)
 import Shikigami.App (AppEnv (..))
 import Shikigami.Directory qualified as Directory
@@ -103,10 +104,11 @@ subscribeActivityStream logger onSupervisor metrics appEnv directory intake conf
   runSubscription logger onSupervisor "stream" metrics appEnv config $ processActivityRecordWithDirectory logger appEnv directory intake (recordStreamDisposition metrics) deadLetterQueue include agents onHit
 
 -- | Subscribe to a public integration-event topic through the same durable
--- acknowledgement boundary.
-subscribeIntegrationEventStream :: Log.Logger -> OnSupervisor -> ShikigamiMetrics -> AppEnv -> Directory.DirectoryHandle -> StreamConfig -> [AgentDecl] -> (EventHit -> IO ()) -> IO ()
-subscribeIntegrationEventStream logger onSupervisor metrics appEnv directory config@StreamConfig {deadLetterQueue} agents onHit =
-  runSubscription logger onSupervisor "events" metrics appEnv config $ processIntegrationEventRecordWithDirectory logger appEnv directory deadLetterQueue agents onHit
+-- acknowledgement boundary. An agent whose event type a composed conversation
+-- channel serves takes a conversation turn.
+subscribeIntegrationEventStream :: Log.Logger -> OnSupervisor -> ShikigamiMetrics -> AppEnv -> Directory.DirectoryHandle -> ConversationChannels -> StreamConfig -> [AgentDecl] -> (EventHit -> IO ()) -> IO ()
+subscribeIntegrationEventStream logger onSupervisor metrics appEnv directory channels config@StreamConfig {deadLetterQueue} agents onHit =
+  runSubscription logger onSupervisor "events" metrics appEnv config $ processIntegrationEventRecordWithDirectory logger appEnv directory channels deadLetterQueue agents onHit
 
 runSubscription ::
   Log.Logger ->

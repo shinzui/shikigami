@@ -96,7 +96,8 @@ fixturePack =
       authorities = [],
       outputs = [],
       approvalChannels = [],
-      trackerProviders = []
+      trackerProviders = [],
+      conversationChannels = []
     }
 
 -- | The builtin pack, the example fixtures and this fixture pack, as a

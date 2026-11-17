@@ -49,6 +49,7 @@ import Kiroku.Store.Connection qualified as StoreConnection
 import Shibuya.App (ShutdownConfig (..), SupervisionStrategy (IgnoreFailures), stopAppGracefully)
 import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Conversation qualified as Conversation
+import Shikigami.Agent.Conversation.Channel (InboundMessage (..))
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), IdentityDecl (..), Trigger (..), defaultMemoryPolicy)
 import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Name (AgentName, mkAgentName)
@@ -60,7 +61,6 @@ import Shikigami.Agent.Workflow qualified as AgentWorkflow
 import Shikigami.Behavior.Error (TransientBehaviorFailure (..))
 import Shikigami.Directory (DirectoryHandle, Lifecycle (..), PrincipalRecord (..), newDirectoryHandle, refreshDirectory, staticDirectorySource)
 import Shikigami.Directory.Store qualified as DirectoryStore
-import Shikigami.Integration.Danwa (AddressedMessage (..))
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Shikigami.RunJobs qualified as RunJobs
 import Shikigami.Trigger.Enqueue qualified as Enqueue
@@ -130,14 +130,17 @@ tests databaseFixture =
         assertAgentRun
           "an explicit agent-run route ignores the payload's shape"
           (routeRunJob (sampleJob & #triggerKind .~ (TriggeredBySchedule) & #routeKind .~ (AgentWorkflowRoute) & #triggerPayload .~ (Aeson.toJSON sampleAddressed))),
-      testCase "event job on the danwa event type routes to conversation" do
+      testCase "event job on a channel's event type routes to conversation" do
         assertConversation
-          "a declared conversation route with a decodable payload"
+          "a declared conversation route with an object payload"
           (routeRunJob (sampleJob & #routeKind .~ (ConversationWorkflowRoute) & #triggerPayload .~ (Aeson.toJSON sampleAddressed))),
-      testCase "undecodable payload on a conversation route dead-letters" do
+      -- The agent's conversation channel reads the payload once the worker
+      -- knows the agent (plan 135, M5); routing refuses only a payload no
+      -- channel could read.
+      testCase "a non-object payload on a conversation route dead-letters" do
         assertRouteError
-          "a declared conversation route with an undecodable payload"
-          (routeRunJob (sampleJob & #routeKind .~ (ConversationWorkflowRoute))),
+          "a declared conversation route with a non-object payload"
+          (routeRunJob (sampleJob & #routeKind .~ (ConversationWorkflowRoute) & #triggerPayload .~ Aeson.String "not a message")),
       testCase "trigger kind does not affect any route" do
         let kinds = [TriggeredBySchedule, TriggeredByStream, TriggeredByEvent, TriggeredByDelegation]
         for_ kinds \kind -> do
@@ -271,7 +274,7 @@ tests databaseFixture =
       testCase "a route error reaches the reconciled DLQ" do
         (withShikigamiFreshDatabase databaseFixture) \connStr -> do
           let tuning = requireTuning (mkJobTuning 2 1 (PollEvery 0.1))
-              misdeclared = (sampleJob & #routeKind .~ (ConversationWorkflowRoute))
+              misdeclared = (sampleJob & #routeKind .~ (ConversationWorkflowRoute) & #triggerPayload .~ Aeson.String "not a message")
           reachedDlq <-
             runDb connStr \runtime ->
               runJobEff runtime do
@@ -343,17 +346,15 @@ showRoute = \case
   AgentRunRoute -> "AgentRunRoute"
   RouteError detail -> "RouteError " <> Text.unpack detail
 
-sampleAddressed :: AddressedMessage
+sampleAddressed :: InboundMessage
 sampleAddressed =
-  AddressedMessage
+  InboundMessage
     { conversationId = (declarationCoordinate "conv_1"),
       messageId = (declarationCoordinate "msg_1"),
       parentMessageId = Nothing,
       author = (declarationCoordinate "person_1"),
       content = "how are the numbers?",
       agentParticipantId = (declarationCoordinate "participant_1"),
-      embellishmentId = (declarationCoordinate "emb_1"),
-      mentionedBy = (declarationCoordinate "person_1"),
       occurredAt = UTCTime (fromGregorian 2026 8 19) 0
     }
 

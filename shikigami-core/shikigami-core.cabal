@@ -41,6 +41,7 @@ library
     Shikigami.Agent.Approval.Workflow
     Shikigami.Agent.Catalog
     Shikigami.Agent.Conversation
+    Shikigami.Agent.Conversation.Channel
     Shikigami.Agent.Conversation.SessionIndex
     Shikigami.Agent.Decl
     Shikigami.Agent.DeclarationValue
@@ -198,7 +199,6 @@ library
     Shikigami.Health.Ping
     Shikigami.Inspection.Aggregates
     Shikigami.Inspection.Settings
-    Shikigami.Integration.Danwa
     Shikigami.Log
     Shikigami.Log.Correlation
     Shikigami.Mandate.Catalog
@@ -392,8 +392,8 @@ library
     Shikigami.Approval.Generated.WorkflowRuntime
     Shikigami.ContinuingWorker.Generated.WorkflowFacts
     Shikigami.ContinuingWorker.Generated.WorkflowRuntime
-    Shikigami.DanwaConversation.Generated.WorkflowFacts
-    Shikigami.DanwaConversation.Generated.WorkflowRuntime
+    Shikigami.Conversation.Generated.WorkflowFacts
+    Shikigami.Conversation.Generated.WorkflowRuntime
     Shikigami.Execution.Bindings
     Shikigami.ExecutionLifecycle.BehaviorHoles
     Shikigami.ExecutionLifecycle.Generated.BehaviorContract
@@ -476,8 +476,6 @@ library
     containers >=0.6,
     contravariant-extras ^>=0.3,
     cron,
-    danwa-api,
-    danwa-client,
     dhall >=1.42,
     directory >=1.3,
     effectful,
@@ -635,6 +633,7 @@ library pack-sdk
 
   reexported-modules:
     Shikigami.Agent.Approval.Workflow,
+    Shikigami.Agent.Conversation.Channel,
     Shikigami.Agent.Loader,
     Shikigami.Agent.Run.Key,
     Shikigami.Agent.Workflow.Name,
@@ -869,6 +868,7 @@ test-suite shikigami-core-postgres-test
     Shikigami.ExecutionSelectionWorkflowSpec
     Shikigami.ExecutionTranscriptSpec
     Shikigami.Fixture.AcknowledgementFlow
+    Shikigami.Fixture.Conversation
     Shikigami.Fixture.DecisionExampleFlow
     Shikigami.Fixture.DecisionExamples
     Shikigami.Fixture.ExamplePack
@@ -919,8 +919,6 @@ test-suite shikigami-core-postgres-test
     bytestring,
     containers,
     contravariant-extras ^>=0.3,
-    danwa-api,
-    danwa-client,
     directory,
     effectful,
     filepath,

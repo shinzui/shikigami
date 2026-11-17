@@ -570,7 +570,7 @@ enqueueRunInfo =
       (\agent payload conversation key workspace -> (runEnqueueRun agent payload conversation key workspace, []))
         <$> argument agentReader (metavar "AGENT")
         <*> payloadArgument
-        <*> switch (long "conversation" <> help "Route the job as a danwa conversation turn instead of an agent run")
+        <*> switch (long "conversation" <> help "Route the job as a conversation turn, read by the agent's conversation channel, instead of an agent run")
         <*> optional (option (eitherReader (first Text.unpack . Addressed.parseRequestKey . Text.pack)) (long "key" <> metavar "TEXT" <> help "Idempotency key; defaults to one derived from the agent and payload"))
         <*> optional (strOption (long "workspace" <> metavar "DIR|mori://…" <> help "Repository the run works in; a local-operator worker opens the run's worktree there"))
 

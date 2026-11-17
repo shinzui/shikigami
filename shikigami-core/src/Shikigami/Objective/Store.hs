@@ -926,7 +926,7 @@ validateSettledSources objective = do
         Nothing -> when required (abort ObjectiveUnavailable)
         Just (state, _) -> unless (state.pendingReceipts == noPendingReceipts && state.phase `elem` [Execution.Succeeded, Execution.Failed, Execution.Cancelled]) (abort ObjectiveUnresolved)
     conversationExecution run turn = do
-      message <- maybe (abort ObjectiveUnavailable) pure (Text.stripPrefix "danwa:user:" (turnReferenceText turn))
+      message <- maybe (abort ObjectiveUnavailable) pure (Text.stripPrefix "conversation:user:" (turnReferenceText turn))
       when (Text.null message) (abort ObjectiveUnavailable)
       pure (Execution.executionIdFor (conversationAssignmentIdFor (runReferenceText run) message))
 

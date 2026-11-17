@@ -30,7 +30,9 @@ import Keiro.Workflow.Resume (resumeWorkflowsOnce)
 import Kiroku.Store.Connection (KirokuStore (..), withStore)
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Agent.Conversation qualified as Conversation
+import Shikigami.Agent.Conversation.Channel (InboundMessage (..))
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (Flow, Skill), IdentityDecl (..), RecordPolicy (Never), defaultDelegationBudget)
+import Shikigami.Agent.Decl qualified as ConversationDecl
 import Shikigami.Agent.DeclarationValue (declarationCoordinate, declarationCoordinateText)
 import Shikigami.Agent.Principal (AgentIdentity (VerifiedIdentity), mkAgentPrincipal)
 import Shikigami.Agent.Run (AgentRunResult (..))
@@ -65,11 +67,11 @@ import Shikigami.Execution.Transcript qualified as Replay
 import Shikigami.ExecutionDriver.Generated.WorkflowRuntime qualified as DriverGenerated
 import Shikigami.ExecutionSelectionWorkflowSpec qualified as SelectionFixture
 import Shikigami.ExecutionTranscriptSpec qualified as Fixture
+import Shikigami.Fixture.Conversation (fixtureChannels, fixtureEventType)
 import Shikigami.Fixture.Outputs (unreachableOutputs)
 import Shikigami.Fixture.RawOutput (danwaConversationKind)
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.FormatVersion (FormatVersion (V1))
-import Shikigami.Integration.Danwa (AddressedMessage (..))
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
 import Shikigami.Objective.Capability qualified as Goal
@@ -117,7 +119,7 @@ conversationCreation fixture = Fixture.withConfiguredResourceFixture fixture id 
   lost <- newIORef False
   let principal = checked mkAgentPrincipal "agent_objectives_conversation"
       actor = VerifiedIdentity principal
-      declaration = (RouterFixture.successSpecialist "worker") & #identity .~ Just (IdentityDecl (declarationCoordinate "agent_objectives_conversation")) & #behavior .~ Skill (declarationCoordinate "../agents/skills/triage-note") & #memory . #recordPolicy .~ Never
+      declaration = (RouterFixture.successSpecialist "worker") & #identity .~ Just (IdentityDecl (declarationCoordinate "agent_objectives_conversation")) & #behavior .~ Skill (declarationCoordinate "../agents/skills/triage-note") & #memory . #recordPolicy .~ Never & #trigger .~ ConversationDecl.Event (declarationCoordinate fixtureEventType)
       settings = O.defaultObjectiveSettings & #enabled .~ O.ObjectivesEnabled & #agentCreation .~ [principal]
       complete model context options = do
         ordinal <- atomicModifyIORef' calls (\n -> (n + 1, n))
@@ -133,7 +135,7 @@ conversationCreation fixture = Fixture.withConfiguredResourceFixture fixture id 
           Nothing -> response
           Just arguments -> response & #message . #stopReason .~ ToolUse & #message . #content .~ Vector.singleton (Content.AssistantToolCall (Content.ToolCall ("conversation-objectives-" <> Text.pack (show ordinal)) "objectives" arguments))
       provider = stubApiProvider & #complete .~ complete & #stream .~ liftCompleteToStream complete
-      message number = AddressedMessage (declarationCoordinate "objective-conversation") (declarationCoordinate ("message-" <> Text.pack (show number))) Nothing (declarationCoordinate "human") "Continue the work" (declarationCoordinate "participant") (declarationCoordinate ("envelope-" <> Text.pack (show number))) (declarationCoordinate "human") now
+      message number = InboundMessage (declarationCoordinate "objective-conversation") (declarationCoordinate ("message-" <> Text.pack (show number))) Nothing (declarationCoordinate "human") "Continue the work" (declarationCoordinate "participant") now
   registry <- Provider.newProviderRegistryFrom [provider]
   directory <- Directory.newDirectoryHandle (Directory.staticDirectorySource [Directory.PrincipalRecord (declarationCoordinate "agent_objectives_conversation") (declarationCoordinate "worker") Directory.Active])
   Directory.refreshDirectory directory >>= (@?= Right ())
@@ -153,6 +155,7 @@ conversationCreation fixture = Fixture.withConfiguredResourceFixture fixture id 
             idleTimeout = checked parseDuration 1800,
             agents = [declaration],
             outputs = unreachableOutputs,
+            channels = fixtureChannels,
             grants = StaticGrants (Map.singleton actor (Set.singleton danwaConversationKind)),
             directory
           }
@@ -222,9 +225,9 @@ oldShapeReplay fixture conversationCase = Fixture.withFixture fixture \env _ _ -
   now <- getCurrentTime
   base <- newBehaviorEnv
   let actor = VerifiedIdentity (checked mkAgentPrincipal "agent_objectives_old_shape")
-      declaration = (RouterFixture.successSpecialist "worker") & #identity .~ Just (IdentityDecl (declarationCoordinate "agent_objectives_old_shape")) & #behavior .~ Skill (declarationCoordinate "../agents/skills/triage-note") & #memory . #recordPolicy .~ Never
+      declaration = (RouterFixture.successSpecialist "worker") & #identity .~ Just (IdentityDecl (declarationCoordinate "agent_objectives_old_shape")) & #behavior .~ Skill (declarationCoordinate "../agents/skills/triage-note") & #memory . #recordPolicy .~ Never & #trigger .~ ConversationDecl.Event (declarationCoordinate fixtureEventType)
       job = addressedRunJob now actor declaration.name AgentWorkflowRoute (Aeson.object []) (checked parseRunKey "old-shape-objectives")
-      message = AddressedMessage (declarationCoordinate "old-objective-conversation") (declarationCoordinate "old-message") Nothing (declarationCoordinate "human") "Original turn" (declarationCoordinate "participant") (declarationCoordinate "envelope") (declarationCoordinate "human") now
+      message = InboundMessage (declarationCoordinate "old-objective-conversation") (declarationCoordinate "old-message") Nothing (declarationCoordinate "human") "Original turn" (declarationCoordinate "participant") now
       run = if conversationCase then Conversation.conversationWorkflowId 0 message else runJobWorkflowId job
       name = if conversationCase then Conversation.conversationWorkflowName else Agent.agentRunWorkflowName
       input = if conversationCase then Aeson.object ["agentName" .= declaration.name, "identity" .= actor, "initialMessage" .= message] else toJSON job
@@ -247,6 +250,7 @@ oldShapeReplay fixture conversationCase = Fixture.withFixture fixture \env _ _ -
             idleTimeout = checked parseDuration 1800,
             agents = [declaration],
             outputs = unreachableOutputs,
+            channels = fixtureChannels,
             grants = StaticGrants (Map.singleton actor (Set.singleton danwaConversationKind)),
             directory
           }
