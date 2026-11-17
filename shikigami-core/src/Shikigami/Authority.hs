@@ -59,6 +59,7 @@ module Shikigami.Authority
     -- * Recording
     recorded,
     recordedIn,
+    recordRunEntry,
     observeDecisions,
     scopeToRun,
     decidedKind,
@@ -82,6 +83,7 @@ import Shikigami.Prelude hiding (at, matching, (.=))
 import Shikigami.Record
   ( ActionRecord (..),
     RecordEntry,
+    RecordError,
     RecordEvent (..),
     RecordKind,
     TierLabel,
@@ -279,6 +281,10 @@ data RunContext = RunContext
 data Authority = Authority
   { origin :: !DecisionSource,
     decideIn :: !(RunContext -> Principal -> Action -> IO (Either AuthorityFailure Decision)),
+    -- | Appends a run's own entry (admission, finish, a delivered effect)
+    -- through the record 'recorded' installed; an unrecorded authority
+    -- appends nothing.
+    noteIn :: !(RunContext -> Principal -> RecordEntry -> IO (Either RecordError ())),
     context :: !RunContext
   }
 
@@ -291,7 +297,7 @@ instance HasField "source" Authority DecisionSource where
 -- | An authority from its decision function.
 authority :: DecisionSource -> (Principal -> Action -> IO (Either AuthorityFailure Decision)) -> Authority
 authority origin decideFn =
-  Authority {origin, decideIn = const decideFn, context = RunContext {run = Nothing, agent = Nothing}}
+  Authority {origin, decideIn = const decideFn, noteIn = \_ _ _ -> pure (Right ()), context = RunContext {run = Nothing, agent = Nothing}}
 
 -- | The value when nothing is composed. It never falls back to a grant table
 -- or to declaration authority.
@@ -328,13 +334,23 @@ recorded ActionRecord {append} tier inner@Authority {origin, decideIn} =
           Right entry ->
             append RecordEvent {at, run, principal = declarationCoordinateText principal, tier, agent, entry} <&> \case
               Left problem -> Left (AuthorityUnavailable ("action record unavailable (" <> recordErrorText problem <> ")"))
-              Right () -> result
+              Right () -> result,
+      noteIn = \RunContext {run, agent} principal entry -> do
+        at <- getCurrentTime
+        append RecordEvent {at, run, principal = declarationCoordinateText principal, tier, agent, entry}
     }
 
 -- | Install an authority over the PostgreSQL action record: the composition
 -- root of every durable process uses this.
 recordedIn :: Log.Logger -> Maybe ShikigamiMetrics -> Pool -> Authority -> Authority
 recordedIn logger metrics pool = recorded (observedRecord logger metrics (postgresRecord pool)) unspecifiedTier
+
+-- | Append one of the run's own entries (@run.admitted@, @run.finished@,
+-- @output.delivered@) with the authority's run context, through the record
+-- it was installed over. The caller decides what a failed append means; an
+-- unrecorded authority (a focused test) appends nothing and succeeds.
+recordRunEntry :: Authority -> Principal -> RecordEntry -> IO (Either RecordError ())
+recordRunEntry Authority {noteIn, context} = noteIn context
 
 -- | Run an observer after every decision, without changing it. Evidence
 -- fixtures use this to write their own trace beside the action record.

@@ -54,6 +54,9 @@ module Shikigami.Record
     defaultRecordLimit,
     readRecord,
     readRecordFile,
+    maxRunEvents,
+    readRunEvents,
+    readRunsWithPayload,
 
     -- * Rendering
     renderRecordEvent,
@@ -64,7 +67,7 @@ import Control.Exception (IOException, try)
 import Data.Aeson (Value, (.:), (.:?), (.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
-import Data.Bifunctor (first)
+import Data.Bifunctor (bimap, first)
 import Data.ByteString qualified as ByteString
 import Data.ByteString.Char8 qualified as ByteString.Char8
 import Data.ByteString.Lazy qualified as LazyByteString
@@ -323,14 +326,7 @@ readRecord pool RecordQuery {run, kinds, limit = RecordLimit limitValue} = do
   result <- Pool.use pool (Session.statement (fmap (.unWorkflowId) run, prefix, refusals, limitValue) readStatement)
   pure case result of
     Left problem -> Left (RecordStoreUnavailable (Text.pack (show problem)))
-    Right rows -> traverse decodeRow rows
-  where
-    decodeRow (at, runId, principal, tierText, agentText, kindText, payload) =
-      first RecordStoreUnavailable do
-        tier <- mkTierLabel tierText
-        agent <- traverse mkAgentName agentText
-        kind <- mkRecordKind kindText
-        pure RecordEvent {at, run = WorkflowId <$> runId, principal, tier, agent, entry = RecordEntry kind payload}
+    Right rows -> traverse decodeEventRow rows
 
 readStatement :: Statement (Maybe Text, Maybe Text, Bool, Int64) [(UTCTime, Maybe Text, Text, Text, Maybe Text, Text, Value)]
 readStatement =
@@ -351,17 +347,80 @@ readStatement =
         <> ((\(_, _, c, _) -> c) >$< Encoders.param (Encoders.nonNullable Encoders.bool))
         <> ((\(_, _, _, d) -> d) >$< Encoders.param (Encoders.nonNullable Encoders.int8))
     )
-    ( Decoders.rowList
-        ( (,,,,,,)
-            <$> Decoders.column (Decoders.nonNullable Decoders.timestamptz)
-            <*> Decoders.column (Decoders.nullable Decoders.text)
-            <*> Decoders.column (Decoders.nonNullable Decoders.text)
-            <*> Decoders.column (Decoders.nonNullable Decoders.text)
-            <*> Decoders.column (Decoders.nullable Decoders.text)
-            <*> Decoders.column (Decoders.nonNullable Decoders.text)
-            <*> Decoders.column (Decoders.nonNullable Decoders.jsonb)
-        )
+    (Decoders.rowList eventRow)
+
+-- | The most events 'readRunEvents' returns for one run.
+maxRunEvents :: Int
+maxRunEvents = 10000
+
+-- | Every event of one run in append order, at most 'maxRunEvents'. The
+-- flag is 'True' when the run has more, so a caller never mistakes a
+-- truncated run for a whole one.
+readRunEvents :: Pool -> WorkflowId -> IO (Either RecordError ([RecordEvent], Bool))
+readRunEvents pool runId = do
+  result <- Pool.use pool (Session.statement (runId.unWorkflowId, fromIntegral (maxRunEvents + 1)) runEventsStatement)
+  pure case result of
+    Left problem -> Left (RecordStoreUnavailable (Text.pack (show problem)))
+    Right rows -> do
+      events <- traverse decodeEventRow rows
+      pure (take maxRunEvents events, length events > maxRunEvents)
+
+-- | The runs (at most 100) with an entry of this kind whose payload field
+-- has this text value, for example every run admitted under one key.
+readRunsWithPayload :: Pool -> RecordKind -> Text -> Text -> IO (Either RecordError [WorkflowId])
+readRunsWithPayload pool kind name value =
+  bimap (RecordStoreUnavailable . Text.pack . show) (fmap WorkflowId)
+    <$> Pool.use pool (Session.statement (recordKindText kind, name, value) runsWithPayloadStatement)
+
+decodeEventRow :: (UTCTime, Maybe Text, Text, Text, Maybe Text, Text, Value) -> Either RecordError RecordEvent
+decodeEventRow (at, runId, principal, tierText, agentText, kindText, payload) =
+  first RecordStoreUnavailable do
+    tier <- mkTierLabel tierText
+    agent <- traverse mkAgentName agentText
+    kind <- mkRecordKind kindText
+    pure RecordEvent {at, run = WorkflowId <$> runId, principal, tier, agent, entry = RecordEntry kind payload}
+
+eventRow :: Decoders.Row (UTCTime, Maybe Text, Text, Text, Maybe Text, Text, Value)
+eventRow =
+  (,,,,,,)
+    <$> Decoders.column (Decoders.nonNullable Decoders.timestamptz)
+    <*> Decoders.column (Decoders.nullable Decoders.text)
+    <*> Decoders.column (Decoders.nonNullable Decoders.text)
+    <*> Decoders.column (Decoders.nonNullable Decoders.text)
+    <*> Decoders.column (Decoders.nullable Decoders.text)
+    <*> Decoders.column (Decoders.nonNullable Decoders.text)
+    <*> Decoders.column (Decoders.nonNullable Decoders.jsonb)
+
+runEventsStatement :: Statement (Text, Int64) [(UTCTime, Maybe Text, Text, Text, Maybe Text, Text, Value)]
+runEventsStatement =
+  preparable
+    """
+    SELECT at, run_id, principal, tier, agent, kind, payload
+      FROM shikigami.action_record
+     WHERE run_id = $1
+     ORDER BY seq ASC
+     LIMIT $2
+    """
+    ( (fst >$< Encoders.param (Encoders.nonNullable Encoders.text))
+        <> (snd >$< Encoders.param (Encoders.nonNullable Encoders.int8))
     )
+    (Decoders.rowList eventRow)
+
+runsWithPayloadStatement :: Statement (Text, Text, Text) [Text]
+runsWithPayloadStatement =
+  preparable
+    """
+    SELECT DISTINCT run_id
+      FROM shikigami.action_record
+     WHERE kind = $1 AND payload->>$2 = $3 AND run_id IS NOT NULL
+     ORDER BY run_id
+     LIMIT 100
+    """
+    ( ((\(a, _, _) -> a) >$< Encoders.param (Encoders.nonNullable Encoders.text))
+        <> ((\(_, b, _) -> b) >$< Encoders.param (Encoders.nonNullable Encoders.text))
+        <> ((\(_, _, c) -> c) >$< Encoders.param (Encoders.nonNullable Encoders.text))
+    )
+    (Decoders.rowList (Decoders.column (Decoders.nonNullable Decoders.text)))
 
 -- | Read a JSON Lines record written by 'fileRecord', applying the same
 -- query. A malformed line is reported, never skipped silently.
@@ -417,6 +476,7 @@ renderRecordEvent RecordEvent {at, run, principal, tier, agent, entry} =
             <> maybe ["run", arguments] (\remote -> [remote | remote /= "-"]) (field "remote")
             <> maybe [] (\code -> ["exit " <> code]) (number "exitCode")
             <> maybe [] pure (field "reason")
+        ("output.delivered", _, _) -> ["delivered", maybe "?" id (field "output") <> " " <> maybe "" (Text.take 120) (field "location")]
         (_, Just "allowed", _) -> ["allowed"]
         (_, Just _, Just detail) -> ["refused " <> detail]
         (_, Just decision, Nothing) -> ["refused " <> decision]

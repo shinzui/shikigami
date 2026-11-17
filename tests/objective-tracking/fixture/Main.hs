@@ -85,7 +85,7 @@ authorityApplication prefix = do
         body <- strictRequestBody request
         case Aeson.eitherDecode body of
           Right (accepted :: Kikan.AuthorizeActionRequest)
-            | Kikan.agentPrincipalText accepted.principal `elem` ["agent_01h000000000000000triage", "agent_01h000000000000000coordinator", "agent_01h000000000000000successor", "agent_01h000000000000000watchdog"] -> do
+            | Kikan.agentPrincipalText accepted.principal `elem` ["agent_01h000000000000000triage", "agent_01h000000000000000coordinator", "agent_01h000000000000000successor", "agent_01h000000000000000watchdog", "agent_01h000000000000000portable"] -> do
                 now <- getCurrentTime
                 let expiry = addUTCTime 30 now
                     grant = Grant.EnGrant (SubjectId (ObjectRef (ObjectType "agent") (Kikan.agentPrincipalText accepted.principal))) (RelationName (Kikan.actionOperation accepted.action)) (ObjectRef (ObjectType (Kikan.actionObjectType accepted.action)) (Kikan.actionObjectId accepted.action)) (En.ConsistencyToken "objective-fixture") (En.SchemaHash "objective-fixture-schema") expiry (Grant.Audience "shikigami") (Just (Grant.RequestId (Kikan.requestIdText accepted.requestId))) Nothing

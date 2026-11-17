@@ -62,6 +62,7 @@ library
     Shikigami.Agent.Run.Key
     Shikigami.Agent.RunFailure
     Shikigami.Agent.RunJob
+    Shikigami.Agent.RunRecord
     Shikigami.Agent.Skill
     Shikigami.Agent.Workflow
     Shikigami.Agent.Workflow.Input
@@ -302,6 +303,7 @@ library
     Shikigami.Program.Runtime
     Shikigami.Program.Task
     Shikigami.Record
+    Shikigami.Record.Invariant
     Shikigami.RecurringCheckpointCycle.Generated.WorkflowFacts
     Shikigami.RecurringCheckpointCycle.Generated.WorkflowRuntime
     Shikigami.RecurringObjective.Generated.WorkflowFacts
@@ -779,6 +781,7 @@ test-suite shikigami-core-test
     Shikigami.PayloadValueSpec
     Shikigami.PlaybookSpec
     Shikigami.ProcessLocalSpec
+    Shikigami.RecordInvariantSpec
     Shikigami.RecordSpec
     Shikigami.RouterCatalogSpec
     Shikigami.RouterDecisionSpec

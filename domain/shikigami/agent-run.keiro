@@ -11,6 +11,7 @@ workflow AgentRun
     step ingest-job -> RunJob
     step validate-execution-root -> ResourceAdmission
     step lookup-agent -> AgentDecl
+    step record-admission -> RecordedAdmission
     step resolve-profile -> ProfileResolution
     step resolve-capability-overlays -> CapabilityOverlayResolution
     step resolve-governed-capability-overlays -> CapabilityOverlayResolution
@@ -41,6 +42,7 @@ workflow AgentRun
     step fail-session -> FailedSession
     step record -> RecordedLearning
     step complete -> CompletedSession
+    step record-finish -> RecordedFinish
     child delegate id input via delegatedWorkflowIdV2 -> AgentRunResult
     child coding-agent id input via codingAgentStepWorkflowId -> CodingAgentOutcome
     child declared-tool id input via declaredToolStepWorkflowId -> ToolStepOutcome

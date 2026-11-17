@@ -50,7 +50,7 @@ import Data.Aeson qualified as Aeson
 import Data.Aeson.Key qualified as Key
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Bifunctor (first)
-import Data.Foldable (traverse_)
+import Data.Foldable (for_, traverse_)
 import Data.Generics.Labels ()
 import Data.List (find)
 import Data.Map.Strict qualified as Map
@@ -111,13 +111,14 @@ import Shikigami.Agent.Principal (AgentIdentity (UnresolvedLegacyIdentity), Reso
 import Shikigami.Agent.Run (AgentRunResult (..), behaviorKindText, recallAgentLearnings, recallQuery, renderLearning)
 import Shikigami.Agent.Run.Key (runKeyText)
 import Shikigami.Agent.RunFailure (AgentRunFailure (..), agentRunFailureDetail)
-import Shikigami.Agent.RunJob (RunJob (..), runJobWorkflowId)
+import Shikigami.Agent.RunJob (RunJob (..), TriggerKind (..), runJobWorkflowId)
+import Shikigami.Agent.RunRecord qualified as RunRecord
 import Shikigami.Agent.Workflow.Name (agentRunWorkflowName, ingestJobStepName)
 import Shikigami.App (AppEffects, AppEnv (..), runAppIO)
 import Shikigami.Attestation.PolicyValue qualified as DecisionLimits
 import Shikigami.Attestation.Profile (ProfileId (..), ProfileVersion (..))
 import Shikigami.Attestation.Resolve (ProfileResolutionError, ResolvedProfile, ResolvedProfileView (..), renderProfileResolutionError, resolvedProfileView)
-import Shikigami.Authority (Action (EmitOutput), Authority (..), AuthorityFailure (InvalidCoordinates), mkOutputTarget, outputKindText, scopeToRun)
+import Shikigami.Authority (Action (EmitOutput), Authority, AuthorityFailure (InvalidCoordinates), mkOutputTarget, outputKindText, recordRunEntry, scopeToRun)
 import Shikigami.Behavior.Error (RunError, TransientBehaviorFailure (..), boundedBehaviorDetail)
 import Shikigami.Behavior.Provider (ProfileViolation, constrainBehaviorEnv, renderProfileViolation)
 import Shikigami.Behavior.Provider.Coordinate (providerCoordinateText)
@@ -144,12 +145,13 @@ import Shikigami.Decision.Evidence qualified as DecisionEvidence
 import Shikigami.Decision.Execution qualified as DecisionExecution
 import Shikigami.Decision.ModelCatalog qualified as ModelCatalog
 import Shikigami.DeclaredTool.Workflow (DeclaredToolRunners, declaredToolStepRegistry, noDeclaredTools)
-import Shikigami.Directory (DirectoryHandle)
+import Shikigami.Directory (DirectoryHandle, consultIdentityLifecycle)
 import Shikigami.Directory qualified as Directory
 import Shikigami.Duration
 import Shikigami.Execution.Attempt qualified as ExecutionAttempt
 import Shikigami.Execution.Driver qualified as ExecutionDriver
 import Shikigami.Execution.Executor qualified as Executor
+import Shikigami.Execution.Identity (executionRootIdText)
 import Shikigami.Execution.Policy.Types qualified as Harness
 import Shikigami.Execution.Request (ExecutionPolicy (..), ExecutionRequest (..))
 import Shikigami.Execution.Resources (ResourceError)
@@ -191,6 +193,7 @@ import Shikigami.Playbook.Run (PlaybookAgent (..), runPlaybook)
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.Program.DecisionRunner (DecisionAbort (..))
 import Shikigami.Program.DecisionRunner qualified as DecisionRunner
+import Shikigami.Record (RecordEntry, RecordError, recordErrorText)
 import Shikigami.Repository (RepositoryId)
 import Shikigami.RuntimePolicy (DefaultModelRequirement (DefaultModelOptional), defaultModelRequired)
 import Shikigami.Sink (DanwaConfig, DeliveryGuard (..), GrantSource, KanmonConfig, KawaConfig, KizashiConfig, ReiConfig, SinkContext (..), SinkOutcome (..), SinkResult (..), dispatch, sinkKindOf)
@@ -385,7 +388,58 @@ runAdmittedAgent deps job = do
     Nothing -> pure (Left (PermanentAgentRunFailure ("unknown agent " <> (agentNameText ((.agentName) job)))))
     -- Every decision made for this run is recorded against it. The authority
     -- is process-local wiring and is never journaled.
-    Just decl -> runResolvedAgent (deps & #actionAuthority %~ scopeToRun (Just (runJobWorkflowId job)) job.agentName) job decl
+    Just decl -> do
+      let scoped = deps & #actionAuthority %~ scopeToRun (Just (runJobWorkflowId job)) job.agentName
+      -- The admission and the end of every admitted run are record
+      -- entries (EP-8 M3), each appended once inside its own journaled
+      -- step. An admission that cannot be recorded is retried, never run
+      -- unaccounted.
+      runStep scoped (StepName "record-admission") (liftIO (recordAdmission scoped job decl))
+      result <- runResolvedAgent scoped job decl
+      runStep scoped (StepName "record-finish") (liftIO (recordFinish scoped job result))
+      pure result
+
+-- | Append @run.admitted@ for the journaled declaration.
+recordAdmission :: AgentRunDeps -> RunJob -> AgentDecl -> IO ()
+recordAdmission deps job decl = do
+  lifecycle <- consultIdentityLifecycle (depsDirectory deps) job.identity
+  let admission =
+        RunRecord.RunAdmission
+          { digest = RunRecord.declarationDigest decl,
+            trigger = runTriggerLabel job.triggerKind,
+            idempotencyKey = jobIdempotencyKey job,
+            root = executionRootIdText <$> job.executionRootId,
+            timeout = durationTime deps.runTimeout,
+            lifecycle = RunRecord.lifecycleLabel lifecycle,
+            outputs = resolveOutputs deps.outputs decl.outputs
+          }
+  appendRunEntry deps job (RunRecord.admissionEntry admission) >>= \case
+    Right () -> pure ()
+    Left problem -> throwIO (TransientBehaviorFailure ("run admission could not be recorded: " <> problem))
+
+-- | Append @run.finished@. A run that already ended is not failed again
+-- because its last entry could not be written; the operator log says so.
+recordFinish :: AgentRunDeps -> RunJob -> Either AgentRunFailure AgentRunResult -> IO ()
+recordFinish deps job result =
+  appendRunEntry deps job (RunRecord.finishEntry (either (RunRecord.FinishedFailed . agentRunFailureDetail) (const RunRecord.Finished) result)) >>= \case
+    Right () -> pure ()
+    Left problem -> Log.logError (depsLogger deps) "record.run_finished_unrecorded" ["reason" .= problem, Log.runIdKey .= (runJobWorkflowId job).unWorkflowId]
+
+-- | Append one of the run's entries. A run whose identity has no principal
+-- text (an unresolved legacy identity) is recorded with an empty principal,
+-- which @record check@ reports as a K1 violation, rather than not at all.
+appendRunEntry :: AgentRunDeps -> RunJob -> Either RecordError RecordEntry -> IO (Either Text ())
+appendRunEntry deps job = \case
+  Left problem -> pure (Left (recordErrorText problem))
+  Right entry -> first recordErrorText <$> recordRunEntry deps.actionAuthority (declarationCoordinate (either (const "") id (identityText job.identity))) entry
+
+runTriggerLabel :: TriggerKind -> Text
+runTriggerLabel = \case
+  TriggeredBySchedule -> "schedule"
+  TriggeredByStream -> "stream"
+  TriggeredByEvent -> "event"
+  TriggeredByDelegation -> "delegation"
+  TriggeredByOperator -> "operator"
 
 runAgentRunWorkflow ::
   AgentRunDeps ->
@@ -983,12 +1037,23 @@ deliverOutputs deps policy sid job decl output = do
       Just adapter -> do
         let runId = runJobWorkflowId job
         decided <- case (identityText ((.identity) job), mkOutputTarget (runId.unWorkflowId :| [Text.pack (show ordinal)])) of
-          (Right principal, Right target) -> deps.actionAuthority.decide (declarationCoordinate principal) (EmitOutput decl'.kind target)
+          (Right principal, Right target) -> do
+            let action = EmitOutput decl'.kind target
+            fmap (action,) <$> deps.actionAuthority.decide (declarationCoordinate principal) action
           (Left problem, _) -> pure (Left (InvalidCoordinates problem))
           (_, Left problem) -> pure (Left (InvalidCoordinates problem))
         case decided of
           Left refusal -> pure (Left (kindOf decl' <> " was refused: " <> Text.pack (show refusal)))
-          Right _ -> adapter.deliver OutputDelivery {run = runId, agent = decl.name, ordinal, output = decl', result = output}
+          Right (action, _) -> do
+            delivered <- adapter.deliver OutputDelivery {run = runId, agent = decl.name, ordinal, output = decl', result = output}
+            -- The effect is recorded after it happened; the decision was
+            -- recorded before. A delivered output whose entry cannot be
+            -- written is reported, not delivered twice.
+            for_ delivered \receipt ->
+              appendRunEntry deps job (RunRecord.deliveredEntry "deliver-outputs" action receipt) >>= \case
+                Right () -> pure ()
+                Left problem -> Log.logError (depsLogger deps) "record.output_delivered_unrecorded" ["reason" .= problem, Log.runIdKey .= runId.unWorkflowId]
+            pure delivered
 
 finishRunFailure ::
   AgentRunDeps ->

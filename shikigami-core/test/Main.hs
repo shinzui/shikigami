@@ -73,6 +73,7 @@ import Shikigami.PackageArchitectureSpec qualified as PackageArchitectureSpec
 import Shikigami.PayloadValueSpec qualified as PayloadValueSpec
 import Shikigami.PlaybookSpec qualified as PlaybookSpec
 import Shikigami.ProcessLocalSpec qualified as ProcessLocalSpec
+import Shikigami.RecordInvariantSpec qualified as RecordInvariantSpec
 import Shikigami.RecordSpec qualified as RecordSpec
 import Shikigami.RouterCatalogSpec qualified as RouterCatalogSpec
 import Shikigami.RouterDecisionSpec qualified as RouterDecisionSpec
@@ -164,6 +165,7 @@ main =
           KernelBoundarySpec.tests,
           AuthoritySpec.tests,
           RecordSpec.tests,
+          RecordInvariantSpec.tests,
           LocalOperatorSpec.tests,
           LocalHostSpec.tests,
           DeclaredToolsSpec.tests,

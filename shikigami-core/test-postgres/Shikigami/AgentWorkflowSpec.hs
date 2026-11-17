@@ -8,6 +8,7 @@ import Control.Monad (forM_, void, when)
 import Data.Aeson (Result (..), ToJSON, Value (..), eitherDecode, fromJSON, object, toJSON, (.=))
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Bifunctor (first)
+import Data.Containers.ListUtils (nubOrd)
 import Data.Functor.Contravariant ((>$<))
 import Data.Generics.Labels ()
 import Data.IORef (IORef, atomicModifyIORef', modifyIORef', newIORef, readIORef, writeIORef)
@@ -15,7 +16,7 @@ import Data.List (elemIndex, find)
 import Data.List.NonEmpty qualified as NonEmpty
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
-import Data.Maybe (fromMaybe, isJust)
+import Data.Maybe (fromMaybe, isJust, listToMaybe)
 import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as Text
@@ -99,7 +100,7 @@ import Shikigami.Attestation.Profile
     unlimitedProfileLimits,
   )
 import Shikigami.Attestation.Resolve (ProfileResolutionError (..), ResolvedProfile, parseResolvedProfile, postgresProfileStore, resolveProfile)
-import Shikigami.Authority (allowAllForTests)
+import Shikigami.Authority (allowAllForTests, recorded)
 import Shikigami.Behavior.Error (TransientBehaviorFailure (..))
 import Shikigami.Behavior.Provider.Coordinate qualified as Coordinate
 import Shikigami.Behavior.Run (BehaviorEnv, newBehaviorEnv, newBehaviorEnvWithTraceSink)
@@ -135,6 +136,8 @@ import Shikigami.Memory.Scope (agentScope, legacyAgentScope)
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Shikigami.Output (emptyOutputRegistry)
 import Shikigami.Pack.Setting (noPackSettings)
+import Shikigami.Record (RecordEvent (..), memoryRecord, recordEntry, recordKindText, unspecifiedTier)
+import Shikigami.Record.Invariant (RunCheck (..), RunFacts (..), checkRun)
 import Shikigami.RunEvidence.Catalog qualified as ExecutionCatalog
 import Shikigami.RunEvidenceSpec (completeScenarioEvidence)
 import Shikigami.RunJobs qualified as RunJobs
@@ -488,6 +491,26 @@ tests databaseFixture =
                 assertEqual "open-session replayed the original session id" firstSessionId secondSessionId
                 assertEqual "dispatch-sinks enqueued one stable outbox row" (Right 1) (length <$> outboxRows)
               other -> assertEqual "both workflow runs complete successfully" "completed twice" (show other),
+      -- EP-8 M3: admission and finish are record entries appended inside
+      -- journaled steps, so a replay of a completed run appends nothing, and
+      -- the run's record satisfies the kernel invariants.
+      testCase "a run's record pins its admission once and holds the invariants across a replay" do
+        (withShikigamiFreshDatabase databaseFixture) \connStr ->
+          withStore (defaultConnectionSettings connStr) \_kirokuStore -> do
+            tracer <- noopTracer
+            behaviorEnv <- newBehaviorEnv
+            (record, events) <- memoryRecord
+            let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
+                deps = testDeps appEnv behaviorEnv defaultAgentRunHooks & #actionAuthority .~ recorded record unspecifiedTier allowAllForTests
+            _ <- runAgentRunWorkflow deps job
+            _ <- runAgentRunWorkflow deps job
+            appended <- events
+            let kinds = recordKindText . fst . recordEntry . (.entry) <$> appended
+                runId = runJobWorkflowId job
+            assertEqual "one admission and one finish" (["run.admitted"], ["run.finished"]) (filter (== "run.admitted") kinds, filter (== "run.finished") kinds)
+            assertEqual "the admission comes first" (Just "run.admitted") (listToMaybe kinds)
+            assertEqual "every entry is the run's" [Just runId] (nubOrd ((.run) <$> appended))
+            assertEqual "no invariant is broken" [] (checkRun RunFacts {run = runId, keyAdmissions = [runId]} appended).violations,
       -- The two-phase gate, and the reason both phases exist: the enqueue-time
       -- check decides whether an outbox row is written at all, and the
       -- publish-time check revalidates before delivery. A revocation landing
@@ -2627,6 +2650,7 @@ expectedLifecycleSteps =
     [ "ingest-job",
       "validate-execution-root",
       "lookup-agent",
+      "record-admission",
       "resolve-profile",
       "resolve-capability-overlays",
       "resolve-execution-selection",
@@ -2638,7 +2662,8 @@ expectedLifecycleSteps =
       "run-behavior-v2",
       "dispatch-sinks",
       "record",
-      "complete"
+      "complete",
+      "record-finish"
     ]
 
 isRight' :: Either a b -> Bool

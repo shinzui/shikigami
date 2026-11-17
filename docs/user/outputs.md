@@ -43,8 +43,24 @@ in  A.Agent::{ …, outputs = [ Local.report Local.Format.Json ] }
 A declaration naming a kind this composition does not register is refused before the run,
 with the kinds that are registered. Every delivery is decided as `emit_output` by the run's
 authority and appears in `shikigami-local ledger`; the local operator's authority allows
-`local.*` outputs, which only write on your machine. The Kikan sinks (`sinks`) keep their own
-path until they move to output adapters.
+`local.*` outputs, which only write on your machine. Each delivered output also appends an
+`output.delivered` record entry naming the exact action that was allowed.
+
+`kawa.digest` publishes the result to the Kawa doorway as one activity envelope, with the
+configuration `{"subjectKind": …, "verb": …}`. A `shikigami-worker` registers it, and gives it
+to a declaration with no outputs when `outputs.default` is `kawa.digest` (the default is `none`:
+the result stays in the journal). The other Kikan sinks (`sinks`) keep their own path until
+they move to output adapters.
+
+## One declaration, two compositions
+
+A declaration that names only kernel vocabulary runs unchanged under the stock local-operator
+composition and under a Kikan composition. `agents/proof/portable-note.dhall` is that check: it
+has a principal, a Skill and nothing else, so it reports to `local.report` in the first and to
+`kawa.digest` in the second. `shikigami record check --run <id>` reads each run's record and
+reports which kernel invariants it shows broken. A capability overlay is not kernel vocabulary:
+`workspace.read` exists only in the light commands, and a worker refuses a declaration that asks
+for it.
 
 ## Approving before delivery
 

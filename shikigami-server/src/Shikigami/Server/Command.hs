@@ -86,7 +86,7 @@ import Shikigami.Server.Command.ObjectiveTrackers
 import Shikigami.Server.Command.Objectives
 import Shikigami.Server.Command.Ops (opsConfigSources, opsInvocationParser, runOps)
 import Shikigami.Server.Command.PublishFixture (runPublishFixture)
-import Shikigami.Server.Command.Record (RecordListOptions (..), runRecordList)
+import Shikigami.Server.Command.Record (RecordCheckOptions (..), RecordListOptions (..), runRecordCheck, runRecordList)
 import Shikigami.Server.Command.RenderLifecycle (runRenderLifecycle)
 import Shikigami.Server.Command.ResolveApproval (resolveApprovalOptionsParser, runResolveApproval)
 import Shikigami.Server.Command.Resources (runResourcesInspect)
@@ -265,8 +265,15 @@ adminContext verb config =
 -- | Read the kernel action record: every authority decision and every
 -- external effect, oldest first.
 recordInfo :: ParserInfo AdminAction
-recordInfo = info (subparser (command "list" listInfo) <**> helper) (progDesc "Read the action record of authority decisions and effects")
+recordInfo = info (subparser (command "list" listInfo <> command "check" checkInfo) <**> helper) (progDesc "Read the action record of authority decisions and effects")
   where
+    checkInfo = info (checking <**> helper) (progDesc "Check one run's record against the kernel invariants K1 to K8")
+    checking =
+      (\options -> (runRecordCheck options, []))
+        <$> ( RecordCheckOptions
+                <$> (Text.pack <$> strOption (long "run" <> metavar "WORKFLOW-ID" <> help "the run to check"))
+                <*> switch (long "json" <> help "print one JSON object")
+            )
     listInfo = info (listing <**> helper) (progDesc "Print the most recent matching record events, oldest first")
     listing =
       (\options -> (runRecordList options, []))

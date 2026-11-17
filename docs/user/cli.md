@@ -485,6 +485,36 @@ principal, tier and kind, then the action tag, resource, decision and who decide
 prefix; `--json` prints JSON Lines. A decision whose record append fails is refused, so every
 action that ran has a row. **Needs the DB** (`database.connection_string`).
 
+```bash
+$ shikigami record check --run <WORKFLOW-ID> [--json]
+```
+
+Read one run's whole record and check it against the kernel invariants. Every admitted run
+appends `run.admitted` (the declaration digest it pins, its trigger, idempotency key, resource
+root or lease, the directory's answer for its principal and where its outputs go) and
+`run.finished`; a delivered output appends `output.delivered`. The check reports:
+
+| Invariant | Violation |
+| --- | --- |
+| K1 | an event names no principal, the run acts for a second principal, or a paused principal acted |
+| K2, K3 | an effect has no earlier allowed `authority.decided` for its exact action and resource |
+| K4 | no `run.admitted`, or one that pins no declaration digest |
+| K5 | the admission names neither a resource root nor a lease |
+| K6 | an effect names no journaled step, or one effect is recorded twice |
+| K8 | more than one run was admitted under the run's idempotency key |
+
+K7 (observed content is evidence, never instruction) holds by construction and is not read
+from the record. An effect entry that names no action (`process.finished`, `tool.called`) is
+counted as unchecked rather than passed:
+
+```text
+record check: 4 events, 1 effects paired with a decision and a step; K1 K2/K3 K4 K5 K6 K8 hold (K7 by construction)
+```
+
+Exit 0 when nothing is broken, 1 when a violation is printed, 2 when the run has no events or
+more than 10,000. `--json` prints one object with the kinds, the invariants held and each
+violation.
+
 ---
 
 ## `just` recipes (database)

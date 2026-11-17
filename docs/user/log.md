@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-11-16
+* **Addition**: DOC-13 documents `shikigami record check` and the `run.admitted`, `run.finished` and `output.delivered` entries; DOC-23 explains the `kawa.digest` output, the worker's `outputs.default` and the portability check (EP-8 M3).
+
 ## 2026-11-15
 * **Update**: DOC-25 covers `Reflect` steps, learnings, suggestion branches, `FromStep` fan-out and attached skills; DOC-6 points to playbooks (EP-4 M3, M4).
 * **Addition**: DOC-25 explains playbooks: bundles, `playbook validate`, the `Playbook` behavior, approvals and `--resume` (EP-4).

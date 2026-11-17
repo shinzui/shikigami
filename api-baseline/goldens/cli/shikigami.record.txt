@@ -8,3 +8,5 @@ Available options:
 Available commands:
   list                     Print the most recent matching record events, oldest
                            first
+  check                    Check one run's record against the kernel invariants
+                           K1 to K8
