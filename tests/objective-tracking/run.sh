@@ -36,8 +36,11 @@ project_cabal() {
   if [ -n "${SHIKIGAMI_CABAL_PROJECT:-}" ]; then arguments+=("--project-file=$SHIKIGAMI_CABAL_PROJECT"); fi
   (cd "$repo_root"; command cabal "${arguments[@]}" "$@")
 }
-project_cabal build exe:shikigami-migrate exe:shikigami-server exe:shikigami-worker exe:shikigami exe:shikigami-objective-fixture
-for executable in shikigami-migrate shikigami-server shikigami-worker shikigami shikigami-objective-fixture; do
+# The scenario authorizes through the Kikan-En fixture authority and replies
+# through a danwa.conversation output on the Danwa conversation channel, which
+# only the Kikan distribution composes (plan 135, M2 to M5).
+project_cabal build exe:shikigami-migrate kikan-shikigami:exe:kikan-shikigami-server kikan-shikigami:exe:kikan-shikigami-worker kikan-shikigami:exe:kikan-shikigami exe:shikigami-objective-fixture
+for executable in shikigami-migrate kikan-shikigami-server kikan-shikigami-worker kikan-shikigami shikigami-objective-fixture; do
   project_cabal list-bin "exe:$executable" >"$work_dir/$executable.path"
 done
 

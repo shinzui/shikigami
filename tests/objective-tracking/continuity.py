@@ -19,7 +19,7 @@ REPO, WORK, CONNECTION = Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3]
 RUNTIME = WORK / "runtime"
 PORTS = json.loads((WORK / "ports.json").read_text())
 BINS = {name: (WORK / (name + ".path")).read_text().strip() for name in
-        ["shikigami", "shikigami-server", "shikigami-worker", "shikigami-objective-fixture"]}
+        ["kikan-shikigami", "kikan-shikigami-server", "kikan-shikigami-worker", "shikigami-objective-fixture"]}
 TOKEN = secrets.token_urlsafe(24)
 BASE = f"http://127.0.0.1:{PORTS['http']}"
 ACTOR = "agent_01h000000000000000triage"
@@ -135,7 +135,7 @@ def command(goal, key, revision, tag, contents=None, expected=200):
 def operator_command(goal, key, revision, tag, contents):
     path = WORK / "operator-command.json"
     path.write_text(json.dumps({"tag": tag, "contents": contents}))
-    value = subprocess.check_output([BINS["shikigami"], "--config", str(CONFIG), "objectives", "command", goal,
+    value = subprocess.check_output([BINS["kikan-shikigami"], "--config", str(CONFIG), "objectives", "command", goal,
         "--operation-key", key, "--expected-revision", str(revision), "--file", str(path), "--json"], cwd=RUNTIME, env=ENV, text=True)
     return json.loads(value)
 
@@ -149,7 +149,7 @@ def conversation(message, payload):
     subprocess.check_call([BINS["shikigami-objective-fixture"], "enqueue-conversation", str(CONFIG), "ir13-conversation", message, json.dumps(payload)], cwd=RUNTIME, env=ENV)
     # A completed turn is an owning journal fact. Reply transport permission is
     # independent of objective access and remains denied by this fixture's C11.
-    query = "SELECT count(*) FROM keiro.keiro_workflow_steps WHERE workflow_name='shikigami.danwa-conversation' AND step_name='turn-result'"
+    query = "SELECT count(*) FROM keiro.keiro_workflow_steps WHERE workflow_name='shikigami.conversation' AND step_name='turn-result'"
     wanted = 1 if message == "first" else 2
     wait_for(lambda: int(sql(query)) >= wanted, "recorded conversation turn")
 
@@ -170,7 +170,7 @@ def propose(goal, key, artifact, checks):
 server = worker = gate = None
 write_config()
 try:
-    server = start("shikigami-server", ["--host", "127.0.0.1", "--port", str(PORTS["http"])])
+    server = start("kikan-shikigami-server", ["--host", "127.0.0.1", "--port", str(PORTS["http"])])
     ready(server)
     api("GET", "/objectives", expected=401, authenticated=False)
 
@@ -182,7 +182,7 @@ try:
     wait_for(lambda: sql(f"SELECT count(*) FROM pg_locks WHERE locktype='advisory' AND objid={guard} AND granted") == "1", "owned acknowledgement gate")
     sql(f"CREATE FUNCTION shikigami.hold_objective_ack() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.body->>'kind'='operation-outcome' AND NEW.body::text LIKE '%ObjectiveCreated%' THEN PERFORM pg_advisory_xact_lock({guard}); END IF; RETURN NEW; END $$; CREATE TRIGGER hold_objective_ack BEFORE INSERT ON shikigami.execution_payloads FOR EACH ROW EXECUTE FUNCTION shikigami.hold_objective_ack()")
     bootstrap = request_run("triage", "autonomous-create", {"scenario": "bootstrap"})
-    worker = start("shikigami-worker")
+    worker = start("kikan-shikigami-worker")
     wait_for(lambda: sql(f"SELECT count(*) FROM pg_locks WHERE locktype='advisory' AND objid={guard} AND NOT granted") == "1", "committed creation before tool outcome")
     original = json.loads(sql("SELECT receipt FROM shikigami.objective_origins WHERE origin->>'tag'='ExecutionOrigin'"))
     autonomous = original["objectiveId"]
@@ -198,9 +198,9 @@ try:
     server = None
     config["objectives"]["agentCreation"] = []
     write_config()
-    server = start("shikigami-server", ["--host", "127.0.0.1", "--port", str(PORTS["http"])])
+    server = start("kikan-shikigami-server", ["--host", "127.0.0.1", "--port", str(PORTS["http"])])
     ready(server)
-    worker = start("shikigami-worker")
+    worker = start("kikan-shikigami-worker")
     run_done("triage", bootstrap)
     replayed = json.loads(sql("SELECT receipt FROM shikigami.objective_origins WHERE origin->>'tag'='ExecutionOrigin'"))
     assert original == replayed
@@ -299,7 +299,7 @@ try:
     server = None
     config["http"]["auth"]["caller"] = "ir13-intruder"
     write_config()
-    server = start("shikigami-server", ["--host", "127.0.0.1", "--port", str(PORTS["http"])])
+    server = start("kikan-shikigami-server", ["--host", "127.0.0.1", "--port", str(PORTS["http"])])
     ready(server)
     api("GET", "/objectives/" + autonomous, expected=404)
     command(autonomous, "intruder-mutation", 5, "SetNextAction", ["forbidden"], expected=403)

@@ -1030,7 +1030,15 @@ tests only, by the user's choice of no sibling stacks). EP-10 M4 is accepted on 
 (`6268f9bf`): the kernel's objective tracker runtime is provider-neutral, a pack installs a
 provider on `FlowPack.trackerProviders`, and the Rei provider and its real-Rei suite run from
 the binding (17/17 against a disposable Rei at the pinned commit); the server composes packs
-as `kikan-shikigami-server`. Next in order are EP-10 M5 and M6 and EP-11 M2 to M4. Stage 1 (the pilot) ends at the declaration baseline, and stage 2 at
+as `kikan-shikigami-server`. EP-10 M5 is accepted on 2026-11-17 (`6b7b39dc`, `f3774b9d`): the
+Kawa stream and event consumers are the distribution's (`kikan-shikigami-consume-stream`,
+`kikan-shikigami-consume-events`, the binding's `intake` library) and no stock package links
+Kafka. By the user's decision the conversation loop stays in the kernel behind a
+conversation-channel port, with Danwa as the binding's channel and the workflow renamed
+`shikigami.conversation`. Against the global Redpanda, a published envelope and a Danwa
+addressed message each ran end to end through the distribution. The objective continuity
+scenario now composes the distribution but exposes a restart-recovery defect (FRIC-99). Next
+in order are EP-10 M6 and EP-11 M2 to M4. Stage 1 (the pilot) ends at the declaration baseline, and stage 2 at
 the kernel baseline.
 
 - [ ] Architectural acceptance: the keiro modernization campaign runs for real on at least

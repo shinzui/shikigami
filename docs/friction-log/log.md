@@ -2,6 +2,9 @@
 
 ## 2026-11-17
 
+* **Addition**: FRIC-99 records detour tooling friction with mori://shinzui/shikigami: The objective continuity scenario strands its run after the injected worker kill
+
+
 * **Addition**: FRIC-98 records detour tooling friction with https://cabal.readthedocs.io/: cabal build all leaves test suites unbuilt, so cabal list-bin runs stale test binaries
 
 

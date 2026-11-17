@@ -146,8 +146,33 @@ service where one runs on this Mac.
   fitness 9/9, conventions clean. `just keiro-gate 85d1cb75` (the commit before M4):
   conformance PASS, every generated module unchanged, no workflow body change;
   `just api-baseline`: 8 surfaces clean.)
-- [ ] M5: The Danwa conversation loop and the Kawa stream and event intake run from the
-  distribution's executables. The stock role set no longer contains a consumer.
+- [x] M5: The Danwa conversation loop and the Kawa stream and event intake run from the
+  distribution's executables. The stock role set no longer contains a consumer. (2026-11-17,
+  amended by the user's decision: the conversation loop stays in the kernel behind a
+  conversation-channel port and Danwa is the binding's channel; see the Decision Log.
+  Intake `6b7b39dc`, conversation `f3774b9d`, baseline re-pin `1e2e223c`. Acceptance
+  against the global Redpanda on dedicated, deleted topics, a disposable PostgreSQL, the
+  loopback fixture authority and the distribution's stubs: `kikan-shikigami
+  publish-fixture fixtures/envelope.json` put one envelope on the stream topic,
+  `kikan-shikigami-consume-stream` matched `ticket-stream`, and `kikan-shikigami-worker`
+  completed it with a delivered Kawa digest at `stub-kawa`; a second envelope on the events
+  topic fired `ticket-event` through `kikan-shikigami-consume-events` the same way. A
+  Danwa addressed-message event produced with `rpk` (keiro headers, event type
+  `danwa.message-addressed-to-agent`) was matched by `kikan-shikigami-consume-events`, and
+  the worker ran the turn through the Danwa channel: `worker.conversation.completed`, the
+  workflow `shikigami.conversation` / `conversation:conv_m5_1` parked for the next message,
+  and a `danwa.conversation` reply authorized by the fixture Kikan-En and visibly `failed`
+  because no Danwa runs (the user chose no sibling stacks). The closure of
+  `shikigami-workers`, `shikigami-server` and every other stock package holds no Kafka
+  library (from `dist-newstyle/cache/plan.json`). Suites: core unit 808, of which three
+  HTTP-timing decision tests failed under the machine's load and pass alone, and postgres 549/549, binding
+  79/79, distribution 44/44, workers 294 with the known Git flake passing alone, server
+  96/96, initiative 120/120; kernel fitness, conventions and api-baseline clean;
+  `keiro-shikigami-conformance` PASS. `just keiro-gate f3774b9d~1` reports the recorded
+  reset finding and nothing else. Gaps, named: `shikigami-core`'s unit suite still depends
+  on `danwa-api` and `danwa-client` for `SinkAuthSpec`, left to M6 (Decision Log);
+  `tests/objective-tracking/run.sh` now composes the distribution but strands its run after
+  the injected kill, before its conversation step (FRIC-99).)
 - [ ] M6: `shikigami-core` and the other six packages link no Kikan client library and the
   fitness check enforces it. The action record is projected into run evidence. The
   portability check passes against the Kikan distribution, with the default output resolved
@@ -270,6 +295,15 @@ These came from read-only research on 2026-11-15, before implementation.
   pending).
   Planned in `docs/plans/137-settle-kioku-distillation-timers-through-kioku-s-fire-api-in-the-shared-timer-dispatcher.md`.
 
+- Observation: (M5) `tests/objective-tracking/run.sh` had not run since M2. Composed with the
+  distribution's server, worker and admin command (and the triage fixture agent declaring
+  Danwa's event type, so the Danwa channel serves its conversation turn), it gets past
+  start-up but times out after the scripted kill of the worker holding the objective
+  command's protected insert: the agent run and its execution child stay `suspended` with
+  no lease and no wake, the run-job queue and its DLQ are empty, and the execution waits on
+  an observation nothing delivers. It is a restart-recovery defect on the agent-run path,
+  outside this plan's move, recorded as FRIC-99; its conversation step was not reached.
+  Evidence: `docs/friction-log/99-the-objective-continuity-scenario-strands-its-run-after-the-injected-worker-kill.md`.
 - Observation: (M5 acceptance) The stream and event consumers share keiro's inbox, which
   dedupes on the integration message id across topics. Publishing the same envelope to the
   activity topic and the events topic fired only the stream agent: the event consumer saw a
