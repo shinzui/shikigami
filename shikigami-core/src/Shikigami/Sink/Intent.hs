@@ -88,6 +88,10 @@ data SinkIntent = SinkIntent
   { agent :: !AgentName,
     identity :: !AgentIdentity,
     runId :: !SessionId,
+    -- | The workflow that enqueued the output, which the action record
+    -- attributes the delivery to (plan 135, M6). Absent on an intent written
+    -- before it existed or by a producer with no run of its own.
+    run :: !(Maybe WorkflowId),
     ordinal :: !SinkOrdinal,
     occurredAt :: !(Maybe UTCTime),
     output :: !OutputDecl,
@@ -99,7 +103,7 @@ data SinkIntent = SinkIntent
   deriving stock (Eq, Show, Generic)
 
 instance ToJSON SinkIntent where
-  toJSON SinkIntent {agent, identity, runId, ordinal, occurredAt, output, address, result} =
+  toJSON SinkIntent {agent, identity, runId, run, ordinal, occurredAt, output, address, result} =
     Aeson.object
       ( [ "agent" .= agent,
           "runId" .= idText runId,
@@ -110,6 +114,7 @@ instance ToJSON SinkIntent where
         ]
           <> ["identity" .= identity | identity /= UnresolvedLegacyIdentity]
           <> maybe [] (\value -> ["occurredAt" .= value]) occurredAt
+          <> maybe [] (\WorkflowId {unWorkflowId} -> ["run" .= unWorkflowId]) run
       )
 
 instance FromJSON SinkIntent where
@@ -125,6 +130,7 @@ instance FromJSON SinkIntent where
       <$> object .: "agent"
       <*> pure identity
       <*> (object .: "runId" >>= either (fail . Text.unpack) pure . parseSinkSession)
+      <*> (fmap WorkflowId <$> object .:? "run")
       <*> object .: "ordinal"
       <*> object .:? "occurredAt"
       <*> object .: "output"
@@ -150,6 +156,8 @@ data Producer = Producer
     identity :: !AgentIdentity,
     agent :: !AgentName,
     runId :: !SessionId,
+    -- | The enqueuing workflow, recorded on the intent.
+    run :: !(Maybe WorkflowId),
     occurredAt :: !(Maybe UTCTime),
     activity :: !(Maybe ActivityEnvelope)
   }
@@ -181,7 +189,7 @@ enqueueSinkIntents registry directoryHandle grantSource agentName identity jobOc
   (workflowName, workflowId) <- currentWorkflow
   generation <- currentRunGeneration
   now <- liftIO getCurrentTime
-  let producer = Producer {registry, directory = directoryHandle, grants = grantSource, identity, agent = agentName, runId = sessionId, occurredAt = Just jobOccurredAt, activity = Just activity}
+  let producer = Producer {registry, directory = directoryHandle, grants = grantSource, identity, agent = agentName, runId = sessionId, run = Just workflowId, occurredAt = Just jobOccurredAt, activity = Just activity}
       placement ordinal = Placement {messageId = sinkMessageId workflowId ordinal, orderingKey = idText sessionId <> ":" <> Text.pack (show ordinal), eventTime = jobOccurredAt}
   prepared <- liftIO (traverse (\(ordinal, output) -> prepareIntent producer (placement ordinal) ordinal output result now) outputs)
   let results = preparedSinkResult <$> prepared
@@ -236,7 +244,7 @@ enqueueSinkIntentBatch onCommitted registry directory grants identity label agen
   when (NonEmpty.length outputs > 192) (liftIO (ioError (userError "sink batch exceeds 192")))
   (workflowName, workflowId) <- currentWorkflow
   now <- liftIO getCurrentTime
-  let producer = Producer {registry, directory, grants, identity, agent, runId = run, occurredAt, activity = Nothing}
+  let producer = Producer {registry, directory, grants, identity, agent, runId = run, run = Just workflowId, occurredAt, activity = Nothing}
       prepare (ordinal, AddressedOutput {output, result}) =
         let message = workflowId.unWorkflowId <> ":" <> unStepName label <> ":" <> Text.pack (show ordinal)
          in prepareIntent producer Placement {messageId = message, orderingKey = idText run, eventTime = now} ordinal output result now
@@ -296,7 +304,7 @@ prepareSinkIntent ::
   IO PreparedSinkIntent
 prepareSinkIntent registry directoryHandle grantSource identity workflowId stepName agentName runId ordinal occurredAt activity output result now =
   prepareIntent
-    Producer {registry, directory = directoryHandle, grants = grantSource, identity, agent = agentName, runId, occurredAt, activity}
+    Producer {registry, directory = directoryHandle, grants = grantSource, identity, agent = agentName, runId, run = Just workflowId, occurredAt, activity}
     Placement {messageId = unWorkflowId workflowId <> ":" <> unStepName stepName, orderingKey = idText runId, eventTime = now}
     ordinal
     output
@@ -322,7 +330,7 @@ prepareSinkIntentWithMessageId ::
   IO PreparedSinkIntent
 prepareSinkIntentWithMessageId registry directoryHandle grantSource identity agentName runId ordinal occurredAt activity messageId output result now =
   prepareIntent
-    Producer {registry, directory = directoryHandle, grants = grantSource, identity, agent = agentName, runId, occurredAt, activity}
+    Producer {registry, directory = directoryHandle, grants = grantSource, identity, agent = agentName, runId, run = Nothing, occurredAt, activity}
     Placement {messageId = Delivery.sinkMessageIdText messageId, orderingKey = idText runId, eventTime = now}
     ordinal
     output
@@ -354,6 +362,7 @@ prepareIntent producer Placement {messageId, orderingKey, eventTime} ordinal out
                       { agent = producer.agent,
                         identity = producer.identity,
                         runId = producer.runId,
+                        run = producer.run,
                         ordinal = position,
                         occurredAt = producer.occurredAt,
                         output,

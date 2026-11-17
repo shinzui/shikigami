@@ -211,6 +211,7 @@ import Shikigami.Sink.Intent
     prepareSinkIntent,
     preparedSinkResult,
   )
+import Shikigami.Sink.Types (OutboxRoute (..))
 import Shikigami.Telemetry.TraceContext qualified as TraceContext
 import Shikigami.WorkerSession.Capability qualified as WorkerCapability
 import Shikigami.WorkerSession.Handoff qualified as WorkerHandoff
@@ -1561,9 +1562,13 @@ publishSinkIntent AgentRunDeps {appEnv = depsAppEnv, outputs = registry, logger 
   let OutboxRow {event = integrationEvent} = row
    in case decodeSinkIntentEvent integrationEvent of
         Left err -> pure (PublishFailed (Text.pack (show err)))
-        Right intent@SinkIntent {agent, identity = recordedIdentity, runId, ordinal, occurredAt, output, address, result} -> liftIO do
+        Right intent@SinkIntent {agent, identity = recordedIdentity, runId, run, ordinal, occurredAt, output, address, result} -> liftIO do
           let messageId = Integration.messageId integrationEvent
               kind = output.kind
+              -- The publish-time decision and the delivery belong to the run
+              -- that enqueued the output (plan 135, M6); an intent from
+              -- before the run was recorded on it stays run-less.
+              runAuthority = maybe actionAuthority (\enqueuing -> scopeToRun (Just enqueuing) agent actionAuthority) run
               publish =
                 Otel.inSpan' (depsAppEnv.tracer) "sink.publish" (spanArgs Consumer) \traceSpan -> do
                   Otel.addAttribute traceSpan "sink.kind" (Otel.toAttribute (outputKindText kind))
@@ -1592,7 +1597,10 @@ publishSinkIntent AgentRunDeps {appEnv = depsAppEnv, outputs = registry, logger 
                         -- Retryable: a publisher composed with the adapter
                         -- can still deliver it.
                         (_, Nothing) -> pure (SinkResult kind (Failed ("output kind " <> outputKindText kind <> " is not registered with this publisher")))
-                        (Right _, Just route) -> dispatchOutbox intentDirectory (withAuthority actionAuthority rawIntentGrants) route delivery
+                        (Right _, Just route) -> do
+                          sent <- dispatchOutbox intentDirectory (withAuthority runAuthority rawIntentGrants) route delivery
+                          noteDelivered intentLogger runAuthority messageId route delivery run sent
+                          pure sent
                   case deliveryPool of
                     Nothing -> publishUntracked <$> send
                     Just pool -> publishTracked intentLogger pool messageId kind intent send
@@ -1606,6 +1614,23 @@ publishSinkIntent AgentRunDeps {appEnv = depsAppEnv, outputs = registry, logger 
                   "sink.trace_context.invalid"
                   ["outbox_message_id" .= messageId]
               pure result
+
+-- | Record the effect of an output the publisher delivered for a run, after
+-- the delivery: @output.delivered@ in step @outbox-publish@, keyed by the
+-- outbox message, naming the action the authority allowed at publish. A
+-- delivery whose entry cannot be written is reported, never sent again.
+noteDelivered :: Log.Logger -> Authority -> Text -> OutboxRoute -> OutboxDelivery -> Maybe WorkflowId -> SinkResult -> IO ()
+noteDelivered logger runAuthority messageId route delivery run sent = case (run, sent.outcome) of
+  (Just _, Delivered downstream) ->
+    case (identityText delivery.identity, mkOutputTarget =<< route.target delivery.config delivery.address) of
+      (Right principal, Right target) -> do
+        let receipt = Output.OutputReceipt {kind = outputKindText delivery.kind, location = declarationCoordinateText downstream, detail = ""}
+        noted <- case RunRecord.publishedEntry messageId (EmitOutput delivery.kind target) receipt of
+          Left problem -> pure (Left (recordErrorText problem))
+          Right entry -> first recordErrorText <$> recordRunEntry runAuthority (declarationCoordinate principal) entry
+        either (\problem -> Log.logError logger "record.output_delivered_unrecorded" ["reason" .= problem, "outbox_message_id" .= messageId]) pure noted
+      _ -> Log.logError logger "record.output_delivered_unrecorded" ["reason" .= ("the delivery has no principal or target" :: Text), "outbox_message_id" .= messageId]
+  _ -> pure ()
 
 publishUntracked :: SinkResult -> PublishOutcome
 publishUntracked result = case (.outcome) result of

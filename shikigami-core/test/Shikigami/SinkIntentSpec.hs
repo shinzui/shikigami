@@ -12,6 +12,7 @@ import Data.Text (Text)
 import Data.Time (UTCTime (..), fromGregorian)
 import Data.UUID qualified as UUID
 import Keiro.Integration.Event (IntegrationEvent (..))
+import Keiro.Workflow.Types (WorkflowId (..))
 import Kioku.Id qualified as SinkSession
 import Shikigami.Agent.Name qualified as Name
 import Shikigami.Agent.Principal (AgentIdentity (UnresolvedLegacyIdentity, VerifiedIdentity), mkAgentPrincipal)
@@ -74,6 +75,14 @@ tests =
         ByteString.isInfixOf "\"conversationKey\":\"conv_55012\"" strict @?= True
         ByteString.isInfixOf "\"triggeringActivityId\":\"act_1\"" strict @?= True
         ByteString.isInfixOf "\"activity\":" strict @?= False,
+      -- The enqueuing run rides on the intent so the publisher records the
+      -- delivery against it (plan 135, M6); an intent written before has none.
+      testCase "an intent carries its enqueuing run, and one without it still decodes" do
+        let withRun = (intentFor canonicalSink) {run = Just (WorkflowId "run-workflow-1")}
+            strict = LazyByteString.toStrict (encode withRun)
+        ByteString.isInfixOf "\"run\":\"run-workflow-1\"" strict @?= True
+        eitherDecodeStrict strict @?= Right withRun
+        eitherDecodeStrict (LazyByteString.toStrict canonicalWireBytes) @?= Right (intentFor canonicalSink),
       testCase "the integration-event identity stays stable" do
         let IntegrationEvent {eventType, schemaVersion} = eventFor (intentFor canonicalSink)
         eventType @?= "shikigami.sink.dispatch-requested"
@@ -96,6 +105,7 @@ intentFor output =
     { agent = either (error . show) id (Name.mkAgentName "at-risk-watch"),
       identity = UnresolvedLegacyIdentity,
       runId = sinkSessionFixture,
+      run = Nothing,
       ordinal = zeroSinkOrdinal,
       occurredAt = Just sampleTime,
       output,
@@ -109,6 +119,7 @@ egressIntent =
     { agent = either (error . show) id (Name.mkAgentName "channel-reply"),
       identity = VerifiedIdentity (either (error . show) id (mkAgentPrincipal "agent_channel_reply")),
       runId = sinkSessionFixture,
+      run = Nothing,
       ordinal = zeroSinkOrdinal,
       occurredAt = Just sampleTime,
       output = egressOutput,

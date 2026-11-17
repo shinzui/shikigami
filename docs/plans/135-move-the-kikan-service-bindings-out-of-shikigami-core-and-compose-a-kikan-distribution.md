@@ -318,6 +318,25 @@ These came from read-only research on 2026-11-15, before implementation.
   Evidence: the first `m5-acceptance.sh` run; `processIntegrationEvent` runs
   `runInboxTransaction ... PreferIntegrationMessageId`.
 
+- Observation: (M6 portability, 2026-11-17) `agents/proof/portable-note.dhall` ran unchanged
+  under `shikigami-agent-run` (local-operator) and through `kikan-shikigami enqueue-run` and
+  `kikan-shikigami-worker` (fixture Kikan-En, `stub-kawa`), both on the stub behavior provider
+  and one disposable PostgreSQL, and `record check` held K1 to K8 for both. But the records
+  differ in more than authority and default output. The stock run records `run.admitted`,
+  `authority.decided emit_output`, `output.delivered`, `run.finished`; the distribution run
+  records `run.admitted`, `authority.decided emit_output`, `run.finished`, and its delivery,
+  made later by the worker's outbox publisher, appears only as a second, run-less
+  `authority.decided` and a `delivered` row in `shikigami.sink_deliveries`. The sink intent
+  carries the Kioku session id as `runId`, not the run's workflow id, so the publisher cannot
+  scope its decision to the run, and nothing appends `output.delivered` for an outbox
+  delivery. EP-8 M3 saw equal sequences because its Kawa adapter was still inline; M3's move
+  to the outbox lost the effect from the record (K3). Separately, the one-off
+  `kikan-shikigami-agent-run` (contained) runs as `compatibilityIdentity` even for a
+  declaration with a principal, so its output was denied by a principal-keyed grant ("agent
+  'portable-note' has no grant for kawa.digest"); the worker admits the declared principal.
+  Evidence: `m6-portability.sh` in the session scratchpad; runs `b4d7e259-…` (stock) and
+  `b5a34a54-…` (distribution).
+
 ## Decision Log
 
 - Decision: The binding is one package, `kikan-shikigami-binding`, with modules under
@@ -745,6 +764,19 @@ These came from read-only research on 2026-11-15, before implementation.
   with `runTypedClientWithHeaders` and `classifyTypedClientError`; behavior unchanged) and
   `SinkAuthSpec`'s three Danwa-client cases moved to the binding as
   `Kikan.Shikigami.Binding.TypedClientSpec`. Both measurement commands print 0.
+  Date: 2026-11-17
+- Decision: (M6, record, 2026-11-17) An output a worker's outbox publisher delivers is
+  recorded against the run that enqueued it. `SinkIntent` gains an optional `run`
+  (`WorkflowId`, JSON key `run`, absent on an intent written before or by the
+  semantic-message-id producer), set from the enqueuing workflow on every enqueue path.
+  The publisher scopes its authority to that run (`scopeToRun`), so the publish-time
+  `authority.decided` carries the run, and after a delivery it notes `output.delivered`
+  (`RunRecord.publishedEntry`: step `outbox-publish`, effect key `outbox:<message id>`,
+  the action allowed at publish). An entry that cannot be written is logged, never
+  re-sent. The codec change is additive both ways (an old decoder ignores `run`, and a row
+  without it decodes to `Nothing`), so no outbox row needs draining.
+  Rationale: the portability check showed a distribution run's record without its delivery
+  (K3), and the M6 evidence projection needs the delivery in the record to project it.
   Date: 2026-11-17
 
 

@@ -263,6 +263,7 @@ sampleSinkIntent =
     { agent = fixtureAgentName "at-risk-watch",
       identity = UnresolvedLegacyIdentity,
       runId = sinkSessionFixture,
+      run = Nothing,
       ordinal = zeroSinkOrdinal,
       occurredAt = Just sampleTime,
       output = sampleSink,

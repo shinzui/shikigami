@@ -23,6 +23,7 @@ module Shikigami.Agent.RunRecord
     RunFinish (..),
     finishEntry,
     deliveredEntry,
+    publishedEntry,
   )
 where
 
@@ -120,14 +121,23 @@ finishEntry = \case
 -- | The effect of one delivered output, after the authority allowed
 -- @action@ in the step named here.
 deliveredEntry :: Text -> Action -> Output.OutputReceipt -> Either RecordError RecordEntry
-deliveredEntry step action Output.OutputReceipt {kind, location} =
+deliveredEntry step action = deliveryEntry step (actionResource action) action
+
+-- | The effect of one output a worker's outbox publisher delivered for a run
+-- (plan 135, M6). Its step is @outbox-publish@, and its effect key is the
+-- outbox message id, because two outputs of one run may share a target.
+publishedEntry :: Text -> Action -> Output.OutputReceipt -> Either RecordError RecordEntry
+publishedEntry messageId = deliveryEntry "outbox-publish" ("outbox:" <> messageId)
+
+deliveryEntry :: Text -> Text -> Action -> Output.OutputReceipt -> Either RecordError RecordEntry
+deliveryEntry step effectKey action Output.OutputReceipt {kind, location} =
   mkRecordEntry
     deliveredKind
     ( object
         [ "action" .= actionTag action,
           "resource" .= actionResource action,
           "step" .= step,
-          "effectKey" .= actionResource action,
+          "effectKey" .= Text.take 256 effectKey,
           "output" .= kind,
           "location" .= Text.take 512 location
         ]
