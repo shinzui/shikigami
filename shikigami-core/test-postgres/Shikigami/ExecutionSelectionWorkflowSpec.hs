@@ -91,18 +91,20 @@ import Shikigami.Execution.Transcript qualified as Replay
 import Shikigami.ExecutionDriver.Generated.WorkflowRuntime qualified as DriverGenerated
 import Shikigami.Fixture.ExamplePack (exampleFlowRegistry, fixtureDecisionServices)
 import Shikigami.Fixture.ExecutionIdentity (fixtureAttemptId, fixtureOperationId, fixtureRootId)
+import Shikigami.Fixture.OutboxDispatch (unreachableServices)
 import Shikigami.Flow.Decision qualified as Decision
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Integration.Danwa (AddressedMessage (..))
 import Shikigami.Log.Correlation (runCorrelationId)
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
+import Shikigami.Output.Kikan (kikanOutputs)
 import Shikigami.Prelude ((&), (.~))
 import Shikigami.RouterWorkflowSpec qualified as Fixture
 import Shikigami.RunEvidence.Catalog qualified as Catalog
 import Shikigami.Sink.Config (DanwaConfig (..))
 import Shikigami.Sink.GrantStore (GrantSource (StaticGrants))
-import Shikigami.Sink.Permission (SinkKind (SDanwaConversation))
+import Shikigami.Sink.Outputs (danwaConversationKind)
 import Shikigami.StateRevision (StateRevision, parseRevision)
 import Shikigami.Trigger.Enqueue (ensureRunQueue)
 import Shikigami.Trigger.Schedule (parseCron)
@@ -418,7 +420,8 @@ tests fixture =
                     idleTimeout = (either (error . show) id (parseDuration (1800))),
                     danwa = DanwaConfig "http://localhost:1" (declarationCoordinate "participant"),
                     agents = [declaration],
-                    grants = StaticGrants (Map.singleton (compatibilityIdentity (either (error . show) id (mkAgentName "router"))) (Set.singleton SDanwaConversation)),
+                    outputs = kikanOutputs unreachableServices,
+                    grants = StaticGrants (Map.singleton (compatibilityIdentity (either (error . show) id (mkAgentName "router"))) (Set.singleton danwaConversationKind)),
                     directory = dependencies.directory
                   }
               context = ExecutionContext (Just root) (Just (ExecutionRequest (Just (fixtureModelAlias "worker-a")) Nothing Nothing)) (Just (map fixtureModelAlias ["worker-a"]))

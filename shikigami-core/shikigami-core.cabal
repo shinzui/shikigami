@@ -330,6 +330,7 @@ library
     Shikigami.Sink.KanmonClient
     Shikigami.Sink.KawaClient
     Shikigami.Sink.KizashiClient
+    Shikigami.Sink.Outputs
     Shikigami.Sink.Permission
     Shikigami.Sink.Recipient
     Shikigami.Sink.ReiAction
@@ -669,6 +670,7 @@ library pack-sdk
     Shikigami.Objective.Association,
     Shikigami.Objective.Reference,
     Shikigami.Objective.Store,
+    Shikigami.Output,
     Shikigami.Pack.Sdk,
     Shikigami.Sink,
     Shikigami.Sink.Delivery,
@@ -759,6 +761,7 @@ test-suite shikigami-core-test
     Shikigami.Fixture.JudgmentExampleFlow
     Shikigami.Fixture.KawaStub
     Shikigami.Fixture.ObjectiveExampleFlow
+    Shikigami.Fixture.OutboxDispatch
     Shikigami.Fixture.SinkHttp
     Shikigami.Fixture.TypeSafe
     Shikigami.FlowPackSpec
@@ -890,6 +893,7 @@ test-suite shikigami-core-postgres-test
     Shikigami.Fixture.JudgmentExampleFlow
     Shikigami.Fixture.KawaStub
     Shikigami.Fixture.ObjectiveExampleFlow
+    Shikigami.Fixture.OutboxDispatch
     Shikigami.Fixture.SinkHttp
     Shikigami.Fixture.TypeSafe
     Shikigami.FlowLifecycleSpec

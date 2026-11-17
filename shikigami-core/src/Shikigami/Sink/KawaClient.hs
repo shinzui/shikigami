@@ -1,7 +1,7 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE TypeApplications #-}
 
--- | The @KawaDigest@ sink handler: build the nine-field C1 Activity Envelope (minting a
+-- | The @kawa.digest@ output client: build the nine-field C1 Activity Envelope (minting a
 -- UUIDv7 @act_@ id the way kawa does) and POST it to the C2 doorway as an
 -- @IngestRequest@. Built against the stub-kawa server; the real kawa base URL needs no
 -- code change.
@@ -29,12 +29,11 @@ import Data.Time.Format.ISO8601 (iso8601Show)
 import Network.HTTP.Types.Header (Header)
 import Shikigami.Activity (ActivityEnvelope (..), Actor (..), ContextRef (..), Subject (..))
 import Shikigami.Activity.Coordinate
-import Shikigami.Agent.Decl (Sink (..))
-import Shikigami.Agent.Principal (identityText)
 import Shikigami.Prelude
 import Shikigami.Sink.Config (KawaConfig (..))
 import Shikigami.Sink.Http (HttpEnv, HttpFailure, postJSONWithHeaders, renderHttpFailure)
-import Shikigami.Sink.Types (SinkContext (..), mkSourceEventId)
+import Shikigami.Sink.Outputs (KawaDigestOutput (..))
+import Shikigami.Sink.Types (OutboxDelivery (..), deliverySubjectText, mkSourceEventId)
 import Shikigami.Sink.Wire (IngestRequest (..), IngestResponse (..))
 
 data KawaError = KawaHttpError !HttpFailure | KawaDecodeError !Text | KawaPayloadError !Text
@@ -45,34 +44,31 @@ renderKawaError (KawaHttpError failure) = renderHttpFailure failure
 renderKawaError (KawaDecodeError t) = "decode IngestResponse: " <> t
 renderKawaError (KawaPayloadError t) = "invalid Kawa payload: " <> t
 
--- | Build the nine-field C1 envelope for a @KawaDigest@ sink: mint the @act_@ id,
--- @actor.kind = "agent"@, @source = activityCoordinate "shinzui/shikigami"@, @idempotency_key@ = the
--- deterministic @source_event_id@.
-buildEnvelope :: SinkContext -> Sink -> Value -> IO (Either KawaError ActivityEnvelope)
-buildEnvelope ctx@SinkContext {identity = ctxIdentity, occurredAt = ctxOccurredAt} sink output =
-  case sink of
-    KawaDigest {subjectType = sty, verb = vb} -> do
-      case contextRefsFromOutput output of
-        Left problem -> pure (Left (KawaPayloadError problem))
-        Right contextRefs -> do
-          actId <- genKindID @"act"
-          now <- maybe getCurrentTime pure ctxOccurredAt
-          let nm = either (const "unresolved-legacy") (\value -> value) (identityText ctxIdentity)
-          pure
-            ( Right
-                ActivityEnvelope
-                  { activityId = activityCoordinate (toText actId),
-                    occurredAt = activityCoordinate (Text.pack (iso8601Show now)),
-                    source = activityCoordinate "shinzui/shikigami",
-                    actor = Actor {kind = AgentActor, id = activityCoordinate nm, session = Nothing},
-                    subject = Subject {kind = sty, subjectId = activityCoordinate (subjectIdFromOutput output nm)},
-                    verb = vb,
-                    payload = output,
-                    contextRefs,
-                    idempotencyKey = activityCoordinate (mkSourceEventId ctx)
-                  }
-            )
-    _ -> error "Shikigami.Sink.KawaClient.buildEnvelope: not a KawaDigest sink"
+-- | Build the nine-field C1 envelope for a @kawa.digest@ output: mint the
+-- @act_@ id, @actor.kind = "agent"@, @source = "shinzui/shikigami"@,
+-- @idempotency_key@ = the deterministic @source_event_id@.
+buildEnvelope :: OutboxDelivery -> KawaDigestOutput -> IO (Either KawaError ActivityEnvelope)
+buildEnvelope delivery KawaDigestOutput {subjectType = sty, verb = vb} =
+  case contextRefsFromOutput delivery.result of
+    Left problem -> pure (Left (KawaPayloadError problem))
+    Right contextRefs -> do
+      actId <- genKindID @"act"
+      now <- maybe getCurrentTime pure delivery.occurredAt
+      let nm = deliverySubjectText delivery
+      pure
+        ( Right
+            ActivityEnvelope
+              { activityId = activityCoordinate (toText actId),
+                occurredAt = activityCoordinate (Text.pack (iso8601Show now)),
+                source = activityCoordinate "shinzui/shikigami",
+                actor = Actor {kind = AgentActor, id = activityCoordinate nm, session = Nothing},
+                subject = Subject {kind = sty, subjectId = activityCoordinate (subjectIdFromOutput delivery.result nm)},
+                verb = vb,
+                payload = delivery.result,
+                contextRefs,
+                idempotencyKey = activityCoordinate (mkSourceEventId delivery)
+              }
+        )
 
 contextRefsFromOutput :: Value -> Either Text [ContextRef]
 contextRefsFromOutput (Object objectValue) =

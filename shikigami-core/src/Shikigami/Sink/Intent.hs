@@ -1,19 +1,20 @@
 {-# LANGUAGE DataKinds #-}
 
--- | The single durable contract between sink producers and the asynchronous
--- publisher. Agent runs, conversations, and flows all prepare and enqueue this
--- record through this module; the publisher decodes the same type here.
+-- | The single durable contract between output producers and the
+-- asynchronous publisher. Agent runs, conversations, and flows all prepare and
+-- enqueue this record through this module; the publisher decodes the same
+-- type here. An intent names its output ('OutputDecl') and carries the
+-- address its adapter computed when it was enqueued (plan 135, M3).
 module Shikigami.Sink.Intent
   ( SinkIntent (..),
+    AddressedOutput (..),
     PreparedSinkIntent,
     enqueueSinkIntents,
     enqueueSinkIntentStep,
-    enqueueSinkIntentStepForRecipient,
     enqueueSinkIntentBatch,
     enqueuePreparedSinkIntentTx,
     prepareSinkIntent,
-    prepareSinkIntentForRecipient,
-    prepareSinkIntentForRecipientWithMessageId,
+    prepareSinkIntentWithMessageId,
     preparedSinkResult,
     decodeSinkIntentEvent,
     sinkIntentEvent,
@@ -59,74 +60,57 @@ import Keiro.Workflow
 import Kioku.Id (SessionId, idText)
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Transaction (runTransaction)
-import Shikigami.Activity (ActivityEnvelope, activityCoordinateText)
-import Shikigami.Activity qualified as Activity
-import Shikigami.Activity.Coordinate
-import Shikigami.Agent.Decl (Sink (..))
+import Shikigami.Activity (ActivityEnvelope)
 import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Name (AgentName)
 import Shikigami.Agent.Principal (AgentIdentity (..), mkAgentPrincipal)
-import Shikigami.Authority (AuthorityFailure (..), authorityFailureDetail)
+import Shikigami.Authority (AuthorityFailure (..), OutputKind, authorityFailureDetail, outputKindText)
 import Shikigami.Directory (DirectoryHandle)
 import Shikigami.Directory qualified as Directory
+import Shikigami.Output (OutputDecl (..), OutputRegistry, lookupAdapter, outboxRouteOf)
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.Sink
-  ( DanwaTarget,
-    GrantSource,
+  ( GrantSource,
     SinkOutcome (..),
     SinkResult (..),
     checkGrant,
-    sinkKindOf,
   )
-import Shikigami.Sink.Authorization (authorizeSinkAction)
+import Shikigami.Sink.Authorization (authorizeOutput)
 import Shikigami.Sink.Coordinate (SinkOrdinal, parseSinkOrdinal, parseSinkSession)
 import Shikigami.Sink.Delivery qualified as Delivery
 import Shikigami.Sink.GrantStore (authorityFor)
-import Shikigami.Sink.KanmonClient (resolveConversationKey)
-import Shikigami.Sink.Permission
-  ( Denied (..),
-    SinkKind,
-  )
-import Shikigami.Sink.Recipient (resolveSinkRecipient)
-import Shikigami.Sink.Types (AddressedSignal (..), SignalAddress (..))
+import Shikigami.Sink.Permission (Denied (..))
+import Shikigami.Sink.Types (AddressInput (..), OutboxRoute (..))
 
--- | Everything the publisher needs to dispatch one sink after the producing
--- workflow has committed. Optional fields are omitted so rows written before
--- an additive field existed keep their original bytes.
+-- | Everything the publisher needs to dispatch one output after the
+-- producing workflow has committed.
 data SinkIntent = SinkIntent
   { agent :: !AgentName,
     identity :: !AgentIdentity,
     runId :: !SessionId,
     ordinal :: !SinkOrdinal,
     occurredAt :: !(Maybe UTCTime),
-    danwaTarget :: !(Maybe DanwaTarget),
-    resolvedRecipient :: !(Maybe (DeclarationCoordinate "recipient")),
-    conversationKey :: !(Maybe (DeclarationCoordinate "conversation")),
-    triggeringActivityId :: !(Maybe (ActivityCoordinate "activity-id")),
-    sink :: !Sink,
-    output :: !Value
+    output :: !OutputDecl,
+    -- | What the adapter computed at enqueue; opaque to the kernel.
+    address :: !Value,
+    -- | The behavior's result the output carries.
+    result :: !Value
   }
   deriving stock (Eq, Show, Generic)
 
 instance ToJSON SinkIntent where
-  toJSON SinkIntent {agent, identity, runId, ordinal, occurredAt, danwaTarget, resolvedRecipient, conversationKey, triggeringActivityId, sink, output} =
+  toJSON SinkIntent {agent, identity, runId, ordinal, occurredAt, output, address, result} =
     Aeson.object
       ( [ "agent" .= agent,
           "runId" .= idText runId,
           "ordinal" .= ordinal,
-          "sink" .= sink,
-          "output" .= output
+          "output" .= output,
+          "address" .= address,
+          "result" .= result
         ]
           <> ["identity" .= identity | identity /= UnresolvedLegacyIdentity]
-          <> maybeField "occurredAt" occurredAt
-          <> maybeField "danwaTarget" danwaTarget
-          <> maybeField "resolvedRecipient" resolvedRecipient
-          <> maybeField "conversationKey" conversationKey
-          <> maybeField "triggeringActivityId" triggeringActivityId
+          <> maybe [] (\value -> ["occurredAt" .= value]) occurredAt
       )
-    where
-      maybeField _ Nothing = []
-      maybeField key (Just value) = [key .= value]
 
 instance FromJSON SinkIntent where
   parseJSON = withObject "SinkIntent" \object -> do
@@ -143,12 +127,14 @@ instance FromJSON SinkIntent where
       <*> (object .: "runId" >>= either (fail . Text.unpack) pure . parseSinkSession)
       <*> object .: "ordinal"
       <*> object .:? "occurredAt"
-      <*> object .:? "danwaTarget"
-      <*> object .:? "resolvedRecipient"
-      <*> object .:? "conversationKey"
-      <*> object .:? "triggeringActivityId"
-      <*> object .: "sink"
       <*> object .: "output"
+      <*> object .: "address"
+      <*> object .: "result"
+
+-- | One output a flow emits in a batch: the output, already directed by its
+-- configuration, and the result it carries.
+data AddressedOutput = AddressedOutput {output :: !OutputDecl, result :: !Value}
+  deriving stock (Eq, Show, Generic)
 
 data PreparedSinkIntent = PreparedSinkIntent
   { sinkResult :: !SinkResult,
@@ -156,36 +142,54 @@ data PreparedSinkIntent = PreparedSinkIntent
     deliveryReceipt :: !(Maybe Delivery.DeliveryReceipt)
   }
 
--- | Atomically journal and enqueue every independent sink declared for one
--- agent run. Each sink gets its own ordering key so one retrying transport does
--- not block its siblings.
+-- | What one producer supplies for one intent.
+data Producer = Producer
+  { registry :: !OutputRegistry,
+    directory :: !DirectoryHandle,
+    grants :: !GrantSource,
+    identity :: !AgentIdentity,
+    agent :: !AgentName,
+    runId :: !SessionId,
+    occurredAt :: !(Maybe UTCTime),
+    activity :: !(Maybe ActivityEnvelope)
+  }
+
+-- | Where one intent goes in the outbox.
+data Placement = Placement
+  { messageId :: !Text,
+    orderingKey :: !Text,
+    eventTime :: !UTCTime
+  }
+
+-- | Atomically journal and enqueue every outbox output of one agent run,
+-- each at its position in the run's resolved outputs. Each output gets its
+-- own ordering key so one retrying transport does not block its siblings.
 enqueueSinkIntents ::
   (Workflow :> es, Store :> es, IOE :> es) =>
+  OutputRegistry ->
   DirectoryHandle ->
   GrantSource ->
   AgentName ->
   AgentIdentity ->
   UTCTime ->
   ActivityEnvelope ->
-  [Sink] ->
+  [(Int, OutputDecl)] ->
   SessionId ->
   Value ->
   Eff es [SinkResult]
-enqueueSinkIntents directoryHandle grantSource agentName identity jobOccurredAt activity sinks sessionId output = do
+enqueueSinkIntents registry directoryHandle grantSource agentName identity jobOccurredAt activity outputs sessionId result = do
   (workflowName, workflowId) <- currentWorkflow
   generation <- currentRunGeneration
-  capturedTraceContext <- traceContextFromCurrentSpan
   now <- liftIO getCurrentTime
-  prepared <- liftIO (traverse (buildSinkIntent capturedTraceContext workflowId now) (zip [0 ..] sinks))
-  let results = fst <$> prepared
-      enqueued = mapMaybe snd prepared
-      encoded = Aeson.toJSON results
-  appendTx <- prepareJournalAppend workflowName workflowId generation (StepRecorded (unStepName dispatchSinksStep) encoded now)
+  let producer = Producer {registry, directory = directoryHandle, grants = grantSource, identity, agent = agentName, runId = sessionId, occurredAt = Just jobOccurredAt, activity = Just activity}
+      placement ordinal = Placement {messageId = sinkMessageId workflowId ordinal, orderingKey = idText sessionId <> ":" <> Text.pack (show ordinal), eventTime = jobOccurredAt}
+  prepared <- liftIO (traverse (\(ordinal, output) -> prepareIntent producer (placement ordinal) ordinal output result now) outputs)
+  let results = preparedSinkResult <$> prepared
+  appendTx <- prepareJournalAppend workflowName workflowId generation (StepRecorded (unStepName dispatchSinksStep) (Aeson.toJSON results) now)
   txResult <- runTransaction do
     appendTx >>= \case
       JournalAppended {} -> do
-        traverse_ (enqueueOutboxTx . fst) enqueued
-        traverse_ (Delivery.recordDeliveryTx . snd) enqueued
+        traverse_ enqueuePreparedSinkIntentTx prepared
         pure (Right results)
       JournalAlreadyPresent stored ->
         case parseEither Aeson.parseJSON stored of
@@ -200,47 +204,13 @@ enqueueSinkIntents directoryHandle grantSource agentName identity jobOccurredAt 
     Left err -> liftIO (ioError (userError (Text.unpack err)))
   where
     dispatchSinksStep = StepName "dispatch-sinks"
-    runIdText = idText sessionId
 
-    buildSinkIntent capturedTraceContext workflowId now (ordinal, sink) = do
-      position <- admitSinkOrdinal ordinal
-      let kind = sinkKindOf sink
-      Directory.identityLifecycleAdmission directoryHandle identity >>= \case
-        Left reason -> pure (SinkResult kind (SkippedLifecycle reason), Nothing)
-        Right () ->
-          checkGrant grantSource identity kind >>= \case
-            Left (Denied reason) ->
-              pure (SinkResult kind (DeniedOutcome reason), Nothing)
-            Right () -> do
-              let (resolvedConversationKey, resolvedTriggeringActivityId) = egressMetadata sink (Just activity) output
-                  intent =
-                    SinkIntent
-                      { agent = agentName,
-                        identity,
-                        runId = sessionId,
-                        ordinal = position,
-                        occurredAt = Just jobOccurredAt,
-                        danwaTarget = Nothing,
-                        resolvedRecipient = resolveSinkRecipient sink (Just activity),
-                        conversationKey = resolvedConversationKey,
-                        triggeringActivityId = resolvedTriggeringActivityId,
-                        sink,
-                        output
-                      }
-                  messageId = sinkMessageId workflowId ordinal
-                  orderingKey = runIdText <> ":" <> Text.pack (show ordinal)
-                  event = sinkIntentEvent messageId orderingKey jobOccurredAt capturedTraceContext intent
-                  outboxId = deterministicOutboxId workflowId ordinal
-                  receipt = pendingDeliveryReceipt messageId kind now intent
-              authorizeSinkAction (authorityFor grantSource) identity sink Nothing ((.resolvedRecipient) intent) resolvedConversationKey >>= \case
-                Left failure -> pure (SinkResult kind (authorizationOutcome failure), Nothing)
-                Right _ -> pure (SinkResult kind (Enqueued (declarationCoordinate ("outbox:" <> messageId))), Just (OutboxMessage outboxId event, receipt))
-
--- | Journal and enqueue one step-shaped sink intent. Flows and conversation
+-- | Journal and enqueue one step-shaped intent. Flows and conversation
 -- replies retain their shared per-run ordering key because their outputs are
 -- ordered within one durable conversation or flow.
 enqueueSinkIntentStep ::
   (Workflow :> es, Store :> es, IOE :> es) =>
+  OutputRegistry ->
   DirectoryHandle ->
   GrantSource ->
   AgentIdentity ->
@@ -249,50 +219,28 @@ enqueueSinkIntentStep ::
   SessionId ->
   Int ->
   Maybe UTCTime ->
-  Maybe DanwaTarget ->
   Maybe ActivityEnvelope ->
-  Sink ->
+  OutputDecl ->
   Value ->
   Eff es SinkResult
-enqueueSinkIntentStep directoryHandle grantSource identity stepName agentName runIdText ordinal occurredAt danwaTarget activity sink output = do
+enqueueSinkIntentStep registry directoryHandle grantSource identity stepName agentName runId ordinal occurredAt activity output result = do
   (_, workflowId) <- currentWorkflow
   now <- liftIO getCurrentTime
-  prepared <- liftIO (prepareSinkIntent directoryHandle grantSource identity workflowId stepName agentName runIdText ordinal occurredAt danwaTarget activity sink output now)
-  journalPreparedSinkIntent stepName now prepared
-
--- | The same journaled emission to a destination the caller already resolved from
--- configuration, so nothing in the triggering activity can choose where it goes.
-enqueueSinkIntentStepForRecipient ::
-  (Workflow :> es, Store :> es, IOE :> es) =>
-  DirectoryHandle ->
-  GrantSource ->
-  AgentIdentity ->
-  StepName ->
-  AgentName ->
-  SessionId ->
-  Int ->
-  Maybe UTCTime ->
-  Maybe DanwaTarget ->
-  Maybe ActivityEnvelope ->
-  DeclarationCoordinate "recipient" ->
-  Sink ->
-  Value ->
-  Eff es SinkResult
-enqueueSinkIntentStepForRecipient directoryHandle grantSource identity stepName agentName runIdText ordinal occurredAt danwaTarget activity recipient sink output = do
-  (_, workflowId) <- currentWorkflow
-  now <- liftIO getCurrentTime
-  prepared <- liftIO (prepareSinkIntentForRecipient directoryHandle grantSource identity workflowId stepName agentName runIdText ordinal occurredAt danwaTarget activity recipient sink output now)
+  prepared <- liftIO (prepareSinkIntent registry directoryHandle grantSource identity workflowId stepName agentName runId ordinal occurredAt activity output result now)
   journalPreparedSinkIntent stepName now prepared
 
 -- | One static journal record and one atomic outbox/receipt batch. Admission is
 -- checked afresh for every intent; replay returns the committed batch verbatim.
-enqueueSinkIntentBatch :: (Workflow :> es, Store :> es, IOE :> es) => IO () -> DirectoryHandle -> GrantSource -> AgentIdentity -> StepName -> AgentName -> SessionId -> Int -> Maybe UTCTime -> NonEmpty AddressedSignal -> Eff es [SinkResult]
-enqueueSinkIntentBatch onCommitted directory grants identity label agent run first occurredAt signals = do
-  when (NonEmpty.length signals > 192) (liftIO (ioError (userError "sink batch exceeds 192")))
-  (_, workflowId) <- currentWorkflow
+enqueueSinkIntentBatch :: (Workflow :> es, Store :> es, IOE :> es) => IO () -> OutputRegistry -> DirectoryHandle -> GrantSource -> AgentIdentity -> StepName -> AgentName -> SessionId -> Int -> Maybe UTCTime -> NonEmpty AddressedOutput -> Eff es [SinkResult]
+enqueueSinkIntentBatch onCommitted registry directory grants identity label agent run first occurredAt outputs = do
+  when (NonEmpty.length outputs > 192) (liftIO (ioError (userError "sink batch exceeds 192")))
+  (workflowName, workflowId) <- currentWorkflow
   now <- liftIO getCurrentTime
-  prepared <- liftIO (traverse (prepare workflowId now) (zip [first ..] (NonEmpty.toList signals)))
-  (workflowName, _) <- currentWorkflow
+  let producer = Producer {registry, directory, grants, identity, agent, runId = run, occurredAt, activity = Nothing}
+      prepare (ordinal, AddressedOutput {output, result}) =
+        let message = workflowId.unWorkflowId <> ":" <> unStepName label <> ":" <> Text.pack (show ordinal)
+         in prepareIntent producer Placement {messageId = message, orderingKey = idText run, eventTime = now} ordinal output result now
+  prepared <- liftIO (traverse prepare (zip [first ..] (NonEmpty.toList outputs)))
   generation <- currentRunGeneration
   let results = map preparedSinkResult prepared
   appendTx <- prepareJournalAppend workflowName workflowId generation (StepRecorded (unStepName label) (Aeson.toJSON results) now)
@@ -305,12 +253,6 @@ enqueueSinkIntentBatch onCommitted directory grants identity label agent run fir
   (fresh, retained) <- either (liftIO . ioError . userError) pure outcome
   when fresh (liftIO onCommitted)
   pure retained
-  where
-    prepare workflow now (ordinal, signal) =
-      let message = Delivery.sinkMessageId (workflow.unWorkflowId <> ":" <> unStepName label <> ":" <> Text.pack (show ordinal))
-       in case signal.address of
-            Recipient recipient -> prepareSinkIntentForRecipientWithMessageId directory grants identity workflow label agent run ordinal occurredAt Nothing Nothing message recipient signal.sink signal.output now
-            Conversation target -> prepareSinkIntentWithRecipient directory grants identity workflow label agent run ordinal occurredAt (Just target) Nothing (Just message) Nothing signal.sink signal.output now
 
 journalPreparedSinkIntent :: (Workflow :> es, Store :> es, IOE :> es) => StepName -> UTCTime -> PreparedSinkIntent -> Eff es SinkResult
 journalPreparedSinkIntent stepName now prepared = do
@@ -335,7 +277,9 @@ journalPreparedSinkIntent stepName now prepared = do
     Right result' -> pure result'
     Left err -> liftIO (ioError (userError (Text.unpack err)))
 
+-- | Prepare one intent whose message id is the workflow and step.
 prepareSinkIntent ::
+  OutputRegistry ->
   DirectoryHandle ->
   GrantSource ->
   AgentIdentity ->
@@ -345,166 +289,95 @@ prepareSinkIntent ::
   SessionId ->
   Int ->
   Maybe UTCTime ->
-  Maybe DanwaTarget ->
   Maybe ActivityEnvelope ->
-  Sink ->
+  OutputDecl ->
   Value ->
   UTCTime ->
   IO PreparedSinkIntent
-prepareSinkIntent directoryHandle grantSource identity workflowId stepName agentName runIdText ordinal occurredAt danwaTarget activity sink output now = do
-  prepareSinkIntentWithRecipient
-    directoryHandle
-    grantSource
-    identity
-    workflowId
-    stepName
-    agentName
-    runIdText
+prepareSinkIntent registry directoryHandle grantSource identity workflowId stepName agentName runId ordinal occurredAt activity output result now =
+  prepareIntent
+    Producer {registry, directory = directoryHandle, grants = grantSource, identity, agent = agentName, runId, occurredAt, activity}
+    Placement {messageId = unWorkflowId workflowId <> ":" <> unStepName stepName, orderingKey = idText runId, eventTime = now}
     ordinal
-    occurredAt
-    danwaTarget
-    activity
-    Nothing
-    (resolveSinkRecipient sink activity)
-    sink
     output
+    result
     now
 
--- | Prepare one sink with a deployment-resolved recipient. This is narrower
--- than a global fallback: callers must supply the concrete destination and the
--- resulting intent records it before entering the outbox transaction.
-prepareSinkIntentForRecipient ::
+-- | Preparation with a semantic message id shared by equivalent producers.
+-- Only the reservation winner may enqueue the result.
+prepareSinkIntentWithMessageId ::
+  OutputRegistry ->
   DirectoryHandle ->
   GrantSource ->
   AgentIdentity ->
-  WorkflowId ->
-  StepName ->
   AgentName ->
   SessionId ->
   Int ->
   Maybe UTCTime ->
-  Maybe DanwaTarget ->
-  Maybe ActivityEnvelope ->
-  DeclarationCoordinate "recipient" ->
-  Sink ->
-  Value ->
-  UTCTime ->
-  IO PreparedSinkIntent
-prepareSinkIntentForRecipient directoryHandle grantSource identity workflowId stepName agentName runIdText ordinal occurredAt danwaTarget activity recipient sink output now =
-  prepareSinkIntentWithRecipient directoryHandle grantSource identity workflowId stepName agentName runIdText ordinal occurredAt danwaTarget activity Nothing (Just recipient) sink output now
-
--- | Explicit-recipient preparation with a semantic message id shared by
--- equivalent producers. Only the reservation winner may enqueue the result.
-prepareSinkIntentForRecipientWithMessageId ::
-  DirectoryHandle ->
-  GrantSource ->
-  AgentIdentity ->
-  WorkflowId ->
-  StepName ->
-  AgentName ->
-  SessionId ->
-  Int ->
-  Maybe UTCTime ->
-  Maybe DanwaTarget ->
   Maybe ActivityEnvelope ->
   Delivery.SinkMessageId ->
-  DeclarationCoordinate "recipient" ->
-  Sink ->
+  OutputDecl ->
   Value ->
   UTCTime ->
   IO PreparedSinkIntent
-prepareSinkIntentForRecipientWithMessageId directoryHandle grantSource identity workflowId stepName agentName runIdText ordinal occurredAt danwaTarget activity messageId recipient sink output now =
-  prepareSinkIntentWithRecipient directoryHandle grantSource identity workflowId stepName agentName runIdText ordinal occurredAt danwaTarget activity (Just messageId) (Just recipient) sink output now
+prepareSinkIntentWithMessageId registry directoryHandle grantSource identity agentName runId ordinal occurredAt activity messageId output result now =
+  prepareIntent
+    Producer {registry, directory = directoryHandle, grants = grantSource, identity, agent = agentName, runId, occurredAt, activity}
+    Placement {messageId = Delivery.sinkMessageIdText messageId, orderingKey = idText runId, eventTime = now}
+    ordinal
+    output
+    result
+    now
 
-prepareSinkIntentWithRecipient ::
-  DirectoryHandle ->
-  GrantSource ->
-  AgentIdentity ->
-  WorkflowId ->
-  StepName ->
-  AgentName ->
-  SessionId ->
-  Int ->
-  Maybe UTCTime ->
-  Maybe DanwaTarget ->
-  Maybe ActivityEnvelope ->
-  Maybe Delivery.SinkMessageId ->
-  Maybe (DeclarationCoordinate "recipient") ->
-  Sink ->
-  Value ->
-  UTCTime ->
-  IO PreparedSinkIntent
-prepareSinkIntentWithRecipient directoryHandle grantSource identity workflowId stepName agentName runId ordinal occurredAt danwaTarget activity explicitMessageId explicitRecipient sink output now = do
+-- | The enqueue-time gates, in order: the output's adapter routes through
+-- the outbox, the principal's lifecycle admits it, C11 grants the kind, and
+-- the authority allows the exact target the adapter names. Any refusal is a
+-- result with nothing enqueued.
+prepareIntent :: Producer -> Placement -> Int -> OutputDecl -> Value -> UTCTime -> IO PreparedSinkIntent
+prepareIntent producer Placement {messageId, orderingKey, eventTime} ordinal output result now = do
   position <- admitSinkOrdinal ordinal
-  let runIdText = idText runId
   capturedTraceContext <- traceContextFromCurrentSpan
-  let kind = sinkKindOf sink
-      messageId = maybe (unWorkflowId workflowId <> ":" <> unStepName stepName) Delivery.sinkMessageIdText explicitMessageId
-      outboxId = deterministicOutboxIdForMessage messageId
-      deniedResult reason = SinkResult kind (DeniedOutcome reason)
-      enqueuedResult = SinkResult kind (Enqueued (declarationCoordinate ("outbox:" <> messageId)))
-  Directory.identityLifecycleAdmission directoryHandle identity >>= \case
-    Left reason ->
-      pure
-        PreparedSinkIntent
-          { sinkResult = SinkResult kind (SkippedLifecycle reason),
-            outboxMessage = Nothing,
-            deliveryReceipt = Nothing
-          }
-    Right () ->
-      checkGrant grantSource identity kind >>= \case
-        Left (Denied reason) ->
-          pure
-            PreparedSinkIntent
-              { sinkResult = deniedResult reason,
-                outboxMessage = Nothing,
-                deliveryReceipt = Nothing
-              }
-        Right () -> do
-          let (resolvedConversationKey, resolvedTriggeringActivityId) = egressMetadata sink activity output
-              intent =
-                SinkIntent
-                  { agent = agentName,
-                    identity,
-                    runId,
-                    ordinal = position,
-                    occurredAt,
-                    danwaTarget,
-                    resolvedRecipient = explicitRecipient,
-                    conversationKey = resolvedConversationKey,
-                    triggeringActivityId = resolvedTriggeringActivityId,
-                    sink,
-                    output
-                  }
-              event = sinkIntentEvent messageId runIdText now capturedTraceContext intent
-              receipt = pendingDeliveryReceipt messageId kind now intent
-          authorizeSinkAction (authorityFor grantSource) identity sink danwaTarget explicitRecipient resolvedConversationKey >>= \case
-            Left failure ->
-              pure
-                PreparedSinkIntent
-                  { sinkResult = SinkResult kind (authorizationOutcome failure),
-                    outboxMessage = Nothing,
-                    deliveryReceipt = Nothing
-                  }
-            Right _ ->
-              pure
-                PreparedSinkIntent
-                  { sinkResult = enqueuedResult,
-                    outboxMessage = Just (OutboxMessage outboxId event),
-                    deliveryReceipt = Just receipt
-                  }
+  let kind = output.kind
+      refusedWith outcome = pure PreparedSinkIntent {sinkResult = SinkResult kind outcome, outboxMessage = Nothing, deliveryReceipt = Nothing}
+  case lookupAdapter producer.registry kind >>= outboxRouteOf of
+    Nothing -> refusedWith (DeniedOutcome (unroutable kind))
+    Just route ->
+      Directory.identityLifecycleAdmission producer.directory producer.identity >>= \case
+        Left reason -> refusedWith (SkippedLifecycle reason)
+        Right () ->
+          checkGrant producer.grants producer.identity kind >>= \case
+            Left (Denied reason) -> refusedWith (DeniedOutcome reason)
+            Right () -> do
+              let address = route.address AddressInput {config = output.config, activity = producer.activity, result}
+                  intent =
+                    SinkIntent
+                      { agent = producer.agent,
+                        identity = producer.identity,
+                        runId = producer.runId,
+                        ordinal = position,
+                        occurredAt = producer.occurredAt,
+                        output,
+                        address,
+                        result
+                      }
+                  event = sinkIntentEvent messageId orderingKey eventTime capturedTraceContext intent
+                  receipt = pendingDeliveryReceipt messageId kind now intent
+              authorizeOutput (authorityFor producer.grants) producer.identity kind (route.target output.config address) >>= \case
+                Left failure -> refusedWith (authorizationOutcome failure)
+                Right _ ->
+                  pure
+                    PreparedSinkIntent
+                      { sinkResult = SinkResult kind (Enqueued (declarationCoordinate ("outbox:" <> messageId))),
+                        outboxMessage = Just (OutboxMessage (deterministicOutboxIdForMessage messageId) event),
+                        deliveryReceipt = Just receipt
+                      }
+
+unroutable :: OutputKind -> Text
+unroutable kind = "output kind " <> outputKindText kind <> " is not delivered through the outbox here"
 
 authorizationOutcome :: AuthorityFailure -> SinkOutcome
 authorizationOutcome failure@PolicyDenied {} = DeniedOutcome (authorityFailureDetail failure)
 authorizationOutcome failure = AuthorizationFailed (authorityFailureDetail failure)
-
-egressMetadata :: Sink -> Maybe ActivityEnvelope -> Value -> (Maybe (DeclarationCoordinate "conversation"), Maybe (ActivityCoordinate "activity-id"))
-egressMetadata sink activity output = case sink of
-  ChannelEgress {} ->
-    ( resolveConversationKey sink activity output,
-      (.activityId) <$> activity
-    )
-  _ -> (Nothing, Nothing)
 
 preparedSinkResult :: PreparedSinkIntent -> SinkResult
 preparedSinkResult PreparedSinkIntent {sinkResult} = sinkResult
@@ -514,14 +387,14 @@ enqueuePreparedSinkIntentTx PreparedSinkIntent {outboxMessage, deliveryReceipt} 
   traverse_ enqueueOutboxTx outboxMessage
   traverse_ Delivery.recordDeliveryTx deliveryReceipt
 
-deliveryContextFor :: Text -> SinkKind -> SinkIntent -> Delivery.ReceiptContext
+deliveryContextFor :: Text -> OutputKind -> SinkIntent -> Delivery.ReceiptContext
 deliveryContextFor messageId kind SinkIntent {agent, runId, ordinal} =
   Delivery.ReceiptContext (Delivery.sinkMessageId messageId) runId agent ordinal kind
 
-deliveryReceiptFor :: Text -> SinkKind -> Delivery.DeliveryStatus -> Maybe Text -> UTCTime -> SinkIntent -> Delivery.DeliveryReceipt
+deliveryReceiptFor :: Text -> OutputKind -> Delivery.DeliveryStatus -> Maybe Text -> UTCTime -> SinkIntent -> Delivery.DeliveryReceipt
 deliveryReceiptFor messageId kind = deliveryReceiptForKey (Delivery.deliveryReceiptKey messageId) messageId kind
 
-deliveryReceiptForKey :: Delivery.ReceiptKey -> Text -> SinkKind -> Delivery.DeliveryStatus -> Maybe Text -> UTCTime -> SinkIntent -> Delivery.DeliveryReceipt
+deliveryReceiptForKey :: Delivery.ReceiptKey -> Text -> OutputKind -> Delivery.DeliveryStatus -> Maybe Text -> UTCTime -> SinkIntent -> Delivery.DeliveryReceipt
 deliveryReceiptForKey key messageId kind receiptStatus receiptDetail now SinkIntent {agent, runId, ordinal} =
   Delivery.DeliveryReceipt
     { Delivery.receiptKey = key,
@@ -535,7 +408,7 @@ deliveryReceiptForKey key messageId kind receiptStatus receiptDetail now SinkInt
       Delivery.updatedAt = now
     }
 
-pendingDeliveryReceipt :: Text -> SinkKind -> UTCTime -> SinkIntent -> Delivery.DeliveryReceipt
+pendingDeliveryReceipt :: Text -> OutputKind -> UTCTime -> SinkIntent -> Delivery.DeliveryReceipt
 pendingDeliveryReceipt messageId kind = deliveryReceiptFor messageId kind Delivery.Pending Nothing
 
 decodeSinkIntentEvent :: IntegrationEvent -> Either IntegrationEventError SinkIntent

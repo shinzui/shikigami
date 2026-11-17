@@ -47,7 +47,7 @@ import Shikigami.Flow.Decision (decisionStepNames)
 import Shikigami.Flow.Pack
 import Shikigami.Memory.Scope (agentScope)
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase, withShikigamiMigratedSuite)
-import Shikigami.Sink.Permission (SinkKind (SKizashiSignal))
+import Shikigami.Sink.Outputs (kizashiSignalKind)
 import Shikigami.Sink.Types (SinkOutcome (Enqueued), SinkResult (..))
 import System.FilePath ((</>))
 import Test.Tasty (TestTree, defaultMain, testGroup)
@@ -226,7 +226,7 @@ recordingMemory seen = interpret \_ -> \case
 
 recordingSink :: (IOE :> es) => IORef (Set.Set Text) -> Eff (Sink : es) a -> Eff es a
 recordingSink seen = interpret \_ -> \case
-  EmitSignal label _ _ -> record seen ("emit-signal-" <> declarationCoordinateText label) >> pure (SinkResult SKizashiSignal (Enqueued (declarationCoordinate "recorded")))
+  EmitSignal label _ _ -> record seen ("emit-signal-" <> declarationCoordinateText label) >> pure (SinkResult kizashiSignalKind (Enqueued (declarationCoordinate "recorded")))
   _ -> error "the at-risk body emits one signal at a time"
 
 recordingAcknowledgement :: (IOE :> es) => IORef (Set.Set Text) -> Ack -> Eff (Acknowledgement : es) a -> Eff es a

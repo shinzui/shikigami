@@ -50,34 +50,30 @@ reportLimit = 1048576
 
 localReportAdapter :: FilePath -> OutputAdapter
 localReportAdapter root =
-  OutputAdapter
-    { kind = localReportKind,
-      validate = fmap (const ()) . formatOf,
-      deliver = \OutputDelivery {run, agent, ordinal, output, result} -> case formatOf output.config of
-        Left problem -> pure (Left problem)
-        Right format -> do
-          let directory = root </> Text.unpack (agentNameText agent)
-              extension = case format of Markdown -> "md"; Json -> "json"
-              path = directory </> (Text.unpack (Text.replace "/" "_" run.unWorkflowId) <> "-" <> show ordinal <> "." <> extension)
-              rendered = case format of
-                Markdown -> Text.Encoding.encodeUtf8 (markdownOf (agentNameText agent) run.unWorkflowId result)
-                Json -> LazyByteString.toStrict (Aeson.encode result)
-              truncated = ByteString.length rendered > reportLimit
-              bytes = if truncated then ByteString.take reportLimit rendered <> "\n\n[truncated at 1 MiB]\n" else rendered
-          createDirectoryIfMissing True directory
-          let staging = path <> ".tmp"
-          ByteString.writeFile staging bytes
-          setFileMode staging 0o600
-          renameFile staging path
-          pure
-            ( Right
-                OutputReceipt
-                  { kind = outputKindText localReportKind,
-                    location = Text.pack path,
-                    detail = Text.pack (show (ByteString.length bytes)) <> " bytes" <> (if truncated then ", truncated" else "")
-                  }
-            )
-    }
+  inlineOutputAdapter localReportKind (fmap (const ()) . formatOf) \OutputDelivery {run, agent, ordinal, output, result} -> case formatOf output.config of
+    Left problem -> pure (Left problem)
+    Right format -> do
+      let directory = root </> Text.unpack (agentNameText agent)
+          extension = case format of Markdown -> "md"; Json -> "json"
+          path = directory </> (Text.unpack (Text.replace "/" "_" run.unWorkflowId) <> "-" <> show ordinal <> "." <> extension)
+          rendered = case format of
+            Markdown -> Text.Encoding.encodeUtf8 (markdownOf (agentNameText agent) run.unWorkflowId result)
+            Json -> LazyByteString.toStrict (Aeson.encode result)
+          truncated = ByteString.length rendered > reportLimit
+          bytes = if truncated then ByteString.take reportLimit rendered <> "\n\n[truncated at 1 MiB]\n" else rendered
+      createDirectoryIfMissing True directory
+      let staging = path <> ".tmp"
+      ByteString.writeFile staging bytes
+      setFileMode staging 0o600
+      renameFile staging path
+      pure
+        ( Right
+            OutputReceipt
+              { kind = outputKindText localReportKind,
+                location = Text.pack path,
+                detail = Text.pack (show (ByteString.length bytes)) <> " bytes" <> (if truncated then ", truncated" else "")
+              }
+        )
 
 -- | The reply (or summary) as prose, and the full result as JSON below it.
 markdownOf :: Text -> Text -> Value -> Text

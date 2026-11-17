@@ -157,13 +157,14 @@ import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Shikigami.Output (emptyOutputRegistry)
+import Shikigami.Output.Kikan (KikanServices (..), kikanOutputs)
 import Shikigami.Pack.Setting (noPackSettings)
 import Shikigami.Repository (RepoRef (..), revisionText)
 import Shikigami.RunJobs (decodeRunJob)
 import Shikigami.Sink.Config (DanwaConfig (..), KanmonConfig (..), KawaConfig (..), KizashiConfig (..), ReiConfig (..))
 import Shikigami.Sink.Delivery (sinkMessageId)
 import Shikigami.Sink.GrantStore (GrantSource (StaticGrants))
-import Shikigami.Sink.Permission (SinkKind (SKawaDigest, SKizashiSignal))
+import Shikigami.Sink.Outputs (kawaDigestKind, kizashiSignalKind)
 import Shikigami.Trigger.Enqueue (ensureRunQueue, runQueueName)
 import Shikigami.Trigger.Schedule (parseCron)
 import Shikigami.Workflow.Versioning (shikigamiWorkflowRunOptions)
@@ -688,7 +689,7 @@ attentionEnv recipients runIdentifier =
       runId = either (error . show) id (NominalId.parseId runIdentifier),
       occurredAt = Nothing,
       activity = Just reviewActivity,
-      grants = StaticGrants (Map.singleton (compatibilityIdentity (fixtureAgentName reviewerAgent)) (Set.fromList [SKawaDigest, SKizashiSignal])),
+      grants = StaticGrants (Map.singleton (compatibilityIdentity (fixtureAgentName reviewerAgent)) (Set.fromList [kawaDigestKind, kizashiSignalKind])),
       directory = disabledDirectoryHandle,
       recipients
     }
@@ -741,15 +742,9 @@ specialistAgentRunDeps appEnv behaviorEnv practiceReview =
       AgentWorkflow.workspaceCatalog = [],
       AgentWorkflow.workspace = Nothing,
       AgentWorkflow.agents = [reviewerDecl],
-      AgentWorkflow.kizashi = KizashiConfig {baseUrl = "http://localhost:1", defaultRecipient = (declarationCoordinate "recipient_unused")},
-      AgentWorkflow.kawa = KawaConfig {baseUrl = "http://localhost:1", sourceSegment = (activityCoordinate "shinzui/shikigami")},
-      AgentWorkflow.kanmon = KanmonConfig {baseUrl = "http://localhost:1"},
-      AgentWorkflow.danwa = DanwaConfig {baseUrl = "http://localhost:1", agentParticipant = (declarationCoordinate "part_agent_practice_review")},
-      AgentWorkflow.rei = ReiConfig {baseUrl = Nothing},
-      AgentWorkflow.http = testSinkHttp,
       AgentWorkflow.hooks = AgentWorkflow.defaultAgentRunHooks,
       AgentWorkflow.codingAgents = AgentWorkflow.noCodingAgents,
-      AgentWorkflow.outputs = emptyOutputRegistry,
+      AgentWorkflow.outputs = kikanOutputs (KikanServices {http = testSinkHttp, kizashi = KizashiConfig {baseUrl = "http://localhost:1", defaultRecipient = (declarationCoordinate "recipient_unused")}, kawa = KawaConfig {baseUrl = "http://localhost:1", sourceSegment = (activityCoordinate "shinzui/shikigami")}, kanmon = KanmonConfig {baseUrl = "http://localhost:1"}, danwa = DanwaConfig {baseUrl = "http://localhost:1", agentParticipant = (declarationCoordinate "part_agent_practice_review")}, rei = ReiConfig {baseUrl = Nothing}}),
       AgentWorkflow.declaredTools = AgentWorkflow.noDeclaredTools,
       AgentWorkflow.approvalPolicy = autoApprovePolicy (((either (error . show) id . parseDuration) (secondsToNominalDiffTime 900))),
       AgentWorkflow.approvalWorkflow = ApprovalWorkflow.defaultApprovalWorkflowEnv,
@@ -757,7 +752,7 @@ specialistAgentRunDeps appEnv behaviorEnv practiceReview =
       AgentWorkflow.harness = Harness.defaultHarnessPolicy,
       AgentWorkflow.delegationBudget = defaultDelegationBudget,
       AgentWorkflow.logger = Log.silentLogger,
-      AgentWorkflow.grants = StaticGrants (Map.singleton (compatibilityIdentity (fixtureAgentName reviewerAgent)) (Set.fromList [SKawaDigest, SKizashiSignal])),
+      AgentWorkflow.grants = StaticGrants (Map.singleton (compatibilityIdentity (fixtureAgentName reviewerAgent)) (Set.fromList [kawaDigestKind, kizashiSignalKind])),
       AgentWorkflow.directory = disabledDirectoryHandle,
       AgentWorkflow.routing = unusedRoutingRuntime,
       AgentWorkflow.packSettings = noPackSettings,
@@ -972,7 +967,7 @@ sinkEnvFixture session =
       occurredAt = Nothing,
       danwaTarget = Nothing,
       activity = Just reviewActivity,
-      grants = StaticGrants (Map.singleton (compatibilityIdentity (fixtureAgentName reviewerAgent)) (Set.fromList [SKawaDigest, SKizashiSignal])),
+      grants = StaticGrants (Map.singleton (compatibilityIdentity (fixtureAgentName reviewerAgent)) (Set.fromList [kawaDigestKind, kizashiSignalKind])),
       directory = disabledDirectoryHandle,
       identity = compatibilityIdentity (fixtureAgentName reviewerAgent)
     }

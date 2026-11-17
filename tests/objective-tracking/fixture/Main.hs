@@ -31,7 +31,7 @@ import Shikigami.App.Config (Role (AdminRole), revealSecretText)
 import Shikigami.App.Config.Load (ConfigOptions (..), DiagnosticMode (NoDiagnostic), requireDatabaseUrl, runAppConfig)
 import Shikigami.Integration.Danwa (AddressedMessage (..))
 import Shikigami.Sink.GrantStore (upsertGrant)
-import Shikigami.Sink.Permission (SinkKind (SDanwaConversation))
+import Shikigami.Sink.Outputs (danwaConversationKind)
 import Shikigami.Trigger.Enqueue (addressedRunJob, enqueueRunJob)
 import System.Directory (doesFileExist)
 import System.Environment (getArgs)
@@ -56,7 +56,7 @@ main =
       putStrLn "conversation turn enqueued through the production producer"
     ["grant-conversation", configFile] -> withFixtureStore configFile \store -> do
       let actor = VerifiedIdentity (checked (mkAgentPrincipal "agent_01h000000000000000triage"))
-      requireRight =<< upsertGrant store.pool "triage" actor SDanwaConversation (Just "ir13-fixture")
+      requireRight =<< upsertGrant store.pool "triage" actor danwaConversationKind (Just "ir13-fixture")
     _ -> fail "usage: objective-tracking-fixture authority DIRECTORY PORT | enqueue-conversation CONFIG CONVERSATION MESSAGE CONTENT | grant-conversation CONFIG"
 
 checked :: (Show e) => Either e a -> a

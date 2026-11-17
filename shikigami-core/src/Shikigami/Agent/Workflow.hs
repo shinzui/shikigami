@@ -98,10 +98,9 @@ import Shikigami.Agent.Approval
     approvalPolicyChannel,
     approvalPolicyDeadline,
     requiresApprovalFor,
-    requiresApprovalForOutput,
   )
 import Shikigami.Agent.Approval.Workflow qualified as ApprovalWorkflow
-import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), DelegationBudget, IdentityDecl (..), MemoryPolicy (..), ProfileRequirement (..), RecordPolicy (..), Sink, Trigger (..), codingAgentStepOf, requestedOverlays)
+import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), DelegationBudget, IdentityDecl (..), MemoryPolicy (..), ProfileRequirement (..), RecordPolicy (..), Trigger (..), codingAgentStepOf, requestedOverlays)
 import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Delegate (awaitAllDelegated, delegate)
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
@@ -118,7 +117,7 @@ import Shikigami.App (AppEffects, AppEnv (..), runAppIO)
 import Shikigami.Attestation.PolicyValue qualified as DecisionLimits
 import Shikigami.Attestation.Profile (ProfileId (..), ProfileVersion (..))
 import Shikigami.Attestation.Resolve (ProfileResolutionError, ResolvedProfile, ResolvedProfileView (..), renderProfileResolutionError, resolvedProfileView)
-import Shikigami.Authority (Action (EmitOutput), Authority, AuthorityFailure (InvalidCoordinates), mkOutputTarget, outputKindText, recordRunEntry, scopeToRun)
+import Shikigami.Authority (Action (EmitOutput), Authority, AuthorityFailure (InvalidCoordinates), OutputKind, mkOutputTarget, outputKindText, recordRunEntry, scopeToRun)
 import Shikigami.Behavior.Error (RunError, TransientBehaviorFailure (..), boundedBehaviorDetail)
 import Shikigami.Behavior.Provider (ProfileViolation, constrainBehaviorEnv, renderProfileViolation)
 import Shikigami.Behavior.Provider.Coordinate (providerCoordinateText)
@@ -196,10 +195,9 @@ import Shikigami.Program.DecisionRunner qualified as DecisionRunner
 import Shikigami.Record (RecordEntry, RecordError, recordErrorText)
 import Shikigami.Repository (RepositoryId)
 import Shikigami.RuntimePolicy (DefaultModelRequirement (DefaultModelOptional), defaultModelRequired)
-import Shikigami.Sink (DanwaConfig, DeliveryGuard (..), GrantSource, KanmonConfig, KawaConfig, KizashiConfig, ReiConfig, SinkContext (..), SinkOutcome (..), SinkResult (..), dispatch, sinkKindOf)
+import Shikigami.Sink (DeliveryGuard (..), GrantSource, OutboxDelivery (..), SinkOutcome (..), SinkResult (..), dispatchOutbox)
 import Shikigami.Sink.Delivery qualified as Delivery
 import Shikigami.Sink.GrantStore (withAuthority)
-import Shikigami.Sink.Http (SinkHttp)
 import Shikigami.Sink.Intent
   ( PreparedSinkIntent,
     SinkIntent (..),
@@ -213,7 +211,7 @@ import Shikigami.Sink.Intent
     prepareSinkIntent,
     preparedSinkResult,
   )
-import Shikigami.Sink.Permission (SinkKind, sinkKindText)
+import Shikigami.Sink.Outputs (declarationOutputs)
 import Shikigami.Telemetry.TraceContext qualified as TraceContext
 import Shikigami.WorkerSession.Capability qualified as WorkerCapability
 import Shikigami.WorkerSession.Handoff qualified as WorkerHandoff
@@ -248,14 +246,6 @@ data AgentRunDeps = AgentRunDeps
     -- pack flow may offer them to a model; their source locators stay private.
     workspaceCatalog :: ![RepositoryId],
     agents :: ![AgentDecl],
-    kizashi :: !KizashiConfig,
-    kawa :: !KawaConfig,
-    kanmon :: !KanmonConfig,
-    danwa :: !DanwaConfig,
-    rei :: !ReiConfig,
-    -- | Process-lifetime sink clients. This dependency never crosses a journal
-    -- or outbox serialization boundary.
-    http :: !SinkHttp,
     hooks :: !AgentRunHooks,
     -- | The tier's coding-agent runner, resolved per run (EP-2). Tiers that
     -- do not admit coding agents use 'noCodingAgents'.
@@ -263,6 +253,8 @@ data AgentRunDeps = AgentRunDeps
     -- | How each declared-tool step finds its runner (EP-3 M4).
     declaredTools :: !DeclaredToolRunners,
     -- | Output adapters and the composition's default output (EP-8 M2).
+    -- The publisher dispatches an outbox intent through the same registry,
+    -- so each adapter closes over its own service clients (plan 135, M3).
     outputs :: !OutputRegistry,
     -- | Mutable process policy, snapshotted once in each new run.
     approvalPolicy :: !ApprovalPolicySnapshot,
@@ -274,8 +266,8 @@ data AgentRunDeps = AgentRunDeps
     -- | Root-run descendant limit used when an agent declaration leaves its
     -- own delegation budget absent.
     delegationBudget :: !DelegationBudget,
-    -- | Which grant source the enqueue-time C11 check consults, and the one
-    -- handed to every 'SinkContext' this run builds.
+    -- | Which grant source the enqueue-time and publish-time C11 checks
+    -- consult.
     grants :: !GrantSource,
     -- | Cached principal lifecycle and attribution view shared with trigger and
     -- drain gates.
@@ -411,7 +403,7 @@ recordAdmission deps job decl = do
             root = executionRootIdText <$> job.executionRootId,
             timeout = durationTime deps.runTimeout,
             lifecycle = RunRecord.lifecycleLabel lifecycle,
-            outputs = resolveOutputs deps.outputs decl.outputs
+            outputs = resolveOutputs deps.outputs (declarationOutputs decl)
           }
   appendRunEntry deps job (RunRecord.admissionEntry admission) >>= \case
     Right () -> pure ()
@@ -936,29 +928,10 @@ finishSuccessfulRun ::
   Value ->
   Eff (Workflow : AppEffects) (Either AgentRunFailure AgentRunResult)
 finishSuccessfulRun deps selectedModelId approvalPolicyForRun recordedIdentity job decl sid prior output = do
-  approvalResult <- approveSinks deps approvalPolicyForRun sid job decl output
-  case approvalResult of
+  delivered <- deliverOutputs deps approvalPolicyForRun sid job decl output
+  case delivered of
     Left err -> finishRunFailure deps recordedIdentity decl sid err
-    Right approvedSinks -> do
-      sinkResults <-
-        withSpan' "sink.dispatch" (spanArgs Producer) \traceSpan -> do
-          addAttribute traceSpan "agent.name" (agentDeclName decl)
-          addAttribute traceSpan "sink.count" (length approvedSinks)
-          enqueueSinkIntents
-            (depsDirectory deps)
-            (depsGrants deps)
-            ((.agentName) job)
-            ((.identity) job)
-            (runJobOccurredAt job)
-            (activityFromJob job)
-            approvedSinks
-            sid
-            output
-      liftIO (traverse_ (logSinkResult (depsLogger deps) job) sinkResults)
-      delivered <- deliverOutputs deps approvalPolicyForRun sid job decl output
-      case delivered of
-        Left err -> finishRunFailure deps recordedIdentity decl sid err
-        Right () -> recordAndComplete deps selectedModelId recordedIdentity decl sid prior output
+    Right () -> recordAndComplete deps selectedModelId recordedIdentity decl sid prior output
 
 -- | Learn from the run and complete its session.
 recordAndComplete ::
@@ -987,10 +960,13 @@ recordAndComplete deps selectedModelId recordedIdentity decl sid prior output = 
                 recordedMemId = mem
               }
 
--- | The run's outputs (EP-8 M2): resolved once and journaled (the
--- declaration's own list, else the composition's default), each approved
--- when the run's policy asks for it, then authorized as 'EmitOutput' and
--- delivered by its adapter in one journaled step.
+-- | The run's outputs: resolved once and journaled (the declaration's own
+-- list, else the composition's default), each approved when the run's policy
+-- asks for it, then delivered by its adapter. An outbox adapter's outputs are
+-- journaled and enqueued together in @dispatch-sinks@ and delivered later by
+-- the publisher; an inline adapter's are authorized as 'EmitOutput' and
+-- delivered in @deliver-outputs@. Each keeps its position in the resolved
+-- list as its ordinal.
 deliverOutputs ::
   AgentRunDeps ->
   ApprovalPolicySnapshot ->
@@ -1000,60 +976,78 @@ deliverOutputs ::
   Value ->
   Eff (Workflow : AppEffects) (Either AgentRunFailure ())
 deliverOutputs deps policy sid job decl output = do
-  resolved <- runStep deps (StepName "resolve-outputs") (pure (resolveOutputs deps.outputs decl.outputs))
+  resolved <- runStep deps (StepName "resolve-outputs") (pure (resolveOutputs deps.outputs (declarationOutputs decl)))
   let listed = zip [0 :: Int ..] (resolvedOutputList resolved)
-  if null listed
-    then pure (Right ())
-    else do
-      approvals <- traverse approve listed
-      case sequence approvals of
-        Left err -> pure (Left err)
-        Right approved -> do
-          receipts <- runStep deps (StepName "deliver-outputs") (liftIO (traverse deliver [entry | (entry, True) <- zip listed approved]))
-          pure case [problem | Left problem <- receipts] of
-            [] -> Right ()
-            problem : _ -> Left (PermanentAgentRunFailure ("output delivery failed: " <> problem))
+  approvals <- traverse approve listed
+  case sequence approvals of
+    Left err -> pure (Left err)
+    Right approved -> do
+      let kept = [entry | (entry, True) <- zip listed approved]
+          routed = [(entry, (.route) <$> lookupAdapter deps.outputs decl'.kind) | entry@(_, decl') <- kept]
+      case [decl' | ((_, decl'), Nothing) <- routed] of
+        unregistered : _ -> pure (Left (PermanentAgentRunFailure ("output kind " <> kindOf unregistered <> " is not registered")))
+        [] -> do
+          let outboxed = [entry | (entry, Just (Output.DeliverByOutbox _)) <- routed]
+              inline = [(entry, deliver) | (entry, Just (Output.DeliverInline deliver)) <- routed]
+          sinkResults <-
+            withSpan' "sink.dispatch" (spanArgs Producer) \traceSpan -> do
+              addAttribute traceSpan "agent.name" (agentDeclName decl)
+              addAttribute traceSpan "sink.count" (length outboxed)
+              enqueueSinkIntents deps.outputs (depsDirectory deps) (depsGrants deps) ((.agentName) job) ((.identity) job) (runJobOccurredAt job) (activityFromJob job) outboxed sid output
+          liftIO (traverse_ (logSinkResult (depsLogger deps) job) sinkResults)
+          if null inline
+            then pure (Right ())
+            else do
+              receipts <- runStep deps (StepName "deliver-outputs") (liftIO (traverse deliverInline inline))
+              pure case [problem | Left problem <- receipts] of
+                [] -> Right ()
+                problem : _ -> Left (PermanentAgentRunFailure ("output delivery failed: " <> problem))
   where
     kindOf decl' = outputKindText decl'.kind
     approve (ordinal, decl')
-      | not (requiresApprovalForOutput policy (kindOf decl')) = pure (Right True)
+      | not (requiresApprovalFor policy decl'.kind) = pure (Right True)
       | otherwise = do
           requested <-
-            ApprovalWorkflow.requestApproval
-              ("output-" <> kindOf decl' <> "-" <> Text.pack (show ordinal))
-              sid
-              ApprovalRequest
-                { prompt = "Deliver the " <> kindOf decl' <> " output of agent " <> agentNameText ((.agentName) job) <> "?",
-                  context = output,
-                  channel = approvalPolicyChannel policy
-                }
-              (approvalPolicyDeadline policy)
-          pure case requested of
-            ApprovalWorkflow.ApprovalNotificationFailed detail -> Left (PermanentAgentRunFailure ("approval notification failed: " <> detail))
-            ApprovalWorkflow.ApprovalResolved (Approved _) -> Right True
-            ApprovalWorkflow.ApprovalResolved _ -> Right False
-    deliver (ordinal, decl') = case lookupAdapter deps.outputs decl'.kind of
-      Nothing -> pure (Left ("output kind " <> kindOf decl' <> " is not registered"))
-      Just adapter -> do
-        let runId = runJobWorkflowId job
-        decided <- case (identityText ((.identity) job), mkOutputTarget (runId.unWorkflowId :| [Text.pack (show ordinal)])) of
-          (Right principal, Right target) -> do
-            let action = EmitOutput decl'.kind target
-            fmap (action,) <$> deps.actionAuthority.decide (declarationCoordinate principal) action
-          (Left problem, _) -> pure (Left (InvalidCoordinates problem))
-          (_, Left problem) -> pure (Left (InvalidCoordinates problem))
-        case decided of
-          Left refusal -> pure (Left (kindOf decl' <> " was refused: " <> Text.pack (show refusal)))
-          Right (action, _) -> do
-            delivered <- adapter.deliver OutputDelivery {run = runId, agent = decl.name, ordinal, output = decl', result = output}
-            -- The effect is recorded after it happened; the decision was
-            -- recorded before. A delivered output whose entry cannot be
-            -- written is reported, not delivered twice.
-            for_ delivered \receipt ->
-              appendRunEntry deps job (RunRecord.deliveredEntry "deliver-outputs" action receipt) >>= \case
-                Right () -> pure ()
-                Left problem -> Log.logError (depsLogger deps) "record.output_delivered_unrecorded" ["reason" .= problem, Log.runIdKey .= runId.unWorkflowId]
-            pure delivered
+            trySync
+              ( ApprovalWorkflow.requestApproval
+                  ("output-" <> kindOf decl' <> "-" <> Text.pack (show ordinal))
+                  sid
+                  ApprovalRequest
+                    { prompt = "Deliver the " <> kindOf decl' <> " output of agent " <> agentNameText ((.agentName) job) <> "?",
+                      context = output,
+                      channel = approvalPolicyChannel policy
+                    }
+                  (approvalPolicyDeadline policy)
+              )
+          case requested of
+            Left err ->
+              case fromException err of
+                Just (WorkflowChildFailed childName childId detail) ->
+                  pure (Left (PermanentAgentRunFailure ("approval child " <> Text.pack (show childName) <> "/" <> Text.pack (show childId) <> " failed: " <> detail)))
+                Nothing -> EffException.throwIO err
+            Right (ApprovalWorkflow.ApprovalNotificationFailed detail) -> pure (Left (PermanentAgentRunFailure ("approval notification failed: " <> detail)))
+            Right (ApprovalWorkflow.ApprovalResolved (Approved _)) -> pure (Right True)
+            Right (ApprovalWorkflow.ApprovalResolved _) -> pure (Right False)
+    deliverInline ((ordinal, decl'), deliver) = do
+      let runId = runJobWorkflowId job
+      decided <- case (identityText ((.identity) job), mkOutputTarget (runId.unWorkflowId :| [Text.pack (show ordinal)])) of
+        (Right principal, Right target) -> do
+          let action = EmitOutput decl'.kind target
+          fmap (action,) <$> deps.actionAuthority.decide (declarationCoordinate principal) action
+        (Left problem, _) -> pure (Left (InvalidCoordinates problem))
+        (_, Left problem) -> pure (Left (InvalidCoordinates problem))
+      case decided of
+        Left refusal -> pure (Left (kindOf decl' <> " was refused: " <> Text.pack (show refusal)))
+        Right (action, _) -> do
+          delivered <- deliver OutputDelivery {run = runId, agent = decl.name, ordinal, output = decl', result = output}
+          -- The effect is recorded after it happened; the decision was
+          -- recorded before. A delivered output whose entry cannot be
+          -- written is reported, not delivered twice.
+          for_ delivered \receipt ->
+            appendRunEntry deps job (RunRecord.deliveredEntry "deliver-outputs" action receipt) >>= \case
+              Right () -> pure ()
+              Left problem -> Log.logError (depsLogger deps) "record.output_delivered_unrecorded" ["reason" .= problem, Log.runIdKey .= runId.unWorkflowId]
+          pure delivered
 
 finishRunFailure ::
   AgentRunDeps ->
@@ -1189,65 +1183,6 @@ runStep deps stepName action =
     result <- action
     liftIO ((.afterStepBody) ((.hooks) deps) stepName)
     pure result
-
-approveSinks ::
-  (Workflow :> es, Store :> es, IOE :> es) =>
-  AgentRunDeps ->
-  ApprovalPolicySnapshot ->
-  SessionId ->
-  RunJob ->
-  AgentDecl ->
-  Value ->
-  Eff es (Either AgentRunFailure [Sink])
-approveSinks deps approvalPolicyForRun sid job decl output = do
-  decisions <- traverse (approveWithPolicy approvalPolicyForRun) indexedSinks
-  pure (catMaybes <$> sequence decisions)
-  where
-    indexedSinks = zip [0 :: Int ..] ((.sinks) decl)
-
-    approveWithPolicy policy (ordinal, sink)
-      | not (requiresApprovalFor policy kind) = pure (Right (Just sink))
-      | otherwise = do
-          requested <-
-            trySync
-              ( ApprovalWorkflow.requestApproval
-                  ("sink-" <> sinkKindText kind <> "-" <> Text.pack (show ordinal))
-                  sid
-                  ApprovalRequest
-                    { prompt = "Approve " <> sinkKindText kind <> " sink for agent " <> (agentNameText ((.agentName) job)) <> "?",
-                      context = output,
-                      channel = approvalPolicyChannel policy
-                    }
-                  (approvalPolicyDeadline policy)
-              )
-          case requested of
-            Left err ->
-              case fromException err of
-                Just (WorkflowChildFailed childName childId detail) ->
-                  pure
-                    ( Left
-                        ( PermanentAgentRunFailure
-                            ( "approval child "
-                                <> Text.pack (show childName)
-                                <> "/"
-                                <> Text.pack (show childId)
-                                <> " failed: "
-                                <> detail
-                            )
-                        )
-                    )
-                Nothing -> EffException.throwIO err
-            Right (ApprovalWorkflow.ApprovalNotificationFailed detail) ->
-              pure (Left (PermanentAgentRunFailure ("approval notification failed: " <> detail)))
-            Right (ApprovalWorkflow.ApprovalResolved decision) ->
-              pure
-                ( Right case decision of
-                    Approved _ -> Just sink
-                    Rejected _ -> Nothing
-                    TimedOut -> Nothing
-                )
-      where
-        kind = sinkKindOf sink
 
 -- | Open the run's kioku session.
 --
@@ -1387,6 +1322,7 @@ runFlowDefinition deps activeBehaviorEnv resolvedProfile approvalPolicyForRun re
             FlowPack.settings = deps.packSettings,
             FlowPack.app = deps.appEnv,
             FlowPack.grants = depsGrants deps,
+            FlowPack.outputs = deps.outputs,
             FlowPack.metrics = maybe FlowPack.noPackMetrics deps.packMetrics owner,
             FlowPack.repositories = deps.workspaceCatalog,
             FlowPack.objectiveSettings = maybe Objective.defaultObjectiveSettings (.settings) deps.objectives
@@ -1491,8 +1427,8 @@ runFlowDefinition deps activeBehaviorEnv resolvedProfile approvalPolicyForRun re
           FlowCapability.agent = (.agentName) job,
           FlowCapability.runId = sid,
           FlowCapability.occurredAt = Just (runJobOccurredAt job),
-          FlowCapability.danwaTarget = Nothing,
           FlowCapability.activity = Just (activityFromJob job),
+          FlowCapability.outputs = deps.outputs,
           FlowCapability.grants = depsGrants deps,
           FlowCapability.directory = depsDirectory deps,
           FlowCapability.identity = (.identity) job
@@ -1622,46 +1558,42 @@ recordFailureLearningBestEffort deps recordedIdentity decl sid err = do
         ]
 
 publishSinkIntent :: (IOE :> es) => AgentRunDeps -> OutboxRow -> Eff es PublishOutcome
-publishSinkIntent AgentRunDeps {appEnv = depsAppEnv, kizashi = depsKizashi, kawa = depsKawa, kanmon = depsKanmon, danwa = depsDanwa, rei = depsRei, http = sinkHttp, logger = intentLogger, grants = rawIntentGrants, actionAuthority, directory = intentDirectory, deliveryPool} row =
+publishSinkIntent AgentRunDeps {appEnv = depsAppEnv, outputs = registry, logger = intentLogger, grants = rawIntentGrants, actionAuthority, directory = intentDirectory, deliveryPool} row =
   let OutboxRow {event = integrationEvent} = row
    in case decodeSinkIntentEvent integrationEvent of
         Left err -> pure (PublishFailed (Text.pack (show err)))
-        Right intent@SinkIntent {agent, identity = recordedIdentity, runId, ordinal, occurredAt, danwaTarget, resolvedRecipient, conversationKey, triggeringActivityId, sink, output} -> liftIO do
+        Right intent@SinkIntent {agent, identity = recordedIdentity, runId, ordinal, occurredAt, output, address, result} -> liftIO do
           let messageId = Integration.messageId integrationEvent
-              kind = sinkKindOf sink
+              kind = output.kind
               publish =
                 Otel.inSpan' (depsAppEnv.tracer) "sink.publish" (spanArgs Consumer) \traceSpan -> do
-                  Otel.addAttribute traceSpan "sink.kind" (Otel.toAttribute (sinkKindText kind))
+                  Otel.addAttribute traceSpan "sink.kind" (Otel.toAttribute (outputKindText kind))
                   currentTraceContext <- traceContextFromCurrentSpan
                   admittedIdentity <- case recordedIdentity of
                     UnresolvedLegacyIdentity ->
                       Directory.identityAdmission intentDirectory Nothing agent
                     _ -> pure (Right recordedIdentity)
-                  let sinkContext =
-                        SinkContext
+                  let delivery =
+                        OutboxDelivery
                           { identity = either (const recordedIdentity) id admittedIdentity,
-                            directory = intentDirectory,
-                            runId = runId,
-                            ordinal = ordinal,
-                            kizashi = depsKizashi,
-                            kawa = depsKawa,
-                            kanmon = depsKanmon,
-                            danwa = depsDanwa,
-                            rei = depsRei,
-                            http = sinkHttp,
+                            agent,
+                            runId,
+                            ordinal,
+                            occurredAt,
+                            kind,
+                            config = output.config,
+                            address,
+                            result,
                             traceHeaders = maybe [] TraceContext.traceHeaders currentTraceContext,
-                            danwaTarget = danwaTarget,
-                            recipientOverride = resolvedRecipient,
-                            conversationKey,
-                            triggeringActivityId,
-                            occurredAt = occurredAt,
                             receipts = (\pool -> deliveryGuard pool messageId kind intent) <$> deliveryPool,
-                            grants = withAuthority actionAuthority rawIntentGrants,
                             logger = intentLogger
                           }
-                      send = case admittedIdentity of
-                        Left reason -> pure (SinkResult kind (SkippedLifecycle reason))
-                        Right _ -> dispatch sinkContext sink output
+                      send = case (admittedIdentity, lookupAdapter registry kind >>= Output.outboxRouteOf) of
+                        (Left reason, _) -> pure (SinkResult kind (SkippedLifecycle reason))
+                        -- Retryable: a publisher composed with the adapter
+                        -- can still deliver it.
+                        (_, Nothing) -> pure (SinkResult kind (Failed ("output kind " <> outputKindText kind <> " is not registered with this publisher")))
+                        (Right _, Just route) -> dispatchOutbox intentDirectory (withAuthority actionAuthority rawIntentGrants) route delivery
                   case deliveryPool of
                     Nothing -> publishUntracked <$> send
                     Just pool -> publishTracked intentLogger pool messageId kind intent send
@@ -1693,7 +1625,7 @@ permanentPublishOutcome detail =
     (("invalid terminal sink rejection: " <>) . Text.pack . show)
     (PublishRejected <$> mkPublishRejection "sink.permanent-failure" (Just detail))
 
-publishTracked :: Log.Logger -> Pool -> Text -> SinkKind -> SinkIntent -> IO SinkResult -> IO PublishOutcome
+publishTracked :: Log.Logger -> Pool -> Text -> OutputKind -> SinkIntent -> IO SinkResult -> IO PublishOutcome
 publishTracked logger pool messageId kind intent send = do
   existing <- Delivery.lookupDeliveryFor pool (deliveryContextFor messageId kind intent) (Delivery.deliveryReceiptKey messageId)
   case existing of
@@ -1705,7 +1637,7 @@ publishTracked logger pool messageId kind intent send = do
         logger
         "sink.delivery.skipped"
         [ "outbox_message_id" .= messageId,
-          "sink_kind" .= sinkKindText kind,
+          "sink_kind" .= outputKindText kind,
           "reason" .= ("proven-delivered" :: Text)
         ]
       pure PublishSucceeded
@@ -1733,7 +1665,7 @@ publishTracked logger pool messageId kind intent send = do
               logger
               "sink.delivery.unknown"
               [ "outbox_message_id" .= messageId,
-                "sink_kind" .= sinkKindText kind,
+                "sink_kind" .= outputKindText kind,
                 "downstream_id" .= downstreamId,
                 "receipt_error" .= err,
                 "unknown_write" .= either id (const ("recorded" :: Text)) unknownResult
@@ -1775,17 +1707,17 @@ publishTracked logger pool messageId kind intent send = do
       Right () -> pure ()
       Left err -> logReceiptError logger eventName messageId kind err
 
-logReceiptError :: Log.Logger -> Text -> Text -> SinkKind -> Text -> IO ()
+logReceiptError :: Log.Logger -> Text -> Text -> OutputKind -> Text -> IO ()
 logReceiptError logger eventName messageId kind err =
   Log.logError
     logger
     eventName
     [ "outbox_message_id" .= messageId,
-      "sink_kind" .= sinkKindText kind,
+      "sink_kind" .= outputKindText kind,
       "error" .= err
     ]
 
-deliveryGuard :: Pool -> Text -> SinkKind -> SinkIntent -> DeliveryGuard
+deliveryGuard :: Pool -> Text -> OutputKind -> SinkIntent -> DeliveryGuard
 deliveryGuard pool messageId kind intent =
   DeliveryGuard
     { lookupReceipt = \substep -> do
@@ -1832,8 +1764,8 @@ reconcilePublishedSinkIntent AgentRunDeps {deliveryPool = Just pool, logger} row
         [ "outbox_message_id" .= messageId,
           "error" .= Text.pack (show err)
         ]
-    Right intent@SinkIntent {sink} -> do
-      let kind = sinkKindOf sink
+    Right intent@SinkIntent {output} -> do
+      let kind = output.kind
       Delivery.lookupDeliveryFor pool (deliveryContextFor messageId kind intent) (Delivery.deliveryReceiptKey messageId) >>= \case
         Left err -> logReceiptError logger "sink.delivery.reconciliation_lookup_failed" messageId kind err
         Right (Just Delivery.DeliveryReceipt {Delivery.status = receiptStatus})
@@ -1848,7 +1780,7 @@ reconcilePublishedSinkIntent AgentRunDeps {deliveryPool = Just pool, logger} row
                 logger
                 "sink.delivery.reconciled_unknown"
                 [ "outbox_message_id" .= messageId,
-                  "sink_kind" .= sinkKindText kind
+                  "sink_kind" .= outputKindText kind
                 ]
 
 -- | Record the run's learning, if the declared policy asks for one.
@@ -1947,7 +1879,7 @@ logSinkResult logger job result =
     "sink.result"
     ( [ "agent" .= (agentNameText ((.agentName) job)),
         Log.runIdKey .= (runJobWorkflowId job).unWorkflowId,
-        "sink_kind" .= sinkKindText ((.kind) result),
+        "sink_kind" .= outputKindText ((.kind) result),
         "outcome" .= outcomeText ((.outcome) result)
       ]
         <> detailField ((.outcome) result)

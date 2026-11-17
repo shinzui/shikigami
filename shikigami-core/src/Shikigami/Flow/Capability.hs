@@ -14,7 +14,7 @@ module Shikigami.Flow.Capability
     defaultRememberOptions,
     deterministicFlowMemoryId,
     emitSignal,
-    emitSignalTo,
+    emitDirected,
     emitSignals,
     recall,
     recordFlowMemory,
@@ -51,7 +51,6 @@ import Kioku.Memory.Domain (RecordMemoryData (..))
 import Kiroku.Store.Effect (Store)
 import Shikigami.Activity (ActivityEnvelope)
 import Shikigami.Agent.Decl (AgentDecl (..), MemoryPolicy (..))
-import Shikigami.Agent.Decl qualified as Agent
 import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Name (AgentName, agentNameText)
 import Shikigami.Agent.Principal (AgentIdentity, ResolvedAgentIdentity)
@@ -60,9 +59,10 @@ import Shikigami.App (AppEnv, runAppIO)
 import Shikigami.Directory (DirectoryHandle)
 import Shikigami.Memory.Access (agentActor, shikigamiMemorySpace, shikigamiWriteContext)
 import Shikigami.Memory.Scope (agentScope)
+import Shikigami.Output (OutputDecl, OutputRegistry)
 import Shikigami.Sink (GrantSource)
-import Shikigami.Sink.Intent (enqueueSinkIntentBatch, enqueueSinkIntentStep, enqueueSinkIntentStepForRecipient)
-import Shikigami.Sink.Types (AddressedSignal, DanwaTarget, SinkResult)
+import Shikigami.Sink.Intent (AddressedOutput, enqueueSinkIntentBatch, enqueueSinkIntentStep)
+import Shikigami.Sink.Types (SinkResult)
 
 newtype MemoryQuery = MemoryQuery {query :: Text}
   deriving stock (Eq, Show)
@@ -80,12 +80,14 @@ data SinkEnv = SinkEnv
     agent :: !AgentName,
     runId :: !SessionId,
     occurredAt :: !(Maybe UTCTime),
-    danwaTarget :: !(Maybe DanwaTarget),
-    -- | The activity that triggered the flow, carried so a @KizashiSignal@
-    -- emitted from inside it can resolve @recipientFrom = Actor@ the same way
-    -- the plain agent path does. A flow with no triggering activity simply
-    -- resolves nothing and falls back to the declaration's default.
+    -- | The activity that triggered the flow, carried so an output emitted
+    -- from inside it is addressed the same way the plain agent path does
+    -- (a signal's @recipientFrom = Actor@, for one). A flow with no
+    -- triggering activity simply resolves nothing.
     activity :: !(Maybe ActivityEnvelope),
+    -- | The composition's output adapters, which address and authorize
+    -- every output a flow emits.
+    outputs :: !OutputRegistry,
     -- | Which grant source the enqueue-time C11 check consults for sinks emitted
     -- from inside a flow.
     grants :: !GrantSource,
@@ -100,9 +102,9 @@ data Memory :: Effect where
 type instance DispatchOf Memory = Dynamic
 
 data Sink :: Effect where
-  EmitSignal :: DeclarationCoordinate "sink-label" -> Agent.Sink -> Value -> Sink m SinkResult
-  EmitSignalTo :: DeclarationCoordinate "sink-label" -> DeclarationCoordinate "recipient" -> Agent.Sink -> Value -> Sink m SinkResult
-  EmitSignals :: DeclarationCoordinate "sink-label" -> NonEmpty AddressedSignal -> Sink m [SinkResult]
+  EmitSignal :: DeclarationCoordinate "sink-label" -> OutputDecl -> Value -> Sink m SinkResult
+  EmitDirected :: DeclarationCoordinate "sink-label" -> OutputDecl -> Value -> Sink m SinkResult
+  EmitSignals :: DeclarationCoordinate "sink-label" -> NonEmpty AddressedOutput -> Sink m [SinkResult]
 
 type instance DispatchOf Sink = Dynamic
 
@@ -210,15 +212,16 @@ rememberWith label opts value = send (Remember label opts value)
 -- change governed by @docs\/workflow-versioning.md@. Values that are themselves
 -- replay-stable (a ticket id read out of a journaled verdict) are permissible
 -- but discouraged; prefer a static token.
-emitSignal :: (Sink :> es) => DeclarationCoordinate "sink-label" -> Agent.Sink -> Value -> Eff es SinkResult
-emitSignal label sink output = send (EmitSignal label sink output)
+emitSignal :: (Sink :> es) => DeclarationCoordinate "sink-label" -> OutputDecl -> Value -> Eff es SinkResult
+emitSignal label output result = send (EmitSignal label output result)
 
--- | Emit to a recipient the caller resolved from configuration. Journaled as
--- @emit-signal-\<label\>@, a name the declaration language can spell.
-emitSignalTo :: (Sink :> es) => DeclarationCoordinate "sink-label" -> DeclarationCoordinate "recipient" -> Agent.Sink -> Value -> Eff es SinkResult
-emitSignalTo label recipient sink output = send (EmitSignalTo label recipient sink output)
+-- | Emit an output the caller directed from configuration (an exact
+-- recipient, say). Journaled as @emit-signal-\<label\>@, a name the
+-- declaration language can spell.
+emitDirected :: (Sink :> es) => DeclarationCoordinate "sink-label" -> OutputDecl -> Value -> Eff es SinkResult
+emitDirected label output result = send (EmitDirected label output result)
 
-emitSignals :: (Sink :> es) => DeclarationCoordinate "sink-label" -> NonEmpty AddressedSignal -> Eff es [SinkResult]
+emitSignals :: (Sink :> es) => DeclarationCoordinate "sink-label" -> NonEmpty AddressedOutput -> Eff es [SinkResult]
 emitSignals label = send . EmitSignals label
 
 currentActivity :: (Activity :> es) => Eff es ActivityEnvelope
@@ -345,22 +348,22 @@ recordFlowMemory
 -- | Journal each emission under its caller's stable label. The payload ordinal
 -- retains emission ordering; it never selects a journal record.
 runSink :: (Workflow :> es, Store :> es, IOE :> es) => SinkEnv -> Eff (Sink : es) a -> Eff es a
-runSink SinkEnv {onBatchCommitted, agent, runId, occurredAt, danwaTarget, activity, grants, directory, identity} action = do
+runSink SinkEnv {onBatchCommitted, agent, runId, occurredAt, activity, outputs, grants, directory, identity} action = do
   ordinalRef <- liftIO (newIORef (0 :: Int))
   interpret
     ( \_ -> \case
         EmitSignals label signals -> do
           ordinal <- liftIO (atomicModifyIORef' ordinalRef \current -> (current + NonEmpty.length signals, current))
           let stepName = StepName ("emit-signals-" <> declarationCoordinateText label)
-          enqueueSinkIntentBatch (onBatchCommitted stepName) directory grants identity stepName agent runId ordinal occurredAt signals
-        EmitSignal label sink output -> do
+          enqueueSinkIntentBatch (onBatchCommitted stepName) outputs directory grants identity stepName agent runId ordinal occurredAt signals
+        EmitSignal label output result -> do
           ordinal <- liftIO (atomicModifyIORef' ordinalRef \current -> (current + 1, current))
           let stepName = StepName ("emit-signal:" <> declarationCoordinateText label)
-          enqueueSinkIntentStep directory grants identity stepName agent runId ordinal occurredAt danwaTarget activity sink output
-        EmitSignalTo label recipient sink output -> do
+          enqueueSinkIntentStep outputs directory grants identity stepName agent runId ordinal occurredAt activity output result
+        EmitDirected label output result -> do
           ordinal <- liftIO (atomicModifyIORef' ordinalRef \current -> (current + 1, current))
           let stepName = StepName ("emit-signal-" <> declarationCoordinateText label)
-          enqueueSinkIntentStepForRecipient directory grants identity stepName agent runId ordinal occurredAt danwaTarget activity recipient sink output
+          enqueueSinkIntentStep outputs directory grants identity stepName agent runId ordinal occurredAt activity output result
     )
     action
 

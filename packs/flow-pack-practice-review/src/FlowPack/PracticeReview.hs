@@ -131,6 +131,7 @@ interpretReview runtime context =
           occurredAt = Just context.occurredAt,
           activity = Just context.activity,
           grants = context.grants,
+          outputs = context.outputs,
           directory = context.directory,
           recipients = case runtime.attentionRecipients of
             FixedRecipients fixed -> fixed

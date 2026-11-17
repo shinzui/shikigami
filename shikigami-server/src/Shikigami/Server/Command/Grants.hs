@@ -29,6 +29,7 @@ import Shikigami.Agent.Name (AgentName, agentNameText, mkAgentName)
 import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.App.Config (AppConfig (directorySettings), revealSecretText)
 import Shikigami.App.Config.Load (requireDatabaseUrl)
+import Shikigami.Authority (OutputKind, mkOutputKind, outputKindText)
 import Shikigami.Directory (DirectoryRuntime (..))
 import Shikigami.Directory qualified as Directory
 import Shikigami.Log qualified as Log
@@ -44,7 +45,6 @@ import Shikigami.Sink.GrantStore
     revokeGrant,
     upsertGrant,
   )
-import Shikigami.Sink.Permission (SinkKind, parseSinkKind, sinkKindText)
 import System.Exit (exitFailure)
 import System.IO (hPutStrLn, stderr)
 
@@ -66,8 +66,8 @@ runGrantsList mlimit mafter config = do
           else mapM_ (TextIO.putStrLn . renderRow) items
         case next of
           Nothing -> pure ()
-          Just GrantCursor {agentName = a, sinkKind = k} ->
-            putStrLn ("-- more: --after " <> Text.unpack (agentNameText a) <> ":" <> Text.unpack (sinkKindText k))
+          Just GrantCursor {agentName = a, kind = k} ->
+            putStrLn ("-- more: --after " <> Text.unpack (agentNameText a) <> ":" <> Text.unpack (outputKindText k))
 
 -- | @grants grant <agent> <kind> [--by WHO]@.
 runGrantsGrant :: AgentName -> String -> Maybe String -> AppConfig -> IO ()
@@ -78,7 +78,7 @@ runGrantsGrant agent kindArg by config = do
       upsertGrant pool (agentNameText agent) identity kind (Text.pack <$> by) >>= \case
         Left err -> die "grants grant" err
         Right () ->
-          putStrLn ("granted " <> Text.unpack (agentNameText agent) <> " " <> Text.unpack (sinkKindText kind))
+          putStrLn ("granted " <> Text.unpack (agentNameText agent) <> " " <> Text.unpack (outputKindText kind))
 
 -- | @grants revoke <agent> <kind> [--by WHO]@.
 --
@@ -93,13 +93,13 @@ runGrantsRevoke agent kindArg by config = do
       revokeGrant pool identity kind (Text.pack <$> by) >>= \case
         Left err -> die "grants revoke" err
         Right True ->
-          putStrLn ("revoked " <> Text.unpack (agentNameText agent) <> " " <> Text.unpack (sinkKindText kind))
+          putStrLn ("revoked " <> Text.unpack (agentNameText agent) <> " " <> Text.unpack (outputKindText kind))
         Right False ->
           putStrLn
             ( "no grant row for "
                 <> Text.unpack (agentNameText agent)
                 <> " "
-                <> Text.unpack (sinkKindText kind)
+                <> Text.unpack (outputKindText kind)
                 <> " (nothing to revoke)"
             )
 
@@ -132,21 +132,23 @@ parseCursor raw =
             then Left ("--after must be AGENT:KIND (got '" <> Text.pack raw <> "')")
             else do
               agentName <- mkAgentName a
-              sinkKind <- maybe (Left "unknown sink kind in --after") Right (parseSinkKind k)
-              Right GrantCursor {agentName, sinkKind}
+              kind <- either (Left . ("unknown output kind in --after: " <>)) Right (mkOutputKind k)
+              Right GrantCursor {agentName, kind}
 
--- | Reject an unknown sink kind by naming the five that exist, because the
--- strings are exact and an operator guessing "kawa" deserves the list.
-requireKind :: String -> String -> IO SinkKind
+-- | Reject a malformed output kind with an example, because the strings are
+-- exact and an operator guessing "kawa" deserves one.
+requireKind :: String -> String -> IO OutputKind
 requireKind ctx raw =
-  case parseSinkKind (Text.pack raw) of
-    Just k -> pure k
-    Nothing ->
+  case mkOutputKind (Text.pack raw) of
+    Right k -> pure k
+    Left problem ->
       die
         ctx
-        ( "unknown sink kind '"
+        ( "invalid output kind '"
             <> Text.pack raw
-            <> "'; expected one of KawaDigest, KizashiSignal, ReiAction, DanwaConversation, ChannelEgress"
+            <> "' ("
+            <> problem
+            <> "); grants name output kinds such as kawa.digest, kizashi.signal, rei.action, danwa.conversation or channel.egress"
         )
 
 withPool :: AppConfig -> String -> (Pool -> IO a) -> IO a

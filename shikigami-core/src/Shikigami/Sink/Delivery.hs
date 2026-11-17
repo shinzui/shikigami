@@ -47,9 +47,9 @@ import Hasql.Transaction.Sessions qualified as Transactions
 import Kioku.Id (SessionId, idText)
 import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Name (AgentName, agentNameText, mkAgentName)
+import Shikigami.Authority (OutputKind, mkOutputKind, outputKindText)
 import Shikigami.Prelude
 import Shikigami.Sink.Coordinate (SinkOrdinal, parseSinkOrdinal, parseSinkSession, sinkOrdinalInt)
-import Shikigami.Sink.Permission (SinkKind, parseSinkKind, sinkKindText)
 
 -- | The observable lifecycle of one downstream delivery.
 data DeliveryStatus
@@ -111,7 +111,7 @@ data DeliveryReceipt = DeliveryReceipt
     runId :: !SessionId,
     agent :: !AgentName,
     ordinal :: !SinkOrdinal,
-    sinkKind :: !SinkKind,
+    sinkKind :: !OutputKind,
     status :: !DeliveryStatus,
     detail :: !(Maybe DeliveryDetail),
     updatedAt :: !UTCTime
@@ -125,7 +125,7 @@ data ReceiptContext = ReceiptContext
     runId :: !SessionId,
     agent :: !AgentName,
     ordinal :: !SinkOrdinal,
-    sinkKind :: !SinkKind
+    sinkKind :: !OutputKind
   }
   deriving stock (Eq, Show)
 
@@ -213,7 +213,7 @@ recordStatement =
         <> (idText . (.runId) >$< Encoders.param (Encoders.nonNullable Encoders.text))
         <> (agentNameText . (.agent) >$< Encoders.param (Encoders.nonNullable Encoders.text))
         <> (fromIntegral . sinkOrdinalInt . (.ordinal) >$< Encoders.param (Encoders.nonNullable Encoders.int4))
-        <> (sinkKindText . (.sinkKind) >$< Encoders.param (Encoders.nonNullable Encoders.text))
+        <> (outputKindText . (.sinkKind) >$< Encoders.param (Encoders.nonNullable Encoders.text))
         <> (renderDeliveryStatus . (.status) >$< Encoders.param (Encoders.nonNullable Encoders.text))
         <> ((fmap deliveryDetailText . (.detail)) >$< Encoders.param (Encoders.nullable Encoders.text))
         <> ((.updatedAt) >$< Encoders.param (Encoders.nonNullable Encoders.timestamptz))
@@ -237,7 +237,7 @@ deliveryReceiptRow =
       do
         parsedStatus <- parseDeliveryStatus status
         when (parsedStatus == ConversationStarted && isNothing detail) (Left "missing retained conversation locator")
-        parsedKind <- maybe (Left ("unknown sink kind: " <> kind)) Right (parseSinkKind kind)
+        parsedKind <- first ("unknown output kind: " <>) (mkOutputKind kind)
         parsedRun <- parseSinkSession run
         parsedAgent <- mkAgentName agent
         parsedOrdinal <- parseSinkOrdinal ordinal

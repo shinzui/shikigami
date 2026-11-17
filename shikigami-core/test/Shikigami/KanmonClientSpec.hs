@@ -1,6 +1,7 @@
 module Shikigami.KanmonClientSpec (tests) where
 
 import Data.Aeson (eitherDecode, encode, object, (.=))
+import Data.Aeson qualified as Aeson
 import Data.Foldable (traverse_)
 import Data.IORef (IORef, modifyIORef', newIORef, readIORef)
 import Data.Map.Strict qualified as Map
@@ -16,23 +17,25 @@ import Settei.Env (envSnapshot, environmentSource)
 import Shikigami.Activity qualified as Activity
 import Shikigami.Activity.Coordinate
 import Shikigami.Activity.Coordinate (activityCoordinate)
-import Shikigami.Agent.Decl (Sink (..))
 import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (compatibilityIdentity)
 import Shikigami.App.Config (AppConfig, CredentialRef (..), appConfig, environmentBindings)
-import Shikigami.Directory (disabledDirectoryHandle)
+import Shikigami.Authority (OutputKind)
+import Shikigami.Fixture.OutboxDispatch (dispatchAddressed, dispatchContext, withAgent, withGrants, withServices)
 import Shikigami.Fixture.SinkHttp (testHttpLimits, testSinkHttp)
 import Shikigami.Log qualified as Log
-import Shikigami.Sink (SinkOutcome (..), SinkResult (..), dispatch)
+import Shikigami.Output (OutputDecl)
+import Shikigami.Output.Kikan (KikanServices (..))
+import Shikigami.Sink (SinkOutcome (..), SinkResult (..))
 import Shikigami.Sink.Auth (CredentialFailure (..), CredentialFailureReason (CredentialBackendUnavailable), TokenSource (..))
-import Shikigami.Sink.Config (DanwaConfig (..), KanmonConfig (..), KawaConfig (..), KizashiConfig (..), ReiConfig (..))
+import Shikigami.Sink.Config (KanmonConfig (..))
 import Shikigami.Sink.Coordinate (parseSinkSession, zeroSinkOrdinal)
 import Shikigami.Sink.GrantStore (GrantSource (StaticGrants))
 import Shikigami.Sink.Http (HttpEnv (..), HttpFailure (..), HttpFailureReason (..), SinkCredentials (..), SinkHttp (..), credentialsFromConfig, newSinkManager)
 import Shikigami.Sink.KanmonClient
-import Shikigami.Sink.Permission (SinkKind (SChannelEgress))
-import Shikigami.Sink.Types (SinkContext (..))
+import Shikigami.Sink.Outputs (ChannelEgressOutput (..), channelEgressKind, channelEgressOutput)
+import Shikigami.Sink.Types (OutboxDelivery (..))
 import Shikigami.Sink.Wire (EgressActionRequest (..), EgressActionResponse (..))
 import Shikigami.Trigger.Schedule (parseCron)
 import Test.Tasty (TestTree, testGroup)
@@ -50,15 +53,15 @@ tests =
       testCase "conversation resolution follows declaration, output, then activity precedence" do
         let activity = Just triggerActivity
             output = object ["conversation_key" .= ("conv_output" :: Text)]
-        resolveConversationKey (egress (Just "conv_static")) activity output @?= Just (declarationCoordinate "conv_static")
-        resolveConversationKey (egress Nothing) activity output @?= Just (declarationCoordinate "conv_output")
-        resolveConversationKey (egress Nothing) activity (object []) @?= Just (declarationCoordinate "conv_activity")
-        resolveConversationKey (egress (Just "  ")) Nothing (object ["conversation_key" .= ("" :: Text)]) @?= Nothing,
+        resolveConversationKey (Just (declarationCoordinate "conv_static")) activity output @?= Just (declarationCoordinate "conv_static")
+        resolveConversationKey Nothing activity output @?= Just (declarationCoordinate "conv_output")
+        resolveConversationKey Nothing activity (object []) @?= Just (declarationCoordinate "conv_activity")
+        resolveConversationKey (Just (declarationCoordinate "  ")) Nothing (object ["conversation_key" .= ("" :: Text)]) @?= Nothing,
       testCase "request construction chooses reply content and stable sink identity" do
-        buildEgressRequest sampleContext (object ["reply" .= ("reply text" :: Text), "summary" .= ("ignored" :: Text)])
+        buildEgressRequest sampleDelivery (Just (declarationCoordinate "conv_55012")) (Just (activityCoordinate "act_1")) (object ["reply" .= ("reply text" :: Text), "summary" .= ("ignored" :: Text)])
           @?= Right request
-        buildEgressRequest (sampleContextFor Nothing) (object [])
-          @?= Left "ChannelEgress requires a resolved conversation key",
+        buildEgressRequest sampleDelivery Nothing (Just (activityCoordinate "act_1")) (object [])
+          @?= Left "channel.egress requires a resolved conversation key",
       testCase "authenticated post carries trace headers and decodes the acknowledgement" do
         seen <- newIORef []
         testWithApplication (pure (acceptingKanmon seen)) \port -> do
@@ -96,19 +99,19 @@ tests =
         seen <- newIORef []
         testWithApplication (pure (acceptingKanmon seen)) \port -> do
           env <- configuredKanmonEnv
-          dispatch (dispatchContext port env (Just "conv_55012")) (egress Nothing) (object ["reply" .= ("reply text" :: Text)])
-            >>= (@?= SinkResult SChannelEgress (Delivered (declarationCoordinate "act_reply_1"))),
+          dispatchAt port env (Just "conv_55012") (object ["reply" .= ("reply text" :: Text)])
+            >>= (@?= SinkResult channelEgressKind (Delivered (declarationCoordinate "act_reply_1"))),
       testCase "dispatcher preserves the shared permanent and transient classifications" do
         env <- configuredKanmonEnv
         traverse_ (assertStatus env Failed "transient HTTP failure: ") [408, 425, 429, 500, 503]
         traverse_ (assertStatus env PermanentFailure "permanent HTTP failure: ") [400, 401, 403, 404]
         testWithApplication (pure malformedSuccess) \port ->
-          dispatch (dispatchContext port env (Just "conv_55012")) (egress Nothing) (object [])
-            >>= (@?= SinkResult SChannelEgress (PermanentFailure "decode EgressActionResponse"))
-        dispatch (dispatchContext 1 env Nothing) (egress Nothing) (object [])
-          >>= (@?= SinkResult SChannelEgress (AuthorizationFailed "invalid coordinates: channel conversation was not resolved before authorization"))
-        dispatch (dispatchContext 1 env (Just "conv_55012")) (egress Nothing) (object [])
-          >>= (@?= SinkResult SChannelEgress (Failed "transient HTTP failure: transport error"))
+          dispatchAt port env (Just "conv_55012") (object [])
+            >>= (@?= SinkResult channelEgressKind (PermanentFailure "decode EgressActionResponse"))
+        dispatchAt 1 env Nothing (object [])
+          >>= (@?= SinkResult channelEgressKind (AuthorizationFailed "invalid coordinates: channel conversation was not resolved before authorization"))
+        dispatchAt 1 env (Just "conv_55012") (object [])
+          >>= (@?= SinkResult channelEgressKind (Failed "transient HTTP failure: transport error"))
     ]
 
 request :: EgressActionRequest
@@ -120,8 +123,8 @@ request =
       triggeringActivityId = Just "act_1"
     }
 
-egress :: Maybe Text -> Sink
-egress conversationKey = ChannelEgress {channel = declarationCoordinate ("intercom"), action = declarationCoordinate ("reply_to_conversation"), conversationKey = declarationCoordinate <$> conversationKey}
+egress :: OutputDecl
+egress = channelEgressOutput ChannelEgressOutput {channel = declarationCoordinate ("intercom"), action = declarationCoordinate ("reply_to_conversation"), conversationKey = Nothing}
 
 triggerActivity :: Activity.ActivityEnvelope
 triggerActivity =
@@ -137,46 +140,42 @@ triggerActivity =
       Activity.idempotencyKey = activityCoordinate ("message_1")
     }
 
-sampleContext :: SinkContext
-sampleContext = sampleContextFor (Just "conv_55012")
-
-sampleContextFor :: Maybe Text -> SinkContext
-sampleContextFor conversationKey = sampleContextWith conversationKey (KanmonConfig unreachable) testSinkHttp
-
-sampleContextWith :: Maybe Text -> KanmonConfig -> SinkHttp -> SinkContext
-sampleContextWith conversationKey kanmon http =
-  SinkContext
+-- | The delivery the publisher hands the adapter, before its address.
+sampleDelivery :: OutboxDelivery
+sampleDelivery =
+  OutboxDelivery
     { identity = compatibilityIdentity (fixtureAgentName "channel-reply"),
-      directory = disabledDirectoryHandle,
+      agent = fixtureAgentName "channel-reply",
       runId = sinkSessionFixture,
       ordinal = zeroSinkOrdinal,
-      kizashi = KizashiConfig {baseUrl = unreachable, defaultRecipient = (declarationCoordinate "recipient")},
-      kawa = KawaConfig {baseUrl = unreachable, sourceSegment = (activityCoordinate "shinzui/shikigami")},
-      danwa = DanwaConfig {baseUrl = unreachable, agentParticipant = (declarationCoordinate "part_agent_test")},
-      kanmon,
-      rei = ReiConfig {baseUrl = Nothing},
-      http,
-      traceHeaders = [],
-      danwaTarget = Nothing,
-      recipientOverride = Nothing,
-      conversationKey = declarationCoordinate <$> conversationKey,
-      triggeringActivityId = Just (activityCoordinate "act_1"),
       occurredAt = Nothing,
+      kind = channelEgressKind,
+      config = object [],
+      address = object [],
+      result = object [],
+      traceHeaders = [],
       receipts = Nothing,
-      grants = StaticGrants (Map.mapKeys (compatibilityIdentity . fixtureAgentName) egressGrants),
       logger = Log.silentLogger
     }
 
-dispatchContext :: Int -> HttpEnv -> Maybe Text -> SinkContext
-dispatchContext port kanmonEnv conversationKey =
-  sampleContextWith conversationKey (KanmonConfig (localBaseUrl port)) (sinkHttpWithKanmon kanmonEnv)
+-- | Dispatch 'egress' with the address the run resolved at enqueue.
+dispatchAt :: Int -> HttpEnv -> Maybe Text -> Aeson.Value -> IO SinkResult
+dispatchAt port kanmonEnv conversationKey =
+  dispatchAddressed
+    ( withGrants (StaticGrants (Map.mapKeys (compatibilityIdentity . fixtureAgentName) egressGrants))
+        . withAgent (fixtureAgentName "channel-reply")
+        . withServices (\services -> services {kanmon = KanmonConfig (localBaseUrl port), http = sinkHttpWithKanmon kanmonEnv})
+        $ dispatchContext
+    )
+    egress
+    (object ["conversationKey" .= conversationKey, "triggeringActivityId" .= ("act_1" :: Text)])
 
 sinkHttpWithKanmon :: HttpEnv -> SinkHttp
 sinkHttpWithKanmon kanmon = case testSinkHttp of
   SinkHttp {kawa, kizashi, danwa} -> SinkHttp {kawa, kizashi, kanmon, danwa}
 
-egressGrants :: Map.Map Text (Set.Set SinkKind)
-egressGrants = Map.singleton "channel-reply" (Set.singleton SChannelEgress)
+egressGrants :: Map.Map Text (Set.Set OutputKind)
+egressGrants = Map.singleton "channel-reply" (Set.singleton channelEgressKind)
 
 configuredKanmonEnv :: IO HttpEnv
 configuredKanmonEnv = do
@@ -217,8 +216,8 @@ countingApplication calls _ respond = do
 assertStatus :: HttpEnv -> (Text -> SinkOutcome) -> Text -> Int -> IO ()
 assertStatus env expected prefix code =
   testWithApplication (pure (statusApplication (mkStatus code "test"))) \port ->
-    dispatch (dispatchContext port env (Just "conv_55012")) (egress Nothing) (object [])
-      >>= (@?= SinkResult SChannelEgress (expected (prefix <> "unexpected status " <> Text.pack (show code))))
+    dispatchAt port env (Just "conv_55012") (object [])
+      >>= (@?= SinkResult channelEgressKind (expected (prefix <> "unexpected status " <> Text.pack (show code))))
 
 statusApplication :: Status -> Application
 statusApplication status _ respond =

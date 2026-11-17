@@ -6,8 +6,12 @@
 -- A declaration that lists none receives the composition's default, resolved
 -- once at admission and journaled, so a restart under another composition
 -- keeps the run's destination. The declaration itself still says "no
--- outputs", which keeps it portable. The Kikan sinks keep their own path
--- (@sinks@) until EP-10 registers them as adapters.
+-- outputs", which keeps it portable.
+--
+-- An adapter delivers inline, inside the run's own journaled step (the local
+-- report), or through the kernel's outbox (plan 135, M3): the run journals and
+-- enqueues an intent, and the publisher dispatches it with fresh checks and a
+-- delivery receipt. Every Kikan service is delivered the second way.
 module Shikigami.Output
   ( OutputKind,
     mkOutputKind,
@@ -16,6 +20,9 @@ module Shikigami.Output
     OutputDelivery (..),
     OutputReceipt (..),
     OutputAdapter (..),
+    OutputRoute (..),
+    inlineOutputAdapter,
+    outboxRouteOf,
     DefaultOutput (..),
     OutputRegistry,
     mkOutputRegistry,
@@ -45,6 +52,7 @@ import GHC.Generics (Generic)
 import Keiro.Workflow (WorkflowId)
 import Shikigami.Agent.Name (AgentName)
 import Shikigami.Authority (OutputKind, mkOutputKind, outputKindText)
+import Shikigami.Sink.Types (OutboxRoute)
 
 -- | One output a declaration lists: its kind and the adapter's configuration.
 data OutputDecl = OutputDecl
@@ -76,10 +84,24 @@ data OutputReceipt = OutputReceipt
 data OutputAdapter = OutputAdapter
   { kind :: !OutputKind,
     validate :: !(Value -> Either Text ()),
-    -- | Must be idempotent for one run and ordinal: delivery is a replayed
-    -- step.
-    deliver :: !(OutputDelivery -> IO (Either Text OutputReceipt))
+    route :: !OutputRoute
   }
+
+-- | How an adapter delivers.
+data OutputRoute
+  = -- | In the run's @deliver-outputs@ step. Must be idempotent for one run
+    -- and ordinal: delivery is a replayed step.
+    DeliverInline !(OutputDelivery -> IO (Either Text OutputReceipt))
+  | -- | Through the outbox, by the publisher.
+    DeliverByOutbox !OutboxRoute
+
+inlineOutputAdapter :: OutputKind -> (Value -> Either Text ()) -> (OutputDelivery -> IO (Either Text OutputReceipt)) -> OutputAdapter
+inlineOutputAdapter kind validate deliver = OutputAdapter {kind, validate, route = DeliverInline deliver}
+
+outboxRouteOf :: OutputAdapter -> Maybe OutboxRoute
+outboxRouteOf adapter = case adapter.route of
+  DeliverByOutbox route -> Just route
+  DeliverInline _ -> Nothing
 
 data DefaultOutput = NoDefaultOutput | DefaultOutput !OutputDecl
 

@@ -1,176 +1,60 @@
--- | The sink dispatcher (IP-5). @dispatch@ computes a sink's kind, gates it on the C11
--- permission check, and on grant routes to the per-variant handler — a denied sink is
--- logged, skipped, and recorded (never crashes the run). The worker (EP-5) calls
--- @dispatch@ once per sink in the agent's list and maps a @Failed@ outcome to a retry.
+-- | The outbox dispatcher (IP-5, reshaped by plan 135 M3).
+--
+-- 'dispatchOutbox' runs when the publisher delivers one sink intent. It
+-- checks the principal's lifecycle, the C11 grant for the output kind and a
+-- fresh C13 decision of the adapter-named target, and only then calls the
+-- adapter. A refusal is logged and returned as an outcome; it never crashes
+-- the publisher.
 module Shikigami.Sink
   ( -- * Re-exports
     module Shikigami.Sink.Types,
     module Shikigami.Sink.Permission,
-    module Shikigami.Sink.Config,
 
     -- * The gate
 
-    -- | Re-exported from "Shikigami.Sink.GrantStore" so the four gate call sites
-    -- need one import. The row and paging types are deliberately /not/ re-exported:
-    -- their @agentName@ field would collide with 'AgentIdentity''s in every module
-    -- that imports this one. The CLI and tests import the store directly.
+    -- | Re-exported from "Shikigami.Sink.GrantStore" so the gate call sites
+    -- need one import. The row and paging types are deliberately /not/
+    -- re-exported: their @agentName@ field would collide with
+    -- 'AgentIdentity''s in every module that imports this one.
     GrantSource (..),
     checkGrant,
 
     -- * Dispatch
-    sinkKindOf,
-    dispatch,
+    dispatchOutbox,
   )
 where
 
-import Data.Aeson (Value, (.=))
-import Data.Aeson qualified as Aeson
-import Data.Foldable (traverse_)
-import Data.Generics.Labels ()
-import Shikigami.Agent.Decl (Sink (..))
-import Shikigami.Agent.DeclarationValue (declarationCoordinate, declarationCoordinateText)
-import Shikigami.Agent.Principal (identityText)
-import Shikigami.Authority (AuthorityFailure (..), authorityFailureDetail)
+import Data.Aeson ((.=))
+import Shikigami.Authority (AuthorityFailure (..), authorityFailureDetail, outputKindText)
+import Shikigami.Directory (DirectoryHandle)
 import Shikigami.Directory qualified as Directory
 import Shikigami.Log qualified as Log
-import Shikigami.Prelude (Text, (^.))
-import Shikigami.Sink.Authorization (authorizeSinkAction)
-import Shikigami.Sink.Config
-import Shikigami.Sink.Danwa (DanwaError (..), renderDanwaError, runDanwaWithHeaders)
+import Shikigami.Sink.Authorization (authorizeOutput)
 import Shikigami.Sink.GrantStore (GrantSource (..), authorityFor, checkGrant)
-import Shikigami.Sink.Http (HttpFailure)
-import Shikigami.Sink.Http qualified as Http
-import Shikigami.Sink.KanmonClient (KanmonError (..), buildEgressRequest, postEgressWithHeaders, renderKanmonError)
-import Shikigami.Sink.KawaClient (KawaError (..), buildEnvelope, postEnvelopeWithHeaders, renderKawaError)
-import Shikigami.Sink.KizashiClient (KizashiError (..), buildSignalReq, postSignalWithHeaders, renderKizashiError)
 import Shikigami.Sink.Permission
-import Shikigami.Sink.Recipient (unresolvableRecipientWarning)
-import Shikigami.Sink.ReiAction (runReiAction)
 import Shikigami.Sink.Types
-import Shikigami.Sink.Wire (EgressActionResponse (..), SignalResponse (..))
 
--- | Map a sink to its permission kind.
-sinkKindOf :: Sink -> SinkKind
-sinkKindOf = \case
-  KawaDigest {} -> SKawaDigest
-  KizashiSignal {} -> SKizashiSignal
-  ReiAction {} -> SReiAction
-  DanwaConversation {} -> SDanwaConversation
-  ChannelEgress {} -> SChannelEgress
-
--- | Dispatch one sink: gate on @checkGrant@, then route. Always returns a 'SinkResult'.
-dispatch :: SinkContext -> Sink -> Value -> IO SinkResult
-dispatch ctx sink output = do
-  let kind = sinkKindOf sink
-      agent = sinkIdentityText ctx
-      resolvedConversation = case ctx of SinkContext {conversationKey = value} -> value
-  lifecycle <- Directory.identityLifecycleAdmission ((.directory) ctx) ((.identity) ctx)
+-- | Dispatch one intent through its adapter's route, after the gates.
+dispatchOutbox :: DirectoryHandle -> GrantSource -> OutboxRoute -> OutboxDelivery -> IO SinkResult
+dispatchOutbox directory grants route delivery = do
+  let kind = delivery.kind
+      refused event reason = do
+        Log.logWarn delivery.logger event (fields reason)
+        pure (SinkResult kind (DeniedOutcome reason))
+      fields reason = ["agent" .= deliverySubjectText delivery, Log.runIdKey .= delivery.runId, "sink_kind" .= outputKindText kind, "reason" .= reason]
+  lifecycle <- Directory.identityLifecycleAdmission directory delivery.identity
   case lifecycle of
     Left reason -> do
-      Log.logWarn
-        ((.logger) ctx)
-        "sink.lifecycle_skipped"
-        [ "agent" .= agent,
-          Log.runIdKey .= (.runId) ctx,
-          "sink_kind" .= sinkKindText kind,
-          "reason" .= reason
-        ]
+      Log.logWarn delivery.logger "sink.lifecycle_skipped" (fields reason)
       pure (SinkResult kind (SkippedLifecycle reason))
-    Right _ -> do
-      grant <- checkGrant ((.grants) ctx) ((.identity) ctx) kind
-      case grant of
-        Left (Denied reason) -> do
-          Log.logWarn
-            ((.logger) ctx)
-            "sink.denied"
-            [ "agent" .= sinkIdentityText ctx,
-              Log.runIdKey .= (.runId) ctx,
-              "sink_kind" .= sinkKindText kind,
-              "reason" .= reason
-            ]
-          pure (SinkResult kind (DeniedOutcome reason))
-        Right () -> do
-          authorizeSinkAction (authorityFor ((.grants) ctx)) ((.identity) ctx) sink ((.danwaTarget) ctx) ((.recipientOverride) ctx) resolvedConversation >>= \case
-            Left failure@PolicyDenied {} -> do
-              let reason = authorityFailureDetail failure
-              Log.logWarn ((.logger) ctx) "sink.action_denied" ["agent" .= agent, Log.runIdKey .= (.runId) ctx, "sink_kind" .= sinkKindText kind, "reason" .= reason]
-              pure (SinkResult kind (DeniedOutcome reason))
+    Right _ ->
+      checkGrant grants delivery.identity kind >>= \case
+        Left (Denied reason) -> refused "sink.denied" reason
+        Right () ->
+          authorizeOutput (authorityFor grants) delivery.identity kind (route.target delivery.config delivery.address) >>= \case
+            Left failure@PolicyDenied {} -> refused "sink.action_denied" (authorityFailureDetail failure)
             Left failure -> do
               let reason = authorityFailureDetail failure
-              Log.logError ((.logger) ctx) "sink.authorization_failed" ["agent" .= agent, Log.runIdKey .= (.runId) ctx, "sink_kind" .= sinkKindText kind, "reason" .= reason]
+              Log.logError delivery.logger "sink.authorization_failed" (fields reason)
               pure (SinkResult kind (AuthorizationFailed reason))
-            Right _ -> SinkResult kind <$> runSink ctx sink output
-
--- | Route a granted sink to its handler, wrapping the outcome.
-runSink :: SinkContext -> Sink -> Value -> IO SinkOutcome
-runSink ctx sink output = case sink of
-  KawaDigest {} -> do
-    buildEnvelope ctx sink output >>= \case
-      Left err@KawaPayloadError {} -> pure (PermanentFailure (renderKawaError err))
-      Left err -> pure (kawaFailure err)
-      Right env -> do
-        r <- postEnvelopeWithHeaders ((.http) ctx ^. #kawa) ((.traceHeaders) ctx) ((.kawa) ctx) env
-        pure (either kawaFailure (Delivered . declarationCoordinate) r)
-  KizashiSignal {} -> do
-    -- A strategy that was declared and could not be honored is said out loud;
-    -- the alternative is a signal quietly reaching whoever the fallback names.
-    traverse_
-      ( \warning ->
-          Log.logWarn
-            ((.logger) ctx)
-            "sink.recipient.unresolved"
-            [ "agent" .= sinkIdentityText ctx,
-              Log.runIdKey .= (.runId) ctx,
-              "sink_kind" .= sinkKindText SKizashiSignal,
-              "detail" .= warning
-            ]
-      )
-      (unresolvableRecipientWarning sink ((.recipientOverride) ctx))
-    case buildSignalReq ((.kizashi) ctx) ((.recipientOverride) ctx) sink ((.identity) ctx) output of
-      Left e -> pure (Failed e)
-      Right req -> do
-        r <- postSignalWithHeaders ((.http) ctx ^. #kizashi) ((.traceHeaders) ctx) ((.kizashi) ctx) req
-        pure (either kizashiFailure (Delivered . declarationCoordinate . (.signalId)) r)
-  ReiAction {} -> do
-    r <- runReiAction (Http.unauthenticatedHttpEnv ((.http) ctx ^. #kawa)) ((.rei) ctx) ctx sink output
-    pure (either Failed (Delivered . declarationCoordinate) r)
-  DanwaConversation {} -> do
-    r <- runDanwaWithHeaders ((.http) ctx ^. #danwa) ((.traceHeaders) ctx) ((.danwa) ctx) ((.identity) ctx) ((.receipts) ctx) ((.danwaTarget) ctx) sink output
-    pure (either danwaFailure (Delivered . declarationCoordinate . declarationCoordinateText) r)
-  ChannelEgress {channel, action} ->
-    case buildEgressRequest ctx output of
-      Left failure -> pure (PermanentFailure failure)
-      Right request -> do
-        result <- postEgressWithHeaders ((.http) ctx ^. #kanmon) ((.traceHeaders) ctx) ((.kanmon) ctx) channel action request
-        pure (either kanmonFailure (Delivered . declarationCoordinate . (.activityId)) result)
-
-sinkIdentityText :: SinkContext -> Text
-sinkIdentityText ctx = either (const "unresolved-legacy") (\value -> value) (identityText ((.identity) ctx))
-
-kawaFailure :: KawaError -> SinkOutcome
-kawaFailure failure = case failure of
-  KawaPayloadError detail -> PermanentFailure detail
-  KawaHttpError httpFailure -> classifiedFailure httpFailure
-  KawaDecodeError _ -> PermanentFailure (renderKawaError failure)
-
-kizashiFailure :: KizashiError -> SinkOutcome
-kizashiFailure failure = case failure of
-  KizashiHttpError httpFailure -> classifiedFailure httpFailure
-  KizashiDecodeError _ -> PermanentFailure (renderKizashiError failure)
-
-danwaFailure :: DanwaError -> SinkOutcome
-danwaFailure failure = case failure of
-  DanwaHttpError httpFailure -> classifiedFailure httpFailure
-  DanwaReceiptFailure _ -> Failed (renderDanwaError failure)
-  DanwaUsageError _ -> PermanentFailure (renderDanwaError failure)
-
-kanmonFailure :: KanmonError -> SinkOutcome
-kanmonFailure failure = case failure of
-  KanmonHttpError httpFailure -> classifiedFailure httpFailure
-  KanmonDecodeError _ -> PermanentFailure (renderKanmonError failure)
-  KanmonUsageError _ -> PermanentFailure (renderKanmonError failure)
-
-classifiedFailure :: HttpFailure -> SinkOutcome
-classifiedFailure failure
-  | Http.httpFailureIsPermanent failure = PermanentFailure (Http.renderHttpFailure failure)
-  | otherwise = Failed (Http.renderHttpFailure failure)
+            Right _ -> SinkResult kind <$> route.dispatch delivery

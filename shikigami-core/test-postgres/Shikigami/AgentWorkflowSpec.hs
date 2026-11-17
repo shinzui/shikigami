@@ -135,6 +135,7 @@ import Shikigami.Memory.AliasStore qualified as AliasStore
 import Shikigami.Memory.Scope (agentScope, legacyAgentScope)
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Shikigami.Output (emptyOutputRegistry)
+import Shikigami.Output.Kikan (KikanServices (..), kikanOutputs)
 import Shikigami.Pack.Setting (noPackSettings)
 import Shikigami.Record (RecordEvent (..), memoryRecord, recordEntry, recordKindText, unspecifiedTier)
 import Shikigami.Record.Invariant (RunCheck (..), RunFacts (..), checkRun)
@@ -144,7 +145,7 @@ import Shikigami.RunJobs qualified as RunJobs
 import Shikigami.Sink (GrantSource (DbGrants, StaticGrants), defaultGrantTable)
 import Shikigami.Sink.Config (DanwaConfig (..), KanmonConfig (..), KawaConfig (..), KizashiConfig (..), ReiConfig (..))
 import Shikigami.Sink.GrantStore (checkGrant, reconcileGrantPrincipal, revokeGrant, upsertGrant)
-import Shikigami.Sink.Permission (SinkKind (..))
+import Shikigami.Sink.Outputs (channelEgressKind, danwaConversationKind, kawaDigestKind, kizashiSignalKind, reiActionKind)
 import Shikigami.Trigger.Enqueue qualified as Enqueue
 import Shikigami.Trigger.Schedule (parseCron)
 import Shikigami.Workflow.Registry qualified as Registry
@@ -462,7 +463,7 @@ tests databaseFixture =
             recordLegacyRecallFixture appEnv "old-heartbeat"
             _ <- AliasStore.reconcileAlias (pool firstStore) principal "old-heartbeat" >>= either (assertFailure . Text.unpack) pure
             _ <- reconcileGrantPrincipal (pool firstStore) "heartbeat" "agent_heartbeat" >>= either (assertFailure . Text.unpack) pure
-            upsertGrant (pool firstStore) "heartbeat-renamed" verified SKawaDigest (Just "rename-demo")
+            upsertGrant (pool firstStore) "heartbeat-renamed" verified kawaDigestKind (Just "rename-demo")
               >>= either (assertFailure . Text.unpack) pure
           withStore settings \reopenedStore -> do
             limit <- either (assertFailure . Text.unpack) pure (mkRecallLimit 3)
@@ -471,7 +472,7 @@ tests databaseFixture =
               "post-restart recall follows the alias to agent_heartbeat"
               ["legacy alias fixture"]
               (map (\MemoryRecord {content = memoryContent} -> memoryContent) recalled)
-            checkGrant (DbGrants (pool reopenedStore)) verified SKawaDigest >>= \case
+            checkGrant (DbGrants (pool reopenedStore)) verified kawaDigestKind >>= \case
               Right () -> pure ()
               Left denial -> assertFailure ("post-restart principal grant was denied: " <> show denial),
       testCase "replays completed lifecycle steps for the same run id" do
@@ -528,7 +529,7 @@ tests databaseFixture =
                   deps =
                     (testDeps appEnv behaviorEnv defaultAgentRunHooks)
                       { grants = DbGrants pool',
-                        kawa = KawaConfig {baseUrl = "http://localhost:" <> Text.pack (show port), sourceSegment = (activityCoordinate "shinzui/shikigami")}
+                        outputs = kikanOutputs (testKikanServices {kawa = KawaConfig {baseUrl = "http://localhost:" <> Text.pack (show port), sourceSegment = (activityCoordinate "shinzui/shikigami")}})
                       }
 
               -- heartbeat/KawaDigest is seeded granted, so the run enqueues.
@@ -537,7 +538,7 @@ tests databaseFixture =
               assertEqual "the granted run enqueued one outbox row" (Right 1) (length <$> outboxBefore)
 
               -- Now revoke, and drive the publisher exactly as the worker does.
-              _ <- revokeGrant pool' (compatibilityIdentity (fixtureAgentName "heartbeat")) SKawaDigest (Just "test") >>= either (assertFailure . show) pure
+              _ <- revokeGrant pool' (compatibilityIdentity (fixtureAgentName "heartbeat")) kawaDigestKind (Just "test") >>= either (assertFailure . show) pure
               let publishBatch rows =
                     traverse (\row -> (outboxId row,) <$> publishSinkIntent deps row) rows
               published <- runAppIO appEnv (publishClaimedOutbox publishBatch defaultPublishOptions Nothing)
@@ -829,7 +830,7 @@ tests databaseFixture =
             case outboxRows of
               Right [OutboxRow {event}] ->
                 case decodeJsonIntegrationEvent event of
-                  Right SinkIntent {output} ->
+                  Right SinkIntent {result = output} ->
                     assertEqual
                       "the emitted signal carries a verdict the recalled memory forced"
                       ( object
@@ -1659,16 +1660,13 @@ tests databaseFixture =
                         (testDepsWithAgents appEnv behaviorEnv defaultAgentRunHooks [decl])
                           { approvalPolicy =
                               ApprovalPolicySnapshot
-                                { requireFor = Set.singleton SKawaDigest,
-                                  requireOutputs = Set.empty,
+                                { requireFor = Set.singleton kawaDigestKind,
                                   channel = ViaDanwa,
                                   deadline = either (error . show) id (parseDuration 60)
                                 },
                             approvalWorkflow = ApprovalWorkflow.ApprovalWorkflowEnv {ApprovalWorkflow.notifier = notifier},
-                            danwa = danwaConfig,
-                            http = sinkHttp,
-                            deliveryPool = Just kirokuStore.pool,
-                            kawa = KawaConfig {baseUrl = localApprovalBaseUrl port, sourceSegment = (activityCoordinate "shinzui/shikigami")}
+                            outputs = kikanOutputs (testKikanServices {danwa = danwaConfig, http = sinkHttp, kawa = KawaConfig {baseUrl = localApprovalBaseUrl port, sourceSegment = (activityCoordinate "shinzui/shikigami")}}),
+                            deliveryPool = Just kirokuStore.pool
                           }
 
                   let consume dependencies expected = Job.withJobRuntime connStr Nothing \runtime -> do
@@ -2032,15 +2030,9 @@ testDepsWithAgents appEnv behaviorEnv hooks agentDecls =
       workspaceCatalog = [],
       workspace = Nothing,
       agents = agentDecls,
-      kizashi = KizashiConfig {baseUrl = "http://localhost:1", defaultRecipient = (declarationCoordinate "recipient")},
-      kawa = KawaConfig {baseUrl = "http://localhost:1", sourceSegment = (activityCoordinate "shinzui/shikigami")},
-      kanmon = KanmonConfig {baseUrl = "http://localhost:1"},
-      danwa = DanwaConfig {baseUrl = "http://localhost:1", agentParticipant = (declarationCoordinate "part_agent_test")},
-      rei = ReiConfig {baseUrl = Nothing},
-      http = testSinkHttp,
       hooks,
       codingAgents = noCodingAgents,
-      outputs = emptyOutputRegistry,
+      outputs = kikanOutputs testKikanServices,
       declaredTools = noDeclaredTools,
       approvalPolicy = autoApprovePolicy (either (error . show) id (parseDuration 900)),
       approvalWorkflow = ApprovalWorkflow.defaultApprovalWorkflowEnv,
@@ -2075,20 +2067,13 @@ testDepsWithApprovalAndDeadline appEnv behaviorEnv hooks approval deadline =
       workspaceCatalog = [],
       workspace = Nothing,
       agents = [decl],
-      kizashi = KizashiConfig {baseUrl = "http://localhost:1", defaultRecipient = (declarationCoordinate "recipient")},
-      kawa = KawaConfig {baseUrl = "http://localhost:1", sourceSegment = (activityCoordinate "shinzui/shikigami")},
-      kanmon = KanmonConfig {baseUrl = "http://localhost:1"},
-      danwa = DanwaConfig {baseUrl = "http://localhost:1", agentParticipant = (declarationCoordinate "part_agent_test")},
-      rei = ReiConfig {baseUrl = Nothing},
-      http = testSinkHttp,
       hooks,
       codingAgents = noCodingAgents,
-      outputs = emptyOutputRegistry,
+      outputs = kikanOutputs testKikanServices,
       declaredTools = noDeclaredTools,
       approvalPolicy =
         ApprovalPolicySnapshot
-          { requireFor = Set.singleton SKawaDigest,
-            requireOutputs = Set.empty,
+          { requireFor = Set.singleton kawaDigestKind,
             channel = ViaDanwa,
             deadline = either (error . show) id (parseDuration (fromMaybe (secondsToNominalDiffTime 900) deadline))
           },
@@ -2121,7 +2106,7 @@ approvalEnv aidRef currentSession =
     { currentSession,
       requiresApproval = \_ kind _ ->
         pure
-          if kind == SKawaDigest
+          if kind == kawaDigestKind
             then ApprovalRequired approvalRequest
             else ApprovalNotRequired,
       recordPark = \_ aid _ -> writeIORef aidRef (Just aid),
@@ -2241,6 +2226,7 @@ testConversationEnvIdle idleWindow appEnv behaviorEnv conversationAgents =
       Conversation.harness = Harness.defaultHarnessPolicy,
       Conversation.idleTimeout = either (error . show) id (parseDuration idleWindow),
       Conversation.danwa = DanwaConfig {baseUrl = "http://localhost:1", agentParticipant = (declarationCoordinate "part_agent_test")},
+      Conversation.outputs = kikanOutputs testKikanServices,
       Conversation.agents = conversationAgents,
       Conversation.grants = StaticGrants defaultGrantTable,
       Conversation.directory = disabledDirectoryHandle
@@ -3560,3 +3546,8 @@ fixtureDelegationDepth = either (error . show) id . parseDelegationDepth . toInt
 
 fixtureRunKey :: Text -> RunKey
 fixtureRunKey = either (error . show) id . parseRunKey
+
+-- | Every Kikan service unreachable: a case that reaches one by accident fails
+-- loudly.
+testKikanServices :: KikanServices
+testKikanServices = KikanServices {http = testSinkHttp, kizashi = KizashiConfig {baseUrl = "http://localhost:1", defaultRecipient = (declarationCoordinate "recipient")}, kawa = KawaConfig {baseUrl = "http://localhost:1", sourceSegment = (activityCoordinate "shinzui/shikigami")}, kanmon = KanmonConfig {baseUrl = "http://localhost:1"}, danwa = DanwaConfig {baseUrl = "http://localhost:1", agentParticipant = (declarationCoordinate "part_agent_test")}, rei = ReiConfig {baseUrl = Nothing}}

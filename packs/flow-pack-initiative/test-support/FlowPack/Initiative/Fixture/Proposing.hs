@@ -124,13 +124,15 @@ import Shikigami.Objective.Command qualified as Command
 import Shikigami.Objective.Runtime qualified as Objectives
 import Shikigami.Objective.Types qualified as Objective
 import Shikigami.Output (emptyOutputRegistry)
+import Shikigami.Output.Kikan (KikanServices (..), kikanOutputs)
 import Shikigami.Pack.Setting (noPackSettings, packSettingsFromList)
 import Shikigami.Repository (RepositoryId, repositoryId, repositoryIdText)
 import Shikigami.RunEvidence.Catalog qualified as Catalog
 import Shikigami.RunJobs qualified as RunJobs
-import Shikigami.Sink (GrantSource (StaticGrants), SinkKind (SKizashiSignal), defaultGrantTable)
+import Shikigami.Sink (GrantSource (StaticGrants), defaultGrantTable)
 import Shikigami.Sink.Config
 import Shikigami.Sink.Http (HttpLimits (..), SinkHttp, credentialsFromConfig, newSinkHttp)
+import Shikigami.Sink.Outputs (kizashiSignalKind)
 import Shikigami.Trigger.Consumer (RecordDisposition, processDecodedActivityObserving)
 import Shikigami.Trigger.Enqueue (ensureRunQueue, runQueueName)
 import Shikigami.Trigger.Hook (StreamHook (..), streamIntake)
@@ -323,22 +325,16 @@ proposingDeps env behavior provider binding objectiveRuntime settings repository
       packMetrics = \_ -> PackMetrics \event attributes -> seen (event, Text.intercalate ":" (map snd attributes)),
       workspaceCatalog = map (.repository) repositoryOptions,
       agents = declarations,
-      kizashi = KizashiConfig "http://localhost:1" (declarationCoordinate "recipient"),
-      kawa = KawaConfig "http://localhost:1" (activityCoordinate "fixture"),
-      kanmon = KanmonConfig "http://localhost:1",
-      danwa = DanwaConfig "http://localhost:1" (declarationCoordinate "fixture"),
-      rei = ReiConfig Nothing,
-      http,
       hooks = Agent.defaultAgentRunHooks,
       codingAgents = Agent.noCodingAgents,
-      outputs = emptyOutputRegistry,
+      outputs = kikanOutputs (KikanServices {http, kizashi = KizashiConfig "http://localhost:1" (declarationCoordinate "recipient"), kawa = KawaConfig "http://localhost:1" (activityCoordinate "fixture"), kanmon = KanmonConfig "http://localhost:1", danwa = DanwaConfig "http://localhost:1" (declarationCoordinate "fixture"), rei = ReiConfig Nothing}),
       declaredTools = Agent.noDeclaredTools,
       approvalPolicy = autoApprovePolicy (either (error . show) id (parseDuration 900)),
       approvalWorkflow = Approval.ApprovalWorkflowEnv {notifier = recordingNotifier recorded},
       runTimeout = either (error . show) id (parseDuration 30),
       harness = defaultHarnessPolicy,
       delegationBudget = defaultDelegationBudget,
-      grants = StaticGrants (Map.insert proposerIdentity (Set.singleton SKizashiSignal) defaultGrantTable),
+      grants = StaticGrants (Map.insert proposerIdentity (Set.singleton kizashiSignalKind) defaultGrantTable),
       directory,
       routing = Routing.RoutingRuntime (\_ -> error "no router") (\_ _ _ -> error "no router"),
       packSettings = packSettingsFromList [(initiativesKey, Aeson.toJSON settings)],

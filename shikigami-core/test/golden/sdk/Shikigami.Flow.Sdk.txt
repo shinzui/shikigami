@@ -4,8 +4,10 @@ Acknowledgement
 Activity
 ActivityCoordinate
 ActivityEnvelope (..)
+AddressedOutput (..)
 ApprovalChannel (..)
 ApprovalRequest (..)
+DanwaTarget (..)
 DecisionAbort (..)
 DecisionMode (..)
 DeclarationCoordinate
@@ -23,6 +25,8 @@ FlowPackNameError (..)
 LifecycleDiagram (..)
 Memory
 MemoryQuery (..)
+OutputDecl (..)
+OutputKind
 PackFlow (..)
 Priority (..)
 RecipientFrom (..)
@@ -46,16 +50,20 @@ currentActivity
 declarationCoordinate
 declarationCoordinateText
 delegate
+emitDirected
 emitSignal
-emitSignalTo
 emitSignals
 flowPackNameText
+inThread
 kernelCapabilityFlow
 noTriggerHooks
+outputKindText
 parseFlowPackName
 parseSignalImportance
 parseSinkSession
 recall
 remember
 send
+sinkOutput
 step
+toRecipient

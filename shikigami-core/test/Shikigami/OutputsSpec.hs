@@ -49,8 +49,9 @@ tests =
       testCase "local.report writes one private file per run and ordinal, idempotently" $ withDirectory \root -> do
         let adapter = localReportAdapter root
             delivery = OutputDelivery {run = WorkflowId "run-1", agent = either (error . show) id (mkAgentName "note"), ordinal = 0, output = defaultLocalReport, result = object ["reply" .= ("Hello." :: Text)]}
-        Right first' <- adapter.deliver delivery
-        Right again <- adapter.deliver delivery
+        DeliverInline deliver <- pure adapter.route
+        Right first' <- deliver delivery
+        Right again <- deliver delivery
         first'.location @?= again.location
         first'.location @?= Text.pack (root </> "note" </> "run-1-0.md")
         content <- TextIO.readFile (Text.unpack first'.location)

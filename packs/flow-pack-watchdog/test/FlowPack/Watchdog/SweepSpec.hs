@@ -60,8 +60,9 @@ import Shikigami.Objective.Types qualified as Objective
 import Shikigami.ObjectiveStoreSpec qualified as ObjectiveFixture
 import Shikigami.Pack.Setting (PackSettings, packSettingsFromList)
 import Shikigami.RouterWorkflowSpec qualified as RouterFixture
-import Shikigami.Sink (GrantSource (StaticGrants), SinkKind (SDanwaConversation))
+import Shikigami.Sink (GrantSource (StaticGrants))
 import Shikigami.Sink.Intent (decodeSinkIntentEvent)
+import Shikigami.Sink.Outputs (danwaConversationKind)
 import Shikigami.Sink.Types (DanwaTarget (..))
 import Shikigami.StateRevision (initialRevision)
 import Shikigami.Trigger.Enqueue (scheduledRunJob)
@@ -263,7 +264,7 @@ withSweepCount count fixture use = withFixture fixture \env admission access -> 
           & #flows .~ watchdogRegistry
           & #packSettings .~ watchdogPackSettings (Just settings)
           & #directory .~ directory
-          & #grants .~ StaticGrants (Map.singleton principal (Set.singleton SDanwaConversation))
+          & #grants .~ StaticGrants (Map.singleton principal (Set.singleton danwaConversationKind))
       job = scheduledRunJob principal declaration.name page.observedAt
   use env deps job
 
@@ -306,7 +307,7 @@ withDriftSweep fixture use = DriftFixture.withHarness fixture \h -> do
           & #flows .~ watchdogRegistry
           & #deliveryPool .~ Just h.pool
           & #decisions .~ h.services
-          & #grants .~ StaticGrants (Map.singleton job.identity (Set.singleton SDanwaConversation))
+          & #grants .~ StaticGrants (Map.singleton job.identity (Set.singleton danwaConversationKind))
           & #packSettings .~ watchdogPackSettings (Just settings)
   use h deps job
 

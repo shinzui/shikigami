@@ -70,7 +70,7 @@ import Shikigami.Objective.Types (ObjectiveService (..), ObjectiveSettings (..),
 import Shikigami.Pack.Setting (PackSetting (..), SettingDefault (..), SettingShape (..), noPackSettings, packSettingSecret, packSettingText, packSettingValue, revealPackSecret)
 import Shikigami.RuntimePolicy (ManifestStrictness (..))
 import Shikigami.Sink.Auth (TokenSource (..), credentialToken, matchesBearerHeader, staticTokenSource)
-import Shikigami.Sink.Permission (SinkKind (..))
+import Shikigami.Sink.Outputs (danwaConversationKind, kizashiSignalKind)
 import Shikigami.Trigger.Schedule (CatchUpPolicy (..), parseCron)
 import Shikigami.Trigger.Stream (IncludeAgentActors (..))
 import Shikigami.Workspace.Settings (WorkspaceSettings (..), WorkspaceSupervisorSettings (..))
@@ -455,7 +455,7 @@ precedenceTests =
             [ ("SHIKIGAMI_APPROVAL_REQUIRE", "ReiAction"),
               ("SHIKIGAMI_APPROVAL_CHANNEL", "kizashi")
             ]
-        (.approvalRequiredSinks) config @?= Set.fromList [SKizashiSignal, SDanwaConversation]
+        (.approvalRequiredSinks) config @?= Set.fromList [kizashiSignalKind, danwaConversationKind]
         (.approvalChannel) config @?= ViaDanwa,
       testCase "an empty approval requirement preserves auto-approval" do
         config <-
@@ -520,10 +520,10 @@ strictnessTests =
         high <- resolveOrFail (optionsWith [] [cliOverride approvalDeadlineSecondsKey "86400"]) [] []
         (.runTimeout) low @?= (either (error . show) id (parseDuration (secondsToNominalDiffTime 1)))
         (.approvalDeadline) high @?= (either (error . show) id (parseDuration (secondsToNominalDiffTime 86_400))),
-      testCase "approval policy rejects duplicates, unknown sink kinds, and unknown channels" do
+      testCase "approval policy rejects duplicates, malformed output kinds, and unknown channels" do
         mapM_
           (\bad -> (.exitCode) (runWith (optionsWith [] [cliOverride approvalRequireKey bad]) [] []) @?= resolutionExitCode)
-          ["KawaDigest,KawaDigest", "KawaDigest,Unknown", ","]
+          ["KawaDigest,KawaDigest", "KawaDigest,kawa.digest", "KawaDigest,Unknown", ","]
         (.exitCode) (runWith (optionsWith [] [cliOverride approvalChannelKey "email"]) [] []) @?= resolutionExitCode,
       -- A flow pack owns its settings (docs/adr/0129). The kernel accepts a
       -- pack's key only in an executable composed with that pack.
@@ -577,15 +577,12 @@ strictnessTests =
                 [("SHIKIGAMI_APPROVAL_REQUIRE", "KawaDigest")]
         (.exitCode) run @?= resolutionExitCode
         assertBool
-          ("the failure should name the key and every valid sink kind:\n" <> Text.unpack ((.standardError) run))
+          ("the failure should name the key and what an output kind looks like:\n" <> Text.unpack ((.standardError) run))
           ( all
               (`Text.isInfixOf` (.standardError) run)
               [ "approval.require",
-                "KawaDigest",
-                "KizashiSignal",
-                "ReiAction",
-                "DanwaConversation",
-                "ChannelEgress"
+                "output kinds",
+                "kizashi.signal"
               ]
           ),
       testCase "file directory mode requires a path" do

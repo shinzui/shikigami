@@ -23,7 +23,6 @@ import Shikigami.Agent.Decl
   ( Priority (High),
     RecipientFrom (SubjectOwner),
     SignalType (Alert),
-    Sink (..),
   )
 import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Name (AgentName, mkAgentName)
@@ -49,10 +48,9 @@ import Shikigami.Fixture.ExecutionIdentity (fixtureRootId)
 import Shikigami.RunJobs qualified as RunJobs
 import Shikigami.Sink.Coordinate (parseSinkSession, zeroSinkOrdinal)
 import Shikigami.Sink.Intent (SinkIntent (..))
-import Shikigami.Sink.Permission (SinkKind (SKizashiSignal, SReiAction))
+import Shikigami.Sink.Outputs (KizashiSignalOutput (..), kizashiSignalKind, kizashiSignalOutput, reiActionKind)
 import Shikigami.Sink.Types
-  ( DanwaTarget (..),
-    SinkOutcome (Delivered, SkippedLifecycle, Stubbed),
+  ( SinkOutcome (Delivered, SkippedLifecycle, Stubbed),
     SinkResult (..),
   )
 import Shikigami.Trigger.Schedule (parseCron)
@@ -237,41 +235,35 @@ outboxTests :: TestTree
 outboxTests =
   testGroup
     "sink outbox rows"
-    [ testCase "a pre-upgrade sink intent decodes to the same value" do
-        decoded <- decodeOrFail @SinkIntent preUpgradeSinkIntent
+    [ testCase "a sink intent decodes to the same value" do
+        decoded <- decodeOrFail @SinkIntent pinnedSinkIntent
         toJSON decoded @?= toJSON sampleSinkIntent,
-      testCase "the encoder still produces the pre-upgrade bytes" do
-        assertSameJson "sink intent" preUpgradeSinkIntent (encode sampleSinkIntent),
+      testCase "the encoder produces the pinned bytes" do
+        assertSameJson "sink intent" pinnedSinkIntent (encode sampleSinkIntent),
       testCase "a delivered sink result decodes" do
-        decoded <- decodeOrFail @SinkResult preUpgradeDelivered
-        toJSON decoded @?= toJSON (SinkResult {kind = SKizashiSignal, outcome = Delivered (declarationCoordinate "sig_1")}),
+        decoded <- decodeOrFail @SinkResult pinnedDelivered
+        toJSON decoded @?= toJSON (SinkResult {kind = kizashiSignalKind, outcome = Delivered (declarationCoordinate "sig_1")}),
       testCase "the deprecated Stubbed outcome still decodes" do
-        decoded <- decodeOrFail @SinkResult preUpgradeStubbed
-        toJSON decoded @?= toJSON (SinkResult {kind = SReiAction, outcome = Stubbed}),
-      -- The decode above proves a pre-upgrade row parses; this proves what it
-      -- parses to. A row written before recipientFrom was honored must route
-      -- exactly as it did then — falling back to the declaration's own default —
-      -- rather than acquiring a recipient nobody chose.
-      testCase "a pre-upgrade row carries no resolved recipient" do
-        SinkIntent {resolvedRecipient} <- decodeOrFail @SinkIntent preUpgradeSinkIntent
-        resolvedRecipient @?= Nothing,
-      testCase "a pre-upgrade row carries unresolved legacy identity" do
-        SinkIntent {identity} <- decodeOrFail @SinkIntent preUpgradeSinkIntent
+        decoded <- decodeOrFail @SinkResult pinnedStubbed
+        toJSON decoded @?= toJSON (SinkResult {kind = reiActionKind, outcome = Stubbed}),
+      testCase "an intent with no identity carries unresolved legacy identity" do
+        SinkIntent {identity} <- decodeOrFail @SinkIntent pinnedSinkIntent
         identity @?= UnresolvedLegacyIdentity,
-      testCase "a pre-upgrade row carries no egress metadata" do
-        SinkIntent {conversationKey, triggeringActivityId} <- decodeOrFail @SinkIntent preUpgradeSinkIntent
-        conversationKey @?= Nothing
-        triggeringActivityId @?= Nothing,
-      testCase "an intent that resolved a recipient says so" do
-        let resolved = (sampleSinkIntent & #resolvedRecipient .~ (Just (declarationCoordinate ("person:nadeem"))))
+      -- The address is what the adapter computed while the trigger activity
+      -- was in scope; the kernel journals it verbatim.
+      testCase "an intent carries its adapter's address verbatim" do
+        let resolved = (sampleSinkIntent & #address .~ Aeson.object ["recipient" .= ("person:nadeem" :: Text)])
         decoded <- decodeOrFail @SinkIntent (LazyByteString.toStrict (encode resolved))
         toJSON decoded @?= toJSON resolved,
       testCase "the lifecycle skip outcome round-trips without changing old outcomes" do
-        let skipped = SinkResult {kind = SKizashiSignal, outcome = SkippedLifecycle "principal lifecycle is paused"}
+        let skipped = SinkResult {kind = kizashiSignalKind, outcome = SkippedLifecycle "principal lifecycle is paused"}
         decoded <- decodeOrFail @SinkResult (LazyByteString.toStrict (encode skipped))
         decoded @?= skipped
     ]
 
+-- | The shape plan 135 M3 gave the intent: an output (kind and
+-- configuration), its adapter's address and the result. Pre-release
+-- (ADR-27), the earlier sink-union rows are not decoded.
 sampleSinkIntent :: SinkIntent
 sampleSinkIntent =
   SinkIntent
@@ -280,20 +272,14 @@ sampleSinkIntent =
       runId = sinkSessionFixture,
       ordinal = zeroSinkOrdinal,
       occurredAt = Just sampleTime,
-      danwaTarget = Just DanwaTarget {conversationId = (declarationCoordinate "conv_1"), parentMessageId = Nothing},
-      -- Absent, and therefore absent from the bytes below: this field was added
-      -- after those rows were written, and @omitNothingFields@ is what keeps an
-      -- intent that does not use it byte-identical to one that predates it.
-      resolvedRecipient = Nothing,
-      conversationKey = Nothing,
-      triggeringActivityId = Nothing,
-      sink = sampleSink,
-      output = outputValue
+      output = kizashiSignalOutput sampleSink,
+      address = Aeson.object ["recipient" .= Aeson.Null],
+      result = outputValue
     }
 
-sampleSink :: Sink
+sampleSink :: KizashiSignalOutput
 sampleSink =
-  KizashiSignal
+  KizashiSignalOutput
     { source = activityCoordinate ("shikigami"),
       signalType = Alert,
       priority = High,
@@ -301,23 +287,24 @@ sampleSink =
       recipientFrom = SubjectOwner,
       defaultRecipient = fmap declarationCoordinate (Just "ops"),
       intentTemplate = "escalate",
-      extraContextTags = ["a"]
+      extraContextTags = ["a"],
+      recipient = Nothing
     }
 
 outputValue :: Value
 outputValue = either error id (eitherDecodeStrict "{\"summary\":\"x\"}")
 
-preUpgradeSinkIntent :: ByteString
-preUpgradeSinkIntent =
-  "{\"agent\":\"at-risk-watch\",\"danwaTarget\":{\"conversationId\":\"conv_1\",\"parentMessageId\":null},\"occurredAt\":\"2026-07-15T12:00:00Z\",\"ordinal\":0,\"output\":{\"summary\":\"x\"},\"runId\":\"kioku_session_01kvxa7d2cezhs874g3n8dfgme\",\"sink\":{\"defaultRecipient\":\"ops\",\"extraContextTags\":[\"a\"],\"importance\":7,\"intentTemplate\":\"escalate\",\"priority\":\"High\",\"recipientFrom\":\"SubjectOwner\",\"signalType\":\"Alert\",\"source\":\"shikigami\",\"tag\":\"KizashiSignal\"}}"
+pinnedSinkIntent :: ByteString
+pinnedSinkIntent =
+  "{\"address\":{\"recipient\":null},\"agent\":\"at-risk-watch\",\"occurredAt\":\"2026-07-15T12:00:00Z\",\"ordinal\":0,\"output\":{\"config\":{\"defaultRecipient\":\"ops\",\"extraContextTags\":[\"a\"],\"importance\":7,\"intentTemplate\":\"escalate\",\"priority\":\"High\",\"recipientFrom\":\"SubjectOwner\",\"signalType\":\"Alert\",\"source\":\"shikigami\"},\"kind\":\"kizashi.signal\"},\"result\":{\"summary\":\"x\"},\"runId\":\"kioku_session_01kvxa7d2cezhs874g3n8dfgme\"}"
 
-preUpgradeDelivered :: ByteString
-preUpgradeDelivered =
-  "{\"kind\":\"SKizashiSignal\",\"outcome\":{\"contents\":\"sig_1\",\"tag\":\"Delivered\"}}"
+pinnedDelivered :: ByteString
+pinnedDelivered =
+  "{\"kind\":\"kizashi.signal\",\"outcome\":{\"contents\":\"sig_1\",\"tag\":\"Delivered\"}}"
 
-preUpgradeStubbed :: ByteString
-preUpgradeStubbed =
-  "{\"kind\":\"SReiAction\",\"outcome\":{\"tag\":\"Stubbed\"}}"
+pinnedStubbed :: ByteString
+pinnedStubbed =
+  "{\"kind\":\"rei.action\",\"outcome\":{\"tag\":\"Stubbed\"}}"
 
 -- ---------------------------------------------------------------------------
 -- Delivery attempt numbering

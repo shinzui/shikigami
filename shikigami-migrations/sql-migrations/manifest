@@ -48,3 +48,4 @@
 0049-recurring-mandates.sql
 0050-action-record.sql
 0051-drop-detector-suppression-table.sql
+0052-output-kind-grants.sql

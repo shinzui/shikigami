@@ -12,9 +12,9 @@
 -- must reach the outbox as @PublishFailed@. The cases below assert the pair, on
 -- both sides of the mapping.
 --
--- No database is involved: 'Shikigami.Sink.dispatch' is a pure-ish IO call over
--- the permission gate and one HTTP client, and the outcome mapping is exercised
--- through a real encoded outbox row.
+-- No database is involved: 'Shikigami.Sink.dispatchOutbox' is a pure-ish IO
+-- call over the permission gate and one HTTP client, reached through the real
+-- Kikan adapters ("Shikigami.Fixture.OutboxDispatch").
 module Shikigami.SinkHonestySpec (tests) where
 
 import Data.Aeson (Value, eitherDecode, encode, object, (.=))
@@ -29,46 +29,39 @@ import Network.Wai.Handler.Warp (testWithApplication)
 import Shikigami.Activity.Coordinate
 import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Name (AgentName, mkAgentName)
-import Shikigami.Trigger.Schedule (cronExpressionClaim, parseCron)
 
 -- Qualified: @Actor@ names both an activity's actor and the routing strategy
 -- that reads it.
 
-import Kioku.Id qualified as SinkSession
 import Shikigami.Activity qualified as Activity
 import Shikigami.Agent.Decl
-  ( AgentDecl (..),
-    Behavior (..),
-    Priority (High),
+  ( Priority (High),
     RecipientFrom (..),
     SignalType (Alert),
-    Sink (..),
-    Trigger (..),
-    defaultMemoryPolicy,
   )
 import Shikigami.Agent.Principal (AgentIdentity (VerifiedIdentity), compatibilityIdentity, mkAgentPrincipal)
-import Shikigami.Directory (disabledDirectoryHandle)
-import Shikigami.Fixture.SinkHttp (testSinkHttp)
-import Shikigami.Log qualified as Log
-import Shikigami.Sink
-  ( DanwaConfig (..),
-    GrantSource (StaticGrants),
-    KanmonConfig (..),
-    KawaConfig (..),
-    KizashiConfig (..),
-    ReiConfig (..),
-    SinkContext (..),
-    SinkOutcome (..),
-    SinkResult (..),
-    defaultGrantTable,
-    dispatch,
-  )
-import Shikigami.Sink.Coordinate (parseSinkSession, zeroSinkOrdinal)
+import Shikigami.Authority (OutputKind)
+import Shikigami.Fixture.OutboxDispatch (DispatchContext, dispatchContext, dispatchOutput, withActivity, withIdentity, withServices)
+import Shikigami.Output (OutputDecl (..))
+import Shikigami.Output.Kikan (KikanServices (..))
+import Shikigami.Sink (SinkOutcome (..), SinkResult (..))
+import Shikigami.Sink.Config (KizashiConfig (..), ReiConfig (..))
 import Shikigami.Sink.KizashiClient (buildSignalReq)
-import Shikigami.Sink.Permission (SinkKind (SReiAction))
-import Shikigami.Sink.Recipient (resolveSinkRecipient, unresolvableRecipientWarning)
+import Shikigami.Sink.Outputs
+  ( ChannelEgressOutput (..),
+    KizashiSignalOutput (..),
+    ReiActionOutput (..),
+    channelEgressOutput,
+    kizashiSignalKind,
+    kizashiSignalOutput,
+    outputConfigErrors,
+    reiActionKind,
+    reiActionOutput,
+    toRecipient,
+    validateKanmonRouteSegment,
+  )
+import Shikigami.Sink.Recipient (resolveRecipient, unresolvableRecipientWarning)
 import Shikigami.Sink.ReiAction (unconfiguredMessage)
-import Shikigami.Sink.Validate (sinkDeclarationErrors, validateKanmonRouteSegment)
 import Shikigami.Sink.Wire (CreateSignalReq (..), ReiActionReq (..))
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
@@ -97,40 +90,44 @@ validationTests =
   testGroup
     "a declaration that can never route is refused up front"
     [ testCase "a directory strategy with no default is an error naming both" $
-        case sinkDeclarationErrors (agentWith [signalWith SubjectOwner Nothing]) of
+        case outputConfigErrors (kizashiSignalOutput (signalWith SubjectOwner Nothing)) of
           [err] -> do
             assertBool ("the error should name the strategy:\n" <> Text.unpack err) ("SubjectOwner" `Text.isInfixOf` err)
             assertBool ("the error should name what is missing:\n" <> Text.unpack err) ("defaultRecipient" `Text.isInfixOf` err)
           other -> assertFailure ("expected exactly one error, got " <> show other),
       testCase "both directory strategies are refused" $
         mapM_
-          (\strategy -> length (sinkDeclarationErrors (agentWith [signalWith strategy Nothing])) @?= 1)
+          (\strategy -> length (outputConfigErrors (kizashiSignalOutput (signalWith strategy Nothing))) @?= 1)
           [SubjectOwner, AreaOwner],
       -- The shape agents/triage-note.dhall already ships: a directory strategy
       -- is fine as long as the author said who to fall back to.
       testCase "a directory strategy with a declared default is fine" $
-        sinkDeclarationErrors (agentWith [signalWith SubjectOwner (Just "person:nadeem")]) @?= [],
+        outputConfigErrors (kizashiSignalOutput (signalWith SubjectOwner (Just "person:nadeem"))) @?= [],
       testCase "Actor needs no default, because it resolves" $
-        sinkDeclarationErrors (agentWith [signalWith Actor Nothing]) @?= [],
-      testCase "sinks with no routing at all are not the subject" $
-        sinkDeclarationErrors (agentWith [sampleReiSink]) @?= [],
+        outputConfigErrors (kizashiSignalOutput (signalWith Actor Nothing)) @?= [],
+      testCase "an exact recipient needs no default" $
+        outputConfigErrors (toRecipient (declarationCoordinate "person:mai") (kizashiSignalOutput (signalWith SubjectOwner Nothing))) @?= [],
+      testCase "outputs with no routing at all are not the subject" $
+        outputConfigErrors sampleReiSink @?= [],
       testCase "Kanmon accepts its current channel and action segments" do
         validateKanmonRouteSegment "intercom" @?= Right "intercom"
         validateKanmonRouteSegment "reply_to_conversation" @?= Right "reply_to_conversation"
-        sinkDeclarationErrors (agentWith [egressWith "intercom" "reply_to_conversation" Nothing]) @?= [],
+        outputConfigErrors (egressWith "intercom" "reply_to_conversation" Nothing) @?= [],
       testCase "Kanmon route segments refuse empty and unsafe values" do
         mapM_
           (\segment -> assertBool ("expected an invalid segment: " <> Text.unpack segment) (isLeft (validateKanmonRouteSegment segment)))
           ["", "inter/com", "reply?now", "..\\reply", "intercom/../other"]
-        let errors = sinkDeclarationErrors (agentWith [egressWith "inter/com" "reply?now" Nothing])
+        let errors = outputConfigErrors (egressWith "inter/com" "reply?now" Nothing)
         assertBool "the channel field is named" (any ("channel" `Text.isPrefixOf`) errors)
         assertBool "the action field is named" (any ("action" `Text.isPrefixOf`) errors),
       testCase "an explicitly blank conversation key is refused" $
-        case sinkDeclarationErrors (agentWith [egressWith "intercom" "reply_to_conversation" (Just "  ")]) of
+        case outputConfigErrors (egressWith "intercom" "reply_to_conversation" (Just "  ")) of
           [err] -> assertBool "the field is named" ("conversationKey" `Text.isInfixOf` err)
           other -> assertFailure ("expected one conversation key error, got " <> show other),
-      testCase "every offending sink is reported, not just the first" $
-        length (sinkDeclarationErrors (agentWith [signalWith SubjectOwner Nothing, signalWith AreaOwner Nothing])) @?= 2
+      testCase "a configuration that does not decode is reported" $
+        case outputConfigErrors (OutputDecl kizashiSignalKind (object ["source" .= ("shinzui/shikigami" :: Text)])) of
+          [err] -> assertBool ("the error names the kind:\n" <> Text.unpack err) ("kizashi.signal" `Text.isInfixOf` err)
+          other -> assertFailure ("expected one decode error, got " <> show other)
     ]
 
 -- ── recipientFrom ───────────────────────────────────────────────────────────
@@ -148,15 +145,13 @@ recipientTests =
   testGroup
     "recipientFrom is honored or reported, never ignored"
     [ testCase "Actor resolves to the triggering activity's actor" $
-        resolveSinkRecipient (signalWith Actor (Just "ops")) (Just triggerActivity) @?= Just (declarationCoordinate ("person:mai")),
+        resolveRecipient Actor (Just triggerActivity) @?= Just (declarationCoordinate ("person:mai")),
       testCase "Actor with no triggering activity resolves to nothing" $
-        resolveSinkRecipient (signalWith Actor (Just "ops")) Nothing @?= Nothing,
+        resolveRecipient Actor Nothing @?= Nothing,
       testCase "the strategies needing an ownership directory resolve to nothing" $
         mapM_
-          (\strategy -> resolveSinkRecipient (signalWith strategy (Just "ops")) (Just triggerActivity) @?= Nothing)
+          (\strategy -> resolveRecipient strategy (Just triggerActivity) @?= Nothing)
           [SubjectOwner, AreaOwner],
-      testCase "a non-signal sink has no recipient to resolve" $
-        resolveSinkRecipient sampleReiSink (Just triggerActivity) @?= Nothing,
       testCase "a resolved recipient beats the declaration's default" $
         recipientOf (Just "person:mai") (Just "ops") @?= Right "person:mai",
       testCase "the declaration's default beats the deployment fallback" $
@@ -185,17 +180,20 @@ recipientTests =
           Nothing -> assertFailure "an unresolvable strategy must warn",
       testCase "a strategy that was honored produces no warning" $
         unresolvableRecipientWarning (signalWith Actor Nothing) (Just (declarationCoordinate ("person:mai"))) @?= Nothing,
-      testCase "a non-signal sink produces no warning" $
-        unresolvableRecipientWarning sampleReiSink Nothing @?= Nothing,
-      testCase "the resolved recipient reaches the signal the client builds" do
+      testCase "Actor resolved from the trigger activity reaches the signal" do
         recorded <- newIORef []
         testWithApplication (pure (stubKizashiApp recorded)) \port -> do
-          let ctx =
-                (ctxWith (ReiConfig {baseUrl = Nothing}))
-                  { kizashi = KizashiConfig {baseUrl = localBaseUrl port, defaultRecipient = (declarationCoordinate "recipient_default")},
-                    recipientOverride = Just (declarationCoordinate "person_mai")
-                  }
-          _ <- dispatch ctx (signalWith Actor (Just "ops")) sampleOutput
+          let ctx = withActivity triggerActivity (withServices (\services -> services {kizashi = KizashiConfig {baseUrl = localBaseUrl port, defaultRecipient = (declarationCoordinate "recipient_default")}}) dispatchContext)
+          _ <- dispatchOutput ctx (kizashiSignalOutput (signalWith Actor (Just "ops"))) sampleOutput
+          posted <- readIORef recorded
+          case posted of
+            [CreateSignalReq {recipient}] -> recipient @?= "person:mai"
+            other -> assertFailure ("expected exactly one signal, got " <> show (length other)),
+      testCase "the exact recipient reaches the signal the client builds" do
+        recorded <- newIORef []
+        testWithApplication (pure (stubKizashiApp recorded)) \port -> do
+          let ctx = withServices (\services -> services {kizashi = KizashiConfig {baseUrl = localBaseUrl port, defaultRecipient = (declarationCoordinate "recipient_default")}}) dispatchContext
+          _ <- dispatchOutput ctx (toRecipient (declarationCoordinate "person_mai") (kizashiSignalOutput (signalWith Actor (Just "ops")))) sampleOutput
           posted <- readIORef recorded
           case posted of
             [CreateSignalReq {recipient}] -> recipient @?= "person_mai"
@@ -214,35 +212,9 @@ recipientOf resolved declared =
       (compatibilityIdentity (fixtureAgentName "triage-note"))
       sampleOutput
 
--- | A declaration carrying the given sinks; every other field is irrelevant to
--- what 'sinkDeclarationErrors' looks at.
-agentWith :: [Sink] -> AgentDecl
-agentWith sinks =
-  AgentDecl
-    { name = fixtureAgentName "triage-note",
-      description = "a declaration used only for its sinks",
-      trigger = Schedule {cron = cronExpressionClaim "*/5 * * * *"},
-      behavior = Skill {path = declarationCoordinate ("agents/skills/triage-note")},
-      sinks,
-      delegates = map fixtureAgentName [],
-      delegationBudget = Nothing,
-      sanctionedProfile = Nothing,
-      capabilityOverlays = [],
-      tools = [],
-      outputs = [],
-      identity = Nothing,
-      memory = defaultMemoryPolicy,
-      enabled = agentEnablement (True),
-      expertise = [],
-      execution = Nothing,
-      harness = Nothing,
-      decisionModels = [],
-      routing = Nothing
-    }
-
-signalWith :: RecipientFrom -> Maybe Text -> Sink
+signalWith :: RecipientFrom -> Maybe Text -> KizashiSignalOutput
 signalWith recipientFrom defaultRecipient =
-  KizashiSignal
+  KizashiSignalOutput
     { source = activityCoordinate ("shinzui/shikigami"),
       signalType = Alert,
       priority = High,
@@ -250,12 +222,13 @@ signalWith recipientFrom defaultRecipient =
       recipientFrom,
       defaultRecipient = declarationCoordinate <$> defaultRecipient,
       intentTemplate = "escalate this",
-      extraContextTags = []
+      extraContextTags = [],
+      recipient = Nothing
     }
 
-egressWith :: Text -> Text -> Maybe Text -> Sink
+egressWith :: Text -> Text -> Maybe Text -> OutputDecl
 egressWith channel action conversationKey =
-  ChannelEgress {channel = declarationCoordinate channel, action = declarationCoordinate action, conversationKey = declarationCoordinate <$> conversationKey}
+  channelEgressOutput ChannelEgressOutput {channel = declarationCoordinate channel, action = declarationCoordinate action, conversationKey = declarationCoordinate <$> conversationKey}
 
 -- | An activity whose actor is a person, so a resolved recipient is visibly not
 -- the agent's own name or the fallback.
@@ -292,8 +265,8 @@ reiActionTests =
   testGroup
     "ReiAction reports what actually happened"
     [ testCase "with no endpoint configured it fails rather than claiming delivery" do
-        result <- dispatch (ctxWith (ReiConfig {baseUrl = Nothing})) sampleReiSink sampleOutput
-        kindOf result @?= SReiAction
+        result <- dispatchOutput (ctxWith (ReiConfig {baseUrl = Nothing})) sampleReiSink sampleOutput
+        kindOf result @?= reiActionKind
         case (.outcome) result of
           Failed reason -> do
             reason @?= unconfiguredMessage "int_42"
@@ -305,7 +278,7 @@ reiActionTests =
       testCase "with an endpoint it really POSTs the action" do
         recorded <- newIORef []
         testWithApplication (pure (stubReiApp recorded)) \port -> do
-          result <- dispatch (ctxWith (ReiConfig {baseUrl = Just (localBaseUrl port)})) sampleReiSink sampleOutput
+          result <- dispatchOutput (ctxWith (ReiConfig {baseUrl = Just (localBaseUrl port)})) sampleReiSink sampleOutput
           case (.outcome) result of
             Delivered detail -> assertBool ("the detail should name the intention: " <> Text.unpack (declarationCoordinateText detail)) ("int_42" `Text.isInfixOf` declarationCoordinateText detail)
             other -> assertFailure ("a configured rei sink should deliver, got " <> show other)
@@ -325,7 +298,7 @@ reiActionTests =
       testCase "an endpoint that refuses the request is a failure too" do
         recorded <- newIORef []
         testWithApplication (pure (refusingReiApp recorded)) \port -> do
-          result <- dispatch (ctxWith (ReiConfig {baseUrl = Just (localBaseUrl port)})) sampleReiSink sampleOutput
+          result <- dispatchOutput (ctxWith (ReiConfig {baseUrl = Just (localBaseUrl port)})) sampleReiSink sampleOutput
           case (.outcome) result of
             Failed reason -> assertBool ("the failure should name the status:\n" <> Text.unpack reason) ("503" `Text.isInfixOf` reason)
             other -> assertFailure ("a refused POST must fail, got " <> show other),
@@ -333,7 +306,7 @@ reiActionTests =
         recorded <- newIORef []
         testWithApplication (pure (stubReiApp recorded)) \port -> do
           let ctx = ctxWithIdentity (compatibilityIdentity (fixtureAgentName "intruder")) (ReiConfig {baseUrl = Just (localBaseUrl port)})
-          result <- dispatch ctx sampleReiSink sampleOutput
+          result <- dispatchOutput ctx sampleReiSink sampleOutput
           case (.outcome) result of
             DeniedOutcome _ -> pure ()
             other -> assertFailure ("an ungranted agent must be denied, got " <> show other)
@@ -383,45 +356,21 @@ publicationDisposition = \case
 
 -- ── Fixtures ────────────────────────────────────────────────────────────────
 
--- | @heartbeat@ is granted @SReiAction@ in the static grant table, so the
+-- | @heartbeat@ is granted @rei.action@ in the static grant table, so the
 -- permission gate is not what these cases are measuring.
-ctxWith :: ReiConfig -> SinkContext
+ctxWith :: ReiConfig -> DispatchContext
 ctxWith = ctxWithIdentity (compatibilityIdentity (fixtureAgentName "heartbeat"))
 
-ctxWithIdentity :: AgentIdentity -> ReiConfig -> SinkContext
-ctxWithIdentity agentIdentity rei =
-  SinkContext
-    { identity = agentIdentity,
-      directory = disabledDirectoryHandle,
-      runId = sinkSessionFixture,
-      ordinal = zeroSinkOrdinal,
-      kizashi = KizashiConfig {baseUrl = unreachable, defaultRecipient = (declarationCoordinate "recipient_default")},
-      kawa = KawaConfig {baseUrl = unreachable, sourceSegment = (activityCoordinate "shinzui/shikigami")},
-      danwa = DanwaConfig {baseUrl = unreachable, agentParticipant = (declarationCoordinate "part_agent_test")},
-      kanmon = KanmonConfig {baseUrl = unreachable},
-      rei,
-      http = testSinkHttp,
-      traceHeaders = [],
-      danwaTarget = Nothing,
-      recipientOverride = Nothing,
-      conversationKey = Nothing,
-      triggeringActivityId = Nothing,
-      occurredAt = Nothing,
-      receipts = Nothing,
-      logger = Log.silentLogger,
-      grants = StaticGrants defaultGrantTable
-    }
-  where
-    -- Port 1 is not listening; a case that accidentally reaches another sink
-    -- fails loudly rather than quietly succeeding against a real service.
-    unreachable = "http://localhost:1"
+ctxWithIdentity :: AgentIdentity -> ReiConfig -> DispatchContext
+ctxWithIdentity agentIdentity rei = withIdentity agentIdentity (withServices (\services -> services {rei}) dispatchContext)
 
-sampleReiSink :: Sink
+sampleReiSink :: OutputDecl
 sampleReiSink =
-  ReiAction
-    { intentionId = declarationCoordinate ("int_42"),
-      note = "follow up on the stalled export"
-    }
+  reiActionOutput
+    ReiActionOutput
+      { intentionId = declarationCoordinate ("int_42"),
+        note = "follow up on the stalled export"
+      }
 
 sampleOutput :: Value
 sampleOutput = object ["summary" .= ("the weekly export has not run since Tuesday" :: Text)]
@@ -447,11 +396,8 @@ refusingReiApp :: IORef [ReiActionReq] -> Application
 refusingReiApp _ref _req respond =
   respond (responseLBS status503 [] "rei is not accepting agent actions")
 
-kindOf :: SinkResult -> SinkKind
+kindOf :: SinkResult -> OutputKind
 kindOf SinkResult {kind} = kind
 
 fixtureAgentName :: Text -> AgentName
 fixtureAgentName = either (error . show) id . mkAgentName
-
-sinkSessionFixture :: SinkSession.SessionId
-sinkSessionFixture = either (error . show) id (parseSinkSession "kioku_session_01kvxa7d2cezhs874g3n8dfgme")

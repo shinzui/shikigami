@@ -43,9 +43,9 @@ worker:
   run_timeout_seconds: 300
 
 approval:
-  # Comma-separated sink kinds that require a human decision. Accepted values:
-  # KawaDigest, KizashiSignal, ReiAction, DanwaConversation, ChannelEgress.
-  # Empty preserves ordinary sink auto-approval.
+  # Comma-separated output kinds whose delivery requires a human decision, such
+  # as kizashi.signal,danwa.conversation. The legacy sink names (KawaDigest, ...)
+  # still name their output kinds. Empty preserves auto-approval.
   require: ""
   # Where approval asks are sent: danwa or kizashi.
   channel: danwa

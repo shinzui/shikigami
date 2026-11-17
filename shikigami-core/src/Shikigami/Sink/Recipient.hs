@@ -27,7 +27,6 @@
 -- out loud, at dispatch, that the strategy was not honored.
 module Shikigami.Sink.Recipient
   ( resolveRecipient,
-    resolveSinkRecipient,
     recipientFor,
     unresolvableRecipientWarning,
   )
@@ -39,8 +38,9 @@ import Shikigami.Agent.DeclarationValue
 -- Qualified: @Actor@ is both an activity's actor record and the name of the
 -- routing strategy that reads it.
 import Shikigami.Activity qualified as Activity
-import Shikigami.Agent.Decl (RecipientFrom (..), Sink (..))
+import Shikigami.Agent.Decl (RecipientFrom (..))
 import Shikigami.Prelude
+import Shikigami.Sink.Outputs (KizashiSignalOutput (..))
 
 -- | Turn a routing strategy into a concrete recipient, when the data allows it.
 --
@@ -55,14 +55,6 @@ resolveRecipient strategy activity =
     AreaOwner -> Nothing
   where
     actorIdOf Activity.ActivityEnvelope {Activity.actor = Activity.Actor {Activity.id = actorId}} = declarationCoordinate (Activity.activityCoordinateText actorId)
-
--- | 'resolveRecipient' for a whole sink: a non-signal sink has no recipient to
--- resolve, so it contributes nothing to the intent.
-resolveSinkRecipient :: Sink -> Maybe Activity.ActivityEnvelope -> Maybe (DeclarationCoordinate "recipient")
-resolveSinkRecipient sink activity =
-  case sink of
-    KizashiSignal {recipientFrom} -> resolveRecipient recipientFrom activity
-    _ -> Nothing
 
 -- | The recipient a signal is sent to, in precedence order.
 --
@@ -87,18 +79,16 @@ recipientFor fallback resolved declared =
 -- quietly reaching the wrong person. Validation already refuses the case where
 -- there is nothing to fall back to; this covers the case where the fallback is
 -- legitimate but the operator should still know the strategy did nothing.
-unresolvableRecipientWarning :: Sink -> Maybe (DeclarationCoordinate "recipient") -> Maybe Text
-unresolvableRecipientWarning sink resolved =
-  case sink of
-    KizashiSignal {recipientFrom}
-      | isNothing resolved,
-        strategyNeedsDirectory recipientFrom ->
-          Just
-            ( "[sink] KizashiSignal recipientFrom="
-                <> renderRecipientFrom recipientFrom
-                <> " is not resolvable (no ownership directory); using declared defaultRecipient"
-            )
-    _ -> Nothing
+unresolvableRecipientWarning :: KizashiSignalOutput -> Maybe (DeclarationCoordinate "recipient") -> Maybe Text
+unresolvableRecipientWarning KizashiSignalOutput {recipientFrom} resolved
+  | isNothing resolved,
+    strategyNeedsDirectory recipientFrom =
+      Just
+        ( "[sink] kizashi.signal recipientFrom="
+            <> renderRecipientFrom recipientFrom
+            <> " is not resolvable (no ownership directory); using declared defaultRecipient"
+        )
+  | otherwise = Nothing
 
 strategyNeedsDirectory :: RecipientFrom -> Bool
 strategyNeedsDirectory = \case

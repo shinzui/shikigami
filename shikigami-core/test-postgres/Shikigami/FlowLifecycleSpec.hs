@@ -48,6 +48,7 @@ import Shikigami.Coordination.Capability qualified as Adaptive
 import Shikigami.Directory (disabledDirectoryHandle)
 import Shikigami.Duration (parseDuration)
 import Shikigami.Fixture.AcknowledgementFlow (acknowledgementFlow, acknowledgementFlowName, fixtureFlowRegistry)
+import Shikigami.Fixture.OutboxDispatch (unreachableServices)
 import Shikigami.Flow (FlowDef (..), FlowEffects, FlowRuntime (..))
 import Shikigami.Flow.Acknowledgement (Ack (..), ackFromDecision, runAcknowledgement)
 import Shikigami.Flow.Builtin (builtinFlowRegistry)
@@ -80,9 +81,11 @@ import Shikigami.Flow.Workers qualified as FlowWorkers
 import Shikigami.Memory.Access (shikigamiMemorySpace)
 import Shikigami.Memory.Scope (agentScope)
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
+import Shikigami.Output.Kikan (kikanOutputs)
 import Shikigami.RuntimePolicy (DefaultModelRequirement (..))
 import Shikigami.Sink.GrantStore (GrantSource (StaticGrants))
-import Shikigami.Sink.Permission (SinkKind (SKizashiSignal), defaultGrantTable)
+import Shikigami.Sink.Outputs (kizashiSignalKind, sinkOutput)
+import Shikigami.Sink.Permission (defaultGrantTable)
 import Shikigami.Sink.Types (SinkOutcome (DeniedOutcome, Enqueued), SinkResult (..))
 import Shikigami.Trigger.Schedule (parseCron)
 import Shikigami.WorkerSession.Capability (CoordinatorRun (..))
@@ -147,14 +150,14 @@ tests databaseFixture =
         (outcome, count) <- (runFlowWorkflowWithAgent databaseFixture) "at-risk-customer" sinkFlow (WorkflowId "flow-sink-spike")
         assertEqual
           "allowed sink returns a delivered outbox result"
-          (Right (Completed (toJSON (SinkResult SKizashiSignal (Enqueued (declarationCoordinate "outbox:flow-sink-spike:emit-signal:alert"))))))
+          (Right (Completed (toJSON (SinkResult kizashiSignalKind (Enqueued (declarationCoordinate "outbox:flow-sink-spike:emit-signal:alert"))))))
           outcome
         assertEqual "allowed sink enqueues one outbox message" (Right 1) count,
       testCase "emitSignal records denied sinks without enqueueing" do
         (outcome, count) <- (runFlowWorkflowWithAgent databaseFixture) "intruder" sinkFlow (WorkflowId "flow-denied-sink-spike")
         case outcome of
           Right (Completed encodedResult) -> case encodedResult of
-            _ | encodedResult == toJSON (SinkResult SKizashiSignal (DeniedOutcome "agent 'intruder' has no sink grants")) -> pure ()
+            _ | encodedResult == toJSON (SinkResult kizashiSignalKind (DeniedOutcome "agent 'intruder' has no sink grants")) -> pure ()
             other -> assertFailure ("expected denied sink result, got " <> show other)
           other -> assertFailure ("denied sink flow should complete, got " <> show other)
         assertEqual "denied sink does not enqueue an outbox message" (Right 0) count,
@@ -451,7 +454,7 @@ sinkFlow :: SpikeFlow
 sinkFlow =
   SpikeFlow
     { name = declarationCoordinate "sink-spike",
-      run = \_payload -> toJSON <$> emitSignal (declarationCoordinate "alert") sampleKizashiSink (object ["summary" .= ("flow alert" :: Text)])
+      run = \_payload -> toJSON <$> emitSignal (declarationCoordinate "alert") (sinkOutput sampleKizashiSink) (object ["summary" .= ("flow alert" :: Text)])
     }
 
 twoStepFlow :: (FlowEffects es) => Value -> Eff es Value
@@ -615,10 +618,10 @@ runFlowBodyUsing decision onAppend appEnv runtime flowAgent SpikeFlow {run} work
           agent = fixtureAgentName flowAgent,
           runId = nominalSessionFixture,
           occurredAt = Just flowOccurredAt,
-          danwaTarget = Nothing,
           -- The same activity the flow's own capability sees, so a signal
           -- emitted from inside it resolves recipientFrom the way production does.
           activity = Just sampleActivity,
+          outputs = kikanOutputs unreachableServices,
           grants = StaticGrants defaultGrantTable,
           directory = disabledDirectoryHandle,
           identity = compatibilityIdentity (fixtureAgentName flowAgent)

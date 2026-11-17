@@ -1,4 +1,4 @@
--- | The @ReiAction@ sink handler: hand an agent finding to @shinzui/rei@ as an
+-- | The @rei.action@ output client: hand an agent finding to @shinzui/rei@ as an
 -- action against one of its intentions.
 --
 -- This legacy protocol still addresses /v1/agent-actions. Rei now serves a
@@ -14,12 +14,12 @@ where
 
 import Data.Aeson (Value)
 import Data.Text qualified as Text
-import Shikigami.Agent.Decl (Sink (..))
 import Shikigami.Agent.DeclarationValue
 import Shikigami.Prelude
 import Shikigami.Sink.Config (ReiConfig (..))
 import Shikigami.Sink.Http (HttpEnv, postJSONWithHeaders, renderHttpFailure)
-import Shikigami.Sink.Types (SinkContext (..), mkSourceEventId)
+import Shikigami.Sink.Outputs (ReiActionOutput (..))
+import Shikigami.Sink.Types (OutboxDelivery (..), mkSourceEventId)
 import Shikigami.Sink.Wire (ReiActionReq (..))
 
 -- | The path an agent action is posted to, appended to the configured base URL.
@@ -31,23 +31,20 @@ reiActionPath = "/v1/agent-actions"
 -- @Left@ becomes a @Failed@ outcome and therefore a failed outbox publish. Both
 -- branches are real: unconfigured is a genuine non-delivery, and a configured
 -- endpoint that refuses the request is a genuine transport failure.
-runReiAction :: HttpEnv -> ReiConfig -> SinkContext -> Sink -> Value -> IO (Either Text Text)
-runReiAction http ReiConfig {baseUrl} ctx sink output =
-  case sink of
-    ReiAction {intentionId = iid, note = nt} ->
-      case baseUrl of
-        Nothing -> pure (Left (unconfiguredMessage (declarationCoordinateText iid)))
-        Just url -> do
-          let req =
-                ReiActionReq
-                  { intentionId = declarationCoordinateText iid,
-                    note = nt,
-                    output,
-                    sourceEventId = mkSourceEventId ctx
-                  }
-          result <- postJSONWithHeaders http ((.traceHeaders) ctx) (url <> reiActionPath) req
-          pure (either (Left . renderHttpFailure) (const (Right ("rei-action recorded for intention " <> declarationCoordinateText iid))) result)
-    _ -> pure (Left "runReiAction: not a ReiAction sink")
+runReiAction :: HttpEnv -> ReiConfig -> OutboxDelivery -> ReiActionOutput -> IO (Either Text Text)
+runReiAction http ReiConfig {baseUrl} delivery ReiActionOutput {intentionId = iid, note = nt} =
+  case baseUrl of
+    Nothing -> pure (Left (unconfiguredMessage (declarationCoordinateText iid)))
+    Just url -> do
+      let req =
+            ReiActionReq
+              { intentionId = declarationCoordinateText iid,
+                note = nt,
+                output = delivery.result,
+                sourceEventId = mkSourceEventId delivery
+              }
+      result <- postJSONWithHeaders http delivery.traceHeaders (url <> reiActionPath) req
+      pure (either (Left . renderHttpFailure) (const (Right ("rei-action recorded for intention " <> declarationCoordinateText iid))) result)
 
 -- | The retained legacy ingestion protocol requires explicit configuration.
 unconfiguredMessage :: Text -> Text

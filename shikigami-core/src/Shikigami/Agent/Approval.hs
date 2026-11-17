@@ -12,13 +12,12 @@ module Shikigami.Agent.Approval
     reviewRequestIdFor,
     approvalWorkflowId,
     requiresApprovalFor,
-    requiresApprovalForOutput,
     withApprovalChannel,
     approvalPolicyChannel,
     approvalPolicyDeadline,
     autoApprovePolicy,
-    parseRequiredSinkKinds,
-    renderRequiredSinkKinds,
+    parseRequiredOutputKinds,
+    renderRequiredOutputKinds,
     parseApprovalChannel,
     renderApprovalChannel,
     ApprovalEnv (..),
@@ -68,9 +67,10 @@ import Kiroku.Store.Transaction (runTransaction)
 import Kiroku.Store.Types (EventId)
 import Shikigami.Agent.Workflow.Input (awaitInput, deliverInput)
 import Shikigami.App (AppEffects, AppEnv (..), runAppIO)
+import Shikigami.Authority (OutputKind, mkOutputKind, outputKindText)
 import Shikigami.Duration
 import Shikigami.Prelude
-import Shikigami.Sink.Permission (AgentIdentity, SinkKind (..), sinkKindText)
+import Shikigami.Sink.Permission (AgentIdentity)
 
 data ApprovalRequest = ApprovalRequest
   { prompt :: !Text,
@@ -127,9 +127,8 @@ instance FromJSON ReviewRequestId where
 -- consults this value instead of whichever process configuration happens to be
 -- active when the run resumes.
 data ApprovalPolicySnapshot = ApprovalPolicySnapshot
-  { requireFor :: !(Set SinkKind),
-    -- | Output kinds whose delivery waits for approval (EP-8 M2).
-    requireOutputs :: !(Set Text),
+  { -- | Output kinds whose delivery waits for approval.
+    requireFor :: !(Set OutputKind),
     channel :: !ApprovalChannel,
     deadline :: !(Duration "approval")
   }
@@ -166,11 +165,8 @@ reviewRequestIdText (ReviewRequestId reviewId) = reviewId
 approvalWorkflowId :: ReviewRequestId -> WorkflowId
 approvalWorkflowId = WorkflowId . reviewRequestIdText
 
-requiresApprovalFor :: ApprovalPolicySnapshot -> SinkKind -> Bool
+requiresApprovalFor :: ApprovalPolicySnapshot -> OutputKind -> Bool
 requiresApprovalFor ApprovalPolicySnapshot {requireFor} = (`Set.member` requireFor)
-
-requiresApprovalForOutput :: ApprovalPolicySnapshot -> Text -> Bool
-requiresApprovalForOutput ApprovalPolicySnapshot {requireOutputs} = (`Set.member` requireOutputs)
 
 withApprovalChannel :: ApprovalChannel -> ApprovalRequest -> ApprovalRequest
 withApprovalChannel selected ApprovalRequest {prompt, context} =
@@ -186,31 +182,37 @@ autoApprovePolicy :: Duration "approval" -> ApprovalPolicySnapshot
 autoApprovePolicy deadline =
   ApprovalPolicySnapshot
     { requireFor = Set.empty,
-      requireOutputs = Set.empty,
       channel = ViaDanwa,
       deadline
     }
 
-parseRequiredSinkKinds :: Text -> Either Text (Set SinkKind)
-parseRequiredSinkKinds raw
+-- | Output kinds, comma-separated and unique. The legacy sink names
+-- (@KawaDigest@, @KizashiSignal@, ...) still name their output kinds, so an
+-- existing configuration keeps working.
+parseRequiredOutputKinds :: Text -> Either Text (Set OutputKind)
+parseRequiredOutputKinds raw
   | Text.null (Text.strip raw) = Right Set.empty
   | otherwise = do
       parsed <- traverse parseKind pieces
       let selected = Set.fromList parsed
       if Set.size selected == length parsed
         then Right selected
-        else Left ("approval.require contains a duplicate; expected unique values from " <> validSinkKinds)
+        else Left "approval.require contains a duplicate output kind"
   where
     pieces = fmap Text.strip (Text.splitOn "," raw)
-    parseKind name =
-      maybe
-        (Left ("unknown approval sink kind; expected one of " <> validSinkKinds))
-        Right
-        (lookup name sinkKindChoices)
+    parseKind name = mkOutputKind (fromMaybe name (lookup name legacySinkNames))
 
-renderRequiredSinkKinds :: Set SinkKind -> Text
-renderRequiredSinkKinds selected =
-  Text.intercalate "," [sinkKindText kind | (_, kind) <- sinkKindChoices, Set.member kind selected]
+renderRequiredOutputKinds :: Set OutputKind -> Text
+renderRequiredOutputKinds selected = Text.intercalate "," (outputKindText <$> Set.toAscList selected)
+
+legacySinkNames :: [(Text, Text)]
+legacySinkNames =
+  [ ("KawaDigest", "kawa.digest"),
+    ("KizashiSignal", "kizashi.signal"),
+    ("ReiAction", "rei.action"),
+    ("DanwaConversation", "danwa.conversation"),
+    ("ChannelEgress", "channel.egress")
+  ]
 
 parseApprovalChannel :: Text -> Either Text ApprovalChannel
 parseApprovalChannel = \case
@@ -224,18 +226,6 @@ renderApprovalChannel = \case
   ViaKizashi -> "kizashi"
   ViaLocalInbox -> "local-inbox"
 
-sinkKindChoices :: [(Text, SinkKind)]
-sinkKindChoices =
-  [ (sinkKindText SKawaDigest, SKawaDigest),
-    (sinkKindText SKizashiSignal, SKizashiSignal),
-    (sinkKindText SReiAction, SReiAction),
-    (sinkKindText SDanwaConversation, SDanwaConversation),
-    (sinkKindText SChannelEgress, SChannelEgress)
-  ]
-
-validSinkKinds :: Text
-validSinkKinds = Text.intercalate ", " (fmap fst sinkKindChoices)
-
 data ApprovalTimeoutPayload = ApprovalTimeoutPayload
   { kind :: !Text,
     awakeableId :: !AwakeableId
@@ -245,7 +235,7 @@ data ApprovalTimeoutPayload = ApprovalTimeoutPayload
 
 data ApprovalEnv = ApprovalEnv
   { currentSession :: !SessionId,
-    requiresApproval :: !(AgentIdentity -> SinkKind -> Value -> IO ApprovalRequirement),
+    requiresApproval :: !(AgentIdentity -> OutputKind -> Value -> IO ApprovalRequirement),
     recordPark :: !(SessionId -> AwakeableId -> ApprovalRequest -> IO ()),
     postAsk :: !(ApprovalChannel -> ApprovalRequest -> AwakeableId -> IO ())
   }

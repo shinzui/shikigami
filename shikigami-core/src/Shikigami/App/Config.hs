@@ -182,9 +182,9 @@ import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Approval
   ( ApprovalChannel (ViaDanwa),
     parseApprovalChannel,
-    parseRequiredSinkKinds,
+    parseRequiredOutputKinds,
     renderApprovalChannel,
-    renderRequiredSinkKinds,
+    renderRequiredOutputKinds,
   )
 import Shikigami.Agent.Decl
   ( DelegationBudget,
@@ -193,6 +193,7 @@ import Shikigami.Agent.Decl
     mkDelegationBudget,
   )
 import Shikigami.Agent.DeclarationValue
+import Shikigami.Authority (OutputKind)
 import Shikigami.Behavior.StubProvider (stubModel)
 import Shikigami.Decision.Contract (DecisionFailure, ModelAlias, modelAliasText)
 import Shikigami.Decision.ModelCatalog qualified as Decision
@@ -205,7 +206,6 @@ import Shikigami.Objective.Tracker.Config (TrackerSettings, defaultTrackerSettin
 import Shikigami.Objective.Types (ObjectiveSettings, defaultObjectiveSettings)
 import Shikigami.Pack.Setting (PackSetting (..), PackSettings, SettingDefault (..), SettingShape (..), noPackSettings, packSettingsWithSecrets)
 import Shikigami.RuntimePolicy
-import Shikigami.Sink.Permission (SinkKind)
 import Shikigami.Trigger.Schedule (CatchUpPolicy (..))
 import Shikigami.Trigger.Stream (IncludeAgentActors (..), agentActorInclusion, agentActorsIncluded)
 import Shikigami.Trust.Tier (TrustTier (..), trustTierText)
@@ -444,7 +444,7 @@ data AppConfig = AppConfig
     -- | Maximum duration of one synchronous external behavior attempt.
     runTimeout :: !(Duration "agent-run"),
     -- | Maximum duration an approval or flow acknowledgement may remain open.
-    approvalRequiredSinks :: !(Set SinkKind),
+    approvalRequiredSinks :: !(Set OutputKind),
     -- | Output kinds whose delivery waits for an approval (EP-8 M2).
     approvalRequiredOutputs :: ![Text],
     -- | The output a worker gives a declaration that lists none
@@ -1142,18 +1142,18 @@ approvalDeadlineSecondsSetting =
     positiveDurationDecoder
     renderDurationSeconds
 
-approvalRequireSetting :: Setting (Set SinkKind)
+approvalRequireSetting :: Setting (Set OutputKind)
 approvalRequireSetting =
   publicSettingWithRenderer
     approvalRequireKey
-    "Comma-separated sink kinds requiring approval; empty means auto-approve"
+    "Comma-separated output kinds requiring approval; empty means auto-approve"
     (decoder decodeRequiredSinks)
-    renderRequiredSinkKinds
+    renderRequiredOutputKinds
   where
     decodeRequiredSinks key raw =
       case runDecoder textDecoder key raw of
         Left _ -> Left (decodeFailure key approvalRequireExpectation)
-        Right value -> first (const (decodeFailure key approvalRequireExpectation)) (parseRequiredSinkKinds value)
+        Right value -> first (const (decodeFailure key approvalRequireExpectation)) (parseRequiredOutputKinds value)
 
 approvalRequireOutputsSetting :: Setting [Text]
 approvalRequireOutputsSetting =
@@ -1196,7 +1196,7 @@ approvalChannelSetting =
 
 approvalRequireExpectation :: Text
 approvalRequireExpectation =
-  "an empty value or a comma-separated unique set of KawaDigest, KizashiSignal, ReiAction, DanwaConversation, ChannelEgress"
+  "an empty value or a comma-separated unique set of output kinds, such as kizashi.signal,danwa.conversation"
 
 approvalChannelExpectation :: Text
 approvalChannelExpectation = "one of danwa, kizashi"

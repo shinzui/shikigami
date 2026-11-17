@@ -24,7 +24,7 @@ import Shikigami.Execution.Resources (Envelope (..))
 import Shikigami.Flow.Decision (Decision, decide)
 import Shikigami.Flow.Objectives (Objectives)
 import Shikigami.Flow.Objectives qualified as Objectives
-import Shikigami.Flow.Sdk (Ack (..), Acknowledgement, Eff, SinkCapability, StepName (..), awaitAckWithin, declarationCoordinate, emitSignalTo, (:>))
+import Shikigami.Flow.Sdk (Ack (..), Acknowledgement, Eff, SinkCapability, StepName (..), awaitAckWithin, declarationCoordinate, emitDirected, sinkOutput, toRecipient, (:>))
 import Shikigami.Objective.Command qualified as Command
 import Shikigami.Objective.Operation qualified as Operation
 import Shikigami.Objective.Types
@@ -115,7 +115,7 @@ admitWork opened proposal reservation =
                     Left problem -> refuse problem
                     Right _ -> do
                       let KizashiRecipient recipient = opened.allowance.notices
-                      _ <- emitSignalTo (declarationCoordinate "initiative-admitted") recipient (noticeSink recipient) (admissionNotice opened.agent opened.observer proposal created.objectiveId reservation.policyId)
+                      _ <- emitDirected (declarationCoordinate "initiative-admitted") (toRecipient recipient (sinkOutput (noticeSink recipient))) (admissionNotice opened.agent opened.observer proposal created.objectiveId reservation.policyId)
                       resolved <$> resolve opened proposal (AdmittedUnder created.objectiveId reservation.policyId)
                 _ -> refuse "the objective refused its assignment"
             _ -> refuse "the objective refused its coordinator"

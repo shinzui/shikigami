@@ -65,6 +65,7 @@ import Shikigami.Execution.Transcript qualified as Replay
 import Shikigami.ExecutionDriver.Generated.WorkflowRuntime qualified as DriverGenerated
 import Shikigami.ExecutionSelectionWorkflowSpec qualified as SelectionFixture
 import Shikigami.ExecutionTranscriptSpec qualified as Fixture
+import Shikigami.Fixture.OutboxDispatch (unreachableServices)
 import Shikigami.Flow.Decision qualified as Decision
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.FormatVersion (FormatVersion (V1))
@@ -78,11 +79,12 @@ import Shikigami.Objective.Runtime qualified as Objectives
 import Shikigami.Objective.Scope qualified as Scope
 import Shikigami.Objective.Tools qualified as Tools
 import Shikigami.Objective.Types qualified as O
+import Shikigami.Output.Kikan (kikanOutputs)
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.RouterWorkflowSpec qualified as RouterFixture
 import Shikigami.Sink.Config (DanwaConfig (..))
 import Shikigami.Sink.GrantStore (GrantSource (StaticGrants))
-import Shikigami.Sink.Permission (SinkKind (SDanwaConversation))
+import Shikigami.Sink.Outputs (danwaConversationKind)
 import Shikigami.Trigger.Enqueue (addressedRunJob, ensureRunQueue)
 import Shikigami.Workflow.Versioning (shikigamiWorkflowResumeOptions)
 import Shikumi.Tool (SomeTool (..), runErasedOutput, someToolDescription, someToolName, someToolSchema)
@@ -154,7 +156,8 @@ conversationCreation fixture = Fixture.withConfiguredResourceFixture fixture id 
             idleTimeout = checked parseDuration 1800,
             danwa = DanwaConfig "http://localhost:1" (declarationCoordinate "participant"),
             agents = [declaration],
-            grants = StaticGrants (Map.singleton actor (Set.singleton SDanwaConversation)),
+            outputs = kikanOutputs unreachableServices,
+            grants = StaticGrants (Map.singleton actor (Set.singleton danwaConversationKind)),
             directory
           }
       firstMessage = message (1 :: Int)
@@ -248,7 +251,8 @@ oldShapeReplay fixture conversationCase = Fixture.withFixture fixture \env _ _ -
             idleTimeout = checked parseDuration 1800,
             danwa = DanwaConfig "http://localhost:1" (declarationCoordinate "participant"),
             agents = [declaration],
-            grants = StaticGrants (Map.singleton actor (Set.singleton SDanwaConversation)),
+            outputs = kikanOutputs unreachableServices,
+            grants = StaticGrants (Map.singleton actor (Set.singleton danwaConversationKind)),
             directory
           }
   Fixture.run env do

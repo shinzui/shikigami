@@ -1,6 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 
--- | The @KizashiSignal@ sink handler: build a @CreateSignalReq@ from the sink config
+-- | The @kizashi.signal@ output client: build a @CreateSignalReq@ from the output
 -- and the behavior output, and POST it to a kizashi base URL (the C4 contract). Built
 -- against a stub kizashi server; swapping the real kizashi base URL needs no code change.
 module Shikigami.Sink.KizashiClient
@@ -17,12 +17,12 @@ import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Text qualified as Text
 import Network.HTTP.Types.Header (Header)
 import Shikigami.Activity.Coordinate
-import Shikigami.Agent.Decl (Sink (..))
 import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Principal (AgentIdentity, identityText)
 import Shikigami.Prelude
 import Shikigami.Sink.Config (KizashiConfig (..))
 import Shikigami.Sink.Http (HttpEnv, HttpFailure, postJSONWithHeaders, renderHttpFailure)
+import Shikigami.Sink.Outputs (KizashiSignalOutput (..))
 import Shikigami.Sink.Recipient (recipientFor)
 import Shikigami.Sink.Wire (CreateSignalReq (..), SignalResponse (..))
 
@@ -34,38 +34,26 @@ renderKizashiError = \case
   KizashiHttpError failure -> renderHttpFailure failure
   KizashiDecodeError detail -> "decode SignalResponse: " <> detail
 
--- | Build the C4 request from a @KizashiSignal@ sink + the behavior output. Fails for
--- any other sink variant.
+-- | Build the C4 request from a @kizashi.signal@ output and the behavior result.
 --
 -- The @Maybe Text@ is what the declaration's @recipientFrom@ strategy resolved
 -- to, decided upstream where the trigger activity is available; see
 -- "Shikigami.Sink.Recipient" for why resolution does not happen here and for the
 -- precedence 'recipientFor' applies.
-buildSignalReq :: KizashiConfig -> Maybe (DeclarationCoordinate "recipient") -> Sink -> AgentIdentity -> Value -> Either Text CreateSignalReq
-buildSignalReq KizashiConfig {defaultRecipient = fallbackRecipient} resolvedRecipient sink identity output = do
+buildSignalReq :: KizashiConfig -> Maybe (DeclarationCoordinate "recipient") -> KizashiSignalOutput -> AgentIdentity -> Value -> Either Text CreateSignalReq
+buildSignalReq KizashiConfig {defaultRecipient = fallbackRecipient} resolvedRecipient KizashiSignalOutput {source = src, signalType = st, priority = pr, importance = imp, defaultRecipient = mrec, intentTemplate = tmpl, extraContextTags = tags} identity output = do
   nm <- identityText identity
-  case sink of
-    KizashiSignal
-      { source = src,
+  Right
+    CreateSignalReq
+      { actor = nm,
+        recipient = declarationCoordinateText (recipientFor fallbackRecipient resolvedRecipient mrec),
+        source = activityCoordinateText src,
         signalType = st,
+        intent = tmpl,
         priority = pr,
-        importance = imp,
-        defaultRecipient = mrec,
-        intentTemplate = tmpl,
-        extraContextTags = tags
-      } ->
-        Right
-          CreateSignalReq
-            { actor = nm,
-              recipient = declarationCoordinateText (recipientFor fallbackRecipient resolvedRecipient mrec),
-              source = activityCoordinateText src,
-              signalType = st,
-              intent = tmpl,
-              priority = pr,
-              importance = signalImportanceInt imp,
-              contextTags = tags <> activityRefTags output
-            }
-    _ -> Left "buildSignalReq: not a KizashiSignal sink"
+        importance = signalImportanceInt imp,
+        contextTags = tags <> activityRefTags output
+      }
 
 -- | If the behavior output carries an @activity_ref@ string, surface it as a
 -- @context_tag@ back-reference (the seed detectors' rule).

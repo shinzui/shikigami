@@ -10,6 +10,7 @@ import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.ByteString.Lazy qualified as LazyByteString
+import Data.Either (rights)
 import Data.Functor ((<&>))
 import Data.List (isInfixOf, isSuffixOf)
 import Data.Map.Strict qualified as Map
@@ -48,6 +49,7 @@ import Shikigami.App.Config (AppConfig)
 import Shikigami.App.Config qualified as Config
 import Shikigami.App.Config.Load (requireDatabaseUrl)
 import Shikigami.Attestation.Resolve qualified as Profile
+import Shikigami.Authority (mkOutputKind)
 import Shikigami.Behavior.Provider (newBehaviorEnvFor)
 import Shikigami.Behavior.Run (withProgramTasks)
 import Shikigami.CodingAgent.Types (renderOutcome)
@@ -66,11 +68,13 @@ import Shikigami.Flow.Pack qualified as FlowPack
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations (verifyShikigamiMigrations)
-import Shikigami.Output (OutputReceipt (..))
+import Shikigami.Output (DefaultOutput (NoDefaultOutput), OutputReceipt (..), mkOutputRegistry)
+import Shikigami.Output.Kikan (KikanServices (..), kikanOutputAdapters)
 import Shikigami.Record (KindFilter (..), RecordEvent (..), RecordQuery (..), mkRecordLimit, observedRecord, postgresRecord, readRecord, recordEntry, recordErrorText)
 import Shikigami.Repository (repositoryIdText)
 import Shikigami.Runtime (registerRuntimeCatalog, runtimeConnectionSettings)
-import Shikigami.Sink (DanwaConfig (..), GrantSource (DbGrants), KanmonConfig (..), KawaConfig (..), KizashiConfig (..), ReiConfig (..))
+import Shikigami.Sink (GrantSource (DbGrants))
+import Shikigami.Sink.Config (DanwaConfig (..), KanmonConfig (..), KawaConfig (..), KizashiConfig (..), ReiConfig (..))
 import Shikigami.Sink.Http (HttpLimits (..), credentialsFromConfig, newSinkHttp)
 import Shikigami.Trigger.Enqueue (ensureRunQueue)
 import Shikigami.Trust.LocalOperator.Approvals (Budget (..))
@@ -172,34 +176,9 @@ runDurableAgent flows logger store@KirokuStore {pool} appEnv workspace triggerPa
             run = Just (runJobWorkflowId unrooted),
             repository = workspaceSelector <$> named
           }
-  -- Resolve the run's ports before any model call: a refused grant, an
-  -- unavailable repository or an undeliverable output stops here.
-  tierRuntime <- (lightComposition config interaction record).resolve subject >>= either (dieAgentRun . renderTierRefusal) pure
-  -- A run that may mutate the repository spends under a resource root sized by
-  -- its grant's budget (K5).
-  job <- case (journaled, tierRuntime.workspace, tierRuntime.grant) of
-    (Just resumed, _, _) -> pure resumed
-    (Nothing, Just _, Just grant) -> do
-      now <- getCurrentTime
-      enrolled <- runAppIO appEnv (enrollRootRun (grantEnvelope now (boundsTokens config) grant.budget) unrooted)
-      case enrolled of
-        Right (Right rooted) -> pure rooted
-        Right (Left problem) -> dieAgentRun ("the run's resource root was refused: " <> Text.pack (show problem))
-        Left problem -> dieAgentRun ("the run's resource root is unavailable: " <> Text.pack (show problem))
-    _ -> pure unrooted
-  -- Under the local operator, an output that needs approval asks through the
-  -- local inbox (EP-8 M2).
-  stateDirectory <- maybe defaultStateDirectory pure config.localOperatorStateDirectory
-  let localTier = config.trustTier == LocalOperator
-      approvalPolicy
-        | localTier = Approval.ApprovalPolicySnapshot {requireFor = Set.empty, requireOutputs = Set.fromList config.approvalRequiredOutputs, channel = Approval.ViaLocalInbox, deadline = config.approvalDeadline}
-        | otherwise = Approval.autoApprovePolicy ((.approvalDeadline) config)
-      approvalEnv
-        | localTier = ApprovalWorkflow.ApprovalWorkflowEnv {notifier = localInboxNotifier (localInboxDirectory stateDirectory)}
-        | otherwise = ApprovalWorkflow.defaultApprovalWorkflowEnv
-  behEnv <- withProgramTasks (FlowPack.lookupTask flows) <$> newBehaviorEnvFor logger ((.behaviorProvider) config) Nothing
-  let capabilities = tierRuntime.capabilities
-      kizashiConfig =
+  -- Outside the local tier a run's outputs are enqueued through the Kikan
+  -- adapters for the worker's publisher (plan 135, M3).
+  let kizashiConfig =
         KizashiConfig
           { baseUrl = (.kizashiBaseUrl) config,
             defaultRecipient = (.kizashiDefaultRecipient) config
@@ -224,7 +203,37 @@ runDurableAgent flows logger store@KirokuStore {pool} appEnv workspace triggerPa
     newSinkHttp httpLimits (credentialsFromConfig config) danwaConfig >>= \case
       Left err -> dieAgentRun ("invalid sink HTTP configuration: " <> Text.pack (show err))
       Right clients -> pure clients
-  let deps =
+  organization <-
+    either (\problem -> dieAgentRun ("invalid outputs: " <> problem)) pure $
+      mkOutputRegistry (kikanOutputAdapters KikanServices {http = sinkHttp, kizashi = kizashiConfig, kawa = kawaConfig, kanmon = kanmonConfig, danwa = danwaConfig, rei = ReiConfig {baseUrl = (.reiBaseUrl) config}}) NoDefaultOutput
+  -- Resolve the run's ports before any model call: a refused grant, an
+  -- unavailable repository or an undeliverable output stops here.
+  tierRuntime <- (lightComposition config organization interaction record).resolve subject >>= either (dieAgentRun . renderTierRefusal) pure
+  -- A run that may mutate the repository spends under a resource root sized by
+  -- its grant's budget (K5).
+  job <- case (journaled, tierRuntime.workspace, tierRuntime.grant) of
+    (Just resumed, _, _) -> pure resumed
+    (Nothing, Just _, Just grant) -> do
+      now <- getCurrentTime
+      enrolled <- runAppIO appEnv (enrollRootRun (grantEnvelope now (boundsTokens config) grant.budget) unrooted)
+      case enrolled of
+        Right (Right rooted) -> pure rooted
+        Right (Left problem) -> dieAgentRun ("the run's resource root was refused: " <> Text.pack (show problem))
+        Left problem -> dieAgentRun ("the run's resource root is unavailable: " <> Text.pack (show problem))
+    _ -> pure unrooted
+  -- Under the local operator, an output that needs approval asks through the
+  -- local inbox (EP-8 M2).
+  stateDirectory <- maybe defaultStateDirectory pure config.localOperatorStateDirectory
+  let localTier = config.trustTier == LocalOperator
+      approvalPolicy
+        | localTier = Approval.ApprovalPolicySnapshot {requireFor = Set.fromList (rights (mkOutputKind <$> config.approvalRequiredOutputs)), channel = Approval.ViaLocalInbox, deadline = config.approvalDeadline}
+        | otherwise = Approval.autoApprovePolicy ((.approvalDeadline) config)
+      approvalEnv
+        | localTier = ApprovalWorkflow.ApprovalWorkflowEnv {notifier = localInboxNotifier (localInboxDirectory stateDirectory)}
+        | otherwise = ApprovalWorkflow.defaultApprovalWorkflowEnv
+  behEnv <- withProgramTasks (FlowPack.lookupTask flows) <$> newBehaviorEnvFor logger ((.behaviorProvider) config) Nothing
+  let capabilities = tierRuntime.capabilities
+      deps =
         AgentWorkflow.AgentRunDeps
           { AgentWorkflow.appEnv = appEnv,
             AgentWorkflow.behaviorEnv = behEnv,
@@ -238,12 +247,6 @@ runDurableAgent flows logger store@KirokuStore {pool} appEnv workspace triggerPa
             AgentWorkflow.workspaceCatalog = [],
             AgentWorkflow.workspace = tierRuntime.workspace,
             AgentWorkflow.agents = [decl],
-            AgentWorkflow.kizashi = kizashiConfig,
-            AgentWorkflow.kawa = kawaConfig,
-            AgentWorkflow.kanmon = kanmonConfig,
-            AgentWorkflow.danwa = danwaConfig,
-            AgentWorkflow.rei = ReiConfig {baseUrl = (.reiBaseUrl) config},
-            AgentWorkflow.http = sinkHttp,
             AgentWorkflow.hooks = AgentWorkflow.defaultAgentRunHooks,
             AgentWorkflow.codingAgents = tierRuntime.codingAgents,
             AgentWorkflow.outputs = tierRuntime.outputs,

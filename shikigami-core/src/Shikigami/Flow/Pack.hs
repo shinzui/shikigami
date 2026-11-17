@@ -118,6 +118,7 @@ import Shikigami.Flow (FlowDef (..), FlowEffects, flowDecisionSlotsFor)
 import Shikigami.Flow.Decision (DecisionServices (..), decisionProviders)
 import Shikigami.Log qualified as Log
 import Shikigami.Objective.Types (ObjectiveSettings)
+import Shikigami.Output (OutputRegistry)
 import Shikigami.Pack.Admin (AdminContext (..), AdminVerb (..))
 import Shikigami.Pack.Setting (PackSetting (..), PackSettings, SettingDefault (..), SettingShape (..), packSettingText, packSettingValue)
 import Shikigami.Program.Decision (ProgramRegistry, ResultCodecRegistry, SomeProgram, SomeResultCodec)
@@ -235,6 +236,9 @@ data FlowRunContext = FlowRunContext
     app :: !AppEnv,
     -- | The grant source a sink intent prepared by the pack is checked against.
     grants :: !GrantSource,
+    -- | The composition's output adapters, which address and authorize an
+    -- output the pack prepares.
+    outputs :: !OutputRegistry,
     -- | The pack's counter.
     metrics :: !PackMetrics,
     -- | The repositories of the operator's workspace catalog, by identity. A

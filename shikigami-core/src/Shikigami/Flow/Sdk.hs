@@ -50,7 +50,7 @@ module Shikigami.Flow.Sdk
     remember,
     SinkCapability,
     emitSignal,
-    emitSignalTo,
+    emitDirected,
     emitSignals,
     DecisionAbort (..),
     Activity,
@@ -64,7 +64,15 @@ module Shikigami.Flow.Sdk
     awaitOne,
 
     -- * The declaration vocabulary those capabilities take
+    OutputDecl (..),
+    OutputKind,
+    outputKindText,
+    AddressedOutput (..),
     Sink (..),
+    sinkOutput,
+    toRecipient,
+    inThread,
+    DanwaTarget (..),
     SinkResult (..),
     SinkOutcome (..),
     SinkMessageId,
@@ -92,19 +100,22 @@ import Shikigami.Activity.Coordinate (ActivityCoordinate, activityCoordinate, ac
 import Shikigami.Agent.Approval (ApprovalChannel (..), ApprovalRequest (..))
 import Shikigami.Agent.Decl (Priority (..), RecipientFrom (..), SignalType (..), Sink (..))
 import Shikigami.Agent.DeclarationValue (DeclarationCoordinate, SignalImportance, declarationCoordinate, declarationCoordinateText, parseSignalImportance)
+import Shikigami.Authority (OutputKind, outputKindText)
 import Shikigami.Flow (DecisionMode (..), FlowDef (..), FlowEffects, LifecycleDiagram (..))
 import Shikigami.Flow.Acknowledgement (Ack (..), Acknowledgement, awaitAck, awaitAckWithin)
-import Shikigami.Flow.Capability (Activity, Memory, MemoryQuery (..), currentActivity, emitSignal, emitSignalTo, emitSignals, recall, remember)
+import Shikigami.Flow.Capability (Activity, Memory, MemoryQuery (..), currentActivity, emitDirected, emitSignal, emitSignals, recall, remember)
 import Shikigami.Flow.Capability qualified as Capability
 import Shikigami.Flow.Delegate (Delegate, awaitOne, delegate)
 import Shikigami.Flow.Pack (FlowPack (..), FlowPackName, FlowPackNameError (..), PackFlow (..), TriggerHooks (..), flowPackNameText, kernelCapabilityFlow, noTriggerHooks, parseFlowPackName)
+import Shikigami.Output (OutputDecl (..))
 import Shikigami.Program.DecisionRunner (DecisionAbort (..))
 import Shikigami.RuntimePolicy (DefaultModelRequirement (..))
 import Shikigami.Sink.Coordinate (parseSinkSession)
 import Shikigami.Sink.Delivery (SinkMessageId)
+import Shikigami.Sink.Intent (AddressedOutput (..))
+import Shikigami.Sink.Outputs (DanwaTarget (..), inThread, sinkOutput, toRecipient)
 import Shikigami.Sink.Types (SinkOutcome (..), SinkResult (..))
 
--- | The capability that emits through a declared sink. It is named apart from
--- the 'Sink' declaration it takes, which a body constructs by its
--- constructors; inside the kernel the two share a name across modules.
+-- | The capability that emits an output. It is named apart from the legacy
+-- 'Sink' declaration; inside the kernel the two share a name across modules.
 type SinkCapability = Capability.Sink

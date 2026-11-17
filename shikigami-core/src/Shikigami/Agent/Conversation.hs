@@ -129,10 +129,12 @@ import Shikigami.Memory.Scope (agentScope)
 import Shikigami.Objective.Runtime qualified as Objectives
 import Shikigami.Objective.Tools qualified as ObjectiveTools
 import Shikigami.Objective.Types qualified as Objective
+import Shikigami.Output (OutputRegistry)
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.Sink.Config (DanwaConfig)
 import Shikigami.Sink.GrantStore (GrantSource)
-import Shikigami.Sink.Types (DanwaTarget (..), SinkOutcome (Delivered, Enqueued), SinkResult (..))
+import Shikigami.Sink.Outputs (DanwaConversationOutput (..), DanwaTarget (..), danwaConversationOutput)
+import Shikigami.Sink.Types (SinkOutcome (Delivered, Enqueued), SinkResult (..))
 import Shikigami.WorkerSession.Tools qualified as WorkerTools
 import Shikigami.Workflow.Versioning (shikigamiWorkflowRunOptions)
 import Text.Read (readMaybe)
@@ -155,6 +157,8 @@ data ConversationEnv = ConversationEnv
     agents :: ![AgentDecl],
     -- | Which grant source the conversation reply's C11 check consults.
     grants :: !GrantSource,
+    -- | The output adapters; a reply is a @danwa.conversation@ output.
+    outputs :: !OutputRegistry,
     directory :: !DirectoryHandle
   }
   deriving stock (Generic)
@@ -951,7 +955,7 @@ processSelectedTurn env selectedBehavior recordedIdentity decl msg@AddressedMess
         step (StepName "record-assistant-and-reply") do
           turns <- liftIO (loadTurns env sid)
           let RecordedTurn {turnIndex = userTurnIndex} = userTurn
-          assistantAndReplyE <- recordAssistantTurnAndEnqueueReply ((.directory) env) ((.grants) env) recordedIdentity decl sid msg replyText (conversationTurnIndexNumber userTurnIndex) turns
+          assistantAndReplyE <- recordAssistantTurnAndEnqueueReply env.outputs ((.directory) env) ((.grants) env) recordedIdentity decl sid msg replyText (conversationTurnIndexNumber userTurnIndex) turns
           (recordedTurn, recordedReply) <- either (liftIO . ioError . userError . Text.unpack) pure assistantAndReplyE
           pure AssistantTurnAndReply {assistantTurn = recordedTurn, assistantReply = recordedReply}
       let replyMessageId = sinkResultDetail sinkResult
@@ -1386,6 +1390,7 @@ recordTurnOnce env recordedIdentity sid turnId desiredIndex role content turns =
       pure accepted
 
 recordAssistantTurnAndEnqueueReply ::
+  OutputRegistry ->
   (IOE :> es, Store :> es, KirokuStoreResource :> es, Error StoreError :> es) =>
   DirectoryHandle ->
   GrantSource ->
@@ -1397,16 +1402,16 @@ recordAssistantTurnAndEnqueueReply ::
   Int ->
   [TurnRow] ->
   Eff es (Either Text (RecordedTurn, SinkResult))
-recordAssistantTurnAndEnqueueReply directoryHandle grantSource recordedIdentity decl sid msg@AddressedMessage {messageId = msgMessageId} replyText userTurnIndex turns =
+recordAssistantTurnAndEnqueueReply registry directoryHandle grantSource recordedIdentity decl sid msg@AddressedMessage {messageId = msgMessageId} replyText userTurnIndex turns =
   case find (\TurnRow {turnId = existingTurnId} -> existingTurnId == turnId) turns of
     Just TurnRow {turnIndex = existingTurnIndex} -> do
       accepted <- either (liftIO . ioError . userError . Text.unpack) pure (recordedTurnView turnId existingTurnIndex)
       now <- liftIO getCurrentTime
-      prepared <- liftIO (prepareConversationReplySinkIntent directoryHandle grantSource recordedIdentity decl sid msg replyText now)
+      prepared <- liftIO (prepareConversationReplySinkIntent registry directoryHandle grantSource recordedIdentity decl sid msg replyText now)
       pure (Right (accepted, AgentWorkflow.preparedSinkResult prepared))
     Nothing -> do
       now <- liftIO getCurrentTime
-      prepared <- liftIO (prepareConversationReplySinkIntent directoryHandle grantSource recordedIdentity decl sid msg replyText now)
+      prepared <- liftIO (prepareConversationReplySinkIntent registry directoryHandle grantSource recordedIdentity decl sid msg replyText now)
       existing <- Session.getById shikigamiMemorySpace sid
       case existing of
         Left err -> pure (Left (Text.pack (show err)))
@@ -1456,6 +1461,7 @@ recordAssistantTurnAndEnqueueReply directoryHandle grantSource recordedIdentity 
         projections
 
 prepareConversationReplySinkIntent ::
+  OutputRegistry ->
   DirectoryHandle ->
   GrantSource ->
   ResolvedAgentIdentity ->
@@ -1465,8 +1471,9 @@ prepareConversationReplySinkIntent ::
   Text ->
   UTCTime ->
   IO AgentWorkflow.PreparedSinkIntent
-prepareConversationReplySinkIntent directoryHandle grantSource recordedIdentity decl sid msg@AddressedMessage {conversationId = msgConversationId, messageId = msgMessageId} replyText now =
+prepareConversationReplySinkIntent registry directoryHandle grantSource recordedIdentity decl sid msg@AddressedMessage {conversationId = msgConversationId, messageId = msgMessageId} replyText now =
   AgentWorkflow.prepareSinkIntent
+    registry
     directoryHandle
     grantSource
     (resolvedIdentity recordedIdentity)
@@ -1476,17 +1483,16 @@ prepareConversationReplySinkIntent directoryHandle grantSource recordedIdentity 
     sid
     0
     Nothing
-    ( Just
-        DanwaTarget
-          { conversationId = msgConversationId,
-            parentMessageId = Just msgMessageId
-          }
-    )
     -- No activity envelope: the turn was triggered by an addressed message.
     -- The shared intent preparation path therefore derives no activity-backed
     -- recipient or channel-egress metadata.
     Nothing
-    Agent.DanwaConversation {Agent.topic = "danwa-conversation"}
+    ( danwaConversationOutput
+        DanwaConversationOutput
+          { topic = "danwa-conversation",
+            thread = Just DanwaTarget {conversationId = msgConversationId, parentMessageId = Just msgMessageId}
+          }
+    )
     (Aeson.object ["reply" .= replyText])
     now
 

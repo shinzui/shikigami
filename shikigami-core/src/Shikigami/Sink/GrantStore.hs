@@ -75,14 +75,11 @@ import Hasql.Transaction qualified as Transaction
 import Hasql.Transaction.Sessions qualified as Transaction.Sessions
 import Shikigami.Agent.Name (AgentName, agentNameText, mkAgentName)
 import Shikigami.Agent.Principal (AgentIdentity (..), AgentPrincipal, mkAgentPrincipal, principalText)
-import Shikigami.Authority (Authority, allowAllForTests, denyAll)
+import Shikigami.Authority (Authority, OutputKind, allowAllForTests, denyAll, mkOutputKind, outputKindText)
 import Shikigami.Prelude
 import Shikigami.Sink.Permission
   ( Denied (..),
-    SinkKind,
     checkGrantStatic,
-    parseSinkKind,
-    sinkKindText,
   )
 
 -- | Where grants come from.
@@ -94,7 +91,7 @@ import Shikigami.Sink.Permission
 data GrantSource
   = -- | The compiled-in table from "Shikigami.Sink.Permission". Test and seed
     -- data now — no production process builds this.
-    StaticGrants !(Map AgentIdentity (Set SinkKind))
+    StaticGrants !(Map AgentIdentity (Set OutputKind))
   | -- | The @shikigami.sink_grants@ table, over the event-store pool.
     DbGrants !Pool
   | -- | C11 plus the process-local C13 interpreter. This wrapper is live
@@ -125,7 +122,7 @@ authorityFor = \case
 -- operator reading a denial needs to know which one happened: a revoked grant
 -- means somebody did that deliberately, a missing grant means nobody ever
 -- granted it, and a lookup failure means the gate could not tell and refused.
-checkGrant :: GrantSource -> AgentIdentity -> SinkKind -> IO (Either Denied ())
+checkGrant :: GrantSource -> AgentIdentity -> OutputKind -> IO (Either Denied ())
 checkGrant source identity kind = case source of
   StaticGrants table -> pure (checkGrantStatic table identity kind)
   ActionGatedGrants _ underlying -> checkGrant underlying identity kind
@@ -133,9 +130,9 @@ checkGrant source identity kind = case source of
     lookupGrant pool identity kind <&> \case
       Right (Just True) -> Right ()
       Right (Just False) ->
-        Left (Denied ("agent '" <> label <> "' grant for " <> sinkKindText kind <> " is revoked"))
+        Left (Denied ("agent '" <> label <> "' grant for " <> outputKindText kind <> " is revoked"))
       Right Nothing ->
-        Left (Denied ("agent '" <> label <> "' has no grant for " <> sinkKindText kind))
+        Left (Denied ("agent '" <> label <> "' has no grant for " <> outputKindText kind))
       Left err ->
         Left (Denied ("grant lookup failed (denying) for agent '" <> label <> "': " <> err))
   where
@@ -215,7 +212,7 @@ defaultPageSize = PageSize 50
 -- the cursor is exactly that pair — the last row the caller has already seen.
 data GrantCursor = GrantCursor
   { agentName :: !AgentName,
-    sinkKind :: !SinkKind
+    kind :: !OutputKind
   }
   deriving stock (Eq, Show, Generic)
 
@@ -237,12 +234,12 @@ data GrantPage = GrantPage
 -- different fact from @Right (Just False)@ (a row saying revoked), and the
 -- caller renders them differently. A pool failure is @Left@ and the caller must
 -- fail closed.
-lookupGrant :: Pool -> AgentIdentity -> SinkKind -> IO (Either Text (Maybe Bool))
+lookupGrant :: Pool -> AgentIdentity -> OutputKind -> IO (Either Text (Maybe Bool))
 lookupGrant pool identity kind = case identity of
   VerifiedIdentity principal ->
-    renderUsage <$> Pool.use pool (Session.statement (principalText principal, sinkKindText kind) lookupVerifiedStatement)
+    renderUsage <$> Pool.use pool (Session.statement (principalText principal, outputKindText kind) lookupVerifiedStatement)
   CompatibilityIdentity agentName ->
-    renderUsage <$> Pool.use pool (Session.statement (agentNameText agentName, sinkKindText kind) lookupCompatibilityStatement)
+    renderUsage <$> Pool.use pool (Session.statement (agentNameText agentName, outputKindText kind) lookupCompatibilityStatement)
   UnresolvedLegacyIdentity -> pure (Left "cannot check a grant for unresolved legacy identity")
 
 lookupVerifiedStatement :: Statement (Text, Text) (Maybe Bool)
@@ -308,7 +305,7 @@ listGrants pool GrantPageRequest {size, after} = do
   let limitPlusOne = unPageSize size + 1
       params = case after of
         Nothing -> ("", "", False, limitPlusOne)
-        Just GrantCursor {agentName = a, sinkKind = k} -> (agentNameText a, sinkKindText k, True, limitPlusOne)
+        Just GrantCursor {agentName = a, kind = k} -> (agentNameText a, outputKindText k, True, limitPlusOne)
   result <- Pool.use pool (Session.statement params listStatement)
   pure (renderUsage result >>= paginate)
   where
@@ -318,7 +315,7 @@ listGrants pool GrantPageRequest {size, after} = do
       next <- if more then traverse cursorOf (lastMay kept) else Right Nothing
       pure GrantPage {items = kept, next}
     cursorOf GrantRow {agentName = a, sinkKind = k} =
-      GrantCursor <$> mkAgentName a <*> maybe (Left ("unknown sink kind: " <> k)) Right (parseSinkKind k)
+      GrantCursor <$> mkAgentName a <*> first ("unknown output kind: " <>) (mkOutputKind k)
     lastMay [] = Nothing
     lastMay xs = Just (last xs)
 
@@ -360,13 +357,13 @@ grantRow =
 --
 -- Re-granting clears @revoked_by@ and @revoked_at@ rather than leaving them set,
 -- so a row never claims to be both granted and revoked.
-upsertGrant :: Pool -> Text -> AgentIdentity -> SinkKind -> Maybe Text -> IO (Either Text ())
+upsertGrant :: Pool -> Text -> AgentIdentity -> OutputKind -> Maybe Text -> IO (Either Text ())
 upsertGrant pool agent identity kind by = case identity of
   VerifiedIdentity principal ->
-    renderUsage <$> Pool.use pool (Session.statement (agent, principalText principal, sinkKindText kind, by) upsertVerifiedStatement)
+    renderUsage <$> Pool.use pool (Session.statement (agent, principalText principal, outputKindText kind, by) upsertVerifiedStatement)
   CompatibilityIdentity compatibilityName
     | agentNameText compatibilityName == agent ->
-        renderUsage <$> Pool.use pool (Session.statement (agent, sinkKindText kind, by) upsertCompatibilityStatement)
+        renderUsage <$> Pool.use pool (Session.statement (agent, outputKindText kind, by) upsertCompatibilityStatement)
     | otherwise -> pure (Left "compatibility identity does not match the selected agent")
   UnresolvedLegacyIdentity -> pure (Left "cannot grant an unresolved legacy identity")
 
@@ -419,12 +416,12 @@ upsertCompatibilityStatement =
 -- | Revoke a grant. Returns whether a row was actually affected, so the caller
 -- can tell an operator that they revoked something that was never granted
 -- instead of silently reporting success.
-revokeGrant :: Pool -> AgentIdentity -> SinkKind -> Maybe Text -> IO (Either Text Bool)
+revokeGrant :: Pool -> AgentIdentity -> OutputKind -> Maybe Text -> IO (Either Text Bool)
 revokeGrant pool identity kind by = case identity of
   VerifiedIdentity principal ->
-    affected <$> Pool.use pool (Session.statement (principalText principal, sinkKindText kind, by) revokeVerifiedStatement)
+    affected <$> Pool.use pool (Session.statement (principalText principal, outputKindText kind, by) revokeVerifiedStatement)
   CompatibilityIdentity agent ->
-    affected <$> Pool.use pool (Session.statement (agentNameText agent, sinkKindText kind, by) revokeCompatibilityStatement)
+    affected <$> Pool.use pool (Session.statement (agentNameText agent, outputKindText kind, by) revokeCompatibilityStatement)
   UnresolvedLegacyIdentity -> pure (Left "cannot revoke an unresolved legacy identity")
   where
     affected = fmap (> 0) . renderUsage

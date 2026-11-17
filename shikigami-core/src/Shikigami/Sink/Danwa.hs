@@ -1,6 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 
--- | Real @DanwaConversation@ sink handler. It posts the rendered behavior output into
+-- | The @danwa.conversation@ output client. It posts the rendered behavior output into
 -- an existing danwa conversation when a target is present, or starts a fresh thread for
 -- ordinary one-shot runs.
 module Shikigami.Sink.Danwa
@@ -24,13 +24,13 @@ import Data.Text qualified as Text
 import Data.Text.Lazy qualified as TL
 import Network.HTTP.Types.Header (Header)
 import Servant.Client (ClientEnv)
-import Shikigami.Agent.Decl (Sink (..))
 import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Principal (AgentIdentity, identityText)
 import Shikigami.Prelude
 import Shikigami.Sink.Config (DanwaConfig (..))
 import Shikigami.Sink.Http (HttpFailure, renderHttpFailure, runDanwaClientWithHeaders)
-import Shikigami.Sink.Types (DanwaTarget (..), DeliveryGuard (..))
+import Shikigami.Sink.Outputs (DanwaConversationOutput (..), DanwaTarget (..))
+import Shikigami.Sink.Types (DeliveryGuard (..))
 
 data DanwaError
   = DanwaHttpError !HttpFailure
@@ -56,22 +56,19 @@ renderDanwaError = \case
 -- has real declarative value — a human opening the thread sees what it is about
 -- — and because rejecting it would invalidate manifests that are otherwise
 -- correct. What was not an option was continuing to accept it and do nothing.
-runDanwa :: ClientEnv -> DanwaConfig -> AgentIdentity -> Maybe DeliveryGuard -> Maybe DanwaTarget -> Sink -> Value -> IO (Either DanwaError (DeclarationCoordinate "danwa-message"))
+runDanwa :: ClientEnv -> DanwaConfig -> AgentIdentity -> Maybe DeliveryGuard -> DanwaConversationOutput -> Value -> IO (Either DanwaError (DeclarationCoordinate "danwa-message"))
 runDanwa clientEnv = runDanwaWithHeaders clientEnv []
 
 -- | 'runDanwa' with dispatch-scoped propagation headers.
-runDanwaWithHeaders :: ClientEnv -> [Header] -> DanwaConfig -> AgentIdentity -> Maybe DeliveryGuard -> Maybe DanwaTarget -> Sink -> Value -> IO (Either DanwaError (DeclarationCoordinate "danwa-message"))
-runDanwaWithHeaders clientEnv headers cfg identity receipts target sink output =
-  case sink of
-    DanwaConversation {topic} ->
-      case identityText identity of
-        Left problem -> pure (Left (DanwaUsageError problem))
-        Right rawAuthor ->
-          let author = declarationCoordinate rawAuthor
-           in case target of
-                Just t -> postReplyWithHeaders clientEnv headers cfg author t (renderDanwaContent output)
-                Nothing -> postToFreshConversation clientEnv headers cfg author receipts sink (withTopicLine topic (renderDanwaContent output))
-    _ -> pure (Left (DanwaUsageError "runDanwa: not a DanwaConversation sink"))
+runDanwaWithHeaders :: ClientEnv -> [Header] -> DanwaConfig -> AgentIdentity -> Maybe DeliveryGuard -> DanwaConversationOutput -> Value -> IO (Either DanwaError (DeclarationCoordinate "danwa-message"))
+runDanwaWithHeaders clientEnv headers cfg identity receipts DanwaConversationOutput {topic, thread} output =
+  case identityText identity of
+    Left problem -> pure (Left (DanwaUsageError problem))
+    Right rawAuthor ->
+      let author = declarationCoordinate rawAuthor
+       in case thread of
+            Just t -> postReplyWithHeaders clientEnv headers cfg author t (renderDanwaContent output)
+            Nothing -> postToFreshConversation clientEnv headers cfg author receipts (withTopicLine topic (renderDanwaContent output))
 
 -- | Prefix the opening message with the declared topic, if there is one.
 --
@@ -127,14 +124,11 @@ postReplyWithHeaders clientEnv headers _cfg author (DanwaTarget {conversationId 
       let Msg.MessageResponse {Msg.messageId = mid} = response
        in Right (declarationCoordinate mid)
 
-postToFreshConversation :: ClientEnv -> [Header] -> DanwaConfig -> DeclarationCoordinate "danwa-participant" -> Maybe DeliveryGuard -> Sink -> Text -> IO (Either DanwaError (DeclarationCoordinate "danwa-message"))
-postToFreshConversation clientEnv headers cfg author receipts sink content =
-  case sink of
-    DanwaConversation {} -> do
-      guardedConversation >>= \case
-        Left err -> pure (Left err)
-        Right cid -> postReplyWithHeaders clientEnv headers cfg author DanwaTarget {conversationId = cid, parentMessageId = Nothing} content
-    _ -> pure (Left (DanwaUsageError "postToFreshConversation: not a DanwaConversation sink"))
+postToFreshConversation :: ClientEnv -> [Header] -> DanwaConfig -> DeclarationCoordinate "danwa-participant" -> Maybe DeliveryGuard -> Text -> IO (Either DanwaError (DeclarationCoordinate "danwa-message"))
+postToFreshConversation clientEnv headers cfg author receipts content =
+  guardedConversation >>= \case
+    Left err -> pure (Left err)
+    Right cid -> postReplyWithHeaders clientEnv headers cfg author DanwaTarget {conversationId = cid, parentMessageId = Nothing} content
   where
     guardedConversation = case receipts of
       Nothing -> startJoinAndRemember Nothing

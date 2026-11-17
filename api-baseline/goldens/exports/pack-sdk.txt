@@ -23,6 +23,7 @@ Shikigami.Pack.Sdk FlowRunContext.metrics
 Shikigami.Pack.Sdk FlowRunContext.model
 Shikigami.Pack.Sdk FlowRunContext.objectiveSettings
 Shikigami.Pack.Sdk FlowRunContext.occurredAt
+Shikigami.Pack.Sdk FlowRunContext.outputs
 Shikigami.Pack.Sdk FlowRunContext.parentRunId
 Shikigami.Pack.Sdk FlowRunContext.parentSession
 Shikigami.Pack.Sdk FlowRunContext.repositories

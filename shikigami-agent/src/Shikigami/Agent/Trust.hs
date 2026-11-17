@@ -47,9 +47,10 @@ import Shikigami.CodingAgent.Types (FailureReason (TierRefused, WorkspaceUnavail
 import Shikigami.CodingAgent.Workflow (CodingAgentStepInput (..), fixedCodingAgentRunner, refusingCodingAgentRunner)
 import Shikigami.DeclaredTool.Local (localDeclaredToolRunner)
 import Shikigami.DeclaredTool.Workflow (noDeclaredTools)
-import Shikigami.Output (DefaultOutput (..), emptyOutputRegistry, mkOutputRegistry, renderOutputLoadError, validateOutputs)
+import Shikigami.Output (DefaultOutput (..), OutputRegistry, mkOutputRegistry, renderOutputLoadError, validateOutputs)
 import Shikigami.Output.Local (defaultLocalReport, localReportAdapter)
 import Shikigami.Record (ActionRecord (..))
+import Shikigami.Sink.Outputs (declarationOutputs)
 import Shikigami.Trust.LocalOperator.Approvals
 import Shikigami.Trust.LocalOperator.Grant
 import Shikigami.Trust.LocalOperator.Host (codingAgentLauncher, compatibilityPrincipal, gateExecutable, localRunAuthority, nothingGranted, openLocalRun, recordGrantIn, repositorySelectorText)
@@ -105,8 +106,11 @@ terminalInteraction noConfirm = do
           Left _ -> False
 
 -- | The composition of one light command invocation.
-lightComposition :: AppConfig -> Interaction -> ActionRecord -> TierComposition
-lightComposition config interaction record =
+-- | @organization@ is the output registry of the non-local tiers: the
+-- adapters a contained run enqueues its outputs through. Under the local
+-- operator the only output is a local report.
+lightComposition :: AppConfig -> OutputRegistry -> Interaction -> ActionRecord -> TierComposition
+lightComposition config organization interaction record =
   TierComposition {tier = config.trustTier, resolve}
   where
     tierLabel = trustTierLabel config.trustTier
@@ -117,10 +121,10 @@ lightComposition config interaction record =
       -- A declaration naming an output kind this composition does not
       -- register is refused before the run (EP-8 M2).
       LocalOperator
-        | Left problems <- validateOutputs (localOutputs "/") decl.outputs -> pure (Left (CompositionFailed (Text.intercalate "; " (renderOutputLoadError <$> foldr (:) [] problems))))
+        | Left problems <- validateOutputs (localOutputs "/") (declarationOutputs decl) -> pure (Left (CompositionFailed (Text.intercalate "; " (renderOutputLoadError <$> foldr (:) [] problems))))
         | otherwise -> resolveLocal subject
       _
-        | Left problems <- validateOutputs emptyOutputRegistry decl.outputs -> pure (Left (CompositionFailed (Text.intercalate "; " (renderOutputLoadError <$> foldr (:) [] problems))))
+        | Left problems <- validateOutputs organization (declarationOutputs decl) -> pure (Left (CompositionFailed (Text.intercalate "; " (renderOutputLoadError <$> foldr (:) [] problems))))
       _ | not (null decl.tools) -> pure (Left (CompositionFailed (renderToolResolutionError (ToolsUnsupportedForTier (trustTierText config.trustTier)))))
       _ -> do
         workspace <- sequence <$> traverse (selectRepository processCheckoutResolver emptyApprovals) repository
@@ -140,14 +144,13 @@ lightComposition config interaction record =
                           workspace = Nothing,
                           grant = Nothing,
                           codingAgents = fixedCodingAgentRunner (refusingCodingAgentRunner containedCodingAgents),
-                          outputs = emptyOutputRegistry,
+                          outputs = organization,
                           declaredTools = noDeclaredTools,
                           release = pure ()
                         }
                   )
 
     resolveLocal RunSubject {agent = decl, principal, run, repository}
-      | sinkKinds <- sinkKindNames decl, (first' : rest) <- sinkKinds = pure (Left (OutputsUnavailable (first' :| rest)))
       -- Checked before the operator is asked: capability overlays (declared
       -- tools among them) are resolved for an identity (FRIC-77).
       | not (null (requestedOverlays decl)),
@@ -311,14 +314,3 @@ prepareDeclaredTools decl@AgentDecl {behavior}
       CoordinatingSkill {} -> "CoordinatingSkill"
       Skill {} -> "Skill"
       Playbook {} -> "Playbook"
-
--- | The output kinds a declaration's sinks would deliver through.
-sinkKindNames :: AgentDecl -> [Text]
-sinkKindNames AgentDecl {sinks} = kindName <$> sinks
-  where
-    kindName = \case
-      KawaDigest {} -> "kawa.digest"
-      KizashiSignal {} -> "kizashi.signal"
-      ReiAction {} -> "rei.action"
-      DanwaConversation {} -> "danwa.conversation"
-      ChannelEgress {} -> "channel.egress"

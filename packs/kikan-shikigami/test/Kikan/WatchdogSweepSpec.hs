@@ -60,8 +60,9 @@ import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
 import Shikigami.Objective.Types qualified as Objective
-import Shikigami.Sink (GrantSource (DbGrants), SinkKind (SDanwaConversation))
+import Shikigami.Sink (GrantSource (DbGrants))
 import Shikigami.Sink.GrantStore qualified as Grants
+import Shikigami.Sink.Outputs (danwaConversationKind)
 import Shikigami.StateRevision (advanceRevision, initialRevision)
 import Shikigami.Trigger.Schedule (CatchUpPolicy (SkipMissed), nextDue, parseCron)
 import Shikigami.Trigger.Scheduler (SchedulerEnv (..), armNextRun, runSchedulerTimerWorker)
@@ -117,7 +118,7 @@ tests fixture =
                       )
                   )
               )
-          _ <- right =<< Grants.upsertGrant h.pool "test-operator" identity SDanwaConversation Nothing
+          _ <- right =<< Grants.upsertGrant h.pool "test-operator" identity danwaConversationKind Nothing
           grant <- right (resolveObservationGrant (Just configured) identity)
           page <- owned h (observePage grant defaultObservationBounds initialCursor) >>= right
           let earlier = page & #observedAt .~ addUTCTime (-120) page.observedAt & #subjects .~ [subject | subject <- page.subjects, subject.subject == WorkerSession (sessionIdFor admission)]

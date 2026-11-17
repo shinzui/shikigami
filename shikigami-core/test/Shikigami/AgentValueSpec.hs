@@ -21,7 +21,8 @@ import Shikigami.Agent.Principal
 import Shikigami.Duration
 import Shikigami.Router.Catalog (CatalogVersion)
 import Shikigami.Router.SelectionLimit (SelectionLimit, parseSelectionLimit, selectionLimitNatural)
-import Shikigami.Sink.Permission (SinkKind (SKizashiSignal), checkGrantStatic)
+import Shikigami.Sink.Outputs (kizashiSignalKind)
+import Shikigami.Sink.Permission (checkGrantStatic)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
 
@@ -32,9 +33,9 @@ tests =
     [ testCase "static grants preserve verified and compatibility identity namespaces" do
         principal <- right (mkAgentPrincipal "agent_verified")
         compatibility <- right (mkAgentName (principalText principal))
-        let grants = Map.singleton (VerifiedIdentity principal) (Set.singleton SKizashiSignal)
-        checkGrantStatic grants (VerifiedIdentity principal) SKizashiSignal @?= Right ()
-        assertBool "same text is a different identity" (isLeft (checkGrantStatic grants (CompatibilityIdentity compatibility) SKizashiSignal)),
+        let grants = Map.singleton (VerifiedIdentity principal) (Set.singleton kizashiSignalKind)
+        checkGrantStatic grants (VerifiedIdentity principal) kizashiSignalKind @?= Right ()
+        assertBool "same text is a different identity" (isLeft (checkGrantStatic grants (CompatibilityIdentity compatibility) kizashiSignalKind)),
       testCase "retained deterministic identities reject malformed and wrong UUID domains" do
         let review = reviewRequestIdFor (WorkflowName "agent") (WorkflowId "original-run") 0 "ask"
             budget = delegationBudgetIdFor (WorkflowId "original-run")

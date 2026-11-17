@@ -24,62 +24,18 @@ module Shikigami.Sink.Validate
   )
 where
 
-import Data.Text qualified as Text
-import Shikigami.Agent.Decl (AgentDecl (..), RecipientFrom (..), Sink (..))
-import Shikigami.Agent.DeclarationValue
+import Shikigami.Agent.Decl (AgentDecl (..), Sink)
 import Shikigami.Prelude
+import Shikigami.Sink.Outputs (outputConfigErrors, sinkOutput, validateKanmonRouteSegment)
 
--- | Every declaration error in an agent's sinks, in declaration order.
+-- | Every declaration error in an agent's sinks and Kikan outputs, in
+-- declaration order.
 --
--- An empty list means the sinks are deployable — not that every field will be
+-- An empty list means they are deployable — not that every field will be
 -- honored, which is what the dispatch-time warnings are for.
 sinkDeclarationErrors :: AgentDecl -> [Text]
-sinkDeclarationErrors AgentDecl {sinks} =
-  concatMap sinkErrors sinks
+sinkDeclarationErrors AgentDecl {sinks, outputs} =
+  concatMap sinkErrors sinks <> concatMap outputConfigErrors outputs
 
 sinkErrors :: Sink -> [Text]
-sinkErrors = \case
-  KizashiSignal {recipientFrom, defaultRecipient}
-    | needsDirectory recipientFrom,
-      isNothing defaultRecipient ->
-        [ "recipientFrom="
-            <> Text.pack (show recipientFrom)
-            <> " requires defaultRecipient (no ownership directory exists to resolve it)"
-        ]
-  ChannelEgress {channel, action, conversationKey} ->
-    routeErrors "channel" (declarationCoordinateText channel)
-      <> routeErrors "action" (declarationCoordinateText action)
-      <> ["conversationKey must be non-empty when declared" | maybe False (Text.null . Text.strip . declarationCoordinateText) conversationKey]
-  _ -> []
-
--- | Validate one path component in Kanmon's channel-action route. The client
--- repeats this check at publication so corrupted durable data cannot inject a
--- slash, query, or traversal-like path after declaration validation has passed.
-validateKanmonRouteSegment :: Text -> Either Text Text
-validateKanmonRouteSegment segment
-  | Text.null segment = Left "must be non-empty"
-  | Text.all isAllowed segment = Right segment
-  | otherwise = Left "must contain only ASCII letters, digits, '.', '_', or '-'"
-  where
-    isAllowed char =
-      ('a' <= char && char <= 'z')
-        || ('A' <= char && char <= 'Z')
-        || ('0' <= char && char <= '9')
-        || char `elem` ("._-" :: String)
-
-routeErrors :: Text -> Text -> [Text]
-routeErrors field value =
-  case validateKanmonRouteSegment value of
-    Left reason -> [field <> " " <> reason]
-    Right _ -> []
-
--- | Which strategies name a person this platform has no way to look up.
---
--- @Actor@ is absent because it is answerable from the trigger activity; see
--- "Shikigami.Sink.Recipient". If an ownership directory ever exists, the fix is
--- to resolve these two rather than to relax this check.
-needsDirectory :: RecipientFrom -> Bool
-needsDirectory = \case
-  SubjectOwner -> True
-  AreaOwner -> True
-  Actor -> False
+sinkErrors = outputConfigErrors . sinkOutput

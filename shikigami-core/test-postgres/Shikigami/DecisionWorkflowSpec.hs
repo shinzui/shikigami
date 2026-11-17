@@ -72,7 +72,8 @@ import Shikigami.Program.DecisionRunner (DecisionRuntime (..), runDecisionProgra
 import Shikigami.Router.Catalog (CandidateCatalog (..))
 import Shikigami.Router.Decision (RouteDecision (..), RouteOutcome (..), RouteSelection (..))
 import Shikigami.RouterWorkflowSpec qualified as Fixture
-import Shikigami.Sink (GrantSource (StaticGrants), SinkKind (SKizashiSignal))
+import Shikigami.Sink (GrantSource (StaticGrants))
+import Shikigami.Sink.Outputs (kizashiSignalKind)
 import Shikigami.Trigger.Schedule (parseCron)
 import Shikigami.Workflow.Versioning (shikigamiWorkflowRunOptions)
 import Shikumi.Program (Program (FMap))
@@ -198,7 +199,7 @@ tests fixture =
           (handler, observed) <- scriptedProvider Investigate returned
           hooks <- crashAt False "record"
           let withSink = (declaration & #sinks .~ ([KizashiSignal (activityCoordinate ("shinzui/shikigami")) Reminder Normal (either (error . show) id (parseSignalImportance (50))) SubjectOwner (fmap declarationCoordinate ((Just "recipient"))) "decision complete" []]))
-              runtime = (deps app store behavior handler (fixtureDecisionServices catalog)) {Agent.hooks = hooks, Agent.agents = [withSink, Fixture.successSpecialist "first"], Agent.grants = StaticGrants (Map.singleton (compatibilityIdentity (either (error . show) id (mkAgentName "router"))) (Set.singleton SKizashiSignal))}
+              runtime = (deps app store behavior handler (fixtureDecisionServices catalog)) {Agent.hooks = hooks, Agent.agents = [withSink, Fixture.successSpecialist "first"], Agent.grants = StaticGrants (Map.singleton (compatibilityIdentity (either (error . show) id (mkAgentName "router"))) (Set.singleton kizashiSignalKind))}
               request = job "decision-completed-replay"
           first <- try @SomeException (Agent.runAgentRunWorkflow runtime request)
           assertBool "crashed after decision commits" (either (const True) (const False) first)

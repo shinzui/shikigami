@@ -15,6 +15,7 @@ import Keiro.Workflow (WorkflowId (..))
 import Shikigami.Activity.Coordinate (activityCoordinate)
 import Shikigami.Agent.RunRecord
 import Shikigami.Authority (Action (EmitOutput), mkOutputKind, mkOutputTarget)
+import Shikigami.Fixture.OutboxDispatch (unreachableServices)
 import Shikigami.Fixture.SinkHttp (testHttpEnv)
 import Shikigami.Output (DefaultOutput (..), OutputAdapter (..), OutputDecl (..), OutputReceipt (..), ResolvedOutputs (..), mkOutputRegistry)
 import Shikigami.Output.Kikan (defaultKawaDigest, kawaDigestAdapter)
@@ -70,11 +71,11 @@ tests =
             result = check [admitted, allowed, event "output.delivered" (snd (recordEntry entry))]
         result.violations @?= []
         result.linkedEffects @?= 1,
-      testCase "kawa.digest needs a subject kind and a verb, and is a valid default" do
-        let adapter = kawaDigestAdapter testHttpEnv KawaConfig {baseUrl = "http://127.0.0.1:1", sourceSegment = activityCoordinate "shinzui/shikigami"}
+      testCase "kawa.digest needs a subject type and a verb, and is a valid default" do
+        let adapter = kawaDigestAdapter unreachableServices
         adapter.validate defaultKawaDigest.config @?= Right ()
-        assertBool "verb missing" (isLeft (adapter.validate (object ["subjectKind" .= ("agent-run" :: Text)])))
-        assertBool "blank subject kind" (isLeft (adapter.validate (object ["subjectKind" .= ("  " :: Text), "verb" .= ("reported" :: Text)])))
+        assertBool "verb missing" (isLeft (adapter.validate (object ["subjectType" .= ("agent-run" :: Text)])))
+        assertBool "blank subject type" (isLeft (adapter.validate (object ["subjectType" .= ("  " :: Text), "verb" .= ("reported" :: Text)])))
         assertBool "registers as the default" (either (const False) (const True) (mkOutputRegistry [adapter] (DefaultOutput defaultKawaDigest)))
     ]
   where

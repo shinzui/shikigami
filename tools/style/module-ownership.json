@@ -286,6 +286,7 @@
         "Shikigami.Objective.Association",
         "Shikigami.Objective.Reference",
         "Shikigami.Objective.Store",
+        "Shikigami.Output",
         "Shikigami.Pack.Sdk",
         "Shikigami.Sink",
         "Shikigami.Sink.Delivery",

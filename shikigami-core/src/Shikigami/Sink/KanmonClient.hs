@@ -21,13 +21,12 @@ import Data.Text qualified as Text
 import Data.Text.Encoding qualified as TextEncoding
 import Network.HTTP.Types.Header (Header)
 import Shikigami.Activity qualified as Activity
-import Shikigami.Agent.Decl (Sink (..))
 import Shikigami.Agent.DeclarationValue
 import Shikigami.Prelude
 import Shikigami.Sink.Config (KanmonConfig (..))
 import Shikigami.Sink.Http (HttpEnv, HttpFailure, postJSONWithHeaders, renderHttpFailure)
-import Shikigami.Sink.Types (SinkContext (..), mkSourceEventId)
-import Shikigami.Sink.Validate (validateKanmonRouteSegment)
+import Shikigami.Sink.Outputs (validateKanmonRouteSegment)
+import Shikigami.Sink.Types (OutboxDelivery, mkSourceEventId)
 import Shikigami.Sink.Wire (EgressActionRequest (..), EgressActionResponse)
 
 data KanmonError
@@ -38,26 +37,26 @@ data KanmonError
 
 -- | Resolve the destination once, before durable enqueue. Non-empty static
 -- declarations win, then output metadata, then the triggering subject id.
-resolveConversationKey :: Sink -> Maybe Activity.ActivityEnvelope -> Value -> Maybe (DeclarationCoordinate "conversation")
-resolveConversationKey sink activity output =
+resolveConversationKey :: Maybe (DeclarationCoordinate "conversation") -> Maybe Activity.ActivityEnvelope -> Value -> Maybe (DeclarationCoordinate "conversation")
+resolveConversationKey declared activity output =
   declarationCoordinate
     <$> firstNonEmpty
-      [ declaredKey sink,
+      [ nonEmpty (declarationCoordinateText <$> declared),
         objectText "conversation_key" output,
         activitySubjectId activity
       ]
 
 -- | Build the exact Kanmon request from durable, already-resolved metadata.
-buildEgressRequest :: SinkContext -> Value -> Either Text EgressActionRequest
-buildEgressRequest ctx@SinkContext {conversationKey = resolvedConversationKey, triggeringActivityId = resolvedTriggeringActivityId} output =
+buildEgressRequest :: OutboxDelivery -> Maybe (DeclarationCoordinate "conversation") -> Maybe (Activity.ActivityCoordinate "activity-id") -> Value -> Either Text EgressActionRequest
+buildEgressRequest delivery resolvedConversationKey resolvedTriggeringActivityId output =
   case nonEmpty (declarationCoordinateText <$> resolvedConversationKey) of
-    Nothing -> Left "ChannelEgress requires a resolved conversation key"
+    Nothing -> Left "channel.egress requires a resolved conversation key"
     Just resolvedKey ->
       Right
         EgressActionRequest
           { conversationKey = resolvedKey,
             content = contentFrom output,
-            idempotencyKey = Just (mkSourceEventId ctx),
+            idempotencyKey = Just (mkSourceEventId delivery),
             triggeringActivityId = nonEmpty (Activity.activityCoordinateText <$> resolvedTriggeringActivityId)
           }
 
@@ -95,11 +94,6 @@ validateRoute channel action = do
       case validateKanmonRouteSegment value of
         Left reason -> Left (field <> " " <> reason)
         Right valid -> Right valid
-
-declaredKey :: Sink -> Maybe Text
-declaredKey = \case
-  ChannelEgress {conversationKey} -> nonEmpty (declarationCoordinateText <$> conversationKey)
-  _ -> Nothing
 
 objectText :: Text -> Value -> Maybe Text
 objectText key = \case

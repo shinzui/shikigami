@@ -72,7 +72,7 @@ atRiskCustomerFlow payload = do
   if (.level) verdict /= HighRisk
     then pure (toJSON verdict)
     else do
-      _ <- emitSignal (declarationCoordinate "examples-alert") (alertFor verdict activity) (toJSON verdict)
+      _ <- emitSignal (declarationCoordinate "examples-alert") (sinkOutput (alertFor verdict activity)) (toJSON verdict)
       ack <- awaitAck (StepName "examples-await-ack") (ackRequest verdict activity)
       case ack of
         Acknowledged answer -> do
@@ -82,7 +82,7 @@ atRiskCustomerFlow payload = do
           _ <- remember (declarationCoordinate "examples-declined") (declinedNote verdict reason)
           pure (declinedValue verdict reason)
         TimedOut -> do
-          _ <- emitSignal (declarationCoordinate "examples-escalate") (escalationFor verdict activity) (toJSON verdict)
+          _ <- emitSignal (declarationCoordinate "examples-escalate") (sinkOutput (escalationFor verdict activity)) (toJSON verdict)
           _ <- remember (declarationCoordinate "examples-escalated") (escalatedNote verdict)
           pure (escalatedValue verdict)
 

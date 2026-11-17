@@ -9,6 +9,7 @@ import Baikai.Trace.Sink.OpenTelemetry (otelSink)
 import Control.Monad (void)
 import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
+import Data.Either (rights)
 import Data.Foldable (traverse_)
 import Data.Set qualified as Set
 import Data.Text qualified as Text
@@ -26,7 +27,7 @@ import Shikigami.App (AppEnv (..), runAppIO)
 import Shikigami.App.Config (ActionAuthorizationConfig (ActionAuthorizationDisabled), AppConfig (..), Role (WorkerRole))
 import Shikigami.App.Config qualified as Config
 import Shikigami.App.Config.Load (requireDatabaseUrl)
-import Shikigami.Authority (Authority, recordedIn)
+import Shikigami.Authority (Authority, mkOutputKind, recordedIn)
 import Shikigami.Authority.Configured (buildConfiguredAuthority)
 import Shikigami.Behavior.Provider (newBehaviorEnvFor)
 import Shikigami.Behavior.Run (withProgramTasks)
@@ -46,12 +47,13 @@ import Shikigami.Objective.Tracker.Runtime qualified as TrackerRuntime
 import Shikigami.Objective.Tracker.Store qualified as Tracker
 import Shikigami.Objective.Tracker.Worker (trackerLoopRegistration)
 import Shikigami.Output (outputKindText, registeredKinds)
+import Shikigami.Output.Kikan (KikanServices (..))
 import Shikigami.Prelude (Text)
 import Shikigami.Record (observedRecord, postgresRecord)
 import Shikigami.Runtime (registerRuntimeCatalog, runtimeConnectionSettings)
-import Shikigami.Sink (DanwaConfig (..), GrantSource (DbGrants), KanmonConfig (..), KawaConfig (..), KizashiConfig (..), ReiConfig (..))
+import Shikigami.Sink (GrantSource (DbGrants))
+import Shikigami.Sink.Config (DanwaConfig (..), KanmonConfig (..), KawaConfig (..), KizashiConfig (..), ReiConfig (..))
 import Shikigami.Sink.Http (HttpLimits (..), SinkHttp, SinkHttpError, credentialsFromConfig, newSinkHttp)
-import Shikigami.Sink.Permission (sinkKindText)
 import Shikigami.Telemetry (withRunTelemetry)
 import Shikigami.Telemetry.Metrics (ShikigamiMetrics, recordPackEvent)
 import Shikigami.Trust.LocalOperator.Approvals (defaultApprovalsPath)
@@ -144,13 +146,13 @@ runWorkerCmdWith packs resumeBudget config = do
       codingAgents <- workerCodingAgents logger shikigamiMetrics storePool config agents
       let policy =
             ApprovalPolicySnapshot
-              { requireFor = (.approvalRequiredSinks) config,
-                requireOutputs = Set.fromList config.approvalRequiredOutputs,
+              { requireFor = requiredOutputs,
                 channel = (.approvalChannel) config,
                 deadline = (.approvalDeadline) config
               }
           notifier = ApprovalNotification.approvalNotifier logger sinkHttp danwaConfig kizashiConfig
-          requiredKinds = sinkKindText <$> Set.toAscList ((.approvalRequiredSinks) config)
+          requiredOutputs = (.approvalRequiredSinks) config <> Set.fromList (rights (mkOutputKind <$> config.approvalRequiredOutputs))
+          requiredKinds = outputKindText <$> Set.toAscList requiredOutputs
       Log.logInfo
         logger
         "worker.approval.policy"
@@ -203,7 +205,7 @@ runWorkerCmdWith packs resumeBudget config = do
         case configured of
           Right (Right ()) -> pure ()
           _ -> Exit.die "shikigami-worker: shared execution capacity is unavailable"
-        outputs <- either (\problem -> Exit.die ("shikigami-worker: invalid outputs: " <> Text.unpack problem)) pure (workerOutputs sinkHttp kawaConfig config.defaultOutputKind)
+        outputs <- either (\problem -> Exit.die ("shikigami-worker: invalid outputs: " <> Text.unpack problem)) pure (workerOutputs KikanServices {http = sinkHttp, kizashi = kizashiConfig, kawa = kawaConfig, kanmon = kanmonConfig, danwa = danwaConfig, rei = ReiConfig {baseUrl = (.reiBaseUrl) config}} config.defaultOutputKind)
         Log.logInfo
           logger
           "worker.outputs"
@@ -235,12 +237,7 @@ runWorkerCmdWith packs resumeBudget config = do
                   conversationIdleTimeout = (.conversationIdleTimeout) config,
                   catchUpPolicy = (.schedulerCatchUp) config,
                   schedules,
-                  kizashi = kizashiConfig,
-                  kawa = kawaConfig,
-                  kanmon = kanmonConfig,
                   danwa = danwaConfig,
-                  rei = ReiConfig {baseUrl = (.reiBaseUrl) config},
-                  http = sinkHttp,
                   metrics = shikigamiMetrics,
                   logger,
                   -- The C11 gate reads shikigami.sink_grants over the same pool

@@ -102,8 +102,8 @@ service where one runs on this Mac.
   no workflow body change. The Kikan-En gap is filed, by the user's decision, as
   `mori://shinzui/kikan-en/improvement-requests/IR-5` (kikan-en commit 045171f, "Authorize
   a coding-agent launch per action"; not pushed).)
-- [ ] M3: (in progress 2026-11-17: approach decided and staged, inventory recorded in
-  Surprises & Discoveries; no code yet) The five output adapters and the two approval channels run from the binding, and
+- [ ] M3: (in progress 2026-11-17: stage a done — the kernel pipeline addresses outputs
+  and dispatches through adapters, still in core; stages c, b with d, and e remain) The five output adapters and the two approval channels run from the binding, and
   the distribution registers `kawa.digest` as its default output. A declared agent's outputs
   reach their services through the distribution worker, a declaration with no outputs gets a
   Kawa digest, and the stock composition refuses a declaration naming a Kikan output kind at
@@ -381,6 +381,50 @@ These came from read-only research on 2026-11-15, before implementation.
   that relaxes the check and renames the stored values (`KawaDigest` to `kawa.digest` and
   so on). The `dispatch-sinks` journal step stores `[SinkResult]` whose `kind` changes from
   the closed `SinkKind` to an output kind; `just keiro-gate` will report it.
+  Date: 2026-11-17
+- Decision: (M3 stage a, 2026-11-17) The adapter says how it delivers. `OutputAdapter`
+  carries `route :: OutputRoute`, either `DeliverInline` (the `local.report` delivery
+  function, unchanged) or `DeliverByOutbox OutboxRoute`, whose three functions are the whole
+  of what the kernel asks of a service: `address` (computed at enqueue from the
+  configuration, the trigger activity and the result, journaled opaquely), `target` (the
+  `EmitOutput` segments the authority decides, from configuration and address) and
+  `dispatch` (called by the publisher with an `OutboxDelivery`). `SinkContext` is gone; its
+  per-service fields are the adapter's own (`KikanServices`), and `danwaTarget`,
+  `resolvedRecipient`, `conversationKey` and `triggeringActivityId` are adapter address or
+  configuration. A producer directs an output in its configuration: `toRecipient` sets a
+  signal's exact `recipient`, `inThread` a Danwa `thread`. So `SinkIntent` is
+  `{agent, identity, runId, ordinal, occurredAt, output, address, result}`, `SinkResult.kind`
+  is an `OutputKind`, `dispatch-sinks` journals dotted kinds, and C11 grants and delivery
+  receipts are keyed by output kind (migration `0052-output-kind-grants` drops the five-name
+  CHECK for a kind-shaped one and renames stored rows). The agent run resolves one output
+  list (legacy `sinks` converted by `sinkOutput` until stage c, then `outputs`), asks one
+  approval per output under the key `output-<kind>-<n>`, then enqueues the outbox outputs in
+  `dispatch-sinks` and delivers the inline ones in `deliver-outputs`, each at its position
+  in the list. `approval.require` names output kinds and still accepts the five legacy
+  names; `approval.require_outputs` adds to the same set. The flow SDK's `emitSignalTo`
+  becomes `emitDirected` (same `emit-signal-<label>` step name) and `AddressedSignal`
+  becomes `AddressedOutput`. The five adapters and the typed configurations
+  (`Shikigami.Output.Kikan`, `Shikigami.Sink.Outputs`) are still in core for this stage.
+  Rationale: the staged design above; every later stage moves code without reshaping it.
+  Date: 2026-11-17
+- Decision: (M3 stage a) `kawa.digest` is one adapter and it is delivered by the outbox,
+  like the `KawaDigest` sink it replaces; its configuration is the sink's
+  `{subjectType, verb}`. EP-8 M3's inline `kawa.digest` (configuration `{subjectKind, verb}`)
+  is retired. Consequence for M6: a Kikan run's record now has `authority.decided` for the
+  enqueue but no `output.delivered`, because delivery happens later in the publisher; M6's
+  projection of the record into run evidence must add the publisher's delivery entry before
+  the portability comparison is rerun.
+  Date: 2026-11-17
+- Decision: (M3 stage a) Pre-release recheck, 2026-11-17. Stage a changes workflow bodies
+  under `shikigami-core/src/Shikigami/Agent/` (the order of `resolve-outputs`,
+  `dispatch-sinks` and `deliver-outputs`, and the approval child keys) and
+  `shikigami-core/src/Shikigami/Flow/` (the emit operations), and the stored shape of
+  outbox intents and delivery kinds. The four facts of ADR-27: no journal that must resume
+  (run 7a28975f in the development database is untouched; every test used a scratch
+  database); no stored payload that needs an old codec (the development database has 0
+  `keiro.keiro_outbox` rows and 0 `shikigami.sink_deliveries` rows); no external wire
+  consumer; `git tag --list` prints nothing. The MasterPlan records no EP-11 baseline, so
+  the exception stands and the old intent bytes are not decoded.
   Date: 2026-11-17
 - Decision: The development stubs (`stub-kawa`, `stub-kanmon`, `publish-fixture`) move to
   the distribution's admin executable.

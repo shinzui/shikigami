@@ -1,55 +1,64 @@
 {-# LANGUAGE DataKinds #-}
 
--- | The dispatcher's shared value types (split out so the per-sink client modules can
--- reference @SinkContext@ without importing the dispatcher — avoids an import cycle).
+-- | The value types of the kernel's output outbox (plan 135, M3).
+--
+-- An output an adapter delivers asynchronously is journaled with its run as
+-- a sink intent, enqueued on Keiro's outbox and later dispatched by the
+-- publisher. The kernel owns that mechanism; the adapter owns the service.
+-- 'OutboxRoute' is what an adapter supplies: how to address an output when
+-- it is enqueued (the trigger activity is in scope only then), the exact
+-- target the authority decides, and the dispatch the publisher calls.
 module Shikigami.Sink.Types
-  ( SinkContext (..),
+  ( OutboxRoute (..),
+    AddressInput (..),
+    OutboxDelivery (..),
     DeliveryGuard (..),
-    DanwaTarget (..),
-    SignalAddress (..),
-    AddressedSignal (..),
     SinkOutcome (..),
     SinkResult (..),
     mkSourceEventId,
+    deliverySubjectText,
   )
 where
 
 import Data.Aeson (Value)
+import Data.List.NonEmpty (NonEmpty)
 import Data.Text qualified as Text
 import Kioku.Id (SessionId, idText)
 import Network.HTTP.Types.Header (Header)
-import Shikigami.Activity.Coordinate
-import Shikigami.Agent.Decl (Sink)
+import Shikigami.Activity (ActivityEnvelope)
 import Shikigami.Agent.DeclarationValue
+import Shikigami.Agent.Name (AgentName)
 import Shikigami.Agent.Principal (AgentIdentity, identityText)
-import Shikigami.Directory (DirectoryHandle)
+import Shikigami.Authority (OutputKind)
 import Shikigami.Log (Logger)
 import Shikigami.Prelude
-import Shikigami.Sink.Config (DanwaConfig, KanmonConfig, KawaConfig, KizashiConfig, ReiConfig)
 import Shikigami.Sink.Coordinate (SinkOrdinal, sinkOrdinalInt)
-import Shikigami.Sink.GrantStore (GrantSource)
-import Shikigami.Sink.Http (SinkHttp)
-import Shikigami.Sink.Permission (SinkKind)
 
--- | A concrete danwa thread target. A parent message id means "reply under that message";
--- absent parent means "post a top-level message in the conversation".
-data DanwaTarget = DanwaTarget
-  { conversationId :: !(DeclarationCoordinate "danwa-conversation"),
-    parentMessageId :: !(Maybe (DeclarationCoordinate "danwa-message"))
+-- | What an adapter may read when an output is enqueued.
+data AddressInput = AddressInput
+  { -- | The output's configuration, already accepted by the adapter.
+    config :: !Value,
+    -- | The activity that triggered the run, when it has one.
+    activity :: !(Maybe ActivityEnvelope),
+    -- | The behavior's result.
+    result :: !Value
   }
-  deriving stock (Eq, Show, Generic)
-  deriving anyclass (ToJSON, FromJSON)
 
--- | Destinations resolved from trusted configuration/owner metadata, never payloads.
-data SignalAddress = Recipient !(DeclarationCoordinate "recipient") | Conversation !DanwaTarget
-  deriving stock (Eq, Show, Generic)
-  deriving anyclass (ToJSON, FromJSON)
+-- | How an adapter delivers through the outbox.
+data OutboxRoute = OutboxRoute
+  { -- | The adapter-owned address journaled with the intent: everything the
+    -- dispatch needs that only the enqueuing run can know.
+    address :: !(AddressInput -> Value),
+    -- | The exact 'Shikigami.Authority.EmitOutput' target for a
+    -- configuration and its address. A 'Left' refuses the output as
+    -- unauthorizable before anything is sent.
+    target :: !(Value -> Value -> Either Text (NonEmpty Text)),
+    -- | Deliver one intent. Called by the publisher after the lifecycle,
+    -- grant and authority checks, and possibly again after a retry.
+    dispatch :: !(OutboxDelivery -> IO SinkOutcome)
+  }
 
-data AddressedSignal = AddressedSignal {address :: !SignalAddress, sink :: !Sink, output :: !Value}
-  deriving stock (Eq, Show, Generic)
-  deriving anyclass (ToJSON, FromJSON)
-
--- | Receipt operations a sink may need while performing a multi-step
+-- | Receipt operations an adapter may need while performing a multi-step
 -- downstream effect. The publisher closes these functions over its database
 -- pool and outbox message id; direct dispatch tests use 'Nothing'.
 data DeliveryGuard = DeliveryGuard
@@ -57,70 +66,36 @@ data DeliveryGuard = DeliveryGuard
     recordReceipt :: !(DeclarationCoordinate "receipt-step" -> DeclarationCoordinate "danwa-conversation" -> IO ())
   }
 
--- | Everything one sink dispatch needs: the agent identity, the run id and the sink's
--- ordinal (for the deterministic @source_event_id@), the endpoint configs, and the
--- run timestamp.
-data SinkContext = SinkContext
+-- | Everything one outbox dispatch is given.
+data OutboxDelivery = OutboxDelivery
   { identity :: !AgentIdentity,
-    directory :: !DirectoryHandle,
+    agent :: !AgentName,
     runId :: !SessionId,
     ordinal :: !SinkOrdinal,
-    kizashi :: !KizashiConfig,
-    kawa :: !KawaConfig,
-    danwa :: !DanwaConfig,
-    kanmon :: !KanmonConfig,
-    rei :: !ReiConfig,
-    -- | Process-lifetime authenticated HTTP clients. This is dependency wiring,
-    -- not durable input, and is never serialized into a sink intent.
-    http :: !SinkHttp,
-    -- | Allowlisted W3C propagation headers for this one outbound dispatch.
-    -- Authentication remains owned by 'SinkHttp' and cannot be supplied here.
-    traceHeaders :: ![Header],
-    danwaTarget :: !(Maybe DanwaTarget),
-    -- | The recipient a @KizashiSignal@'s @recipientFrom@ strategy resolved to,
-    -- decided upstream where the trigger activity is in scope and carried here
-    -- on the sink intent. 'Nothing' means either that the sink is not a signal
-    -- or that the strategy could not be answered; see "Shikigami.Sink.Recipient".
-    recipientOverride :: !(Maybe (DeclarationCoordinate "recipient")),
-    -- | Minimal egress destination metadata resolved before durable enqueue,
-    -- while the triggering activity and behavior output are still in scope.
-    conversationKey :: !(Maybe (DeclarationCoordinate "conversation")),
-    triggeringActivityId :: !(Maybe (ActivityCoordinate "activity-id")),
     occurredAt :: !(Maybe UTCTime),
-    -- | Durable intermediate effects within this delivery, when publication is
-    -- running under the receipt-aware outbox transport.
+    kind :: !OutputKind,
+    config :: !Value,
+    address :: !Value,
+    result :: !Value,
+    -- | Allowlisted W3C propagation headers for this one dispatch.
+    -- Authentication stays with the adapter's own HTTP environment.
+    traceHeaders :: ![Header],
+    -- | Durable intermediate effects within this delivery, when publication
+    -- runs under the receipt-aware outbox transport.
     receipts :: !(Maybe DeliveryGuard),
-    -- | Which grant source the publish-time C11 check consults. Carried on the
-    -- context because a sink is dispatched from two different processes — inline
-    -- during a run, and later from the outbox publisher — and each builds its own.
-    grants :: !GrantSource,
-    -- | Where this dispatch's log lines go. Carried on the context rather than
-    -- reached for globally because a sink is dispatched from two different
-    -- processes — inline during a run, and later from the outbox publisher —
-    -- and each of them owns its own logger.
     logger :: !Logger
   }
-  deriving stock (Generic)
 
--- | The outcome of one sink dispatch. @DeniedOutcome@ is distinct from the permission
--- gate's @Denied@ newtype.
+-- | The outcome of one dispatch. @DeniedOutcome@ is distinct from the
+-- permission gate's @Denied@ newtype.
 data SinkOutcome
   = Delivered !(DeclarationCoordinate "downstream-effect") -- a detail string (e.g. the returned id)
   | -- | The sink intent was durably written to Keiro's outbox. This says only
     -- that asynchronous delivery may now happen; it is deliberately distinct
     -- from 'Delivered', which is reserved for a downstream acknowledgement.
     Enqueued !(DeclarationCoordinate "outbox-receipt")
-  | -- | __Deprecated: never produced.__ A stub handler ran and the dispatch was
-    -- counted as a success, which is the lie
-    -- @docs\/plans\/16-honest-sink-handlers-real-reiaction-and-honored-declaration-fields.md@
-    -- removed: anything not 'Failed' is published forever by the outbox, so a
-    -- stubbed sink reported delivery of something that went nowhere.
-    --
-    -- The constructor stays because 'SinkResult' values are journaled and
-    -- replayed by 'Data.Aeson.FromJSON'; removing it would make historical
-    -- journals undecodable. Retiring it belongs to a journal-migration plan
-    -- under MasterPlan 5. Nothing in this repository constructs it — see
-    -- @Shikigami.WireCompatSpec@, which pins that it still /decodes/.
+  | -- | __Deprecated: never produced.__ Kept so that journaled results that
+    -- carry it still decode; see @Shikigami.WireCompatSpec@.
     Stubbed
   | DeniedOutcome !Text -- permission denied; the reason (no send)
   | AuthorizationFailed !Text -- C13 unavailable, invalid, or proof-rejected (no send)
@@ -134,16 +109,18 @@ data SinkOutcome
   deriving anyclass (ToJSON, FromJSON)
 
 data SinkResult = SinkResult
-  { kind :: !SinkKind,
+  { kind :: !OutputKind,
     outcome :: !SinkOutcome
   }
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
--- | The deterministic doorway dedup key: @"<agentName>:<runId>:<sinkOrdinal>"@. A retry
--- of the same run re-POSTs the same key, so the doorway dedups it.
-mkSourceEventId :: SinkContext -> Text
-mkSourceEventId ctx =
-  identityLabel ((.identity) ctx) <> ":" <> idText ((.runId) ctx) <> ":" <> Text.pack (show (sinkOrdinalInt ((.ordinal) ctx)))
-  where
-    identityLabel = either (const "unresolved-legacy") id . identityText
+-- | The deterministic doorway dedup key: @"<agent>:<runId>:<ordinal>"@. A
+-- retry of the same run re-sends the same key, so the doorway dedups it.
+mkSourceEventId :: OutboxDelivery -> Text
+mkSourceEventId delivery =
+  deliverySubjectText delivery <> ":" <> idText delivery.runId <> ":" <> Text.pack (show (sinkOrdinalInt delivery.ordinal))
+
+-- | The identity a delivery acts as, as text.
+deliverySubjectText :: OutboxDelivery -> Text
+deliverySubjectText delivery = either (const "unresolved-legacy") id (identityText delivery.identity)

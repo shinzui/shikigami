@@ -45,6 +45,7 @@ import Shikigami.Flow.Capability (Activity, Memory, MemoryQuery (..), currentAct
 import Shikigami.Flow.Capability qualified as Capability
 import Shikigami.Flow.Pack (FlowPack (..), FlowRegistry, composeFlowRegistry, kernelCapabilityFlow, noTriggerHooks, parseFlowPackName)
 import Shikigami.RuntimePolicy (DefaultModelRequirement (..))
+import Shikigami.Sink.Outputs (sinkOutput)
 
 data RiskLevel = HighRisk | LowRisk deriving stock (Eq, Show)
 
@@ -112,7 +113,7 @@ acknowledgementFlow payload = do
   if (.level) verdict /= HighRisk
     then pure (toJSON verdict)
     else do
-      _ <- emitSignal (declarationCoordinate "alert") (alertFor verdict activity) (toJSON verdict)
+      _ <- emitSignal (declarationCoordinate "alert") (sinkOutput (alertFor verdict activity)) (toJSON verdict)
       ack <- awaitAck (StepName "await-ack") (ackRequest verdict activity)
       case ack of
         Acknowledged answer -> do
@@ -122,7 +123,7 @@ acknowledgementFlow payload = do
           _ <- remember (declarationCoordinate "declined") (declinedNote verdict reason)
           pure (declinedValue verdict reason)
         TimedOut -> do
-          _ <- emitSignal (declarationCoordinate "escalate") (escalationFor verdict activity) (toJSON verdict)
+          _ <- emitSignal (declarationCoordinate "escalate") (sinkOutput (escalationFor verdict activity)) (toJSON verdict)
           _ <- remember (declarationCoordinate "escalated") (escalatedNote verdict)
           pure (escalatedValue verdict)
 

@@ -65,8 +65,9 @@ import Shikigami.Log qualified as Log
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
 import Shikigami.Objective.Types qualified as Objective
 import Shikigami.Pack.Setting (PackSettings, packSettingsFromList)
-import Shikigami.Sink (GrantSource (DbGrants), SinkKind (SDanwaConversation))
+import Shikigami.Sink (GrantSource (DbGrants))
 import Shikigami.Sink.GrantStore qualified as Grants
+import Shikigami.Sink.Outputs (danwaConversationKind)
 import Shikigami.StateRevision (advanceRevision, initialRevision)
 import Shikigami.Trigger.Hook (ScheduleIntake, scheduleIntake)
 import Shikigami.Trigger.Schedule (CatchUpPolicy (SkipMissed), nextDue, parseCron)
@@ -135,7 +136,7 @@ withWatchdog fixture use = P.withProposing fixture P.defaultOptions \h -> do
               )
           )
       )
-  _ <- right =<< Grants.upsertGrant h.pool "test-operator" identity SDanwaConversation Nothing
+  _ <- right =<< Grants.upsertGrant h.pool "test-operator" identity danwaConversationKind Nothing
   directory <-
     Directory.newDirectoryHandle
       ( Directory.staticDirectorySource

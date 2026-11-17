@@ -18,6 +18,7 @@ import Hasql.Pool (Pool)
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
 import Shikigami.Agent.Name (AgentName, agentNameText, mkAgentName)
 import Shikigami.Agent.Principal (AgentIdentity (VerifiedIdentity), AgentPrincipal, compatibilityIdentity, mkAgentPrincipal)
+import Shikigami.Authority (OutputKind, outputKindText)
 import Shikigami.Memory.AliasStore
   ( AliasReconciliation (..),
     aliasesForPrincipal,
@@ -41,7 +42,8 @@ import Shikigami.Sink.GrantStore
     revokeGrant,
     upsertGrant,
   )
-import Shikigami.Sink.Permission (Denied (..), SinkKind (..), sinkKindText)
+import Shikigami.Sink.Outputs (danwaConversationKind, kawaDigestKind, kizashiSignalKind, reiActionKind)
+import Shikigami.Sink.Permission (Denied (..))
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertEqual, assertFailure, testCase)
 
@@ -66,16 +68,16 @@ withPool databaseFixture use =
 -- | The gate's verdict, with the denial reason kept for failure messages.
 -- Named @verdict@ rather than @granted@ because 'GrantRow' already has a
 -- @granted@ field, which @DuplicateRecordFields@ makes ambiguous.
-verdict :: Pool -> Text -> SinkKind -> IO (Either Text ())
+verdict :: Pool -> Text -> OutputKind -> IO (Either Text ())
 verdict pool agent kind =
   checkGrant (DbGrants pool) (compatibilityIdentity (fixtureAgentName agent)) kind >>= \case
     Right () -> pure (Right ())
     Left (Denied reason) -> pure (Left reason)
 
-compatGrant :: Pool -> Text -> SinkKind -> Maybe Text -> IO (Either Text ())
+compatGrant :: Pool -> Text -> OutputKind -> Maybe Text -> IO (Either Text ())
 compatGrant pool agent = upsertGrant pool agent (compatibilityIdentity (fixtureAgentName agent))
 
-compatRevoke :: Pool -> Text -> SinkKind -> Maybe Text -> IO (Either Text Bool)
+compatRevoke :: Pool -> Text -> OutputKind -> Maybe Text -> IO (Either Text Bool)
 compatRevoke pool agent = revokeGrant pool (compatibilityIdentity (fixtureAgentName agent))
 
 agentPrincipal :: Text -> AgentPrincipal
@@ -84,13 +86,13 @@ agentPrincipal raw = either (error . Text.unpack) id (mkAgentPrincipal raw)
 verifiedIdentity :: Text -> AgentIdentity
 verifiedIdentity = VerifiedIdentity . agentPrincipal
 
-assertGranted :: String -> Pool -> Text -> SinkKind -> IO ()
+assertGranted :: String -> Pool -> Text -> OutputKind -> IO ()
 assertGranted label pool agent kind =
   verdict pool agent kind >>= \case
     Right () -> pure ()
     Left reason -> assertFailure (label <> ": expected granted, got denial: " <> show reason)
 
-assertDenied :: String -> Pool -> Text -> SinkKind -> IO Text
+assertDenied :: String -> Pool -> Text -> OutputKind -> IO Text
 assertDenied label pool agent kind =
   verdict pool agent kind >>= \case
     Right () -> assertFailure (label <> ": expected a denial, but the sink was granted")
@@ -102,28 +104,28 @@ seedTests databaseFixture =
     -- applying it silently changes who may deliver what.
     testCase "a seeded agent is granted the kind it was seeded with" do
       (withPool databaseFixture) \pool -> do
-        assertGranted "heartbeat/KawaDigest" pool "heartbeat" SKawaDigest
-        assertGranted "heartbeat/DanwaConversation" pool "heartbeat" SDanwaConversation
-        assertGranted "triage-note/ReiAction" pool "triage-note" SReiAction,
+        assertGranted "heartbeat/KawaDigest" pool "heartbeat" kawaDigestKind
+        assertGranted "heartbeat/DanwaConversation" pool "heartbeat" danwaConversationKind
+        assertGranted "triage-note/ReiAction" pool "triage-note" reiActionKind,
     testCase "an unknown agent is denied, and the reason says no grant exists" do
       (withPool databaseFixture) \pool -> do
-        reason <- assertDenied "intruder" pool "intruder" SKawaDigest
+        reason <- assertDenied "intruder" pool "intruder" kawaDigestKind
         assertBool
           ("reason should name the missing grant: " <> show reason)
-          ("has no grant for KawaDigest" `isInfixOfT` reason),
+          ("has no grant for kawa.digest" `isInfixOfT` reason),
     testCase "a seeded agent is denied a kind it was not seeded with" do
       -- danwa-heartbeat has DanwaConversation only. This is the case that would
       -- pass by accident if the gate keyed on the agent rather than the pair.
       (withPool databaseFixture) \pool -> do
-        assertGranted "danwa-heartbeat/DanwaConversation" pool "danwa-heartbeat" SDanwaConversation
-        _ <- assertDenied "danwa-heartbeat/KizashiSignal" pool "danwa-heartbeat" SKizashiSignal
+        assertGranted "danwa-heartbeat/DanwaConversation" pool "danwa-heartbeat" danwaConversationKind
+        _ <- assertDenied "danwa-heartbeat/KizashiSignal" pool "danwa-heartbeat" kizashiSignalKind
         pure (),
     testCase "the proof agents ship denied" do
       -- The behavior-preserving seed deliberately omits them; granting one at
       -- runtime is the demonstration that runtime grants work.
       (withPool databaseFixture) \pool -> do
-        _ <- assertDenied "digest-watcher" pool "digest-watcher" SKawaDigest
-        _ <- assertDenied "web-researcher" pool "web-researcher" SKizashiSignal
+        _ <- assertDenied "digest-watcher" pool "digest-watcher" kawaDigestKind
+        _ <- assertDenied "web-researcher" pool "web-researcher" kizashiSignalKind
         pure ()
   ]
 
@@ -131,16 +133,16 @@ runtimeTests :: DatabaseFixture -> [TestTree]
 runtimeTests databaseFixture =
   [ testCase "granting at runtime flips a denial to a grant" do
       (withPool databaseFixture) \pool -> do
-        _ <- assertDenied "before" pool "digest-watcher" SKawaDigest
-        compatGrant pool "digest-watcher" SKawaDigest (Just "test") >>= expectRight "upsertGrant"
-        assertGranted "after" pool "digest-watcher" SKawaDigest,
+        _ <- assertDenied "before" pool "digest-watcher" kawaDigestKind
+        compatGrant pool "digest-watcher" kawaDigestKind (Just "test") >>= expectRight "upsertGrant"
+        assertGranted "after" pool "digest-watcher" kawaDigestKind,
     testCase "revoking flips it back, and the reason distinguishes revoked from absent" do
       (withPool databaseFixture) \pool -> do
-        compatGrant pool "digest-watcher" SKawaDigest (Just "test") >>= expectRight "upsertGrant"
-        assertGranted "granted" pool "digest-watcher" SKawaDigest
-        revoked <- compatRevoke pool "digest-watcher" SKawaDigest (Just "test") >>= expectRight "revokeGrant"
+        compatGrant pool "digest-watcher" kawaDigestKind (Just "test") >>= expectRight "upsertGrant"
+        assertGranted "granted" pool "digest-watcher" kawaDigestKind
+        revoked <- compatRevoke pool "digest-watcher" kawaDigestKind (Just "test") >>= expectRight "revokeGrant"
         assertEqual "a row was revoked" True revoked
-        reason <- assertDenied "revoked" pool "digest-watcher" SKawaDigest
+        reason <- assertDenied "revoked" pool "digest-watcher" kawaDigestKind
         -- Not "has no grant for": an operator must be able to tell a deliberate
         -- revocation from a grant nobody ever made.
         assertBool
@@ -148,8 +150,8 @@ runtimeTests databaseFixture =
           ("is revoked" `isInfixOfT` reason),
     testCase "a revoked row survives with its audit trail" do
       (withPool databaseFixture) \pool -> do
-        compatGrant pool "digest-watcher" SKawaDigest (Just "granter") >>= expectRight "upsertGrant"
-        _ <- compatRevoke pool "digest-watcher" SKawaDigest (Just "revoker") >>= expectRight "revokeGrant"
+        compatGrant pool "digest-watcher" kawaDigestKind (Just "granter") >>= expectRight "upsertGrant"
+        _ <- compatRevoke pool "digest-watcher" kawaDigestKind (Just "revoker") >>= expectRight "revokeGrant"
         row <- findRow pool "digest-watcher"
         assertEqual "granted flag" False (granted' row)
         assertEqual "revoked_by" (Just "revoker") ((.revokedBy) row)
@@ -158,17 +160,17 @@ runtimeTests databaseFixture =
       -- A row claiming to be both granted and revoked would make the audit
       -- trail lie about the current state.
       (withPool databaseFixture) \pool -> do
-        compatGrant pool "digest-watcher" SKawaDigest (Just "granter") >>= expectRight "upsertGrant"
-        _ <- compatRevoke pool "digest-watcher" SKawaDigest (Just "revoker") >>= expectRight "revokeGrant"
-        compatGrant pool "digest-watcher" SKawaDigest (Just "granter2") >>= expectRight "re-grant"
-        assertGranted "re-granted" pool "digest-watcher" SKawaDigest
+        compatGrant pool "digest-watcher" kawaDigestKind (Just "granter") >>= expectRight "upsertGrant"
+        _ <- compatRevoke pool "digest-watcher" kawaDigestKind (Just "revoker") >>= expectRight "revokeGrant"
+        compatGrant pool "digest-watcher" kawaDigestKind (Just "granter2") >>= expectRight "re-grant"
+        assertGranted "re-granted" pool "digest-watcher" kawaDigestKind
         row <- findRow pool "digest-watcher"
         assertEqual "granted flag" True (granted' row)
         assertEqual "revoked_by cleared" Nothing ((.revokedBy) row)
         assertEqual "revoked_at cleared" Nothing ((.revokedAt) row),
     testCase "revoking something never granted reports that it changed nothing" do
       (withPool databaseFixture) \pool -> do
-        changed <- compatRevoke pool "nobody" SKawaDigest (Just "test") >>= expectRight "revokeGrant"
+        changed <- compatRevoke pool "nobody" kawaDigestKind (Just "test") >>= expectRight "revokeGrant"
         assertEqual "no row affected" False changed
   ]
 
@@ -194,11 +196,11 @@ principalReconciliationTests databaseFixture =
         assertEqual "verified every row" (fromIntegral (length after)) ((.verifiedCount) second),
     testCase "a conflicting principal leaves null rows untouched" do
       (withPool databaseFixture) \pool -> do
-        compatGrant pool "digest-watcher" SKawaDigest (Just "test") >>= expectRight "first grant"
+        compatGrant pool "digest-watcher" kawaDigestKind (Just "test") >>= expectRight "first grant"
         _ <-
           reconcileGrantPrincipal pool "digest-watcher" "agent_wrong"
             >>= expectRight "seed conflicting principal"
-        compatGrant pool "digest-watcher" SKizashiSignal (Just "test") >>= expectRight "second grant"
+        compatGrant pool "digest-watcher" kizashiSignalKind (Just "test") >>= expectRight "second grant"
         result <-
           reconcileGrantPrincipal pool "digest-watcher" "agent_digest_watcher"
             >>= expectRight "conflicting reconcileGrantPrincipal"
@@ -215,17 +217,17 @@ principalGrantTests :: DatabaseFixture -> [TestTree]
 principalGrantTests databaseFixture =
   [ testCase "verified lookup never falls back to a same-named compatibility grant" do
       (withPool databaseFixture) \pool -> do
-        assertGranted "compatibility seed" pool "heartbeat" SKawaDigest
-        checkGrant (DbGrants pool) (verifiedIdentity "agent_heartbeat") SKawaDigest >>= \case
+        assertGranted "compatibility seed" pool "heartbeat" kawaDigestKind
+        checkGrant (DbGrants pool) (verifiedIdentity "agent_heartbeat") kawaDigestKind >>= \case
           Left (Denied reason) -> assertBool "denial names the missing principal grant" ("has no grant" `isInfixOfT` reason)
           Right () -> assertFailure "verified lookup fell back to the compatibility row",
     testCase "a presentation rename retains the principal-keyed grant" do
       (withPool databaseFixture) \pool -> do
         _ <- reconcileGrantPrincipal pool "heartbeat" "agent_heartbeat" >>= expectRight "reconcile heartbeat"
-        assertVerifiedGranted "before rename" pool "agent_heartbeat" SKawaDigest
-        upsertGrant pool "heartbeat-renamed" (verifiedIdentity "agent_heartbeat") SKawaDigest (Just "test")
+        assertVerifiedGranted "before rename" pool "agent_heartbeat" kawaDigestKind
+        upsertGrant pool "heartbeat-renamed" (verifiedIdentity "agent_heartbeat") kawaDigestKind (Just "test")
           >>= expectRight "rename presentation"
-        assertVerifiedGranted "after rename" pool "agent_heartbeat" SKawaDigest
+        assertVerifiedGranted "after rename" pool "agent_heartbeat" kawaDigestKind
         rows <- findRows pool "heartbeat-renamed"
         assertEqual "the updated presentation has one row" 1 (length rows)
   ]
@@ -266,7 +268,7 @@ aliasTests databaseFixture =
           >>= assertEqual "the rejected owner gets nothing" []
   ]
 
-assertVerifiedGranted :: String -> Pool -> Text -> SinkKind -> IO ()
+assertVerifiedGranted :: String -> Pool -> Text -> OutputKind -> IO ()
 assertVerifiedGranted label pool principal kind =
   checkGrant (DbGrants pool) (verifiedIdentity principal) kind >>= \case
     Right () -> pure ()
@@ -286,7 +288,7 @@ pagingTests databaseFixture =
       -- in the keyset predicate, which a single-page table cannot expose.
       (withPool databaseFixture) \pool -> do
         mapM_
-          (\i -> compatGrant pool ("agent-" <> pad i) SKizashiSignal (Just "test") >>= expectRight "seed")
+          (\i -> compatGrant pool ("agent-" <> pad i) kizashiSignalKind (Just "test") >>= expectRight "seed")
           [1 .. 11 :: Int]
         size <- either (assertFailure . show) pure (mkPageSize 4)
         collected <- drain pool size Nothing []
@@ -310,7 +312,7 @@ rowKey :: GrantRow -> (Text, Text)
 rowKey GrantRow {agentName, sinkKind} = (agentName, sinkKind)
 
 cursorKey :: GrantCursor -> (Text, Text)
-cursorKey GrantCursor {agentName, sinkKind} = (agentNameText agentName, sinkKindText sinkKind)
+cursorKey GrantCursor {agentName, kind} = (agentNameText agentName, outputKindText kind)
 
 -- | The one row for an agent, failing the test if the table does not have
 -- exactly one.

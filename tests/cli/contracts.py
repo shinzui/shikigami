@@ -65,8 +65,8 @@ with tempfile.TemporaryDirectory(prefix="shikigami-cli-contract-") as directory:
     output = run("shikigami", ["--config", str(poison), "enqueue-run", "heartbeat", "--key", "", "--payload", "-"], 2, env=clean)
     assert b"addressed request key must not be empty" in output
     for args in [["enqueue-run", "", "--payload", "-"],
-                 ["grants", "grant", "", "KawaDigest"],
-                 ["grants", "revoke", "", "KawaDigest"]]:
+                 ["grants", "grant", "", "kawa.digest"],
+                 ["grants", "revoke", "", "kawa.digest"]]:
         output = run("shikigami", ["--config", str(poison), *args], 2, env=clean)
         assert b"agent name must not be empty" in output
     for args in [["agents", "show", ""],

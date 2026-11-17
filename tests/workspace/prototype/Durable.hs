@@ -65,6 +65,7 @@ import Shikigami.Flow.Pack (noPackMetrics)
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Log qualified as Log
 import Shikigami.Output (emptyOutputRegistry)
+import Shikigami.Output.Kikan (KikanServices (..), kikanOutputs)
 import Shikigami.Pack.Setting (noPackSettings)
 import Shikigami.Prelude ((&), (.~))
 import Shikigami.RunEvidence.Catalog qualified as Catalog
@@ -168,15 +169,9 @@ workflowCase configFile prefix stage = do
               packMetrics = const noPackMetrics,
               workspaceCatalog = [],
               agents = [declaration],
-              kizashi = KizashiConfig "http://localhost:1" (declarationCoordinate "recipient"),
-              kawa = KawaConfig "http://localhost:1" (activityCoordinate "fixture"),
-              kanmon = KanmonConfig "http://localhost:1",
-              danwa = DanwaConfig "http://localhost:1" (declarationCoordinate "fixture"),
-              rei = ReiConfig Nothing,
-              http,
               hooks = Agent.defaultAgentRunHooks,
               codingAgents = Agent.noCodingAgents,
-              outputs = emptyOutputRegistry,
+              outputs = kikanOutputs (KikanServices {http, kizashi = KizashiConfig "http://localhost:1" (declarationCoordinate "recipient"), kawa = KawaConfig "http://localhost:1" (activityCoordinate "fixture"), kanmon = KanmonConfig "http://localhost:1", danwa = DanwaConfig "http://localhost:1" (declarationCoordinate "fixture"), rei = ReiConfig Nothing}),
               declaredTools = Agent.noDeclaredTools,
               approvalPolicy = autoApprovePolicy (either (error . show) id (parseDuration 900)),
               approvalWorkflow = Approval.defaultApprovalWorkflowEnv,

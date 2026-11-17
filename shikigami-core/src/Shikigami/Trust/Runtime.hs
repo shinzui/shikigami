@@ -15,9 +15,7 @@ module Shikigami.Trust.Runtime
   )
 where
 
-import Data.List.NonEmpty (NonEmpty)
 import Data.Text (Text)
-import Data.Text qualified as Text
 import Keiro.Workflow (WorkflowId)
 import Shikigami.Agent.Decl (AgentDecl)
 import Shikigami.Authority (Authority, Principal)
@@ -75,8 +73,6 @@ data TierRefusal
   = -- | Nothing granted this declaration on this repository.
     NoGrant !GrantRefusal
   | RepositoryUnavailable !ApprovalsError
-  | -- | The declaration lists outputs this composition cannot deliver.
-    OutputsUnavailable !(NonEmpty Text)
   | -- | This executable does not compose the tier (for example
     -- @local-operator@ in @shikigami-worker@ until EP-2).
     TierUnsupportedHere !TrustTier !Text
@@ -87,7 +83,5 @@ renderTierRefusal :: TierRefusal -> Text
 renderTierRefusal = \case
   NoGrant refusal -> renderGrantRefusal refusal
   RepositoryUnavailable problem -> renderApprovalsError problem
-  OutputsUnavailable kinds ->
-    "the declaration lists outputs this composition cannot deliver: " <> Text.intercalate ", " (foldr (:) [] kinds)
   TierUnsupportedHere tier detail -> trustTierText tier <> " is not composed here: " <> detail
   CompositionFailed detail -> detail

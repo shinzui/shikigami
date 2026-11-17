@@ -1,6 +1,5 @@
 module Main (main) where
 
-import Control.Lens ((&), (.~))
 import Data.Aeson (Value (..), eitherDecode, encode, object, (.=))
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.ByteString.Lazy.Char8 qualified as LBS8
@@ -11,7 +10,6 @@ import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Time (UTCTime (..), fromGregorian, secondsToDiffTime)
-import Kioku.Id qualified as SinkSession
 import Network.HTTP.Types (hContentType, status200, status204, status400, status404)
 import Network.HTTP.Types.Header (Header)
 import Network.Wai (Application, Request, Response, ResponseReceived, pathInfo, requestHeaders, requestMethod, responseLBS, strictRequestBody)
@@ -44,7 +42,6 @@ import Shikigami.DecisionRunnerSpec qualified as DecisionRunnerSpec
 import Shikigami.DeclaredToolsSpec qualified as DeclaredToolsSpec
 import Shikigami.DelegateContextSpec qualified as DelegateContextSpec
 import Shikigami.DelegationBatchSpec qualified as DelegationBatchSpec
-import Shikigami.Directory (disabledDirectoryHandle)
 import Shikigami.DirectorySpec qualified as DirectorySpec
 import Shikigami.DirectoryValueSpec qualified as DirectoryValueSpec
 import Shikigami.EnqueueHardeningSpec qualified as EnqueueHardeningSpec
@@ -53,7 +50,8 @@ import Shikigami.ExecutionPositionSpec qualified as ExecutionPositionSpec
 import Shikigami.ExecutionResourcesSpec qualified as ExecutionResourcesSpec
 import Shikigami.ExecutionSelectionSpec qualified as ExecutionSelectionSpec
 import Shikigami.Fixture.KawaStub (kawaDoorwayApplication)
-import Shikigami.Fixture.SinkHttp (testSinkHttp, testSinkHttpFor)
+import Shikigami.Fixture.OutboxDispatch (DispatchContext, deliveryFor, dispatchContext, dispatchOutput, withIdentity, withServices, withTraceHeaders)
+import Shikigami.Fixture.SinkHttp (testSinkHttpFor)
 import Shikigami.FlowPackSpec qualified as FlowPackSpec
 import Shikigami.FormatVersionSpec qualified as FormatVersionSpec
 import Shikigami.Integration.Danwa (AddressedMessage (..), addressedMessageEventType)
@@ -62,12 +60,12 @@ import Shikigami.KeiroSpecificationSpec qualified as KeiroSpecificationSpec
 import Shikigami.KernelBoundarySpec qualified as KernelBoundarySpec
 import Shikigami.LocalHostSpec qualified as LocalHostSpec
 import Shikigami.LocalOperatorSpec qualified as LocalOperatorSpec
-import Shikigami.Log qualified as Log
 import Shikigami.LogSpec qualified as LogSpec
 import Shikigami.MandateSpec qualified as MandateSpec
 import Shikigami.ObjectiveSpec qualified as ObjectiveSpec
 import Shikigami.ObjectiveToolsSpec qualified as ObjectiveToolsSpec
 import Shikigami.ObjectiveTrackerSpec qualified as ObjectiveTrackerSpec
+import Shikigami.Output.Kikan (KikanServices (..))
 import Shikigami.OutputsSpec qualified as OutputsSpec
 import Shikigami.PackageArchitectureSpec qualified as PackageArchitectureSpec
 import Shikigami.PayloadValueSpec qualified as PayloadValueSpec
@@ -80,20 +78,12 @@ import Shikigami.RouterDecisionSpec qualified as RouterDecisionSpec
 import Shikigami.RouterDeclarationSpec qualified as RouterDeclarationSpec
 import Shikigami.Sink
   ( AgentIdentity,
-    DanwaConfig (..),
-    DanwaTarget (..),
-    GrantSource (StaticGrants),
-    KanmonConfig (..),
-    KawaConfig (..),
-    KizashiConfig (..),
-    SinkContext (..),
     SinkOutcome (..),
     SinkResult (..),
-    defaultGrantTable,
   )
-import Shikigami.Sink qualified as Sink
-import Shikigami.Sink.Coordinate (parseSinkSession, zeroSinkOrdinal)
+import Shikigami.Sink.Config (DanwaConfig (..), KawaConfig (..), KizashiConfig (..), ReiConfig (..))
 import Shikigami.Sink.KawaClient (buildEnvelope)
+import Shikigami.Sink.Outputs (DanwaTarget (..), KawaDigestOutput (..), inThread, kawaDigestOutput, sinkOutput)
 import Shikigami.Sink.Wire (CreateSignalReq (..), SignalResponse (..))
 import Shikigami.SinkAuthSpec qualified as SinkAuthSpec
 import Shikigami.SinkHonestySpec qualified as SinkHonestySpec
@@ -302,29 +292,12 @@ sampleKizashiSink =
       extraContextTags = ["verb:x"]
     }
 
-ctxFor :: AgentIdentity -> KizashiConfig -> KawaConfig -> SinkContext
-ctxFor ident kz kw =
-  SinkContext
-    { identity = ident,
-      directory = disabledDirectoryHandle,
-      runId = sinkSessionFixture,
-      ordinal = zeroSinkOrdinal,
-      kizashi = kz,
-      kawa = kw,
-      danwa = DanwaConfig {baseUrl = "http://localhost:1", agentParticipant = (declarationCoordinate "part_agent_test")},
-      kanmon = KanmonConfig {baseUrl = "http://localhost:1"},
-      rei = Sink.ReiConfig {baseUrl = Nothing},
-      http = testSinkHttp,
-      traceHeaders = [],
-      danwaTarget = Nothing,
-      recipientOverride = Nothing,
-      conversationKey = Nothing,
-      triggeringActivityId = Nothing,
-      occurredAt = Nothing,
-      receipts = Nothing,
-      logger = Log.silentLogger,
-      grants = StaticGrants defaultGrantTable
-    }
+ctxFor :: AgentIdentity -> KizashiConfig -> KawaConfig -> DispatchContext
+ctxFor ident kz kw = withIdentity ident (withServices (\services -> services {kizashi = kz, kawa = kw}) dispatchContext)
+
+-- | Dispatch a legacy sink as the output it declares.
+dispatchSink :: DispatchContext -> Sink -> Value -> IO SinkResult
+dispatchSink ctx = dispatchOutput ctx . sinkOutput
 
 dummyKawa :: KawaConfig
 dummyKawa = KawaConfig {baseUrl = "http://localhost:1", sourceSegment = (activityCoordinate "shinzui/shikigami")}
@@ -332,16 +305,14 @@ dummyKawa = KawaConfig {baseUrl = "http://localhost:1", sourceSegment = (activit
 dummyKizashi :: KizashiConfig
 dummyKizashi = KizashiConfig {baseUrl = "http://localhost:1", defaultRecipient = (declarationCoordinate "recipient_default")}
 
-ctxForDanwa :: AgentIdentity -> DanwaConfig -> Maybe DanwaTarget -> IO SinkContext
-ctxForDanwa ident danwa target = do
+ctxForDanwa :: AgentIdentity -> DanwaConfig -> IO DispatchContext
+ctxForDanwa ident danwa = do
   sinkHttp <- testSinkHttpFor danwa
-  pure
-    ( (ctxFor ident dummyKizashi dummyKawa)
-        { danwa = danwa,
-          http = sinkHttp,
-          danwaTarget = target
-        }
-    )
+  pure (withServices (\services -> services {danwa, http = sinkHttp}) (ctxFor ident dummyKizashi dummyKawa))
+
+-- | A Danwa sink, posted into @target@ when there is one.
+danwaDispatch :: DispatchContext -> Maybe DanwaTarget -> Sink -> Value -> IO SinkResult
+danwaDispatch ctx target sink = dispatchOutput ctx (maybe id inThread target (sinkOutput sink))
 
 kizashiTests :: TestTree
 kizashiTests =
@@ -352,7 +323,7 @@ kizashiTests =
         testWithApplication (pure (stubKizashiApp ref)) $ \port -> do
           let kz = KizashiConfig {baseUrl = testBaseUrl port, defaultRecipient = (declarationCoordinate "recipient_default")}
               ctx = ctxFor (compatibilityIdentity (fixtureAgentName "heartbeat")) kz dummyKawa
-          r <- Sink.dispatch ctx sampleKizashiSink sampleOutput
+          r <- dispatchSink ctx sampleKizashiSink sampleOutput
           (.outcome) r @?= Delivered (declarationCoordinate "sig_stub")
           reqs <- readIORef ref
           assertEqual "one signal recorded" 1 (length reqs)
@@ -364,7 +335,7 @@ kizashiTests =
         testWithApplication (pure (stubKizashiApp ref)) $ \port -> do
           let kz = KizashiConfig {baseUrl = testBaseUrl port, defaultRecipient = (declarationCoordinate "recipient_default")}
               ctx = ctxFor (compatibilityIdentity (fixtureAgentName "intruder")) kz dummyKawa
-          r <- Sink.dispatch ctx sampleKizashiSink sampleOutput
+          r <- dispatchSink ctx sampleKizashiSink sampleOutput
           case (.outcome) r of
             DeniedOutcome _ -> pure ()
             other -> assertBool ("expected DeniedOutcome, got " <> show other) False
@@ -383,8 +354,8 @@ kawaTests =
               dummyKz = KizashiConfig {baseUrl = "http://localhost:1", defaultRecipient = (declarationCoordinate "r")}
               ctx = ctxFor (compatibilityIdentity (fixtureAgentName "heartbeat")) dummyKz kw
               sink = KawaDigest {subjectType = activityCoordinate ("heartbeat"), verb = activityCoordinate ("heartbeat.tick")}
-          r1 <- Sink.dispatch ctx sink sampleOutput
-          r2 <- Sink.dispatch ctx sink sampleOutput
+          r1 <- dispatchSink ctx sink sampleOutput
+          r2 <- dispatchSink ctx sink sampleOutput
           case ((.outcome) r1, (.outcome) r2) of
             (Delivered a1, Delivered a2) -> do
               assertBool "activity id non-empty" (not (Text.null (declarationCoordinateText a1)))
@@ -394,7 +365,7 @@ kawaTests =
           assertEqual "exactly one stored (source, source_event_id)" 1 (Map.size m),
       testCase "context refs are bounded to closed schemes and deduplicated before ingest" do
         let ctx = ctxFor (compatibilityIdentity (fixtureAgentName "heartbeat")) dummyKizashi dummyKawa
-            sink = KawaDigest {subjectType = activityCoordinate ("practice-review"), verb = activityCoordinate ("practice-review.completed")}
+            sink = KawaDigestOutput {subjectType = activityCoordinate ("practice-review"), verb = activityCoordinate ("practice-review.completed")}
             output =
               object
                 [ "context_refs"
@@ -403,7 +374,7 @@ kawaTests =
                          object ["scheme" .= ("activity://" :: Text), "ref" .= ("practice-review/review-1" :: Text)]
                        ]
                 ]
-        buildEnvelope ctx sink output >>= \case
+        buildEnvelope (deliveryFor ctx (kawaDigestOutput sink) output) sink >>= \case
           Left problem -> assertFailure (show problem)
           Right ActivityEnvelope {contextRefs} ->
             contextRefs
@@ -417,7 +388,7 @@ kawaTests =
               ctx = ctxFor (compatibilityIdentity (fixtureAgentName "heartbeat")) dummyKizashi kw
               sink = KawaDigest {subjectType = activityCoordinate ("practice-review"), verb = activityCoordinate ("practice-review.completed")}
               output = object ["context_refs" .= [object ["scheme" .= ("https://" :: Text), "ref" .= ("example.invalid" :: Text)]]]
-          result <- Sink.dispatch ctx sink output
+          result <- dispatchSink ctx sink output
           case (.outcome) result of
             PermanentFailure detail -> assertBool "failure does not name the bad scheme" ("unknown context_refs scheme" `Text.isInfixOf` detail)
             other -> assertFailure ("malformed context refs were not permanent: " <> show other)
@@ -489,8 +460,8 @@ danwaTests =
           let cfg = DanwaConfig {baseUrl = testBaseUrl port, agentParticipant = (declarationCoordinate "part_agent_test")}
               target = Just DanwaTarget {conversationId = (declarationCoordinate "conv_target"), parentMessageId = Just (declarationCoordinate "msg_parent")}
               sink = DanwaConversation {topic = "support"}
-          ctx <- ctxForDanwa (compatibilityIdentity (fixtureAgentName "heartbeat")) cfg target
-          r <- Sink.dispatch ctx sink (object ["reply" .= ("reply text" :: Text)])
+          ctx <- ctxForDanwa (compatibilityIdentity (fixtureAgentName "heartbeat")) cfg
+          r <- danwaDispatch ctx target sink (object ["reply" .= ("reply text" :: Text)])
           (.outcome) r @?= Delivered (declarationCoordinate "msg_reply")
           reqs <- readIORef ref
           assertEqual "one danwa message recorded" 1 (length reqs)
@@ -503,8 +474,8 @@ danwaTests =
         testWithApplication (pure (stubDanwaApp ref)) \port -> do
           let cfg = DanwaConfig {baseUrl = testBaseUrl port, agentParticipant = (declarationCoordinate "part_agent_test")}
               sink = DanwaConversation {topic = "support"}
-          ctx <- ctxForDanwa (compatibilityIdentity (fixtureAgentName "heartbeat")) cfg Nothing
-          r <- Sink.dispatch ctx sink (object ["summary" .= ("fresh thread text" :: Text)])
+          ctx <- ctxForDanwa (compatibilityIdentity (fixtureAgentName "heartbeat")) cfg
+          r <- danwaDispatch ctx Nothing sink (object ["summary" .= ("fresh thread text" :: Text)])
           (.outcome) r @?= Delivered (declarationCoordinate "msg_stub")
           reqs <- readIORef ref
           assertEqual "one danwa message recorded" 1 (length reqs)
@@ -514,8 +485,8 @@ danwaTests =
         testWithApplication (pure (stubDanwaApp ref)) \port -> do
           let cfg = DanwaConfig {baseUrl = testBaseUrl port, agentParticipant = (declarationCoordinate "part_agent_test")}
               sink = DanwaConversation {topic = ""}
-          ctx <- ctxForDanwa (compatibilityIdentity (fixtureAgentName "heartbeat")) cfg Nothing
-          result <- Sink.dispatch ctx sink (object ["summary" .= ("fresh thread text" :: Text)])
+          ctx <- ctxForDanwa (compatibilityIdentity (fixtureAgentName "heartbeat")) cfg
+          result <- danwaDispatch ctx Nothing sink (object ["summary" .= ("fresh thread text" :: Text)])
           case (.outcome) result of
             AuthorizationFailed reason -> assertBool "the missing exact target is explicit" ("invalid coordinates" `Text.isInfixOf` reason)
             other -> assertFailure ("expected fail-closed authorization, got " <> show other)
@@ -532,28 +503,25 @@ traceHeaderTests =
         store <- newIORef (Map.empty :: Map (Text, Text) Text)
         testWithApplication (pure (captureHeaders headers (kawaDoorwayApplication store))) \port -> do
           let kw = KawaConfig {baseUrl = testBaseUrl port, sourceSegment = (activityCoordinate "shinzui/shikigami")}
-              ctx = (ctxFor (compatibilityIdentity (fixtureAgentName "heartbeat")) dummyKizashi kw) {traceHeaders = sampleTraceHeaders}
+              ctx = withTraceHeaders sampleTraceHeaders (ctxFor (compatibilityIdentity (fixtureAgentName "heartbeat")) dummyKizashi kw)
               sink = KawaDigest {subjectType = activityCoordinate ("heartbeat"), verb = activityCoordinate ("heartbeat.tick")}
-          _ <- Sink.dispatch ctx sink sampleOutput
+          _ <- dispatchSink ctx sink sampleOutput
           assertCapturedTraceHeaders headers,
       testCase "kizashi receives only the generated W3C trace headers" do
         headers <- newIORef []
         signals <- newIORef []
         testWithApplication (pure (captureHeaders headers (stubKizashiApp signals))) \port -> do
           let kz = KizashiConfig {baseUrl = testBaseUrl port, defaultRecipient = (declarationCoordinate "recipient_default")}
-              ctx = (ctxFor (compatibilityIdentity (fixtureAgentName "heartbeat")) kz dummyKawa) {traceHeaders = sampleTraceHeaders}
-          _ <- Sink.dispatch ctx sampleKizashiSink sampleOutput
+              ctx = withTraceHeaders sampleTraceHeaders (ctxFor (compatibilityIdentity (fixtureAgentName "heartbeat")) kz dummyKawa)
+          _ <- dispatchSink ctx sampleKizashiSink sampleOutput
           assertCapturedTraceHeaders headers,
       testCase "rei receives only the generated W3C trace headers" do
         headers <- newIORef []
         testWithApplication (pure (captureHeaders headers acceptingReiApp)) \port -> do
           let ctx =
-                (ctxFor (compatibilityIdentity (fixtureAgentName "heartbeat")) dummyKizashi dummyKawa)
-                  { rei = Sink.ReiConfig {baseUrl = Just (testBaseUrl port)},
-                    traceHeaders = sampleTraceHeaders
-                  }
+                withTraceHeaders sampleTraceHeaders (withServices (\services -> services {rei = ReiConfig {baseUrl = Just (testBaseUrl port)}}) (ctxFor (compatibilityIdentity (fixtureAgentName "heartbeat")) dummyKizashi dummyKawa))
               sink = ReiAction {intentionId = declarationCoordinate ("int_trace"), note = "trace this action"}
-          _ <- Sink.dispatch ctx sink sampleOutput
+          _ <- dispatchSink ctx sink sampleOutput
           assertCapturedTraceHeaders headers,
       testCase "danwa receives only the generated W3C trace headers" do
         headers <- newIORef []
@@ -562,8 +530,8 @@ traceHeaderTests =
           let cfg = DanwaConfig {baseUrl = testBaseUrl port, agentParticipant = (declarationCoordinate "part_agent_test")}
               target = Just DanwaTarget {conversationId = (declarationCoordinate "conv_target"), parentMessageId = Just (declarationCoordinate "msg_parent")}
               sink = DanwaConversation {topic = "support"}
-          baseCtx <- ctxForDanwa (compatibilityIdentity (fixtureAgentName "heartbeat")) cfg target
-          _ <- Sink.dispatch ((baseCtx & #traceHeaders .~ (sampleTraceHeaders))) sink sampleOutput
+          baseCtx <- ctxForDanwa (compatibilityIdentity (fixtureAgentName "heartbeat")) cfg
+          _ <- danwaDispatch (withTraceHeaders sampleTraceHeaders baseCtx) target sink sampleOutput
           assertCapturedTraceHeaders headers
     ]
 
@@ -610,6 +578,3 @@ testBaseUrl port = "http://localhost:" <> Text.pack (show port)
 
 fixtureAgentName :: Text -> AgentName
 fixtureAgentName = either (error . show) id . mkAgentName
-
-sinkSessionFixture :: SinkSession.SessionId
-sinkSessionFixture = either (error . show) id (parseSinkSession "kioku_session_01kvxa7d2cezhs874g3n8dfgme")

@@ -29,7 +29,7 @@ import Shikigami.Prelude
 import Shikigami.RunEvidence.Catalog qualified as Catalog
 import Shikigami.Sink.Coordinate (parseSinkSession, zeroSinkOrdinal)
 import Shikigami.Sink.Delivery qualified as Delivery
-import Shikigami.Sink.Permission (parseSinkKind)
+import Shikigami.Sink.Outputs (kawaDigestKind)
 import Shikigami.StateRevision
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit
@@ -72,7 +72,7 @@ tests fixture =
           legacyReconciliations <- newIORef (0 :: Int)
           now <- getCurrentTime
           let message = Delivery.sinkMessageId "legacy-delivered"
-              receipt = Delivery.DeliveryReceipt (Delivery.deliveryReceiptKey "legacy-delivered") message (checked (parseSinkSession "kioku_session_01kvxa7d2cezhs874g3n8dfgme")) (checked (mkAgentName "fixture")) zeroSinkOrdinal (fromMaybe (error "missing kawa kind") (parseSinkKind "KawaDigest")) Delivery.Delivered Nothing now
+              receipt = Delivery.DeliveryReceipt (Delivery.deliveryReceiptKey "legacy-delivered") message (checked (parseSinkSession "kioku_session_01kvxa7d2cezhs874g3n8dfgme")) (checked (mkAgentName "fixture")) zeroSinkOrdinal kawaDigestKind Delivery.Delivered Nothing now
               legacy _ = do
                 liftIO (modifyIORef' legacyCalls (+ 1))
                 liftIO (Delivery.recordDelivery (Connection.pool store) receipt) >>= rightEff

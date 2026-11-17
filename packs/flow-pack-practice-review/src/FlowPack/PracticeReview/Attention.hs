@@ -71,7 +71,8 @@ import Shikigami.Agent.Decl qualified as Agent
 import Shikigami.Agent.Name (AgentName)
 import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.Directory (DirectoryHandle)
-import Shikigami.Flow.Sdk (Eff, (:>))
+import Shikigami.Flow.Sdk (Eff, sinkOutput, toRecipient, (:>))
+import Shikigami.Output (OutputRegistry)
 import Shikigami.Pack.Sdk (IOE, Store, interpret, runTransaction)
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.Repository (RepoRef (..), relativePathText, repositoryIdText, revisionText)
@@ -79,7 +80,7 @@ import Shikigami.Sink (GrantSource, SinkOutcome (Enqueued), SinkResult (..))
 import Shikigami.Sink.Delivery (sinkMessageId)
 import Shikigami.Sink.Intent
   ( enqueuePreparedSinkIntentTx,
-    prepareSinkIntentForRecipientWithMessageId,
+    prepareSinkIntentWithMessageId,
     preparedSinkResult,
   )
 
@@ -90,6 +91,9 @@ data PracticeReviewAttentionEnv = PracticeReviewAttentionEnv
     occurredAt :: !(Maybe UTCTime),
     activity :: !(Maybe ActivityEnvelope),
     grants :: !GrantSource,
+    -- | The composition's output adapters; an attention is a
+    -- @kizashi.signal@ output.
+    outputs :: !OutputRegistry,
     directory :: !DirectoryHandle,
     recipients :: !AttentionRecipientMap
   }
@@ -220,7 +224,7 @@ reserveAttention ::
   PracticeReviewAttentionEnv ->
   ValidatedPracticeReviewVerdict ->
   Eff es AttentionReservationResult
-reserveAttention PracticeReviewAttentionEnv {agent, identity, runId, occurredAt, activity, grants, directory, recipients} validated = do
+reserveAttention PracticeReviewAttentionEnv {agent, identity, runId, occurredAt, activity, grants, outputs = registry, directory, recipients} validated = do
   projection <- either (liftIO . Exception.throwIO . userError . Text.unpack) pure (attentionProjection recipients verdict)
   (workflowName, workflowId) <- currentWorkflow
   generation <- currentRunGeneration
@@ -229,24 +233,21 @@ reserveAttention PracticeReviewAttentionEnv {agent, identity, runId, occurredAt,
       AttentionProjection {key, reviewId = projectionReviewId} = projection
       messageId = "practice-review-attention:" <> attentionKeyText key
       output = attentionOutput projection
-      sink = attentionSink projection
+      directed = toRecipient (Agent.declarationCoordinate (attentionRecipientText projection.recipient)) (sinkOutput (attentionSink projection))
   prepared <-
     liftIO
-      ( prepareSinkIntentForRecipientWithMessageId
+      ( prepareSinkIntentWithMessageId
+          registry
           directory
           grants
           identity
-          workflowId
-          stepName
           agent
           runId
           0
           occurredAt
-          Nothing
           activity
           (sinkMessageId messageId)
-          (Agent.declarationCoordinate (attentionRecipientText projection.recipient))
-          sink
+          directed
           output
           now
       )

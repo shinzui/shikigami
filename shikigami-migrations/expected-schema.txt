@@ -928,7 +928,7 @@ constraint	sink_deliveries.sink_deliveries_updated_at_not_null	NOT NULL updated_
 constraint	sink_grants.sink_grants_agent_name_not_null	NOT NULL agent_name
 constraint	sink_grants.sink_grants_granted_at_not_null	NOT NULL granted_at
 constraint	sink_grants.sink_grants_granted_not_null	NOT NULL granted
-constraint	sink_grants.sink_grants_sink_kind_check	CHECK ((sink_kind = ANY (ARRAY['KawaDigest'::text, 'KizashiSignal'::text, 'ReiAction'::text, 'DanwaConversation'::text, 'ChannelEgress'::text])))
+constraint	sink_grants.sink_grants_output_kind_check	CHECK (((sink_kind ~ '^[a-z][a-z0-9-]*(\.[a-z][a-z0-9-]*)+$'::text) AND (length(sink_kind) <= 64)))
 constraint	sink_grants.sink_grants_sink_kind_not_null	NOT NULL sink_kind
 constraint	sink_grants.sink_grants_updated_at_not_null	NOT NULL updated_at
 constraint	watchdog_claims.watchdog_claims_claim_key_not_null	NOT NULL claim_key
