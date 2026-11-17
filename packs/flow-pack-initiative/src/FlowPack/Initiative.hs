@@ -37,5 +37,6 @@ initiativePack =
       gauges = [],
       authorities = [],
       outputs = [],
-      approvalChannels = []
+      approvalChannels = [],
+      trackerProviders = []
     }

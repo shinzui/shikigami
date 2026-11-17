@@ -18,6 +18,7 @@ import Kikan.Shikigami.Binding.Approval (kikanApprovalChannels)
 import Kikan.Shikigami.Binding.Authority (authoritySettings, kikanAuthorityAdapter)
 import Kikan.Shikigami.Binding.Output (kikanOutputRegistrations)
 import Kikan.Shikigami.Binding.Settings (serviceSettings)
+import Kikan.Shikigami.Binding.Tracker.Rei (reiTrackerProvider)
 import Shikigami.Flow.Sdk
 
 kikanBindingName :: FlowPackName
@@ -41,5 +42,6 @@ kikanBinding =
       gauges = [],
       authorities = [kikanAuthorityAdapter],
       outputs = kikanOutputRegistrations,
-      approvalChannels = kikanApprovalChannels
+      approvalChannels = kikanApprovalChannels,
+      trackerProviders = [reiTrackerProvider]
     }

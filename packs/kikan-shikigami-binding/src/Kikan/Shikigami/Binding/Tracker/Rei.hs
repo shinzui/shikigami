@@ -1,9 +1,12 @@
 {-# LANGUAGE DataKinds #-}
 
--- | Rei's typed v2 client. Process composition supplies the manager, endpoint
--- and opaque bearer token. No environment, CLI or database access lives here.
-module Shikigami.Objective.Tracker.Rei
-  ( reiProviderRevision,
+-- | Rei's typed v2 client as an objective tracker provider (plan 135, M4).
+-- 'reiTrackerProvider' is what the binding installs: it opens a configured
+-- connection from its endpoint and its @env:NAME@ bearer credential. No CLI or
+-- database access lives here.
+module Kikan.Shikigami.Binding.Tracker.Rei
+  ( reiTrackerProvider,
+    reiProviderRevision,
     mkReiProvider,
     publicationDescription,
     candidateReceipts,
@@ -17,6 +20,7 @@ import Data.Generics.Labels ()
 import Data.KindID qualified as KindID
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Text
+import Network.HTTP.Client (closeManager)
 import Network.HTTP.Types (statusCode)
 import Rei.Api qualified as Api
 import Rei.Api.Id qualified as Id
@@ -27,15 +31,41 @@ import Rei.Intention.Api qualified as Intention
 import Rei.Intention.Wire qualified as Wire
 import Rei.Work.Wire qualified as Work
 import Shikigami.Objective.Content (parseInstructions)
+import Shikigami.Objective.Tracker.Config (Connection (..))
 import Shikigami.Objective.Tracker.Provider
 import Shikigami.Objective.Tracker.Types
 import Shikigami.Objective.Types (objectiveIdText)
 import Shikigami.Prelude
+import Shikigami.Sink.Auth (bearerTokenFromText, staticTokenSource)
+import Shikigami.Sink.Http (HttpLimits, newTypedClientManager)
 import Shikigami.StateRevision
 import System.Timeout (timeout)
 
 reiProviderRevision :: ProviderRevision
 reiProviderRevision = either (error . show) id (parseCoordinate "rei-v2-objectives/1")
+
+-- | The Rei v2 provider: one bounded manager and one opaque token per
+-- configured connection.
+reiTrackerProvider :: TrackerProviderRegistration
+reiTrackerProvider = TrackerProviderRegistration {revision = reiProviderRevision, connect = connectRei}
+
+connectRei :: HttpLimits -> Connection -> IO (Either TrackerError TrackerConnection)
+connectRei limits connection =
+  environmentCredential connection >>= \case
+    Left problem -> pure (Left problem)
+    Right secret -> case Client.mkBearerToken secret of
+      Left _ -> pure (Left (TrackerInvalid "invalid Rei bearer credential"))
+      Right token -> do
+        attempted <- try do
+          base <- Client.parseBaseUrl (Text.unpack connection.endpoint)
+          manager <- newTypedClientManager limits (Just (staticTokenSource (bearerTokenFromText secret)))
+          pure (manager, Client.mkClientEnv manager base)
+        case attempted of
+          Left (failure :: SomeException)
+            | Just (_ :: SomeAsyncException) <- fromException failure -> throwIO failure
+            | otherwise -> pure (Left TrackerUnavailable)
+          Right (manager, environment) ->
+            pure (Right TrackerConnection {provider = mkReiProvider environment token, close = closeManager manager})
 
 mkReiProvider :: Client.ClientEnv -> Client.BearerToken -> ResourceScope -> Either TrackerError Provider
 mkReiProvider environment token scope = do

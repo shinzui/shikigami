@@ -1,4 +1,4 @@
-module Shikigami.ObjectiveTrackerReiSpec (requireIsolatedRei, tests, dispatchChild) where
+module Kikan.Shikigami.Binding.Tracker.ReiSpec (requireIsolatedRei, tests, dispatchChild) where
 
 import Control.Concurrent (threadDelay)
 import Control.Exception (bracket_)
@@ -10,6 +10,7 @@ import Data.KindID qualified as KindID
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Text
 import Effectful (Eff)
+import Kikan.Shikigami.Binding.Tracker.Rei qualified as Rei
 import Kiroku.Store.Connection (defaultConnectionSettings)
 import Network.HTTP.Client (defaultManagerSettings, newManager)
 import Network.HTTP.Client qualified as Http
@@ -34,7 +35,6 @@ import Shikigami.Objective.Tracker.Config
 import Shikigami.Objective.Tracker.Dispatch qualified as Dispatch
 import Shikigami.Objective.Tracker.Mapping (supportedMappingRevision)
 import Shikigami.Objective.Tracker.Provider qualified as P
-import Shikigami.Objective.Tracker.Rei qualified as Rei
 import Shikigami.Objective.Tracker.Runtime qualified as Runtime
 import Shikigami.Objective.Tracker.Store qualified as S
 import Shikigami.Objective.Tracker.Types
@@ -175,7 +175,7 @@ tests fixture isolated =
           let name = "SHIKIGAMI_TEST_REI_RUNTIME_TOKEN"
               configured = host.settings & #connections .~ [connection & #credential .~ Just (key ("env:" <> Text.pack name)) | connection <- host.settings.connections]
           bracket_ (setEnv name token) (unsetEnv name) $
-            Runtime.withTrackerProviders (HttpLimits (checked (mkByteLimit 65536)) (checked (mkByteLimit 1048576))) configured \built -> do
+            Runtime.withTrackerProviders [Rei.reiTrackerProvider] (HttpLimits (checked (mkByteLimit 65536)) (checked (mkByteLimit 1048576))) configured \built -> do
               providers <- right built
               connection <- single host.settings.connections
               let scope = binding.scope
@@ -184,12 +184,12 @@ tests fixture isolated =
               let redirected = configured & #connections .~ [connection & #endpoint .~ "http://127.0.0.1:1"]
               Runtime.providerFor providers redirected scope >>= \case Left TrackerConflict -> pure (); _ -> fail "cached credentials must not follow changed connection targets"
           bracket_ (setEnv name token) (unsetEnv name) $
-            Runtime.withTrackerProviders (HttpLimits (checked (mkByteLimit 65536)) (checked (mkByteLimit 1024))) configured \built -> do
+            Runtime.withTrackerProviders [Rei.reiTrackerProvider] (HttpLimits (checked (mkByteLimit 65536)) (checked (mkByteLimit 1024))) configured \built -> do
               providers <- right built
               let scope = binding.scope
               provider <- right =<< Runtime.providerFor providers configured scope
               provider.readResource scope >>= (@?= P.ReadUnavailable)
-          Runtime.withTrackerProviders (HttpLimits (checked (mkByteLimit 65536)) (checked (mkByteLimit 1048576))) (configured & #enabled .~ TrackersDisabled) \built -> do
+          Runtime.withTrackerProviders [Rei.reiTrackerProvider] (HttpLimits (checked (mkByteLimit 65536)) (checked (mkByteLimit 1048576))) (configured & #enabled .~ TrackersDisabled) \built -> do
             _ <- right built
             pure (),
       testCase "real note guidance becomes a proposal and action-only advances do not invent changes" $

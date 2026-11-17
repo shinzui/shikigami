@@ -7,13 +7,18 @@ import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.Either (isLeft)
 import Data.Generics.Labels ()
+import Data.IORef (modifyIORef', newIORef, readIORef)
 import Data.Text qualified as Text
+import Shikigami.App.Config (mkByteLimit)
 import Shikigami.Objective.Tracker.Command qualified as Command
 import Shikigami.Objective.Tracker.Config
 import Shikigami.Objective.Tracker.Mapping
+import Shikigami.Objective.Tracker.Provider (TrackerConnection (..), TrackerProviderRegistration (..))
+import Shikigami.Objective.Tracker.Runtime qualified as Runtime
 import Shikigami.Objective.Tracker.Types
 import Shikigami.Objective.Types qualified as O
 import Shikigami.Prelude hiding ((.=))
+import Shikigami.Sink.Http (HttpLimits (..))
 import Shikigami.StateRevision
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit
@@ -39,6 +44,21 @@ tests =
         mayUseConnection both actor (scope & #incarnation .~ next.incarnation) @?= True
         matchesConnection both scope (connectionDigestFor connection) @?= True
         matchesConnection (settings & #connections .~ [connection & #account .~ key "changed-account"]) scope (connectionDigestFor connection) @?= False,
+      -- The kernel names no provider (plan 135, M4): a connection opens only
+      -- through a registration for its revision, and the rest is refused.
+      testCase "a connection whose provider revision no pack installs refuses the composition" do
+        opened <- newIORef (0 :: Int)
+        let installed providerRevision =
+              TrackerProviderRegistration
+                { revision = providerRevision,
+                  connect = \_ _ -> do
+                    modifyIORef' opened (+ 1)
+                    pure (Right TrackerConnection {provider = \_ -> Left TrackerUnavailable, close = pure ()})
+                }
+        Runtime.withTrackerProviders [] limits settings (pure . either Just (const Nothing)) >>= (@?= Just (TrackerInvalid "objective tracker provider revision is not installed"))
+        Runtime.withTrackerProviders [installed (key "another-v1")] limits settings (pure . either Just (const Nothing)) >>= (@?= Just (TrackerInvalid "objective tracker provider revision is not installed"))
+        Runtime.withTrackerProviders [installed scope.providerRevision] limits settings (pure . either Just (const Nothing)) >>= (@?= Nothing)
+        readIORef opened >>= (@?= 1),
       testCase "configuration bounds work and rejects duplicate connections and invalid actors" do
         validateTrackerSettings settings @?= Right ()
         forM_ [settings & #batchSize .~ 0, settings & #batchSize .~ 101, settings & #pollSeconds .~ 0, settings & #connections .~ [connection, connection], settings & #reconciliationOperators .~ [actor, actor]] \invalid -> assertBool "invalid settings" (isLeft (validateTrackerSettings invalid)),
@@ -178,3 +198,6 @@ onlyProposal :: ImportProposal
 onlyProposal = case snd (checked (stageProposals binding changed)) of
   [proposal] -> proposal
   _ -> error "expected one proposal in fixture"
+
+limits :: HttpLimits
+limits = HttpLimits {requestBytes = checked (mkByteLimit 65536), responseBytes = checked (mkByteLimit 65536)}

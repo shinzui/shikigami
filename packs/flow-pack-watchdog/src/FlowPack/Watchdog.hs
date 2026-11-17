@@ -29,5 +29,6 @@ watchdogPack =
       gauges = [sweepAgeGauge],
       authorities = [],
       outputs = [],
-      approvalChannels = []
+      approvalChannels = [],
+      trackerProviders = []
     }

@@ -9,7 +9,9 @@ if [[ "${1:-}" != -- || $# -lt 2 ]]; then
 fi
 shift
 task_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-rei_source="$(mori path mori://shinzui/rei)"
+# SHIKIGAMI_REI_SOURCE names another checkout of the same pinned commit, such as
+# a clone, so a qualification need not move the developer's own Rei checkout.
+rei_source="${SHIKIGAMI_REI_SOURCE:-$(mori path mori://shinzui/rei)}"
 rei_commit=c109222db550537ec998ecc6fc1866cc7a35e29a
 if [[ "$(git -C "$rei_source" rev-parse HEAD)" != "$rei_commit" ]] || [[ -n "$(git -C "$rei_source" status --porcelain --untracked-files=no)" ]]; then
   echo 'Rei fixture requires the clean pinned source at mori://shinzui/rei; refusing another source tuple' >&2

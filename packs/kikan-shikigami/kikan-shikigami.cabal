@@ -37,6 +37,12 @@ executable kikan-shikigami-worker
   main-is: Main.hs
   build-depends: shikigami-workers
 
+executable kikan-shikigami-server
+  import: common
+  hs-source-dirs: app/server
+  main-is: Main.hs
+  build-depends: shikigami-server
+
 executable kikan-shikigami-workspace-supervisor
   import: common
   hs-source-dirs: app/workspace-supervisor

@@ -83,7 +83,8 @@ withSetting FlowPack {name, flows, decisionPrograms, retainedCodecs, tasks} =
       gauges = [],
       authorities = [],
       outputs = [],
-      approvalChannels = []
+      approvalChannels = [],
+      trackerProviders = []
     }
 
 probePack :: Text -> [Text] -> FlowPack
@@ -100,7 +101,8 @@ probePack name flowNames =
       gauges = [],
       authorities = [],
       outputs = [],
-      approvalChannels = []
+      approvalChannels = [],
+      trackerProviders = []
     }
   where
     definition flowName =

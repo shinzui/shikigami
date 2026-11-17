@@ -374,5 +374,6 @@ probePack =
       gauges = [],
       authorities = [],
       outputs = [],
-      approvalChannels = []
+      approvalChannels = [],
+      trackerProviders = []
     }

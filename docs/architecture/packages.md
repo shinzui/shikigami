@@ -126,7 +126,7 @@ no library; each `main` passes its packs to `agentRunRoleInfoWith`, `workerRoleI
 `shikigami-migrations:test-support`; its libraries may not.
 
 `packs/kikan-shikigami` is the distribution for organizational use. It composes the Kikan
-binding and every pack into `kikan-shikigami-worker`, `kikan-shikigami-scheduler`, `kikan-shikigami-consume-stream`, the `kikan-shikigami` admin
+binding and every pack into `kikan-shikigami-worker`, `kikan-shikigami-server`, `kikan-shikigami-scheduler`, `kikan-shikigami-consume-stream`, the `kikan-shikigami` admin
 command and `kikan-shikigami-agent-run`, all reading one list in `src-shared/Packs.hs`. The
 admin command also mounts the Kikan service stubs, `stub-kawa` and `stub-kanmon`, compiled
 from `admin/`. Its test suite, `kikan-shikigami-test`, holds what needs composed use cases
@@ -138,8 +138,8 @@ services. It is held to the same rule as any pack library (the two SDK component
 light package forbids), and [plan 135](../plans/135-move-the-kikan-service-bindings-out-of-shikigami-core-and-compose-a-kikan-distribution.md)
 moves the Kikan-En authority, the Kikan outputs and approval channels, the Rei tracker
 provider, the Danwa conversation loop and the Kawa intake into it from `shikigami-core`.
-The authority (M2) and the outputs, their clients, settings and approval channels (M3) have
-moved. The binding also publishes `kikan-shikigami-binding:outputs`, the typed output
+The authority (M2), the outputs, their clients, settings and approval channels (M3), and
+the Rei objective tracker provider (M4, with its real-Rei qualification suite) have moved. The binding also publishes `kikan-shikigami-binding:outputs`, the typed output
 configurations and directing helpers (`toRecipient`, `inThread`) a pack's bodies may import,
 and `kikan-shikigami-binding:test-support`, its fixtures.
 `kikan-shikigami flows` lists it under `packs:` with what it contributes; the stock
@@ -151,8 +151,9 @@ stream intake and scheduled ticks for the agents that run its flows; `adminVerbs
 operator verbs; `gauges`, levels the worker samples for it; `authorities`, the action
 authorities it registers; `outputs`, the output kinds it delivers
 (`Shikigami.Output.Registration`); `approvalChannels`, the channels it can ask a person
-through (`Shikigami.Approval.Channel`); and, at run time, events on the kernel's
-`shikigami.pack.events` counter. A pack may also publish a
+through (`Shikigami.Approval.Channel`); `trackerProviders`, the objective tracker providers
+it installs by adapter revision (`Shikigami.Objective.Tracker.Provider`); and, at run time,
+events on the kernel's `shikigami.pack.events` counter. A pack may also publish a
 `test-support` sublibrary for tests; that one may depend on the worker package, which the
 pack's own library may not. The stock
 executables run kernel behaviors and declared agents only; a use case that ships as a pack

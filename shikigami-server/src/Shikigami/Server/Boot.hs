@@ -13,7 +13,9 @@
 -- loops.
 module Shikigami.Server.Boot
   ( runServerMain,
+    runServerMainWith,
     runServer,
+    runServerWith,
     newServerEnv,
     newServerEnvWith,
   )
@@ -41,8 +43,10 @@ import Shikigami.Agent.Catalog (AgentCatalog (..), catalogFromReport)
 import Shikigami.Agent.Loader (loadAgentsLoud)
 import Shikigami.AgentRun.Status (RunStatusFailure (..), deriveRunStatus)
 import Shikigami.App.Config (AppConfig (..), HttpAuthSettings (..), Role (ServerRole), revealSecretText)
-import Shikigami.App.Config.Load (requireDatabaseUrl, runAppConfig)
+import Shikigami.App.Config.Load (requireDatabaseUrl, runAppConfigWith)
 import Shikigami.Directory qualified as Directory
+import Shikigami.Flow.Builtin (builtinPack)
+import Shikigami.Flow.Pack (FlowPack (..), composeFlowRegistryOrExit)
 import Shikigami.Health.Handler (mkHealthChecks)
 import Shikigami.Inspection.Server (withServerInspection)
 import Shikigami.Inspection.Store (withObservedStore)
@@ -66,10 +70,16 @@ import System.Posix.Signals (Handler (CatchOnce), installHandler, keyboardSignal
 -- before 'runAppConfig' returns, so @--check-config@ and both
 -- @--describe-config@ forms complete without binding a socket.
 runServerMain :: IO ()
-runServerMain = do
+runServerMain = runServerMainWith []
+
+-- | A server composed with flow packs (plan 135, M4): it accepts their
+-- settings and opens objective tracker connections through the providers they
+-- install. The stock server composes none.
+runServerMainWith :: [FlowPack] -> IO ()
+runServerMainWith packs = do
   options <- execParser serverParserInfo
-  config <- runAppConfig ServerRole options
-  runServer config
+  config <- runAppConfigWith (concatMap (.settings) packs) ServerRole options
+  runServerWith packs config
 
 -- | Build the environment handlers read, creating the stateful probe checks once.
 --
@@ -118,8 +128,12 @@ newServerEnvWith tracer config pool logger catalog directory livenessCheck readi
 -- both the bound address and the probe paths an operator will point a health
 -- check at.
 runServer :: AppConfig -> IO ()
-runServer config = do
+runServer = runServerWith []
+
+runServerWith :: [FlowPack] -> AppConfig -> IO ()
+runServerWith packs config = do
   logger <- Log.newStderrLogger Log.Info
+  _ <- composeFlowRegistryOrExit logger "shikigami-server" (builtinPack : packs)
   connStr <- revealSecretText <$> requireDatabaseUrl "shikigami-server" config
   Log.logInfo logger "server.auth.mode" ["mode" .= (case config.httpAuth of AuthDisabled -> "disabled"; AuthBearer {} -> "bearer" :: Text.Text)]
   case config.httpAuth of
@@ -138,7 +152,7 @@ runServer config = do
     withObservedStore serverTracer settings \st storeMetrics -> do
       registerRuntimeCatalog st
       ensureRunQueue (StoreConnection.pool st) >>= either (const (ioError (userError "The run-job queue could not be reconciled."))) pure
-      TrackerRuntime.withTrackerProviders (HttpLimits config.httpRequestMaxBytes config.httpResponseMaxBytes) config.trackerSettings \available -> do
+      TrackerRuntime.withTrackerProviders (concatMap (.trackerProviders) packs) (HttpLimits config.httpRequestMaxBytes config.httpResponseMaxBytes) config.trackerSettings \available -> do
         providers <- either (const (ioError (userError "Invalid objective tracker provider configuration"))) pure available
         initial <- newServerEnv serverTracer st config logger catalog directoryRuntime.handle
         let env = initial & #trackerProvider .~ TrackerRuntime.providerFor providers config.trackerSettings

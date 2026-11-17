@@ -45,13 +45,15 @@ authority. Save this closed envelope as `bind.json`, replacing its coordinates:
 ```
 
 ```bash
-shikigami objectives trackers bind OBJECTIVE --file bind.json --json
-shikigami objectives trackers operation OBJECTIVE bind-reviewed-intention --json
-shikigami objectives trackers inspect OBJECTIVE --binding binding-main --json
+kikan-shikigami objectives trackers bind OBJECTIVE --file bind.json --json
+kikan-shikigami objectives trackers operation OBJECTIVE bind-reviewed-intention --json
+kikan-shikigami objectives trackers inspect OBJECTIVE --binding binding-main --json
 ```
 
 Binding requests queue provider reads and return a durable operation. A configured
-worker must be running. Reuse the identical key and document after a timeout.
+`kikan-shikigami-worker` must be running: the Rei provider is part of the Kikan binding, so
+only the Kikan distribution's executables open a Rei connection, and a stock executable
+refuses a connection naming `rei-v2-objectives/1` at start (plan 135, M4). Reuse the identical key and document after a timeout.
 Local decisions such as pause, proposal rejection and application return their
 existing command receipt immediately. No CLI option selects another principal.
 
@@ -64,8 +66,8 @@ the external source before deciding. A preview is not a command document.
 ## Review external proposals
 
 ```bash
-shikigami objectives trackers proposals OBJECTIVE binding-main --limit 3 --json
-shikigami objectives trackers deliveries OBJECTIVE binding-main --limit 3 --json
+kikan-shikigami objectives trackers proposals OBJECTIVE binding-main --limit 3 --json
+kikan-shikigami objectives trackers deliveries OBJECTIVE binding-main --limit 3 --json
 ```
 
 CLI pages return `next`; pass that exact key with `--after`. HTTP collections use
@@ -81,7 +83,7 @@ inspection. Submit this request inside the same `format`/`operationKey` envelope
 ```
 
 ```bash
-shikigami objectives trackers command OBJECTIVE --file apply.json --json
+kikan-shikigami objectives trackers command OBJECTIVE --file apply.json --json
 ```
 
 Applying instructions goes through the objective owner and invalidates older

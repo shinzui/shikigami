@@ -490,7 +490,10 @@ creation policy and reproducible qualification.
 
 ## Objective trackers
 
-The configured local operator uses the same protected tracker owner as HTTP:
+The configured local operator uses the same protected tracker owner as HTTP. The
+commands are kernel commands, but a connection opens only through a provider a composed
+pack installs: the Rei provider is the Kikan binding's, so a Rei connection needs the
+distribution's `kikan-shikigami` (plan 135, M4).
 
 ```bash
 shikigami objectives trackers bind OBJECTIVE --file bind.json --json

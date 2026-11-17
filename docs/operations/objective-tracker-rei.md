@@ -7,6 +7,16 @@ explicit local decision at the current objective revision. Rei completion cannot
 supply Shikigami acceptance evidence. No intention is created, completed or
 reopened by the adapter.
 
+## Where the provider runs
+
+The Rei provider is part of the Kikan binding (`packs/kikan-shikigami-binding`,
+`Kikan.Shikigami.Binding.Tracker.Rei`), which installs it under its adapter
+revision (plan 135, M4). Only the Kikan distribution's executables open a Rei
+connection: `kikan-shikigami-worker`, `kikan-shikigami-server` and the
+`kikan-shikigami objectives trackers` commands. A stock executable given a
+connection naming `rei-v2-objectives/1` refuses to start with "objective
+tracker provider revision is not installed".
+
 ## Qualified protocol
 
 Qualification uses Rei server **8.0.0.0**, contract/client **0.2.0.0**, public

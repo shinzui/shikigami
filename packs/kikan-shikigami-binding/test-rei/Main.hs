@@ -1,7 +1,7 @@
 module Main (main) where
 
+import Kikan.Shikigami.Binding.Tracker.ReiSpec (dispatchChild, requireIsolatedRei, tests)
 import Shikigami.Migrations.TestSupport (withShikigamiMigratedSuite)
-import Shikigami.ObjectiveTrackerReiSpec (dispatchChild, requireIsolatedRei, tests)
 import System.Environment (getArgs)
 import Test.Tasty (defaultMain)
 

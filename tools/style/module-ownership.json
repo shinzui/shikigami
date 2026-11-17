@@ -211,8 +211,7 @@
     "frozenModules": [
       "Shikigami.DanwaConversation.Generated.WorkflowFacts",
       "Shikigami.DanwaConversation.Generated.WorkflowRuntime",
-      "Shikigami.Flow.Builtin",
-      "Shikigami.Objective.Tracker.Rei"
+      "Shikigami.Flow.Builtin"
     ],
     "sdkModules": {
       "flow-sdk": [
@@ -279,8 +278,12 @@
         "Shikigami.Memory.Access",
         "Shikigami.Memory.Scope",
         "Shikigami.Objective.Association",
+        "Shikigami.Objective.Content",
         "Shikigami.Objective.Reference",
         "Shikigami.Objective.Store",
+        "Shikigami.Objective.Tracker.Config",
+        "Shikigami.Objective.Tracker.Provider",
+        "Shikigami.Objective.Tracker.Types",
         "Shikigami.Output",
         "Shikigami.Output.Registration",
         "Shikigami.Pack.Sdk",

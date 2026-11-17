@@ -7,6 +7,7 @@ module Shikigami.Sink.Auth.Internal
   ( BearerToken,
     credentialToken,
     packSecretToken,
+    bearerTokenFromText,
     matchesBearerHeader,
     renderAuthHeader,
   )
@@ -30,6 +31,11 @@ credentialToken = BearerToken . revealSecretText
 -- | The same boundary for a pack's secret setting.
 packSecretToken :: PackSecret -> BearerToken
 packSecretToken = BearerToken . revealPackSecret
+
+-- | The same boundary for a credential an adapter read from its own source,
+-- such as an objective tracker connection's @env:NAME@ reference.
+bearerTokenFromText :: Text -> BearerToken
+bearerTokenFromText = BearerToken
 
 -- | Compare a received header with the expected bearer header in constant time.
 matchesBearerHeader :: BearerToken -> ByteString -> Bool

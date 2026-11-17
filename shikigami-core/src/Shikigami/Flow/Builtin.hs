@@ -53,7 +53,8 @@ builtinPack =
       gauges = [],
       authorities = [],
       outputs = [],
-      approvalChannels = []
+      approvalChannels = [],
+      trackerProviders = []
     }
 
 -- | The builtin pack alone, composed. It cannot fail for a reviewed build, so

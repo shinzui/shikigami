@@ -172,7 +172,7 @@ runWorkerCmdWith packs resumeBudget config = do
           Log.logError logger "worker.workspace.invalid" []
           Exit.exitFailure
         Right host -> pure host
-      TrackerRuntime.withTrackerProviders httpLimits config.trackerSettings \available -> do
+      TrackerRuntime.withTrackerProviders (concatMap (.trackerProviders) packs) httpLimits config.trackerSettings \available -> do
         providers <- either (const (Exit.die "shikigami-worker: invalid objective tracker provider configuration")) pure available
         trackers <-
           if config.trackerSettings.enabled == TrackersDisabled

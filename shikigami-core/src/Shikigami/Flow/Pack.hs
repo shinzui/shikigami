@@ -120,6 +120,8 @@ import Shikigami.Execution.Identity (ExecutionRootId)
 import Shikigami.Flow (FlowDef (..), FlowEffects, flowDecisionSlotsFor)
 import Shikigami.Flow.Decision (DecisionServices (..), decisionProviders)
 import Shikigami.Log qualified as Log
+import Shikigami.Objective.Tracker.Coordinate (ProviderRevision, coordinateText)
+import Shikigami.Objective.Tracker.Provider (TrackerProviderRegistration (..))
 import Shikigami.Objective.Types (ObjectiveSettings)
 import Shikigami.Output (OutputRegistry)
 import Shikigami.Output.Registration (OutputRegistration (..))
@@ -180,7 +182,10 @@ data FlowPack = FlowPack
     -- | Output kinds the pack delivers (plan 135, M3).
     outputs :: ![OutputRegistration],
     -- | Approval channels the pack posts asks through (plan 135, M3).
-    approvalChannels :: ![ApprovalChannelRegistration]
+    approvalChannels :: ![ApprovalChannelRegistration],
+    -- | Objective tracker providers the pack installs, by adapter revision
+    -- (plan 135, M4).
+    trackerProviders :: ![TrackerProviderRegistration]
   }
 
 -- | One level a pack wants sampled: how stale its last result is, how deep
@@ -316,6 +321,7 @@ data FlowRegistryError
   | DuplicateAuthorityMode !Text !FlowPackName !FlowPackName
   | DuplicateOutputKind !OutputKind !FlowPackName !FlowPackName
   | DuplicateApprovalChannel !ApprovalChannel !FlowPackName !FlowPackName
+  | DuplicateTrackerProvider !ProviderRevision !FlowPackName !FlowPackName
   | DecisionProgramsRejected !DecisionFailure
   | ResultCodecsRejected !DecisionFailure
   deriving stock (Eq, Show)
@@ -335,6 +341,8 @@ renderFlowRegistryError = \case
     "output kind " <> outputKindText kind <> " is registered by both pack " <> flowPackNameText first <> " and pack " <> flowPackNameText second
   DuplicateApprovalChannel channel first second ->
     "approval channel " <> approvalChannelText channel <> " is registered by both pack " <> flowPackNameText first <> " and pack " <> flowPackNameText second
+  DuplicateTrackerProvider revision first second ->
+    "objective tracker provider " <> coordinateText revision <> " is installed by both pack " <> flowPackNameText first <> " and pack " <> flowPackNameText second
   DecisionProgramsRejected failure -> "the composed decision programs were refused: " <> Text.pack (show failure)
   ResultCodecsRejected failure -> "the composed result codecs were refused: " <> Text.pack (show failure)
 
@@ -342,7 +350,7 @@ renderFlowRegistryError = \case
 -- first, so one failed start names everything an operator must fix.
 composeFlowRegistry :: [FlowPack] -> Either (NonEmpty FlowRegistryError) FlowRegistry
 composeFlowRegistry composed =
-  case NonEmpty.nonEmpty (packErrors <> flowErrors <> taskErrors <> settingErrors <> authorityErrors <> outputErrors <> channelErrors <> programErrors <> codecErrors) of
+  case NonEmpty.nonEmpty (packErrors <> flowErrors <> taskErrors <> settingErrors <> authorityErrors <> outputErrors <> channelErrors <> trackerErrors <> programErrors <> codecErrors) of
     Just errors -> Left errors
     Nothing -> case (programsResult, codecsResult) of
       (Right programs, Right codecs) -> Right FlowRegistry {packs = packNames, entries, taskEntries, hooks = [(pack.name, pack.triggers) | pack <- composed], gaugeEntries = [(pack.name, gauge) | pack <- composed, gauge <- pack.gauges], programs, codecs}
@@ -359,6 +367,7 @@ composeFlowRegistry composed =
     authorityErrors = [DuplicateAuthorityMode mode first second | (mode, first, second) <- repeated [(adapter.mode, pack.name) | pack <- composed, adapter <- pack.authorities]]
     outputErrors = [DuplicateOutputKind kind first second | (kind, first, second) <- repeated [(registration.kind, pack.name) | pack <- composed, registration <- pack.outputs]]
     channelErrors = [DuplicateApprovalChannel channel first second | (channel, first, second) <- repeated [(registration.channel, pack.name) | pack <- composed, registration <- pack.approvalChannels]]
+    trackerErrors = [DuplicateTrackerProvider revision first second | (revision, first, second) <- repeated [(registration.revision, pack.name) | pack <- composed, registration <- pack.trackerProviders]]
     programsResult = Decision.programRegistry (concatMap (.decisionPrograms) composed)
     codecsResult = Decision.resultCodecRegistry (concatMap (.retainedCodecs) composed)
     programErrors = either (pure . DecisionProgramsRejected) (const []) programsResult

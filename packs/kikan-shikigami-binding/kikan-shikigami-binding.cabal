@@ -13,6 +13,11 @@ description:
 license: BSD-3-Clause
 build-type: Simple
 
+flag objective-tracker-rei-tests
+  description: Run mandatory real-Rei qualification through the disposable launcher
+  default: False
+  manual: True
+
 common common
   default-language: GHC2024
   default-extensions:
@@ -71,6 +76,7 @@ library
     Kikan.Shikigami.Binding.Output.Rei
     Kikan.Shikigami.Binding.Output.Wire
     Kikan.Shikigami.Binding.Settings
+    Kikan.Shikigami.Binding.Tracker.Rei
 
   build-depends:
     aeson,
@@ -80,6 +86,8 @@ library
     danwa-api,
     danwa-client,
     en-biscuit,
+    generic-lens,
+    http-client,
     http-client-tls,
     http-types,
     keiro,
@@ -87,6 +95,8 @@ library
     kikan-en-contract,
     kikan-shikigami-binding:outputs,
     mmzk-typeid,
+    rei-api-client >=0.2 && <0.3,
+    rei-api-contract >=0.2 && <0.3,
     servant-client,
     settei,
     settei-env,
@@ -186,5 +196,42 @@ test-suite kikan-shikigami-binding-test
     text,
     time,
     uuid,
+    wai,
+    warp,
+
+-- The real-Rei qualification of the tracker provider (plan 135, M4): run it
+-- with tests/objective-trackers/run-rei.sh, which starts a disposable Rei.
+test-suite kikan-shikigami-binding-rei-test
+  import: common
+  type: exitcode-stdio-1.0
+  main-is: Main.hs
+  hs-source-dirs: test-rei
+  other-modules: Kikan.Shikigami.Binding.Tracker.ReiSpec
+  ghc-options:
+    -threaded
+    -rtsopts
+    -with-rtsopts=-N2
+
+  if !flag(objective-tracker-rei-tests)
+    buildable: False
+  build-depends:
+    aeson,
+    base,
+    bytestring,
+    effectful-core,
+    generic-lens,
+    http-client,
+    http-types,
+    kikan-shikigami-binding,
+    kiroku-store,
+    mmzk-typeid,
+    process,
+    rei-api-client,
+    rei-api-contract,
+    shikigami-core,
+    shikigami-migrations:test-support,
+    tasty,
+    tasty-hunit,
+    text,
     wai,
     warp,

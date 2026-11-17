@@ -560,6 +560,33 @@ These came from read-only research on 2026-11-15, before implementation.
   among them core tests that only decode them; moving them changes no behaviour and is
   left to M6 with the distribution's example set.
   Date: 2026-11-17
+- Decision: (M4, 2026-11-17) A pack installs an objective tracker provider as a
+  `TrackerProviderRegistration {revision, connect}` on `FlowPack.trackerProviders`, in
+  `Shikigami.Objective.Tracker.Provider`; `connect :: HttpLimits -> Connection -> IO (Either
+  TrackerError TrackerConnection)` opens one configured connection at start, and a
+  `TrackerConnection` is `{provider :: ResourceScope -> Either TrackerError Provider, close}`.
+  `Shikigami.Objective.Tracker.Runtime.withTrackerProviders` takes the installed
+  registrations, keeps the connection-digest fence, and refuses a revision nobody installs
+  ("objective tracker provider revision is not installed"). The kernel keeps the generic
+  `env:NAME` credential reading (`environmentCredential`); `Sink.Auth.bearerTokenFromText`
+  is the token boundary for a credential an adapter reads itself. The Rei provider is
+  `Kikan.Shikigami.Binding.Tracker.Rei.reiTrackerProvider`, installed by the binding, and its
+  real-Rei suite is `kikan-shikigami-binding:test:kikan-shikigami-binding-rei-test` under the
+  binding's `objective-tracker-rei-tests` flag. `shikigami-core` no longer depends on
+  `rei-api-client` or `rei-api-contract`. `composeFlowRegistry` refuses a revision two packs
+  install, and `flows` lists each pack's authority, outputs, channels and trackers.
+  Date: 2026-11-17
+- Decision: (M4) The server composes packs: `Shikigami.Server.Boot.runServerMainWith` and
+  `runServerWith` take `[FlowPack]`, accept their settings and open tracker connections
+  through their providers; the distribution adds `kikan-shikigami-server`. The admin
+  `objectives trackers` commands take the composed packs' providers. As decided for M1, the
+  server executable is added now because it composes something.
+  Date: 2026-11-17
+- Decision: (M4) The frozen qualification cohort (`nix/qualification/cohort.json`, ADR-39)
+  is not regenerated here. It has not been since M2 removed Kikan-En from the core, and
+  regenerating it needs the isolated qualification solve and the Nix builds; M6, which owns
+  the Nix exclusion and its consequences, regenerates it once for M2 to M5.
+  Date: 2026-11-17
 - Decision: The development stubs (`stub-kawa`, `stub-kanmon`, `publish-fixture`) move to
   the distribution's admin executable.
   Rationale: They are fixtures for Kikan services. The stock admin command should not offer

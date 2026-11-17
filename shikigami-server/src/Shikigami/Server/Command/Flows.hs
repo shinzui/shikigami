@@ -16,11 +16,18 @@ import Data.List.NonEmpty qualified as NonEmpty
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.IO qualified as TIO
+import Shikigami.Agent.Approval (approvalChannelText)
 import Shikigami.Agent.DeclarationValue (declarationCoordinateText)
+import Shikigami.Approval.Channel (ApprovalChannelRegistration (..))
+import Shikigami.Authority (outputKindText)
+import Shikigami.Authority.Adapter (AuthorityAdapter (..))
 import Shikigami.Decision.Contract (DecisionSlot (..), decisionSlotLabelText)
 import Shikigami.Flow (FlowDef (..))
 import Shikigami.Flow.Builtin (builtinPack)
 import Shikigami.Flow.Pack
+import Shikigami.Objective.Tracker.Coordinate (coordinateText)
+import Shikigami.Objective.Tracker.Provider (TrackerProviderRegistration (..))
+import Shikigami.Output.Registration (OutputRegistration (..))
 import Shikigami.RuntimePolicy (defaultModelRequired)
 import System.Exit (exitFailure)
 import System.IO (hPutStrLn, stderr)
@@ -77,7 +84,11 @@ renderPackLines packs = map line packs
         counted "tasks" (length pack.tasks),
         named "settings" [setting.key | setting <- pack.settings],
         named "verbs" [verb.name | verb <- pack.adminVerbs],
-        named "gauges" [gauge.name | gauge <- pack.gauges]
+        named "gauges" [gauge.name | gauge <- pack.gauges],
+        named "authority" [adapter.mode | adapter <- pack.authorities],
+        named "outputs" [outputKindText registration.kind | registration <- pack.outputs],
+        named "channels" [approvalChannelText registration.channel | registration <- pack.approvalChannels],
+        named "trackers" [coordinateText registration.revision | registration <- pack.trackerProviders]
       ]
     counted label n = if n == 0 then "" else label <> ": " <> Text.pack (show n)
     named label names = if null names then "" else label <> ": " <> Text.intercalate ", " names

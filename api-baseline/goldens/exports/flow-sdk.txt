@@ -291,6 +291,7 @@ Shikigami.Flow.Sdk FlowPack.outputs
 Shikigami.Flow.Sdk FlowPack.retainedCodecs
 Shikigami.Flow.Sdk FlowPack.settings
 Shikigami.Flow.Sdk FlowPack.tasks
+Shikigami.Flow.Sdk FlowPack.trackerProviders
 Shikigami.Flow.Sdk FlowPack.triggers
 Shikigami.Flow.Sdk FlowPackName
 Shikigami.Flow.Sdk FlowPackNameError
