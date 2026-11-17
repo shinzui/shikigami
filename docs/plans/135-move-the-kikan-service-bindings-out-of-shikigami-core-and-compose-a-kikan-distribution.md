@@ -98,7 +98,10 @@ service where one runs on this Mac.
   naming `kikan-shikigami-worker`, and refuses the Kikan-En keys as unknown (exit 4).
   Binding tests 11/11 including `toAgentAction` over every `Action` constructor; core
   866/866; workers 301/301 with the known Git-provider load flake passing alone; server
-  108/108; distribution 10/10.)
+  108/108; distribution 10/10. `just keiro-gate HEAD~1` after d74b7efa: conformance PASS,
+  no workflow body change. The Kikan-En gap is filed, by the user's decision, as
+  `mori://shinzui/kikan-en/improvement-requests/IR-5` (kikan-en commit 045171f, "Authorize
+  a coding-agent launch per action"; not pushed).)
 - [ ] M3: The five output adapters and the two approval channels run from the binding, and
   the distribution registers `kawa.digest` as its default output. A declared agent's outputs
   reach their services through the distribution worker, a declaration with no outputs gets a
