@@ -1,6 +1,6 @@
 ---
 name: campaign-readiness
-description: Bring a keiro service repository to the keiro modernization campaign's readiness checklist (R1-R7) using only the declared tools, and report what changed.
+description: Bring a keiro service repository to the keiro modernization campaign's readiness checklist (R1-R8) using only the declared tools, and report what changed.
 ---
 
 # Campaign readiness
@@ -22,6 +22,7 @@ files.
 | R5 agent guide | `AGENTS.md` exists | Write a short `AGENTS.md` from what the repository shows: what it is, how to build and test it, where plans live. Claim nothing you did not see. |
 | R6 build plan | `dist-newstyle/cache/plan.json` exists | `nix develop -c cabal build all --dry-run` |
 | R7 friction log | `docs/friction-log/profile.dhall` exists | `bun agents/skills/exec-plan/record-friction.ts init` (after R4, which installs it) |
+| R8 migration blueprints current | `seihou outdated` lists `keiro-upgrade`, `kiroku-upgrade`, `shibuya-kiroku-adapter-upgrade` and `shibuya-pgmq-adapter-upgrade` as up to date, or does not list them | None: `seihou upgrade` refreshes the operator's shared cache. Report `not fixed` and name each outdated blueprint with its installed and available versions, so the operator runs `seihou upgrade <name>` before approving. |
 
 Rules:
 
@@ -30,6 +31,9 @@ Rules:
   next stage.
 * `dist-newstyle/` is build output; do not add it to Git.
 * If a fix fails, leave it, and report the command and the error.
+* R8 exists because the kizashi pilot stopped halfway through its upgrade: the installed
+  keiro-upgrade had no migration edge to the target version, which nobody saw until the
+  blueprint ran. An outdated migration blueprint must surface here, before any planning.
 
-End with a short report: one line per check (R1-R7) saying `ready`, `fixed` (and how) or
+End with a short report: one line per check (R1-R8) saying `ready`, `fixed` (and how) or
 `not fixed` (and why), then the keiro version the build files name.

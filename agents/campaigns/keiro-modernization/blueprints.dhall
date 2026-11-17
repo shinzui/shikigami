@@ -22,6 +22,16 @@
   , source = "mori://shinzui/keiro"
   , rule = "the build resolves keiro below 0.25.0.0; window --from=<resolved version>, target --to=0.25.0.0. It entails kiroku-upgrade and the shibuya adapter edges"
   }
+, { name = "shibuya-kiroku-adapter-upgrade"
+  , kind = "migrate"
+  , source = "mori://shinzui/kiroku"
+  , rule = "only with keiro-upgrade, when the build depends on shibuya-kiroku-adapter: keiro 0.25 moves it to the shibuya-core 0.13 cohort (kizashi pilot)"
+  }
+, { name = "shibuya-pgmq-adapter-upgrade"
+  , kind = "migrate"
+  , source = "mori://shinzui/shibuya-pgmq-adapter"
+  , rule = "only with keiro-upgrade, when the build depends on shibuya-pgmq-adapter: keiro 0.25 moves it to the shibuya-core 0.13 cohort (kizashi pilot)"
+  }
 , { name = "kiroku-upgrade"
   , kind = "migrate"
   , source = "mori://shinzui/kiroku"
@@ -30,6 +40,6 @@
 , { name = "migrate-keiro-stack"
   , kind = "run"
   , source = "mori://shinzui/agent-seihou"
-  , rule = "the project is not yet on pg-migrate, Settei and the six-package vertical structure; set vars to --var=database.policy=disposable"
+  , rule = "deferred to the batches by the operator on 2026-11-17: do not select it for the pilot or the second repository. In a batch run, select it when the project is not yet on pg-migrate, Settei and the six-package vertical structure; set vars to --var=database.policy=disposable"
   }
 ]

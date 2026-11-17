@@ -1,6 +1,6 @@
 -- The keiro modernization campaign (EP-7 of MasterPlan 22). One run takes the
 -- repositories named in its payload, {"repos": ["mori://shinzui/kizashi"]}.
--- For each one it probes readiness (R1-R7), fixes what it can and asks the
+-- For each one it probes readiness (R1-R8), fixes what it can and asks the
 -- operator to accept the result (declining ends the run there). Then it
 -- selects blueprints from the operator's catalog, writes a MasterPlan, runs
 -- each blueprint and its ExecPlan, builds and tests, and reflects.
@@ -76,6 +76,7 @@ in  { main = "keiro-modernization"
           , probe "mina" "mina" [ "config", "show" ]
           , probe "mori" "mori" [ "status", "--json" ]
           , probe "seihou" "seihou" [ "status" ]
+          , probe "outdated" "seihou" [ "outdated" ]
           , probe
               "keiro"
               "git"
@@ -98,6 +99,8 @@ in  { main = "keiro-modernization"
               {{steps.mori.output}}
               seihou status:
               {{steps.seihou.output}}
+              seihou outdated:
+              {{steps.outdated.output}}
               keiro in the build files:
               {{steps.keiro.output}}
 
@@ -107,6 +110,7 @@ in  { main = "keiro-modernization"
               "readiness-review"
               ''
               Accept the readiness work in {{repo}} and continue to modernize it? It started at {{steps.start.output}}; `git reset --hard` to that commit undoes it. Reject to stop here.
+              If R8 is not ready, run `seihou upgrade <name>` for each blueprint it names before you approve: the upgrade runs those blueprints next.
               {{steps.readiness.summary}}
 
               {{steps.readiness.output}}

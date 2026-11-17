@@ -185,6 +185,21 @@ These came from read-only research on 2026-11-15, before implementation.
 
 ## Decision Log
 
+- Decision: The second-repository run (M3) on koyomi uses a slimmed playbook. Readiness gains
+  R8: a `seihou outdated` probe and a check that the migration blueprints are current, which
+  the operator fixes with `seihou upgrade <name>` before approving readiness. The catalog
+  gains `shibuya-kiroku-adapter-upgrade` and `shibuya-pgmq-adapter-upgrade`, which keiro
+  0.25 requires when a build depends on those adapters; without them in the catalog, the
+  campaign's tool grant refused them. `migrate-keiro-stack` is deferred to the batches (M4).
+  Rationale: the user chose this on 2026-11-17 to unblock EP-11 M2 without loosening its
+  dependency on M3. The kizashi pilot stopped because the installed keiro-upgrade (0.13.0)
+  had no 0.24 to 0.25 edge, and the two Shibuya blueprints had to be applied by hand. On
+  2026-11-17, koyomi's `seihou outdated` again shows keiro-upgrade 0.14.0 installed and
+  0.14.1 available. Moving that check to readiness is the repository-1 learning that M3
+  must show applied. migrate-keiro-stack took most of the pilot's time, and the
+  build-repair fixture already covers the playbook's tail.
+  Date: 2026-11-17
+
 - Decision: Stop gating kizashi through the campaign. Finish keiro 0.25 by hand, and validate
   the playbook tail with a small fixture bundle (`agents/playbooks/build-repair.dhall`) rather
   than the rest of the kizashi run.
