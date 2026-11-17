@@ -150,6 +150,21 @@ It owns that plan's fourth acceptance test, "Baseline", and its "Public surfaces
 
 ## Decision Log
 
+- Decision: (M3, 2026-11-17) Pack declarations get their own kernel-freeze surface,
+  `pack-declaration-codec`: a `JournalCodec` over `api-baseline/corpus/packs`, one declaration
+  per flow pack (`objective-example`, `proposer`, `architecture-practice-router`,
+  `watchdog`), copied with only import paths changed. They stay out of the
+  `agent-declaration` corpus, which by the M1 decision holds only declarations that name no
+  moved flow and no Kikan output, because that corpus belongs to the first freeze.
+  Date: 2026-11-17
+- Decision: (M3) The audit of K1 to K8 and the three requirements is
+  `docs/architecture/kernel-invariants.md`. Its real-run evidence is plan 135's M6 pair
+  (`portable-note` under `shikigami-agent-run` local-operator and under
+  `kikan-shikigami-agent-run` contained), plus EP-8 M3's real-model pair; it records the
+  partial entries (K1 file directory, K2 IR-5, K5 lease-only ordinary runs, K6 adapter
+  deduplication) and the architectural requirement as not accepted.
+  Date: 2026-11-17
+
 - Decision: (M3, 2026-11-17) Four surfaces join the inventory in report mode, each in the
   kernel freeze: `kernel-ports` (EP-8's `Shikigami.Approval.Channel`, `Shikigami.Authority`,
   `Shikigami.Authority.Adapter`, `Shikigami.Output`, `Shikigami.Output.Registration`,

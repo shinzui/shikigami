@@ -230,4 +230,17 @@ in  [ { name = "agent-declaration"
       , freeze = S.Freeze.Kernel
       , enforcement = S.Enforcement.Report
       }
+    , { name = "pack-declaration-codec"
+      , owner = masterPlan
+      , stability = S.Stability.Provisional
+      , rule =
+          "A journaled declaration that runs a pack's flow keeps decoding to the value its Dhall file loads to."
+      , check =
+          S.Check.JournalCodec
+            { corpus = "api-baseline/corpus/packs"
+            , goldens = "api-baseline/goldens/packs"
+            }
+      , freeze = S.Freeze.Kernel
+      , enforcement = S.Enforcement.Report
+      }
     ]
