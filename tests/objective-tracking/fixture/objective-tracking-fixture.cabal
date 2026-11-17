@@ -30,6 +30,7 @@ executable shikigami-objective-fixture
     filepath,
     http-types,
     kikan-en-contract,
+    kikan-shikigami-binding,
     kiroku-store,
     shikigami-core,
     text,

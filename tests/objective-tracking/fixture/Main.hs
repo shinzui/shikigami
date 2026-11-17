@@ -18,6 +18,7 @@ import En.Revision qualified as En
 import En.Schema (ObjectType (..), RelationName (..))
 import En.Tuple (ObjectRef (..), Subject (SubjectId))
 import Kikan.En.Action qualified as Kikan
+import Kikan.Shikigami.Binding.Authority (authoritySettings)
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
 import Network.HTTP.Types (status200, status403, status404)
 import Network.Wai (Application, pathInfo, requestHeaders, responseLBS, strictRequestBody)
@@ -27,7 +28,7 @@ import Shikigami.Agent.Principal (AgentIdentity (VerifiedIdentity), mkAgentPrinc
 import Shikigami.Agent.Run.Key (parseRunKey)
 import Shikigami.Agent.RunJob (RunRouteKind (ConversationWorkflowRoute))
 import Shikigami.App.Config (Role (AdminRole), revealSecretText)
-import Shikigami.App.Config.Load (ConfigOptions (..), DiagnosticMode (NoDiagnostic), requireDatabaseUrl, runAppConfig)
+import Shikigami.App.Config.Load (ConfigOptions (..), DiagnosticMode (NoDiagnostic), requireDatabaseUrl, runAppConfigWith)
 import Shikigami.Authority (OutputKind, mkOutputKind)
 import Shikigami.Sink.GrantStore (upsertGrant)
 import Shikigami.Trigger.Enqueue (addressedRunJob, enqueueRunJob)
@@ -78,7 +79,10 @@ requireRight = either (fail . show) pure
 
 withFixtureStore :: FilePath -> (KirokuStore -> IO a) -> IO a
 withFixtureStore configFile use = do
-  config <- runAppConfig AdminRole (ConfigOptions [configFile] [] [] NoDiagnostic)
+  -- The scenario's file carries the Kikan distribution's authority settings,
+  -- so the fixture reads it with the binding's settings, as the distribution
+  -- executables do (plan 135).
+  config <- runAppConfigWith authoritySettings AdminRole (ConfigOptions [configFile] [] [] NoDiagnostic)
   connection <- revealSecretText <$> requireDatabaseUrl "objective-tracking-fixture" config
   withStore (defaultConnectionSettings connection) use
 
