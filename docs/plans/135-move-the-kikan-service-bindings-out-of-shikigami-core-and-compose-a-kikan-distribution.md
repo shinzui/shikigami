@@ -132,8 +132,20 @@ service where one runs on this Mac.
   11, packs 14, 120, 79 and 115; kernel fitness, conventions, capabilities and api-baseline
   clean; `just keiro-gate HEAD~1` after `ee48e978`: conformance PASS, every generated module
   unchanged.)
-- [ ] M4: The Rei tracker provider runs from the binding and passes the existing real-Rei
-  qualification. Provider-neutral tracker code stays in the kernel.
+- [x] M4: The Rei tracker provider runs from the binding and passes the existing real-Rei
+  qualification. Provider-neutral tracker code stays in the kernel. (2026-11-17: code
+  `6268f9bf`. `Shikigami.Objective.Tracker.Runtime` is provider-neutral and opens each
+  connection through the `TrackerProviderRegistration` its revision names;
+  `Kikan.Shikigami.Binding.Tracker.Rei` installs `rei-v2-objectives/1`; `rei-api-client` and
+  `rei-api-contract` appear only in `kikan-shikigami-binding.cabal`. Real-Rei acceptance from
+  the binding: `bash tests/objective-trackers/run-rei.sh` with `SHIKIGAMI_REI_SOURCE` set to
+  a separate clone at the pinned Rei commit `c109222` (the operator's own checkout was left
+  where it was) ran `kikan-shikigami-binding:test:kikan-shikigami-binding-rei-test`: "All 17
+  tests passed", disposable Rei 8.0.0.0, typed contract 0.2.0.0, loopback only. Suites: core
+  unit 809/809 and postgres 549/549, binding 65/65, distribution 42/42, server 97/97, kernel
+  fitness 9/9, conventions clean. `just keiro-gate 85d1cb75` (the commit before M4):
+  conformance PASS, every generated module unchanged, no workflow body change;
+  `just api-baseline`: 8 surfaces clean.)
 - [ ] M5: The Danwa conversation loop and the Kawa stream and event intake run from the
   distribution's executables. The stock role set no longer contains a consumer.
 - [ ] M6: `shikigami-core` and the other six packages link no Kikan client library and the

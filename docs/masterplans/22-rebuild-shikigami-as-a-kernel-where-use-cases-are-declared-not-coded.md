@@ -1026,8 +1026,11 @@ the distribution's admin command. The kernel registers outputs and approval chan
 and names no service; `sinks` left the declaration before the first freeze. Through
 `kikan-shikigami-worker`, a declaration with no outputs produced exactly one Kawa digest at the
 stub and an explicit `channel.egress` reached the Kanmon stub (Kizashi and Danwa against client
-tests only, by the user's choice of no sibling stacks). Next in order are EP-10 M4 to M6 and
-EP-11 M2 to M4. Stage 1 (the pilot) ends at the declaration baseline, and stage 2 at
+tests only, by the user's choice of no sibling stacks). EP-10 M4 is accepted on 2026-11-17
+(`6268f9bf`): the kernel's objective tracker runtime is provider-neutral, a pack installs a
+provider on `FlowPack.trackerProviders`, and the Rei provider and its real-Rei suite run from
+the binding (17/17 against a disposable Rei at the pinned commit); the server composes packs
+as `kikan-shikigami-server`. Next in order are EP-10 M5 and M6 and EP-11 M2 to M4. Stage 1 (the pilot) ends at the declaration baseline, and stage 2 at
 the kernel baseline.
 
 - [ ] Architectural acceptance: the keiro modernization campaign runs for real on at least
