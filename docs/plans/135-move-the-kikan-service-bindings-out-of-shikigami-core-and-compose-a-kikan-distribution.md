@@ -32,6 +32,11 @@ provenance:
       at: 2026-11-17T05:37:04Z
       mode: "implement"
       note: "M1 implemented: binding package, distribution composition, flows pack lines, inventory"
+    - model: "claude-opus-5-5"
+      harness: "claude-code"
+      at: 2026-11-17T17:46:08Z
+      mode: "implement"
+      note: "M3 implemented: outputs, approval channels, settings and stubs run from the binding and distribution; acceptance recorded"
 ---
 
 # Move the Kikan service bindings out of shikigami-core and compose a Kikan distribution
@@ -102,16 +107,31 @@ service where one runs on this Mac.
   no workflow body change. The Kikan-En gap is filed, by the user's decision, as
   `mori://shinzui/kikan-en/improvement-requests/IR-5` (kikan-en commit 045171f, "Authorize
   a coding-agent launch per action"; not pushed).)
-- [ ] M3: (in progress 2026-11-17: stage a done — the kernel pipeline addresses outputs
-  and dispatches through adapters, still in core (`dda65c61`); stage c done — `sinks`
-  left the declaration (`269a7355`); stages b, d and e done — the adapters, clients,
-  settings, approval channels and stubs run from the binding and the distribution, and
-  the kernel registers outputs and channels from packs. Remaining: the acceptance runs
-  through `kikan-shikigami-worker`.) The five output adapters and the two approval channels run from the binding, and
+- [x] M3: The five output adapters and the two approval channels run from the binding, and
   the distribution registers `kawa.digest` as its default output. A declared agent's outputs
   reach their services through the distribution worker, a declaration with no outputs gets a
   Kawa digest, and the stock composition refuses a declaration naming a Kikan output kind at
-  load.
+  load. (2026-11-17: stage a `dda65c61`, stage c `269a7355`, stages b, d and e `ee48e978`.
+  Acceptance, through `kikan-shikigami-worker` on a disposable PostgreSQL with the loopback
+  fixture authority and the distribution's stubs: a declaration with no `outputs`
+  (`default-digest`, validated as `outputs: kawa.digest (composition default)`) produced
+  exactly one envelope at `kikan-shikigami stub-kawa` and a `delivered` receipt carrying its
+  `act_` id; an explicit `channel.egress` was accepted by `stub-kanmon` with a `delivered`
+  receipt; an explicit `rei.action` produced no Kawa envelope and a visible `failed` receipt
+  ("no rei endpoint is configured"), retried on each publish pass. Every delivery was
+  authorized twice, at enqueue and at publish (`dispatch_kawa`, `dispatch_channel`,
+  `act_on_intention`, decided by the fixture's Kikan-En). The stock `shikigami validate
+  agents/triage-note.dhall` fails with "output kind kizashi.signal is not registered here
+  (registered: local.report)". Gaps, named: Kizashi and Danwa ran against their client
+  tests only (the binding's `OutputDispatchSpec` and `ApprovalNotificationSpec`), since the
+  user chose no sibling stacks; `rei.action` cannot run against a real Rei, because Rei
+  exposes no ingestion endpoint for it (its v2 API serves the tracker, M4); the receipts were
+  checked for kind and status, not compared byte for byte with a pre-move run. Suites: core
+  unit 809/809 and postgres 549/549, binding 65/65, distribution 42/42, workers 301 with the
+  known Git flake passing alone, server 97/97, agent 42, api 35, client 9, migrations 9 and
+  11, packs 14, 120, 79 and 115; kernel fitness, conventions, capabilities and api-baseline
+  clean; `just keiro-gate HEAD~1` after `ee48e978`: conformance PASS, every generated module
+  unchanged.)
 - [ ] M4: The Rei tracker provider runs from the binding and passes the existing real-Rei
   qualification. Provider-neutral tracker code stays in the kernel.
 - [ ] M5: The Danwa conversation loop and the Kawa stream and event intake run from the
@@ -214,6 +234,28 @@ These came from read-only research on 2026-11-15, before implementation.
   `approval.require`), dotted (`sinkOutputKind`, `Trust.sinkKindNames`) and snake_case
   (the HTTP API); after M3 only the dotted output kind remains.
   Evidence: an Explore-agent inventory of the working tree at 177d9b4e.
+
+- Observation: (M3 acceptance) `shikigami grants grant` and `revoke` never returned under a
+  file directory: they ran the directory's periodic refresh loop as `finally` cleanup, the
+  defect the admin context had already fixed for `principalActive`. A one-shot verb now uses
+  the snapshot `startDirectory` loads and never runs the refresher.
+  Evidence: the acceptance hung on `kikan-shikigami grants grant default-digest
+  kawa.digest` with `directory.mode=file`; `Shikigami.Server.Command.Grants`.
+- Observation: (M3 acceptance) The development shell exports `PG_CONNECTION_STRING`, and the
+  environment outranks `--config`, so a disposable run must clear it or it reaches the
+  development database. The first attempt stopped at migration verification there (the
+  development database lacks `0052`) before any write.
+- Observation: (M3) `tests/objective-tracking/continuity.py` still drives the stock
+  `shikigami-worker` with `authorization.actions.mode=kikan`, which the stock worker has
+  refused since M2, and its fixture agents grant `danwa.conversation`, which only the
+  distribution registers since M3. The script must run the distribution's executables; M5,
+  which moves the conversation loop, is where it is next run.
+- Observation: (M3 acceptance, unrelated to this plan) The worker's timer loop logs
+  `scheduler.timer.unknown_kind` for Kioku's L1 distillation timers (kind `final`, and one
+  with no kind), which `Kioku.Distill.Timer` writes and no Shikigami action claims.
+  Evidence: two such lines per finished run in the acceptance worker log;
+  `mori://shinzui/kioku` `kioku-core/src/Kioku/Distill/Timer.hs` line 128 (artifact URI
+  pending).
 
 ## Decision Log
 

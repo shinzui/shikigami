@@ -56,6 +56,11 @@ provenance:
       at: 2026-11-17T04:08:29Z
       mode: "update"
       note: "EP-8 M3 accepted and EP-8 complete; portability check against the fixture Kikan composition"
+    - model: "claude-opus-5-5"
+      harness: "claude-code"
+      at: 2026-11-17T17:46:08Z
+      mode: "implement"
+      note: "EP-10 M3 accepted; progress snapshot and FRIC-98 and test-placement observations"
 ---
 
 # Rebuild Shikigami as a kernel where use cases are declared, not coded
@@ -1014,7 +1019,15 @@ under `shikigami-worker` with the Kikan-En authority (the loopback fixture autho
 and their kind-and-tag sequences were equal. By the user's decision M3 pulled the `kawa.digest`
 output adapter forward (`Shikigami.Output.Kikan`, FRIC-94), which EP-10 moves with the other
 Kikan adapters. `workspace.read` proved to be a light-command overlay only, so it is not
-kernel vocabulary (FRIC-95). Next in order are EP-10 and EP-11 M2 to M4. Stage 1 (the pilot) ends at the declaration baseline, and stage 2 at
+kernel vocabulary (FRIC-95). EP-10 M2 and M3 are accepted on 2026-11-17: the Kikan-En
+authority, the five Kikan output adapters, their clients and settings, and the Danwa and
+Kizashi approval channels run from `kikan-shikigami-binding`, and the Kawa and Kanmon stubs from
+the distribution's admin command. The kernel registers outputs and approval channels from packs
+and names no service; `sinks` left the declaration before the first freeze. Through
+`kikan-shikigami-worker`, a declaration with no outputs produced exactly one Kawa digest at the
+stub and an explicit `channel.egress` reached the Kanmon stub (Kizashi and Danwa against client
+tests only, by the user's choice of no sibling stacks). Next in order are EP-10 M4 to M6 and
+EP-11 M2 to M4. Stage 1 (the pilot) ends at the declaration baseline, and stage 2 at
 the kernel baseline.
 
 - [ ] Architectural acceptance: the keiro modernization campaign runs for real on at least
@@ -1159,6 +1172,15 @@ the kernel baseline.
   child (FRIC-72 under EP-8, FRIC-75 and FRIC-76 under EP-2). FRIC-75 is fixed by a sequential
   group; the others are rerun singly. Promote if a third child meets one.
   Evidence: `docs/friction-log/72-…`, `75-…`, `76-…`.
+- Observation (EP-10): `cabal build all` here builds no test suite, so `cabal list-bin` of a
+  suite runs whatever binary was last built and a broken suite can look green (FRIC-98). EP-10
+  M3 stage a was verified that way. Every child plan's verification should build each suite by
+  name (`cabal build <pkg>:test:<suite>`) or run `cabal test`.
+  Evidence: `docs/friction-log/98-cabal-build-all-leaves-test-suites-unbuilt-so-cabal-list-bin-runs-stale-test-binaries.md`.
+- Observation (EP-10): a test now lives with the code it tests, because no stock package may
+  depend on a pack in any stanza. Kernel suites spell outputs as raw `OutputDecl`s and use
+  neutral adapters; Kikan delivery is tested in the binding's and the distribution's suites.
+  A child that moves code out of the core should plan for its tests to move with it.
 
 
 - Observation (EP-9): scheduled routine agents run through the light composition inside

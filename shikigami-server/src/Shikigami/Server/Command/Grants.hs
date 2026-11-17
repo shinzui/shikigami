@@ -18,7 +18,6 @@ module Shikigami.Server.Command.Grants
   )
 where
 
-import Control.Exception (finally)
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.IO qualified as TextIO
@@ -160,8 +159,10 @@ withPool config ctx use = do
 withResolvedIdentity :: AppConfig -> String -> AgentName -> (AgentIdentity -> IO a) -> IO a
 withResolvedIdentity config context agent use = do
   runtime <- Directory.startDirectory Log.silentLogger ((.directorySettings) config) >>= either (die context) pure
-  let cleanup = maybe (pure ()) id ((.refresher) runtime)
-  (Directory.identityAdmission ((.handle) runtime) Nothing agent >>= either (die context) use) `finally` cleanup
+  -- 'startDirectory' has already loaded the projection once. Its @refresher@
+  -- is the periodic loop a long-lived role supervises; a one-shot verb must not
+  -- run it, because it never returns.
+  Directory.identityAdmission ((.handle) runtime) Nothing agent >>= either (die context) use
 
 die :: String -> Text -> IO a
 die ctx msg = do

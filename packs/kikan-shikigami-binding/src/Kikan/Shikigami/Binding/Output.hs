@@ -49,7 +49,6 @@ import Kikan.Shikigami.Binding.Settings (ServiceEndpoints (..), loadServiceEndpo
 import Shikigami.Activity (ActivityEnvelope (..))
 import Shikigami.Activity.Coordinate (activityCoordinate, activityCoordinateText)
 import Shikigami.Agent.DeclarationValue
-import Shikigami.Authority (OutputKind, outputKindText)
 import Shikigami.Output
 import Shikigami.Output.Registration (AdapterContext (..), OutputRegistration (..))
 import Shikigami.Pack.Sdk (logWarn)
