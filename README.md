@@ -168,8 +168,12 @@ shikigami-migrate up                   # database migrations
 `shikigami-run-behavior` and `shikigami-agent-run` live in `shikigami-agent`, which depends
 only on `shikigami-core`. A consumer who is not running the Kikan platform can build and use
 just those two without acquiring the messaging, queueing, or telemetry stack the deployed
-service needs. Both commands accept `--workspace`, but currently use a deny-all action authorizer,
-so requesting an overlay does not authorize its acquisition. See the
+service needs. Under `trust.tier=local-operator` the operator authorizes a declaration once.
+Under a deployment tier, `shikigami-run-behavior` uses a deny-all authorizer, and
+`shikigami-agent-run` decides actions with the authority `authorization.actions.mode` selects
+among its composed packs; the stock command composes none, so only `disabled` (deny-all) works
+there, and the Kikan distribution's `kikan-shikigami-agent-run` composes the Kikan-En
+authority and runs as the declaration's admitted principal. See the
 [CLI reference](docs/user/cli.md) for current one-off limitations.
 
 See [docs/user/cli.md](docs/user/cli.md) for the full command reference.

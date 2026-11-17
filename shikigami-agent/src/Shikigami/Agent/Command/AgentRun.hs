@@ -33,11 +33,11 @@ import Shikigami.Agent.Approval qualified as Approval
 import Shikigami.Agent.Approval.LocalInbox (PendingApproval (..), listPendingApprovals, localInboxDirectory, localInboxNotifier)
 import Shikigami.Agent.Approval.Workflow (approvalWorkflow, approvalWorkflowName)
 import Shikigami.Agent.Approval.Workflow qualified as ApprovalWorkflow
-import Shikigami.Agent.Decl (AgentDecl (..), Behavior (CoordinatingSkill, Skill))
+import Shikigami.Agent.Decl (AgentDecl (..), Behavior (CoordinatingSkill, Skill), IdentityDecl (..))
 import Shikigami.Agent.Loader (AgentLoadEntry (..), AgentLoadReport (..), loadAgent)
 import Shikigami.Agent.Name (agentNameText)
 import Shikigami.Agent.Payload (readPayloadArgument)
-import Shikigami.Agent.Principal (compatibilityIdentity)
+import Shikigami.Agent.Principal (AgentIdentity, compatibilityIdentity)
 import Shikigami.Agent.Run (AgentRunResult (..), recordActivityAsMemory, renderMemoryRecord)
 import Shikigami.Agent.Run.Key (newCliRunKey)
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (AgentWorkflowRoute), TriggerKind (TriggeredByOperator), runJobWorkflowId)
@@ -49,13 +49,16 @@ import Shikigami.App.Config (AppConfig)
 import Shikigami.App.Config qualified as Config
 import Shikigami.App.Config.Load (requireDatabaseUrl)
 import Shikigami.Attestation.Resolve qualified as Profile
-import Shikigami.Authority (mkOutputKind)
+import Shikigami.Authority (denyAll, mkOutputKind)
+import Shikigami.Authority.Adapter (AuthorityAdapter)
+import Shikigami.Authority.Configured (buildConfiguredAuthority)
 import Shikigami.Behavior.Provider (newBehaviorEnvFor)
 import Shikigami.Behavior.Run (withProgramTasks)
 import Shikigami.CodingAgent.Types (renderOutcome)
 import Shikigami.CodingAgent.Workflow (codingAgentStepWorkflow, codingAgentStepWorkflowName, fixedCodingAgentRunner)
 import Shikigami.DeclaredTool.Workflow (declaredToolStepWorkflow, declaredToolStepWorkflowName, renderToolStepOutcome)
-import Shikigami.Directory (disabledDirectoryHandle)
+import Shikigami.Directory (DirectoryHandle, DirectoryRuntime (..), disabledDirectoryHandle)
+import Shikigami.Directory qualified as Directory
 import Shikigami.Execution.Admission (enrollRootRun)
 import Shikigami.Execution.Driver (ExecutionStart (..))
 import Shikigami.Execution.Foreground (driveExecutionForeground)
@@ -132,10 +135,24 @@ runAgentRun packs agentArg mActivity workspace payloadArgument noConfirm resume 
               [] -> pure ()
               problems -> dieAgentRun (Text.intercalate "; " problems)
             interaction <- terminalInteraction noConfirm
-            runDurableAgent flows (concatMap (.outputs) packs) logger store appEnv (parseWorkspaceArgument <$> workspace) triggerPayload interaction config decl resume
+            runDurableAgent flows (concatMap (.outputs) packs) (concatMap (.authorities) packs) logger store appEnv (parseWorkspaceArgument <$> workspace) triggerPayload interaction config decl resume
 
-runDurableAgent :: FlowPack.FlowRegistry -> [OutputRegistration] -> Log.Logger -> KirokuStore -> AppEnv -> Maybe WorkspaceArgument -> Aeson.Value -> Interaction -> AppConfig -> AgentDecl -> Maybe Text -> IO ()
-runDurableAgent flows outputRegistrations logger store@KirokuStore {pool} appEnv workspace triggerPayload interaction config decl resume = do
+-- | The declared principal, admitted by a snapshot of the configured
+-- directory, and that snapshot. A one-shot command never runs the
+-- directory's refresh loop. A principal the directory refuses, or a
+-- directory that cannot start, stops the run before anything happens.
+admitDeclaredIdentity :: AppConfig -> AgentDecl -> IO (AgentIdentity, DirectoryHandle)
+admitDeclaredIdentity config decl = do
+  runtime <-
+    Directory.startDirectory Log.silentLogger config.directorySettings
+      >>= either (\problem -> dieAgentRun ("directory admission failed: " <> problem)) pure
+  admitted <-
+    Directory.identityAdmission runtime.handle ((\IdentityDecl {principal} -> principal) <$> decl.identity) decl.name
+      >>= either dieAgentRun pure
+  pure (admitted, runtime.handle)
+
+runDurableAgent :: FlowPack.FlowRegistry -> [OutputRegistration] -> [AuthorityAdapter] -> Log.Logger -> KirokuStore -> AppEnv -> Maybe WorkspaceArgument -> Aeson.Value -> Interaction -> AppConfig -> AgentDecl -> Maybe Text -> IO ()
+runDurableAgent flows outputRegistrations authorities logger store@KirokuStore {pool} appEnv workspace triggerPayload interaction config decl resume = do
   occurredAt <- getCurrentTime
   freshKey <- newCliRunKey ((.name) decl)
   -- With --resume, the run is the journaled job of an earlier invocation: the
@@ -146,10 +163,18 @@ runDurableAgent flows outputRegistrations logger store@KirokuStore {pool} appEnv
   -- Mori identity, so a resume (or a worker) finds the same one.
   given <- traverse absoluteWorkspace workspace
   let named = maybe (parseWorkspaceArgument . Text.unpack <$> (journaled >>= (.repository))) Just given
+  -- Outside the local tier a run acts as its declared principal, admitted by
+  -- the directory as enqueue-run admits it, and its workflow reads the
+  -- principal's lifecycle from that directory (plan 135, M6). The local
+  -- operator's runs keep the name-keyed identity their file grants name.
+  (identity, directory) <-
+    if config.trustTier == LocalOperator
+      then pure (compatibilityIdentity decl.name, disabledDirectoryHandle)
+      else admitDeclaredIdentity config decl
   let fresh =
         RunJob
           { agentName = ((.name) decl),
-            identity = compatibilityIdentity ((.name) decl),
+            identity,
             triggerKind = TriggeredByOperator,
             occurredAt,
             triggerPayload,
@@ -187,7 +212,13 @@ runDurableAgent flows outputRegistrations logger store@KirokuStore {pool} appEnv
       >>= either (\problem -> dieAgentRun ("invalid outputs: " <> problem)) pure
   -- Resolve the run's ports before any model call: a refused grant, an
   -- unavailable repository or an undeliverable output stops here.
-  tierRuntime <- (lightComposition config organization interaction record).resolve subject >>= either (dieAgentRun . renderTierRefusal) pure
+  -- A non-local run's actions are decided by the configured authority, built
+  -- once from the composed packs' adapters, as the worker builds it.
+  organizationAuthority <-
+    if config.trustTier == LocalOperator
+      then pure denyAll
+      else buildConfiguredAuthority authorities logger config >>= either (\problem -> dieAgentRun ("refusing to run: " <> problem)) pure
+  tierRuntime <- (lightComposition config organization organizationAuthority interaction record).resolve subject >>= either (dieAgentRun . renderTierRefusal) pure
   -- A run that may mutate the repository spends under a resource root sized by
   -- its grant's budget (K5).
   job <- case (journaled, tierRuntime.workspace, tierRuntime.grant) of
@@ -236,11 +267,11 @@ runDurableAgent flows outputRegistrations logger store@KirokuStore {pool} appEnv
             AgentWorkflow.harness = (.harness) config,
             AgentWorkflow.delegationBudget = (.delegationBudget) config,
             AgentWorkflow.grants = DbGrants pool,
-            AgentWorkflow.directory = disabledDirectoryHandle,
+            AgentWorkflow.directory = directory,
             AgentWorkflow.routing =
               Routing.routingRuntime
                 (AgentLoadReport [AgentLoaded {path = "<agent-run>", declaration = decl}])
-                disabledDirectoryHandle,
+                directory,
             AgentWorkflow.packSettings = config.packSettings,
             AgentWorkflow.deliveryPool = Just pool,
             AgentWorkflow.logger = logger,

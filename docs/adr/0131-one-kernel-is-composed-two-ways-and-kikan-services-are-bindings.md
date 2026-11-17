@@ -105,12 +105,16 @@ A pack that needs a new kind of service connection adds a field to `FlowPack` wi
 executed consumer (ADR-1), as `trackerProviders` and `conversationChannels` did; it does not
 define a parallel registration.
 
-Two gaps stay open and are named where they live: the one-off `agent-run` runs as the
-agent's compatibility identity even for a declaration with a principal, so a contained
-one-off run cannot use principal-keyed grants (organizational runs go through the worker,
-which admits the principal); and Kikan-En has no action for a declared tool or a coding-agent
-launch, so the binding refuses those actions
-(`mori://shinzui/kikan-en/improvement-requests/IR-5`).
+A one-off run under a deployment tier is composed like the worker: `agent-run` admits the
+declaration's principal through the directory and decides actions with the authority its
+packs register, so `kikan-shikigami-agent-run` runs under the Kikan-En authority and its
+outputs are published by a distribution worker.
+
+Gaps that stay open are named where they live: Kikan-En has no action for a declared tool
+or a coding-agent launch, so the binding refuses those actions
+(`mori://shinzui/kikan-en/improvement-requests/IR-5`); projecting the action record into
+attestation evidence belongs to the attestation plan; and no Meibo directory source exists
+yet, so both compositions read the file directory.
 
 
 ## References

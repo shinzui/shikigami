@@ -20,6 +20,7 @@ import Shikigami.Agent.Trust (compatibilityPrincipal, lightComposition, parseWor
 import Shikigami.App.Config (AppConfig)
 import Shikigami.App.Config qualified as Config
 import Shikigami.Attestation.Profile (ProfileId (..))
+import Shikigami.Authority (denyAll)
 import Shikigami.Behavior.Provider (newBehaviorEnvFor)
 import Shikigami.Behavior.Run (triggerOnly)
 import Shikigami.Duration
@@ -72,7 +73,7 @@ runRunBehavior path mpayload workspace noConfirm config = do
           interaction <- terminalInteraction noConfirm
           record <- oneOffRecord logger
           let subject = RunSubject {agent = decl, principal = compatibilityPrincipal decl.name, run = Nothing, repository = workspaceSelector . parseWorkspaceArgument <$> workspace}
-          runtime <- (lightComposition config emptyOutputRegistry interaction record).resolve subject >>= either (\refusal -> hPutStrLn stderr ("run-behavior: " <> Text.unpack (renderTierRefusal refusal)) >> exitFailure) pure
+          runtime <- (lightComposition config emptyOutputRegistry denyAll interaction record).resolve subject >>= either (\refusal -> hPutStrLn stderr ("run-behavior: " <> Text.unpack (renderTierRefusal refusal)) >> exitFailure) pure
           let checkout = maybe workspace (\grant -> Just grant.source) runtime.grant
           resultE <-
             withOneOffCapabilityOverlays logger runtime.authority checkout decl env \derivedEnv ->

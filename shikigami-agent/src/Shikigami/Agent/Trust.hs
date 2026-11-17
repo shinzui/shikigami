@@ -107,9 +107,12 @@ terminalInteraction noConfirm = do
 -- | The composition of one light command invocation.
 -- | @organization@ is the output registry of the non-local tiers: the
 -- adapters a contained run enqueues its outputs through. Under the local
--- operator the only output is a local report.
-lightComposition :: AppConfig -> OutputRegistry -> Interaction -> ActionRecord -> TierComposition
-lightComposition config organization interaction record =
+-- operator the only output is a local report. @organizationAuthority@ decides
+-- a non-local run's actions: the authority @authorization.actions.mode@
+-- selects among the composed packs' (the Kikan-En authority under the Kikan
+-- distribution, plan 135 M6), or the deny-all one when it is @disabled@.
+lightComposition :: AppConfig -> OutputRegistry -> Authority -> Interaction -> ActionRecord -> TierComposition
+lightComposition config organization organizationAuthority interaction record =
   TierComposition {tier = config.trustTier, resolve}
   where
     tierLabel = trustTierLabel config.trustTier
@@ -137,7 +140,7 @@ lightComposition config organization interaction record =
                   ( Right
                       TierRuntime
                         { tier = config.trustTier,
-                          authority = scopeToRun run decl.name (recorded record tierLabel denyAll),
+                          authority = scopeToRun run decl.name (recorded record tierLabel organizationAuthority),
                           record,
                           capabilities,
                           workspace = Nothing,

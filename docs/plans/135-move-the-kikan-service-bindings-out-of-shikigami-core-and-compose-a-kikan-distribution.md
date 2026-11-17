@@ -794,6 +794,23 @@ These came from read-only research on 2026-11-15, before implementation.
   Rationale: the portability check showed a distribution run's record without its delivery
   (K3), and the M6 evidence projection needs the delivery in the record to project it.
   Date: 2026-11-17
+- Decision: (M6, 2026-11-17, the user's decisions) Four M6 items are settled. (1) The
+  projection of the action record into attestation evidence and a per-run Kawa summary is
+  deferred to the attestation plan
+  (`docs/plans/52-signed-attestation-read-api-and-uc-8-conformance.md`): `RunEvidence` is
+  the attestation-profile store, created only for runs bound to a profile, and the action
+  record, complete with outbox deliveries since `5bd2c94b`, is K3's source of truth; the
+  distribution's default output already sends one Kawa digest per run. (2) The frozen
+  qualification cohort (`nix/qualification/cohort.json`) is regenerated when a plan
+  packages the distribution for Nix, and stays a known stale artifact until then. (3) The
+  three Kikan sample declarations stay in `agents/`; they load only under the
+  distribution. (4) The one-off `agent-run` outside local-operator now runs as the
+  declaration's principal, admitted by a snapshot of the configured directory (as
+  `enqueue-run` admits it), and decides actions with the authority
+  `authorization.actions.mode` selects among its packs (`buildConfiguredAuthority`, as the
+  worker does), so `kikan-shikigami-agent-run` composes the Kikan-En authority; the
+  local-operator path is unchanged and `shikigami-run-behavior` keeps deny-all.
+  Date: 2026-11-17
 
 
 ## Outcomes & Retrospective
