@@ -27,6 +27,11 @@ provenance:
       at: 2026-11-16T05:08:52Z
       mode: "implement"
       note: "M1: surface inventory, api-baseline tool with six checks, eight surfaces pinned in report mode, exposure measurement"
+    - model: "claude-opus-5-5"
+      harness: "claude-code"
+      at: 2026-11-17T21:21:43Z
+      mode: "implement"
+      note: "EP-11 M3 accepted: 6 surfaces registered, ExposedSet check, private internal library exposing 273 modules, kernel-label check, K1-K8 audit"
 ---
 
 # Freeze the v1 API baseline with a surface inventory and compatibility checks
