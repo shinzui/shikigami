@@ -8,6 +8,8 @@
 module Shikigami.Sink.KawaClient
   ( KawaError (..),
     buildEnvelope,
+    contextRefsFromOutput,
+    subjectIdFromOutput,
     postEnvelope,
     postEnvelopeWithHeaders,
     projectIngest,

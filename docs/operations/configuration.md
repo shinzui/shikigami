@@ -122,6 +122,8 @@ nested under `kafka`.
 | `approval.require` | *(empty)* | `SHIKIGAMI_APPROVAL_REQUIRE` | Comma-separated unique sink kinds requiring human approval: `KawaDigest`, `KizashiSignal`, `ReiAction`, `DanwaConversation`, or `ChannelEgress`. Surrounding whitespace is ignored; empty preserves ordinary sink auto-approval. |
 | `approval.channel` | `danwa` | `SHIKIGAMI_APPROVAL_CHANNEL` | Human approval notification channel: exactly `danwa` or `kizashi`. Explicit Flow acknowledgements always use this channel even when `approval.require` is empty. |
 | `approval.deadline_seconds` | `900` | `SHIKIGAMI_APPROVAL_DEADLINE_SECONDS` | Maximum duration an approval or flow acknowledgement may remain open. |
+| `approval.require_outputs` | *(empty)* | `SHIKIGAMI_APPROVAL_REQUIRE_OUTPUTS` | Comma-separated output kinds (such as `local.report`) whose delivery waits for an approval. |
+| `outputs.default` | `none` | `SHIKIGAMI_OUTPUTS_DEFAULT` | The worker's output for a declaration that lists none: `none` keeps the result in the journal; `kawa.digest` publishes it to `sinks.kawa.base_url`. |
 | `practice_review.attention_recipients` | *(empty; fail closed)* | `SHIKIGAMI_PRACTICE_REVIEW_ATTENTION_RECIPIENTS` | Owned by the practice-review flow pack, so only an executable composed with it (`kikan-shikigami-*`) accepts the key; a stock executable refuses it as unknown. Comma-separated semantic-owner to Kizashi `recipient_...` mappings. Joint-owner keys are sorted and joined with `+`; duplicate canonical keys and invalid recipients refuse startup. |
 | `kafka.broker` | `127.0.0.1:9092` | `SHIKIGAMI_KAFKA_BROKER` | Bootstrap broker, `HOST:PORT`. |
 | `kafka.activity.topic` | `activity.v1` | `SHIKIGAMI_KAFKA_ACTIVITY_TOPIC` | Topic carrying `activity.v1` envelopes. |

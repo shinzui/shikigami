@@ -284,6 +284,7 @@ library
     Shikigami.ObjectiveTrackerLookup.Generated.ReadModelTable
     Shikigami.ObjectiveTrackerLookup.ReadModelHoles
     Shikigami.Output
+    Shikigami.Output.Kikan
     Shikigami.Output.Local
     Shikigami.Pack.Admin
     Shikigami.Pack.Sdk

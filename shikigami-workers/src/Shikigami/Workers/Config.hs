@@ -28,6 +28,7 @@ module Shikigami.Workers.Config
     envDirectory,
     envDirectoryRefresher,
     agentRunDeps,
+    workerOutputs,
     conversationEnv,
     persistAgentLoadReport,
     schedulerSchedules,
@@ -74,14 +75,15 @@ import Shikigami.Log qualified as Log
 import Shikigami.Objective.Runtime qualified as Objectives
 import Shikigami.Objective.Tracker.Store qualified as Tracker
 import Shikigami.Objective.Types (ObjectiveSettings)
-import Shikigami.Output (emptyOutputRegistry)
+import Shikigami.Output (DefaultOutput (..), OutputRegistry, mkOutputRegistry)
+import Shikigami.Output.Kikan (defaultKawaDigest, kawaDigestAdapter)
 import Shikigami.Pack.Setting (PackSettings)
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.Repository (RepositoryId)
 import Shikigami.RuntimePolicy
 import Shikigami.Sink (DanwaConfig, GrantSource, KanmonConfig, KawaConfig, KizashiConfig, ReiConfig)
 import Shikigami.Sink.GrantStore (withAuthority)
-import Shikigami.Sink.Http (SinkHttp)
+import Shikigami.Sink.Http (SinkHttp (..))
 import Shikigami.Telemetry.Metrics (ShikigamiMetrics)
 import Shikigami.Trigger.Schedule (CatchUpPolicy, CronSchedule, cronExpressionText, parseCron)
 import Shikigami.Trigger.Scheduler qualified as Scheduler
@@ -173,7 +175,10 @@ data WorkerEnv = WorkerEnv
     workspaceCatalog :: ![RepositoryId],
     trackers :: !(Maybe Tracker.TrackerHost),
     -- | The validated settings of the composed flow packs.
-    packSettings :: !PackSettings
+    packSettings :: !PackSettings,
+    -- | Output adapters and the default for a declaration that lists none
+    -- ('workerOutputs').
+    outputs :: !OutputRegistry
   }
 
 -- | The process-wide logger. Named rather than used as a bare selector
@@ -231,6 +236,16 @@ envApprovalNotifier WorkerEnv {approvalNotifier = notifier} = notifier
 envConversationIdleTimeout :: WorkerEnv -> Duration "conversation-idle"
 envConversationIdleTimeout WorkerEnv {conversationIdleTimeout = timeout} = timeout
 
+-- | The worker's outputs (EP-8 M3): the Kikan @kawa.digest@ adapter, and as
+-- the default either none, so the result of a declaration with no outputs
+-- stays in the journal as before, or @kawa.digest@ when @outputs.default@
+-- names it.
+workerOutputs :: SinkHttp -> KawaConfig -> Maybe Text -> Either Text OutputRegistry
+workerOutputs http kawa defaultKind =
+  mkOutputRegistry [kawaDigestAdapter http.kawa kawa] case defaultKind of
+    Just "kawa.digest" -> DefaultOutput defaultKawaDigest
+    _ -> NoDefaultOutput
+
 -- | The agent-run workflow's dependencies.
 agentRunDeps :: WorkerEnv -> AgentWorkflow.AgentRunDeps
 agentRunDeps env =
@@ -255,7 +270,7 @@ agentRunDeps env =
       AgentWorkflow.http = (.http) env,
       AgentWorkflow.hooks = AgentWorkflow.defaultAgentRunHooks,
       AgentWorkflow.codingAgents = env.codingAgents,
-      AgentWorkflow.outputs = emptyOutputRegistry,
+      AgentWorkflow.outputs = env.outputs,
       AgentWorkflow.declaredTools = AgentWorkflow.noDeclaredTools,
       AgentWorkflow.approvalPolicy = envApprovalPolicy env,
       AgentWorkflow.approvalWorkflow = ApprovalWorkflow.ApprovalWorkflowEnv {ApprovalWorkflow.notifier = envApprovalNotifier env},

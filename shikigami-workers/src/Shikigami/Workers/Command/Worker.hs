@@ -45,6 +45,7 @@ import Shikigami.Objective.Tracker.Config (TrackerEnablement (..), TrackerSettin
 import Shikigami.Objective.Tracker.Runtime qualified as TrackerRuntime
 import Shikigami.Objective.Tracker.Store qualified as Tracker
 import Shikigami.Objective.Tracker.Worker (trackerLoopRegistration)
+import Shikigami.Output (outputKindText, registeredKinds)
 import Shikigami.Prelude (Text)
 import Shikigami.Record (observedRecord, postgresRecord)
 import Shikigami.Runtime (registerRuntimeCatalog, runtimeConnectionSettings)
@@ -57,7 +58,7 @@ import Shikigami.Trust.LocalOperator.Approvals (defaultApprovalsPath)
 import Shikigami.Trust.LocalOperator.Grant (defaultStateDirectory)
 import Shikigami.Trust.LocalOperator.Host (LocalOperatorPaths (..), queuedCodingAgents)
 import Shikigami.Trust.Tier (TrustTier (..))
-import Shikigami.Workers.Config (WorkerEnv (..), directoryLoopRegistration, persistAgentLoadReport, schedulerSchedules, startProcessDirectory)
+import Shikigami.Workers.Config (WorkerEnv (..), directoryLoopRegistration, persistAgentLoadReport, schedulerSchedules, startProcessDirectory, workerOutputs)
 import Shikigami.Workers.Registry (runWorkers)
 import Shikigami.Workspace.ConfiguredHost (configuredWorkspaceHostWithTransfers, configuredWorkspaceTransfers)
 import Shikigami.Workspace.Settings (WorkspaceRepository (..), WorkspaceSettings (..))
@@ -202,9 +203,17 @@ runWorkerCmdWith packs resumeBudget config = do
         case configured of
           Right (Right ()) -> pure ()
           _ -> Exit.die "shikigami-worker: shared execution capacity is unavailable"
+        outputs <- either (\problem -> Exit.die ("shikigami-worker: invalid outputs: " <> Text.unpack problem)) pure (workerOutputs sinkHttp kawaConfig config.defaultOutputKind)
+        Log.logInfo
+          logger
+          "worker.outputs"
+          [ "registered" .= (outputKindText <$> registeredKinds outputs),
+            "default" .= maybe ("none" :: Text) id config.defaultOutputKind
+          ]
         let env =
               WorkerEnv
                 { pool = storePool,
+                  outputs,
                   appEnv,
                   inspection = consumerInspection (durationTime config.runTimeout + 30) config.inspection logger settings st storeMetrics,
                   agents,
