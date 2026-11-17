@@ -3,11 +3,12 @@
 -- Run it from the repository root, through @just api-baseline@.
 module Main (main) where
 
-import ApiBaseline.Exposure (measureExposure, renderExposure)
+import ApiBaseline.Exposure (measureExposure, neededModules, renderExposure)
 import ApiBaseline.Inventory (loadInventory, renderInventoryError)
 import ApiBaseline.Run (checkSurface, pinSurface)
 import ApiBaseline.Types
 import Control.Monad (forM, forM_, unless, when)
+import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.IO qualified as TextIO
@@ -19,7 +20,7 @@ data Command
   = Check !FilePath !Bool ![Text]
   | Pin !FilePath !Text
   | List !FilePath !(Maybe Freeze)
-  | Exposure
+  | Exposure !Bool
 
 main :: IO ()
 main =
@@ -28,7 +29,10 @@ main =
     Pin inventory surface -> runPin inventory surface
     List inventory freeze -> withInventory inventory \surfaces ->
       mapM_ (TextIO.putStrLn . (.name)) [surface | surface <- surfaces, maybe True (== surface.freeze) freeze]
-    Exposure -> measureExposure "." >>= TextIO.putStrLn . renderExposure
+    Exposure listNeeded -> do
+      exposure <- measureExposure "."
+      TextIO.putStrLn (renderExposure exposure)
+      when listNeeded (mapM_ TextIO.putStrLn (Set.toAscList (neededModules exposure)))
 
 commands :: Parser Command
 commands =
@@ -36,7 +40,7 @@ commands =
     ( command "check" (info checking (progDesc "Run every surface's check and print the report; exit 1 if an enforcing surface has a finding"))
         <> command "pin" (info pinning (progDesc "Re-pin one surface from the working tree after a deliberate, reviewed change"))
         <> command "list" (info listing (progDesc "Print the names of the registered surfaces"))
-        <> command "exposure" (info (pure Exposure) (progDesc "Measure how much of shikigami-core is exposed and how much a consumer imports"))
+        <> command "exposure" (info (Exposure <$> switch (long "needed" <> help "Also list the needed modules, one per line, sorted")) (progDesc "Measure how much of shikigami-core is exposed and how much a consumer imports"))
     )
   where
     inventory = strArgument (metavar "INVENTORY" <> help "The inventory, api-baseline/surfaces.dhall")

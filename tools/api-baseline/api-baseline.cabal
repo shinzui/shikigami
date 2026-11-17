@@ -64,6 +64,7 @@ executable api-baseline
   build-depends:
     api-baseline,
     base,
+    containers,
     optparse-applicative,
     text,
 

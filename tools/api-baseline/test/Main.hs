@@ -9,7 +9,7 @@ import ApiBaseline.Check.JournalCodec (encodeGolden, journalCodecFindings)
 import ApiBaseline.Check.KeiroGate (keiroGateFindings)
 import ApiBaseline.Check.KernelLabels (PackLabelInSpec (..), packLabels, packLabelsInSpecs, specLabels)
 import ApiBaseline.Check.OpenApi (OpenApiChange (..), openApiChanges)
-import ApiBaseline.Exposure (Exposure (..), exposureCounts, importedModules, parseExposedModules)
+import ApiBaseline.Exposure (Exposure (..), exposureCounts, importedModules, parseExposedModules, parseStanzaModules)
 import ApiBaseline.Run (pinSurface)
 import ApiBaseline.Types
 import Data.Aeson (Value, object, (.=))
@@ -258,7 +258,11 @@ exposureTests =
         importedModules "import Data.Text (Text)\nimport Shikigami.Flow.Sdk\nimport qualified Shikigami.Agent.Decl as Decl\nimport Shikigami.Log qualified as Log\n-- import Shikigami.Hidden\n"
           @?= Set.fromList ["Shikigami.Flow.Sdk", "Shikigami.Agent.Decl", "Shikigami.Log"],
       testCase "the three numbers are exposed, needed and exposed but unneeded" do
-        exposureCounts Exposure {exposed = Set.fromList ["A", "B", "C"], imported = Set.fromList ["B", "Elsewhere"]} @?= (3, 1, 2)
+        exposureCounts Exposure {exposed = Set.fromList ["A", "B", "C"], defined = Set.fromList ["A", "B", "C"], imported = Set.fromList ["B", "Elsewhere"]} @?= (3, 1, 2),
+      testCase "a module re-exported from a private library counts as exposed, and a hidden one as defined" do
+        let split = Text.unlines ["library", "  reexported-modules:", "    Shikigami.Flow.Sdk,", "", "library internal", "  visibility: private", "  exposed-modules:", "    Shikigami.Flow.Sdk", "    Shikigami.Hidden"]
+        parseExposedModules split @?= Set.fromList ["Shikigami.Flow.Sdk"]
+        parseStanzaModules "library internal" ["exposed-modules:"] split @?= Set.fromList ["Shikigami.Flow.Sdk", "Shikigami.Hidden"]
     ]
   where
     cabal =

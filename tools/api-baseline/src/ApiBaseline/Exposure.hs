@@ -7,7 +7,9 @@
 module ApiBaseline.Exposure
   ( Exposure (..),
     exposureCounts,
+    neededModules,
     parseExposedModules,
+    parseStanzaModules,
     importedModules,
     measureExposure,
     renderExposure,
@@ -24,15 +26,23 @@ import System.Directory (doesDirectoryExist, listDirectory)
 import System.FilePath (takeExtension, takeFileName, (</>))
 
 data Exposure = Exposure
-  { exposed :: !(Set Text),
+  { -- | What the main library exposes or re-exports.
+    exposed :: !(Set Text),
+    -- | Every module the core defines: the main library's own and, once it
+    -- re-exports from a private @internal@ library, that library's.
+    defined :: !(Set Text),
     imported :: !(Set Text)
   }
+
+-- | The core modules some consumer imports.
+neededModules :: Exposure -> Set Text
+neededModules exposure = exposure.defined `Set.intersection` exposure.imported
 
 -- | Exposed today, needed by a consumer, and exposed but unneeded.
 exposureCounts :: Exposure -> (Int, Int, Int)
 exposureCounts exposure = (Set.size exposure.exposed, Set.size needed, Set.size (exposure.exposed `Set.difference` needed))
   where
-    needed = exposure.exposed `Set.intersection` exposure.imported
+    needed = neededModules exposure
 
 renderExposure :: Exposure -> Text
 renderExposure exposure =
@@ -47,18 +57,24 @@ renderExposure exposure =
     (exposed, needed, unneeded) = exposureCounts exposure
     count = Text.pack . show
 
--- | The @exposed-modules@ of a Cabal file's main library stanza.
+-- | The @exposed-modules@ and @reexported-modules@ of a Cabal file's main
+-- library stanza.
 parseExposedModules :: Text -> Set Text
-parseExposedModules contents =
+parseExposedModules contents = parseStanzaModules "library" ["exposed-modules:", "reexported-modules:"] contents
+
+-- | The modules the named fields of one stanza list, such as
+-- @parseStanzaModules "library internal" ["exposed-modules:"]@.
+parseStanzaModules :: Text -> [Text] -> Text -> Set Text
+parseStanzaModules header fields contents =
   Set.fromList
-    [ Text.strip line
-    | line <- takeWhile continuation (drop 1 (dropWhile (not . field) mainLibrary)),
+    [ Text.dropWhileEnd (== ',') (Text.strip line)
+    | name <- fields,
+      line <- takeWhile continuation (drop 1 (dropWhile ((/= name) . Text.strip) stanza)),
       not (Text.null (Text.strip line))
     ]
   where
-    mainLibrary = takeWhile (not . nextStanza) (drop 1 (dropWhile ((/= "library") . Text.stripEnd) (Text.lines contents)))
+    stanza = takeWhile (not . nextStanza) (drop 1 (dropWhile ((/= header) . Text.stripEnd) (Text.lines contents)))
     nextStanza line = not (Text.null line) && not (" " `Text.isPrefixOf` line) && not ("--" `Text.isPrefixOf` line)
-    field line = Text.strip line == "exposed-modules:"
     continuation line = Text.null (Text.strip line) || "    " `Text.isPrefixOf` line
 
 -- | The @Shikigami.*@ modules a source file imports.
@@ -79,10 +95,12 @@ importedModules source =
 -- consumers.
 measureExposure :: FilePath -> IO Exposure
 measureExposure root = do
-  exposed <- parseExposedModules <$> TextIO.readFile (root </> "shikigami-core" </> "shikigami-core.cabal")
+  cabal <- TextIO.readFile (root </> "shikigami-core" </> "shikigami-core.cabal")
+  let exposed = parseExposedModules cabal
+      defined = parseStanzaModules "library" ["exposed-modules:"] cabal <> parseStanzaModules "library internal" ["exposed-modules:"] cabal
   sources <- concat <$> mapM (haskellSources . (root </>)) consumerDirectories
   imported <- Set.unions <$> mapM (fmap importedModules . TextIO.readFile) sources
-  pure Exposure {exposed, imported}
+  pure Exposure {exposed, defined, imported}
   where
     consumerDirectories =
       [ "shikigami-agent",
