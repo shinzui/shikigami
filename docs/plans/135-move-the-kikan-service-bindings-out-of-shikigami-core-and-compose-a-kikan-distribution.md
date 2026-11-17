@@ -183,6 +183,22 @@ service where one runs on this Mac.
   portability check passes against the Kikan distribution, with the default output resolved
   to `local.report` in one run and `kawa.digest` in the other. The ADR and the requirement
   mapping are published.
+  (In progress, 2026-11-17. Done: both measurement commands print 0 and the boundary check
+  enforces the rule, proven on a planted `import Rei.Client` and a planted `rei-api-client`
+  (`1f6d582f`); outbox deliveries are recorded against their run (`5bd2c94b`); ADR-131, the
+  packages guide, the outbox capability page and both requirement maps (`dd1f1ad0`). The
+  portability check ran `agents/proof/portable-note.dhall` unchanged under
+  `shikigami-agent-run` (local-operator) and through `kikan-shikigami enqueue-run` and
+  `kikan-shikigami-worker`; `record check` holds K1 to K8 for both. Stock: `run.admitted`
+  (`local.report`, composition default), `authority.decided emit_output` (operator),
+  `output.delivered`, `run.finished`. Distribution: `run.admitted` (`kawa.digest`, composition
+  default), `authority.decided emit_output` (`service:kikan-en`), `run.finished`, then the
+  publish-time `authority.decided emit_output` and `output.delivered` (step
+  `outbox-publish`). The same action is decided and delivered in both; they differ in the
+  authority, the default output, the tier label (`unspecified` for the worker) and, by
+  design since M3, the organizational delivery happening after the run under a second
+  decision. Open: the record-into-evidence projection, the stale qualification cohort and the
+  move of the three Kikan sample agents, each awaiting the user.)
 
 
 ## Surprises & Discoveries
