@@ -351,7 +351,7 @@ withWorkflowAuthority authorizer configure fixture use = Fixture.withFixture fix
   principal <- right (identityText (CompatibilityIdentity (fixtureAgentName "workspace-worker")))
   let settings = WorkspaceSettings (workspaceLocator root) [WorkspaceRepository (repositoryId "mori://fixture/repo") (workspaceLocator source) [WorkspaceRevision (repositoryBase repository) (bundleDigest expected)] (repositoryBase repository) (workspaceCoordinate "policy-1") [(workspaceCoordinate "")] [(workspaceCoordinate "dependency.txt")]] [WorkspaceGrant ((either (error . show) id . mkAgentName) "workspace-worker") (declarationCoordinate principal) (repositoryId "mori://fixture/repo") Nothing] Nothing
   host <- right (configuredWorkspaceHost env store.pool disabledDirectoryHandle authorizer (configure settings))
-  let declaration = original & #name .~ fixtureAgentName "workspace-worker" & #behavior .~ Skill (declarationCoordinate ((Text.pack skill))) & #identity .~ Just (IdentityDecl (declarationCoordinate ("workspace-principal"))) & #capabilityOverlays .~ [workspaceEditDescriptor.capability] & #sinks .~ []
+  let declaration = original & #name .~ fixtureAgentName "workspace-worker" & #behavior .~ Skill (declarationCoordinate ((Text.pack skill))) & #identity .~ Just (IdentityDecl (declarationCoordinate ("workspace-principal"))) & #capabilityOverlays .~ [workspaceEditDescriptor.capability]
       identity = CompatibilityIdentity (fixtureAgentName "workspace-worker")
       rootId = fixtureRootId "workflow-root"
       job = RunJob (fixtureAgentName "workspace-worker") identity TriggeredBySchedule now Aeson.Null (fixtureRunKey "workspace-workflow-fixture") Nothing Nothing Nothing [] Nothing Nothing (Just rootId) Nothing Nothing AgentWorkflowRoute Nothing

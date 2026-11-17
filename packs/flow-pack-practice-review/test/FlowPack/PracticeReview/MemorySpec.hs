@@ -555,7 +555,6 @@ reviewAgentDecl =
       description = "practice-review memory integration test agent",
       trigger = Event {eventType = declarationCoordinate ("architecture.practice-review.test")},
       behavior = Flow {name = declarationCoordinate "test-flow"},
-      sinks = [],
       delegates = map fixtureAgentName [],
       delegationBudget = Nothing,
       sanctionedProfile = Nothing,

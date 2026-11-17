@@ -6,6 +6,8 @@ import Control.Exception (SomeException, throwIO, try)
 import Control.Lens ((&), (.~))
 import Control.Monad (when)
 import Data.Aeson (Value, eitherDecode, encode, object, toJSON, (.=))
+import Data.Aeson qualified as Aeson
+import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Generics.Labels ()
 import Data.IORef (atomicModifyIORef', modifyIORef', newIORef, readIORef)
 import Data.Int (Int64)
@@ -58,12 +60,12 @@ import Shikigami.Objective.Capability qualified as Objectives
 import Shikigami.Objective.Command (Command (CancelObjective))
 import Shikigami.Objective.Types qualified as Objective
 import Shikigami.ObjectiveStoreSpec qualified as ObjectiveFixture
+import Shikigami.Output (OutputDecl (..))
 import Shikigami.Pack.Setting (PackSettings, packSettingsFromList)
 import Shikigami.RouterWorkflowSpec qualified as RouterFixture
 import Shikigami.Sink (GrantSource (StaticGrants))
 import Shikigami.Sink.Intent (decodeSinkIntentEvent)
-import Shikigami.Sink.Outputs (danwaConversationKind)
-import Shikigami.Sink.Types (DanwaTarget (..))
+import Shikigami.Sink.Outputs (DanwaTarget (..), danwaConversationKind)
 import Shikigami.StateRevision (initialRevision)
 import Shikigami.Trigger.Enqueue (scheduledRunJob)
 import Shikigami.WorkerSession.Capability qualified as Workers
@@ -99,8 +101,12 @@ tests fixture =
           driftCount <- run h.env (runTransaction (Tx.statement () (preparable "SELECT count(*) FROM shikigami.watchdog_findings" E.noParams (D.singleRow (D.column (D.nonNullable D.int8))))))
           driftCount @?= (1 :: Int64)
           [intent] <- traverse (right . decodeSinkIntentEvent . (.event)) =<< run h.env (Outbox.listOutbox "shinzui/shikigami")
-          intent.danwaTarget @?= Just (DanwaTarget (declarationCoordinate "trusted-thread") Nothing)
-          intent.resolvedRecipient @?= Nothing,
+          -- The finding's objective has a conversation, so the notice is a
+          -- Danwa post into that thread, named by trusted metadata only.
+          intent.output.kind @?= danwaConversationKind
+          case intent.output.config of
+            Aeson.Object fields -> KeyMap.lookup "thread" fields @?= Just (Aeson.toJSON (DanwaTarget (declarationCoordinate "trusted-thread") Nothing))
+            other -> assertFailure ("unexpected configuration " <> show other),
       testCase "committed Drift result survives AgentRun restart without another provider call" $
         withDriftSweep fixture \h deps job -> do
           crashResumeWith (1, 1, 1, 1) h.env deps job (StepName "decision-result-watchdog-drift")
@@ -239,7 +245,7 @@ withSweepCount count fixture use = withFixture fixture \env admission access -> 
                     "parkedWindowSeconds" .= (30 :: Int),
                     "coordinatorWindowSeconds" .= (60 :: Int),
                     "subjectsPerSweep" .= (9 :: Int),
-                    "delivery" .= object ["operatorRecipient" .= ("operator" :: Text), "operatorSink" .= object ["tag" .= ("DanwaConversation" :: Text), "topic" .= ("watchdog-operator" :: Text)], "conversationSink" .= object ["tag" .= ("DanwaConversation" :: Text), "topic" .= ("watchdog" :: Text)]]
+                    "delivery" .= object ["operatorRecipient" .= ("operator" :: Text), "operatorOutput" .= object ["kind" .= ("danwa.conversation" :: Text), "config" .= object ["topic" .= ("watchdog-operator" :: Text)]], "conversationOutput" .= object ["kind" .= ("danwa.conversation" :: Text), "config" .= object ["topic" .= ("watchdog" :: Text)]]]
                   ]
               )
           )
@@ -258,7 +264,7 @@ withSweepCount count fixture use = withFixture fixture \env admission access -> 
   directory <- Directory.newDirectoryHandle (Directory.staticDirectorySource [Directory.PrincipalRecord (declarationCoordinate "agent_watchdog") (declarationCoordinate "heartbeat") Directory.Active])
   _ <- right =<< Directory.refreshDirectory directory
   behavior <- newBehaviorEnv
-  let declaration = AgentFixture.decl & #behavior .~ Flow watchdogFlowName & #sinks .~ []
+  let declaration = AgentFixture.decl & #behavior .~ Flow watchdogFlowName
       deps =
         AgentFixture.testDepsWithAgents env behavior defaultAgentRunHooks [declaration]
           & #flows .~ watchdogRegistry
@@ -270,7 +276,7 @@ withSweepCount count fixture use = withFixture fixture \env admission access -> 
 
 withDriftSweep :: DatabaseFixture -> (DriftFixture.Harness -> AgentRunDeps -> RunJob -> IO a) -> IO a
 withDriftSweep fixture use = DriftFixture.withHarness fixture \h -> do
-  let declaration = RouterFixture.routerDecl & #behavior .~ Flow watchdogFlowName & #decisionModels .~ [driftAlias] & #sinks .~ []
+  let declaration = RouterFixture.routerDecl & #behavior .~ Flow watchdogFlowName & #decisionModels .~ [driftAlias]
   settings <-
     right
       ( eitherDecode
@@ -284,7 +290,7 @@ withDriftSweep fixture use = DriftFixture.withHarness fixture \h -> do
                     "subjectsPerSweep" .= (9 :: Int),
                     "driftIntervalSeconds" .= (300 :: Int),
                     "driftSubjectsPerSweep" .= (1 :: Int),
-                    "delivery" .= object ["operatorRecipient" .= ("operator" :: Text), "operatorSink" .= object ["tag" .= ("DanwaConversation" :: Text), "topic" .= ("watchdog-operator" :: Text)], "conversationSink" .= object ["tag" .= ("DanwaConversation" :: Text), "topic" .= ("watchdog" :: Text)]]
+                    "delivery" .= object ["operatorRecipient" .= ("operator" :: Text), "operatorOutput" .= object ["kind" .= ("danwa.conversation" :: Text), "config" .= object ["topic" .= ("watchdog-operator" :: Text)]], "conversationOutput" .= object ["kind" .= ("danwa.conversation" :: Text), "config" .= object ["topic" .= ("watchdog" :: Text)]]]
                   ]
               )
           )

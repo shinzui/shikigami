@@ -181,10 +181,17 @@ tests fixture = withResource (newMVar Map.empty) (const (pure ())) $ \resource -
         prompts <- w.prompts
         assertBool "protected instructions never enter Drift" (all (\value -> not ("PRIVATE_REPLAY_MARKER" `Text.isInfixOf` encoded value || "ignore previous instructions" `Text.isInfixOf` encoded value)) prompts)
         intents <- traverse (right . decodeSinkIntentEvent . (.event)) =<< owned w.base (Outbox.listOutbox "shinzui/shikigami")
-        let notices = [intent | intent <- intents, case intent.output of Aeson.Object fields -> KeyMap.member "finding" fields; _ -> False]
+        let notices = [intent | intent <- intents, case intent.result of Aeson.Object fields -> KeyMap.member "finding" fields; _ -> False]
+            addressedRecipient intent = case intent.address of
+              Aeson.Object fields -> KeyMap.lookup "recipient" fields
+              _ -> Nothing
         length notices @?= 1
-        map (.resolvedRecipient) notices @?= [Just (declarationCoordinate "operator")]
-        assertBool "no poison destination" (all (not . Text.isInfixOf "other-thread" . encoded . (.output)) notices)
+        -- The operator output in this fixture is a Danwa post: its
+        -- destination is the configured topic, and nothing in the finding
+        -- may add a thread to it.
+        map (Aeson.toJSON . (.output)) notices @?= [Aeson.object ["kind" Aeson..= ("danwa.conversation" :: Text), "config" Aeson..= Aeson.object ["topic" Aeson..= ("watchdog-advisories" :: Text)]]]
+        map addressedRecipient notices @?= [Nothing]
+        assertBool "no poison destination" (all (not . Text.isInfixOf "other-thread" . encoded . Aeson.toJSON . (.output)) notices)
         evidence resource 6 w ["notices" .= length notices, "recipient" .= ("operator" :: Text), "protectedInstructionsExcluded" .= True],
       testCase "IR-19 case 7: stopped target stays observable and only watchdog root pays" $ withWatchdog fixture \w -> do
         (snapshot, _) <- acceptedTool (w & #admission . #context . #executionRootId .~ Just w.targetRoot) False

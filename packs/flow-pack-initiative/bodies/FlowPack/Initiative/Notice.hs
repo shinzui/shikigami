@@ -18,13 +18,15 @@ import Data.Time.Format.ISO8601 (iso8601Show)
 import FlowPack.Initiative.Types
 import Shikigami.Activity.Coordinate (activityCoordinate, activityCoordinateText)
 import Shikigami.Agent.Approval (ApprovalChannel (ViaKizashi), ApprovalRequest (..))
-import Shikigami.Agent.Decl (Priority (Normal), RecipientFrom (Actor), SignalType (Notification), Sink (..))
+import Shikigami.Agent.Decl (Priority (Normal), RecipientFrom (Actor), SignalType (Notification))
 import Shikigami.Agent.DeclarationValue (DeclarationCoordinate, parseSignalImportance)
 import Shikigami.Agent.Name (AgentName, agentNameText)
 import Shikigami.Agent.Principal (AgentPrincipal, principalText)
 import Shikigami.Execution.Coordinate (executionDigestText)
+import Shikigami.Flow.Sdk (OutputDecl)
 import Shikigami.Objective.Keys (ObservedSource (..))
 import Shikigami.Objective.Types (ObjectiveId, objectiveIdText)
+import Shikigami.Sink.Outputs (KizashiSignalOutput (..), kizashiSignalOutput)
 
 nobodyRequested :: Text
 nobodyRequested = "Nobody requested this work."
@@ -84,15 +86,18 @@ admissionNotice agent principal view objective policy =
 
 -- | The closed form of an admission notice. Its recipient is passed explicitly,
 -- so the actor field here selects nothing.
-noticeSink :: DeclarationCoordinate "recipient" -> Sink
+noticeSink :: DeclarationCoordinate "recipient" -> OutputDecl
 noticeSink recipient =
-  KizashiSignal
-    { source = activityCoordinate "shinzui/shikigami",
-      signalType = Notification,
-      priority = Normal,
-      importance = either (error . Text.unpack) id (parseSignalImportance 60),
-      recipientFrom = Actor,
-      defaultRecipient = Just recipient,
-      intentTemplate = "Unrequested work was admitted under a standing policy. Nobody requested it.",
-      extraContextTags = ["unrequested-work"]
-    }
+  ( kizashiSignalOutput
+      KizashiSignalOutput
+        { source = activityCoordinate "shinzui/shikigami",
+          signalType = Notification,
+          priority = Normal,
+          importance = either (error . Text.unpack) id (parseSignalImportance 60),
+          recipientFrom = Actor,
+          defaultRecipient = Just recipient,
+          intentTemplate = "Unrequested work was admitted under a standing policy. Nobody requested it.",
+          extraContextTags = ["unrequested-work"],
+          recipient = Nothing
+        }
+  )

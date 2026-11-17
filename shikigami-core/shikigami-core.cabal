@@ -634,6 +634,7 @@ library flow-sdk
     Shikigami.Program.Decision.Confidence,
     Shikigami.Repository,
     Shikigami.Router.Decision,
+    Shikigami.Sink.Outputs,
     Shikigami.Sink.Types,
     Shikigami.Sink.Validate,
     Shikigami.StateRevision,

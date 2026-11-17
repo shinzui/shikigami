@@ -19,23 +19,18 @@
 -- tests, and any future server-side validator all ask the same question.
 module Shikigami.Sink.Validate
   ( sinkDeclarationErrors,
-    sinkErrors,
     validateKanmonRouteSegment,
   )
 where
 
-import Shikigami.Agent.Decl (AgentDecl (..), Sink)
+import Shikigami.Agent.Decl (AgentDecl (..))
 import Shikigami.Prelude
-import Shikigami.Sink.Outputs (outputConfigErrors, sinkOutput, validateKanmonRouteSegment)
+import Shikigami.Sink.Outputs (outputConfigErrors, validateKanmonRouteSegment)
 
--- | Every declaration error in an agent's sinks and Kikan outputs, in
--- declaration order.
+-- | Every declaration error in an agent's Kikan outputs, in declaration
+-- order.
 --
 -- An empty list means they are deployable — not that every field will be
 -- honored, which is what the dispatch-time warnings are for.
 sinkDeclarationErrors :: AgentDecl -> [Text]
-sinkDeclarationErrors AgentDecl {sinks, outputs} =
-  concatMap sinkErrors sinks <> concatMap outputConfigErrors outputs
-
-sinkErrors :: Sink -> [Text]
-sinkErrors = outputConfigErrors . sinkOutput
+sinkDeclarationErrors AgentDecl {outputs} = concatMap outputConfigErrors outputs

@@ -27,5 +27,4 @@ in    Agent::{
                 }
             }
       , behavior = Behavior.Flow { name = "at-risk-customer" }
-      , sinks = [] : List Schema.Sink
       }

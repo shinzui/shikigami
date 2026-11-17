@@ -11,13 +11,6 @@
     "preferEnrichment": false,
     "grounding": null
   },
-  "sinks": [
-    {
-      "tag": "KawaDigest",
-      "subjectType": "heartbeat",
-      "verb": "heartbeat.tick"
-    }
-  ],
   "delegates": [],
   "delegationBudget": null,
   "sanctionedProfile": null,
@@ -30,5 +23,14 @@
   },
   "enabled": true,
   "expertise": [],
-  "routing": null
+  "routing": null,
+  "outputs": [
+    {
+      "config": {
+        "subjectType": "heartbeat",
+        "verb": "heartbeat.tick"
+      },
+      "kind": "kawa.digest"
+    }
+  ]
 }

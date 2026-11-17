@@ -34,7 +34,7 @@ import Shibuya.Telemetry.Effect (runTracingNoop)
 import Shikigami.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
 import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Approval qualified as Approval
-import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Priority (Normal), RecipientFrom (SubjectOwner), SignalType (Reminder), Sink (..), Trigger (..), defaultDelegationBudget, defaultMemoryPolicy)
+import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Priority (Normal), RecipientFrom (SubjectOwner), SignalType (Reminder), Trigger (..), defaultDelegationBudget, defaultMemoryPolicy)
 import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
 import Shikigami.Agent.Delegate.Depth (DelegationDepth, parseDelegationDepth)
@@ -81,10 +81,11 @@ import Shikigami.Flow.Workers qualified as FlowWorkers
 import Shikigami.Memory.Access (shikigamiMemorySpace)
 import Shikigami.Memory.Scope (agentScope)
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
+import Shikigami.Output (OutputDecl (..))
 import Shikigami.Output.Kikan (kikanOutputs)
 import Shikigami.RuntimePolicy (DefaultModelRequirement (..))
 import Shikigami.Sink.GrantStore (GrantSource (StaticGrants))
-import Shikigami.Sink.Outputs (kizashiSignalKind, sinkOutput)
+import Shikigami.Sink.Outputs
 import Shikigami.Sink.Permission (defaultGrantTable)
 import Shikigami.Sink.Types (SinkOutcome (DeniedOutcome, Enqueued), SinkResult (..))
 import Shikigami.Trigger.Schedule (parseCron)
@@ -454,7 +455,7 @@ sinkFlow :: SpikeFlow
 sinkFlow =
   SpikeFlow
     { name = declarationCoordinate "sink-spike",
-      run = \_payload -> toJSON <$> emitSignal (declarationCoordinate "alert") (sinkOutput sampleKizashiSink) (object ["summary" .= ("flow alert" :: Text)])
+      run = \_payload -> toJSON <$> emitSignal (declarationCoordinate "alert") (sampleKizashiSink) (object ["summary" .= ("flow alert" :: Text)])
     }
 
 twoStepFlow :: (FlowEffects es) => Value -> Eff es Value
@@ -731,18 +732,21 @@ sampleActivity =
       idempotencyKey = activityCoordinate ("act_flow_test")
     }
 
-sampleKizashiSink :: Sink
+sampleKizashiSink :: OutputDecl
 sampleKizashiSink =
-  KizashiSignal
-    { source = activityCoordinate ("shinzui/shikigami"),
-      signalType = Reminder,
-      priority = Normal,
-      importance = either (error . show) id (parseSignalImportance (50)),
-      recipientFrom = SubjectOwner,
-      defaultRecipient = fmap declarationCoordinate (Just "recipient_x"),
-      intentTemplate = "triage this",
-      extraContextTags = ["verb:customer.risk_detected"]
-    }
+  ( kizashiSignalOutput
+      KizashiSignalOutput
+        { source = activityCoordinate ("shinzui/shikigami"),
+          signalType = Reminder,
+          priority = Normal,
+          importance = either (error . show) id (parseSignalImportance (50)),
+          recipientFrom = SubjectOwner,
+          defaultRecipient = fmap declarationCoordinate (Just "recipient_x"),
+          intentTemplate = "triage this",
+          extraContextTags = ["verb:customer.risk_detected"],
+          recipient = Nothing
+        }
+  )
 
 -- | An agent declaration that differs from 'flowAgentDecl' only in its behavior,
 -- so a behavior-validation assertion is about the behavior and nothing else.
@@ -757,7 +761,6 @@ flowAgentDecl flowAgent =
       trigger = Event {eventType = declarationCoordinate ("customer.risk_detected")},
       behavior =
         Flow {name = declarationCoordinate "test-flow"},
-      sinks = [],
       delegates = map fixtureAgentName [],
       delegationBudget = Nothing,
       sanctionedProfile = Nothing,

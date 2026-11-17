@@ -32,7 +32,6 @@ module Shikigami.Agent.Decl
     declaredToolCapabilities,
     Trigger (..),
     StreamMatch (..),
-    Sink (..),
     SignalType (..),
     Priority (..),
     RecipientFrom (..),
@@ -296,28 +295,6 @@ codingAgentStepOf = \case
     Just CodingAgentStep {provider, prompt, access, model, effort, deadlineMinutes, skills}
   _ -> Nothing
 
-data Sink
-  = KawaDigest {subjectType :: !(ActivityCoordinate "subject-kind"), verb :: !(ActivityCoordinate "verb")}
-  | KizashiSignal
-      { source :: !(ActivityCoordinate "source"),
-        signalType :: !SignalType,
-        priority :: !Priority,
-        importance :: !SignalImportance,
-        recipientFrom :: !RecipientFrom,
-        defaultRecipient :: !(Maybe (DeclarationCoordinate "recipient")),
-        intentTemplate :: !Text,
-        extraContextTags :: ![Text]
-      }
-  | ReiAction {intentionId :: !(DeclarationCoordinate "intention"), note :: !Text}
-  | DanwaConversation {topic :: !Text}
-  | ChannelEgress
-      { channel :: !(DeclarationCoordinate "channel"),
-        action :: !(DeclarationCoordinate "channel-action"),
-        conversationKey :: !(Maybe (DeclarationCoordinate "conversation"))
-      }
-  deriving stock (Eq, Show, Generic)
-  deriving anyclass (FromDhall, ToJSON, FromJSON)
-
 -- | Which sanctioned execution profile an agent run must resolve before it may
 -- open a memory session. An absent version means "the one active version" and
 -- therefore still fails if the store returns zero or multiple candidates.
@@ -333,7 +310,6 @@ data AgentDecl = AgentDecl
     description :: !Text,
     trigger :: !Trigger,
     behavior :: !Behavior,
-    sinks :: ![Sink],
     delegates :: ![AgentName],
     execution :: !(Maybe ExecutionPolicy),
     harness :: !(Maybe HarnessOverrides),

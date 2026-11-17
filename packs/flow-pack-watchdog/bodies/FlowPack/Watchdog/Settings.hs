@@ -13,15 +13,15 @@ import Data.Text (Text)
 import Data.Text qualified as Text
 import FlowPack.Watchdog.Types (WatchdogLimit, limitValue)
 import GHC.Generics (Generic)
-import Shikigami.Agent.Decl (Sink (..))
 import Shikigami.Agent.DeclarationValue (DeclarationCoordinate, declarationCoordinate)
 import Shikigami.Agent.Name (agentNameText, mkAgentName)
 import Shikigami.Agent.Principal (AgentIdentity (..), AgentPrincipal, mkAgentPrincipal, principalText)
 import Shikigami.Duration (Duration, durationTime)
 import Shikigami.Execution.Quantity (amountUnits)
 import Shikigami.Execution.Resources qualified as Resources
+import Shikigami.Flow.Sdk (OutputDecl (..))
 import Shikigami.Objective.Types (ObjectiveId)
-import Shikigami.Sink.Validate (sinkErrors)
+import Shikigami.Sink.Outputs (danwaConversationKind, outputConfigErrors)
 
 data ObservationScope = AllObjectives | SelectedObjectives !(NonEmpty ObjectiveId)
   deriving stock (Eq, Show, Generic)
@@ -78,19 +78,23 @@ instance FromJSON WatchdogAllowance where
     where
       bounded limits dimension = case Map.lookup dimension limits of Just (Resources.Limited amount) -> amountUnits amount > 0; _ -> False
 
+-- | Where findings go: the operator's output (a signal sent to
+-- @operatorRecipient@, or any output) and the Danwa output that posts into an
+-- objective's own conversation. Both are outputs (plan 135, M3), each a kind
+-- and its configuration.
 data DeliveryPolicy = DeliveryPolicy
   { operatorRecipient :: !(DeclarationCoordinate "recipient"),
-    operatorSink :: !Sink,
-    conversationSink :: !Sink
+    operatorOutput :: !OutputDecl,
+    conversationOutput :: !OutputDecl
   }
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON)
 
 instance FromJSON DeliveryPolicy where
   parseJSON = withObject "watchdog delivery" \fields -> do
-    policy <- DeliveryPolicy <$> fields .: "operatorRecipient" <*> fields .: "operatorSink" <*> fields .: "conversationSink"
-    unless (null (sinkErrors policy.operatorSink <> sinkErrors policy.conversationSink)) (fail "invalid watchdog sink")
-    case policy.conversationSink of DanwaConversation {} -> pure (); _ -> fail "watchdog conversationSink must be DanwaConversation"
+    policy <- DeliveryPolicy <$> fields .: "operatorRecipient" <*> fields .: "operatorOutput" <*> fields .: "conversationOutput"
+    unless (null (outputConfigErrors policy.operatorOutput <> outputConfigErrors policy.conversationOutput)) (fail "invalid watchdog output")
+    unless (policy.conversationOutput.kind == danwaConversationKind) (fail "watchdog conversationOutput must be a danwa.conversation output")
     pure policy
 
 data WatchdogSettings = WatchdogSettings

@@ -95,7 +95,6 @@ missingTaskAgent =
             preferEnrichment = False,
             grounding = Nothing
           },
-      sinks = [],
       delegates = map fixtureAgentName [],
       delegationBudget = Nothing,
       sanctionedProfile = Nothing,

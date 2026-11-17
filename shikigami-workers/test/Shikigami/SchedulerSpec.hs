@@ -364,7 +364,6 @@ scheduledAgent agentName cron =
       description = "scheduler spec fixture",
       trigger = Schedule {cron = cronExpressionClaim cron},
       behavior = Flow {name = declarationCoordinate "test-flow"},
-      sinks = [],
       delegates = map fixtureAgentName [],
       delegationBudget = Nothing,
       sanctionedProfile = Nothing,

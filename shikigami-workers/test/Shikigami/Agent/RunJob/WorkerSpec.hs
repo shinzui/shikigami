@@ -399,7 +399,6 @@ drainAgent =
       description = "drain lifecycle fixture",
       trigger = Event {eventType = declarationCoordinate ("fixture.event")},
       behavior = Flow {name = declarationCoordinate "test-flow"},
-      sinks = [],
       delegates = map fixtureAgentName [],
       delegationBudget = Nothing,
       sanctionedProfile = Nothing,

@@ -599,7 +599,6 @@ declFor capabilityOverlays behavior =
       description = "exercise run-local model tools",
       trigger = Event (declarationCoordinate ("test")),
       behavior,
-      sinks = [],
       delegates = map fixtureAgentName [],
       delegationBudget = Nothing,
       sanctionedProfile = Nothing,

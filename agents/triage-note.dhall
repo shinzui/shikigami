@@ -1,4 +1,6 @@
 let A = ../schema/Agent.dhall
+
+let K = ../schema/outputs/Kikan.dhall
 in  A.Agent::{
     , name = "triage-note"
     , behavior = A.Behavior.Skill { path = "agents/skills/triage-note" }
@@ -11,13 +13,13 @@ in  A.Agent::{
               , verbs = [] : List Text
               }
           }
-    , sinks =
-        [ A.Sink.KizashiSignal
+    , outputs =
+        [ K.kizashiSignal K.KizashiSignal::
             { source = "shinzui/shikigami"
-            , signalType = A.SignalType.TaskCandidate
-            , priority = A.Priority.Normal
+            , signalType = K.SignalType.TaskCandidate
+            , priority = K.Priority.Normal
             , importance = 45
-            , recipientFrom = A.RecipientFrom.SubjectOwner
+            , recipientFrom = K.RecipientFrom.SubjectOwner
             , defaultRecipient = Some "person:nadeem"
             , intentTemplate = "triage this ticket"
             , extraContextTags = [ "verb:ticket.received", "subject:ticket" ]

@@ -130,7 +130,7 @@ agentsInfo =
                   url = config.server
               callServer url ((.show) (agentsClient credential) name) >>= \case
                 Right (Agent.AgentFound view) ->
-                  mapM_ (putStrLn . Text.unpack) ["name         " <> view.name, "enabled      " <> boolText view.enabled, "trigger      " <> view.trigger, "behavior     " <> view.behavior, "sinks        " <> Text.intercalate "," view.sinks, "lifecycle    " <> view.lifecycle, "runnable     " <> boolText view.runnable]
+                  mapM_ (putStrLn . Text.unpack) ["name         " <> view.name, "enabled      " <> boolText view.enabled, "trigger      " <> view.trigger, "behavior     " <> view.behavior, "outputs      " <> (if null view.outputs then "(composition default)" else Text.intercalate "," view.outputs), "lifecycle    " <> view.lifecycle, "runnable     " <> boolText view.runnable]
                 Right result -> hPutStrLn stderr (show result) >> exitFailure
                 Left _ -> hPutStrLn stderr "shikigami-client: request failed" >> exitFailure,
             named

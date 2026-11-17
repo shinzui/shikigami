@@ -9,7 +9,7 @@ import Data.Map.Strict qualified as Map
 import FlowPack.Watchdog.Settings (DeliveryPolicy (..))
 import FlowPack.Watchdog.Types (FindingView (..))
 import Shikigami.Agent.DeclarationValue (declarationCoordinate)
-import Shikigami.Flow.Sdk (AddressedOutput (..), DanwaTarget (..), inThread, sinkOutput, toRecipient)
+import Shikigami.Flow.Sdk (AddressedOutput (..), DanwaTarget (..), inThread, toRecipient)
 import Shikigami.Objective.Types (ConversationRef, ObjectiveId, conversationRefText)
 
 -- | A finding on an objective that has a conversation is posted into it;
@@ -17,8 +17,8 @@ import Shikigami.Objective.Types (ConversationRef, ObjectiveId, conversationRefT
 -- delivery policy and the objective's own record, never from the finding.
 address :: DeliveryPolicy -> Map ObjectiveId ConversationRef -> FindingView -> AddressedOutput
 address policy conversations finding = case finding.objective >>= (`Map.lookup` conversations) of
-  Just conversation -> AddressedOutput (inThread (DanwaTarget (declarationCoordinate (conversationRefText conversation)) Nothing) (sinkOutput policy.conversationSink)) (renderNotice finding)
-  Nothing -> AddressedOutput (toRecipient policy.operatorRecipient (sinkOutput policy.operatorSink)) (renderNotice finding)
+  Just conversation -> AddressedOutput (inThread (DanwaTarget (declarationCoordinate (conversationRefText conversation)) Nothing) policy.conversationOutput) (renderNotice finding)
+  Nothing -> AddressedOutput (toRecipient policy.operatorRecipient policy.operatorOutput) (renderNotice finding)
 
 renderNotice :: FindingView -> Value
 renderNotice finding = object ["finding" .= finding.findingId, "objective" .= finding.objective, "subject" .= finding.subject, "kind" .= finding.kind, "evidence" .= finding.evidence, "window" .= finding.window, "limit" .= finding.limit]

@@ -1,4 +1,6 @@
 let A = ../schema/Agent.dhall
+
+let K = ../schema/outputs/Kikan.dhall
 in  A.Agent::{
     , name = "heartbeat"
     , behavior =
@@ -8,5 +10,5 @@ in  A.Agent::{
           , grounding = None Text
           }
     , trigger = A.Trigger.Schedule { cron = "* * * * *" }
-    , sinks = [ A.Sink.KawaDigest { subjectType = "heartbeat", verb = "heartbeat.tick" } ]
+    , outputs = [ K.kawaDigest { subjectType = "heartbeat", verb = "heartbeat.tick" } ]
     }

@@ -71,8 +71,8 @@ import Shikigami.Agent.Decl qualified as Agent
 import Shikigami.Agent.Name (AgentName)
 import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.Directory (DirectoryHandle)
-import Shikigami.Flow.Sdk (Eff, sinkOutput, toRecipient, (:>))
-import Shikigami.Output (OutputRegistry)
+import Shikigami.Flow.Sdk (Eff, toRecipient, (:>))
+import Shikigami.Output (OutputDecl, OutputRegistry)
 import Shikigami.Pack.Sdk (IOE, Store, interpret, runTransaction)
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.Repository (RepoRef (..), relativePathText, repositoryIdText, revisionText)
@@ -83,6 +83,7 @@ import Shikigami.Sink.Intent
     prepareSinkIntentWithMessageId,
     preparedSinkResult,
   )
+import Shikigami.Sink.Outputs (KizashiSignalOutput (..), kizashiSignalOutput)
 
 data PracticeReviewAttentionEnv = PracticeReviewAttentionEnv
   { agent :: !AgentName,
@@ -233,7 +234,7 @@ reserveAttention PracticeReviewAttentionEnv {agent, identity, runId, occurredAt,
       AttentionProjection {key, reviewId = projectionReviewId} = projection
       messageId = "practice-review-attention:" <> attentionKeyText key
       output = attentionOutput projection
-      directed = toRecipient (Agent.declarationCoordinate (attentionRecipientText projection.recipient)) (sinkOutput (attentionSink projection))
+      directed = toRecipient (Agent.declarationCoordinate (attentionRecipientText projection.recipient)) (attentionSink projection)
   prepared <-
     liftIO
       ( prepareSinkIntentWithMessageId
@@ -303,18 +304,21 @@ attentionOutput AttentionProjection {key = attentionKey, reviewId, intent} =
       "activity_ref" .= ("activity://practice-review/" <> reviewId)
     ]
 
-attentionSink :: AttentionProjection -> Agent.Sink
+attentionSink :: AttentionProjection -> OutputDecl
 attentionSink AttentionProjection {intent} =
-  Agent.KizashiSignal
-    { Agent.source = Agent.activityCoordinate "shinzui/shikigami",
-      Agent.signalType = Agent.TaskCandidate,
-      Agent.priority = Agent.High,
-      Agent.importance = either (error . show) id (Agent.parseSignalImportance 8),
-      Agent.recipientFrom = Agent.Actor,
-      Agent.defaultRecipient = Nothing,
-      Agent.intentTemplate = intent,
-      Agent.extraContextTags = ["practice-review"]
-    }
+  ( kizashiSignalOutput
+      KizashiSignalOutput
+        { source = Agent.activityCoordinate "shinzui/shikigami",
+          signalType = Agent.TaskCandidate,
+          priority = Agent.High,
+          importance = either (error . show) id (Agent.parseSignalImportance 8),
+          recipientFrom = Agent.Actor,
+          defaultRecipient = Nothing,
+          intentTemplate = intent,
+          extraContextTags = ["practice-review"],
+          recipient = Nothing
+        }
+  )
 
 insertAttentionTx :: AttentionProjection -> Text -> UTCTime -> Tx.Transaction Bool
 insertAttentionTx projection outboxMessageId createdAt =

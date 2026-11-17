@@ -8,5 +8,4 @@ in  A.Agent::{
           , grounding = None Text
           }
     , trigger = A.Trigger.Schedule { cron = "* * * * *" }
-    , sinks = [] : List A.Sink
     }

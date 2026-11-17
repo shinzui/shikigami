@@ -59,7 +59,7 @@ tests =
         mode <- fileMode <$> getFileStatus (Text.unpack first'.location)
         intersectFileModes mode 0o077 @?= 0,
       testCase "a declaration with no outputs loads with none, and the helper's output decodes" do
-        loaded <- loadAgent "../agents/heartbeat.dhall"
+        loaded <- loadAgent "../agents/proof/portable-note.dhall"
         decl <- either (assertFailure . show) pure loaded
         decl.outputs @?= [],
       testCase "the local inbox holds one private ask per review and nothing after removal" $ withDirectory \root -> do

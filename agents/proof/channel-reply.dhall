@@ -1,5 +1,7 @@
 let A = ../../schema/Agent.dhall
 
+let K = ../../schema/outputs/Kikan.dhall
+
 in  A.Agent::{
     , name = "channel-reply"
     , behavior =
@@ -9,8 +11,8 @@ in  A.Agent::{
           , grounding = None Text
           }
     , trigger = A.Trigger.Event { eventType = "channel.message_received" }
-    , sinks =
-        [ A.Sink.ChannelEgress
+    , outputs =
+        [ K.channelEgress K.ChannelEgress::
             { channel = "intercom"
             , action = "reply_to_conversation"
             , conversationKey = None Text

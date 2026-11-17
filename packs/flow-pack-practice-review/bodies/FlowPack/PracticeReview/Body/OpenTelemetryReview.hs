@@ -94,9 +94,10 @@ import FlowPack.PracticeReview.Types
   )
 import Kioku.Id (MemoryId, idText)
 import Shikigami.Agent.Name qualified as AgentName
-import Shikigami.Flow.Sdk (Eff, Sink (..), SinkCapability, SinkOutcome (Enqueued), SinkResult (..), activityCoordinate, declarationCoordinate, emitSignal, sinkOutput, (:>))
+import Shikigami.Flow.Sdk (Eff, OutputDecl, SinkCapability, SinkOutcome (Enqueued), SinkResult (..), activityCoordinate, declarationCoordinate, emitSignal, (:>))
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.Repository (RepositoryId, repositoryIdText)
+import Shikigami.Sink.Outputs (KawaDigestOutput (..), kawaDigestOutput)
 
 opentelemetryPracticeReviewFlowName :: Text
 opentelemetryPracticeReviewFlowName = "opentelemetry-practice-review"
@@ -214,7 +215,7 @@ reviewTrigger validatedTrigger = do
   remembered <- rememberProvisional reference (priorActiveMemoryId trigger recalled) validatedVerdict
   memoryId <- either (failFlow . ("practice-review provisional memory failed: " <>) . Text.pack . show) pure remembered
   let verdict = validatedVerdictValue validatedVerdict
-  history <- emitSignal (declarationCoordinate "practice-review-history") (sinkOutput reviewHistorySink) (reviewHistoryPayload verdict)
+  history <- emitSignal (declarationCoordinate "practice-review-history") (reviewHistorySink) (reviewHistoryPayload verdict)
   attention <- case (history, actionable verdict) of
     (SinkResult {outcome = Enqueued _}, True) -> Just <$> requestPracticeReviewAttention validatedVerdict
     _ -> pure Nothing
@@ -247,7 +248,7 @@ resolveAuthorized envelope = do
   resolved <- resolveReview provisionalId validatedResolution
   ResolvedPracticeReview {memoryId, resolution = allocatedResolution} <- either (failFlow . ("practice-review resolution memory failed: " <>) . Text.pack . show) pure resolved
   let resolution = validatedResolutionValue allocatedResolution
-  history <- emitSignal (declarationCoordinate "practice-review-resolution-history") (sinkOutput resolutionHistorySink) (resolutionHistoryPayload verdict resolution)
+  history <- emitSignal (declarationCoordinate "practice-review-resolution-history") (resolutionHistorySink) (resolutionHistoryPayload verdict resolution)
   pure
     ( Aeson.object
         [ "kind" .= ("practice-review-resolution" :: Text),
@@ -394,11 +395,11 @@ citations = fmap (.citation)
 allCitations :: EvidenceBundle -> [EvidenceItem]
 allCitations EvidenceBundle {target, references, upstream} = citations (target <> references <> upstream)
 
-reviewHistorySink :: Sink
-reviewHistorySink = KawaDigest {subjectType = activityCoordinate "practice-review", verb = activityCoordinate "practice-review.completed"}
+reviewHistorySink :: OutputDecl
+reviewHistorySink = (kawaDigestOutput KawaDigestOutput {subjectType = activityCoordinate "practice-review", verb = activityCoordinate "practice-review.completed"})
 
-resolutionHistorySink :: Sink
-resolutionHistorySink = KawaDigest {subjectType = activityCoordinate "practice-review", verb = activityCoordinate "practice-review.resolved"}
+resolutionHistorySink :: OutputDecl
+resolutionHistorySink = (kawaDigestOutput KawaDigestOutput {subjectType = activityCoordinate "practice-review", verb = activityCoordinate "practice-review.resolved"})
 
 reviewHistoryPayload :: PracticeReviewVerdict -> Value
 reviewHistoryPayload verdict@PracticeReviewVerdict {reviewId, targetEvidence, referenceEvidence, upstreamEvidence} =

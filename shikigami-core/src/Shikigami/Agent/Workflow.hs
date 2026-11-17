@@ -211,7 +211,6 @@ import Shikigami.Sink.Intent
     prepareSinkIntent,
     preparedSinkResult,
   )
-import Shikigami.Sink.Outputs (declarationOutputs)
 import Shikigami.Telemetry.TraceContext qualified as TraceContext
 import Shikigami.WorkerSession.Capability qualified as WorkerCapability
 import Shikigami.WorkerSession.Handoff qualified as WorkerHandoff
@@ -403,7 +402,7 @@ recordAdmission deps job decl = do
             root = executionRootIdText <$> job.executionRootId,
             timeout = durationTime deps.runTimeout,
             lifecycle = RunRecord.lifecycleLabel lifecycle,
-            outputs = resolveOutputs deps.outputs (declarationOutputs decl)
+            outputs = resolveOutputs deps.outputs decl.outputs
           }
   appendRunEntry deps job (RunRecord.admissionEntry admission) >>= \case
     Right () -> pure ()
@@ -976,7 +975,7 @@ deliverOutputs ::
   Value ->
   Eff (Workflow : AppEffects) (Either AgentRunFailure ())
 deliverOutputs deps policy sid job decl output = do
-  resolved <- runStep deps (StepName "resolve-outputs") (pure (resolveOutputs deps.outputs (declarationOutputs decl)))
+  resolved <- runStep deps (StepName "resolve-outputs") (pure (resolveOutputs deps.outputs decl.outputs))
   let listed = zip [0 :: Int ..] (resolvedOutputList resolved)
   approvals <- traverse approve listed
   case sequence approvals of

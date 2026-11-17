@@ -167,7 +167,6 @@ fixtureDecl =
       description = "",
       trigger = Event {eventType = declarationCoordinate "local.maintenance.requested"},
       behavior = Skill {path = declarationCoordinate "agents/skills/local-maintainer"},
-      sinks = [],
       delegates = [],
       execution = Nothing,
       harness = Nothing,

@@ -2,6 +2,9 @@
 
 ## 2026-11-17
 
+* **Addition**: FRIC-98 records detour tooling friction with https://cabal.readthedocs.io/: cabal build all leaves test suites unbuilt, so cabal list-bin runs stale test binaries
+
+
 * **Addition**: FRIC-97 records nuisance tooling friction with mori://shinzui/shikigami: A worker logs light-command approval timers as unknown timer kinds
 
 

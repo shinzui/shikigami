@@ -12,7 +12,7 @@ tests =
   testGroup
     "agent wire contract"
     [ testCase "agent view bytes are stable" $
-        encode fixture @?= "{\"behavior\":\"skill\",\"delegates\":[],\"description\":\"A\",\"enabled\":true,\"lifecycle\":\"unverified\",\"name\":\"a\",\"principalId\":null,\"runnable\":true,\"sinks\":[],\"trigger\":\"event\"}",
+        encode fixture @?= "{\"behavior\":\"skill\",\"delegates\":[],\"description\":\"A\",\"enabled\":true,\"lifecycle\":\"unverified\",\"name\":\"a\",\"outputs\":[],\"principalId\":null,\"runnable\":true,\"trigger\":\"event\"}",
       testCase "empty connection bytes are stable" $
         encode (Connection [] (PageInfo False False Nothing Nothing) :: Connection AgentView)
           @?= "{\"edges\":[],\"pageInfo\":{\"hasNextPage\":false,\"hasPreviousPage\":false,\"startCursor\":null,\"endCursor\":null}}",

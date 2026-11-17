@@ -16,5 +16,4 @@ in  A.Agent::{
               , verbs = [] : List Text
               }
           }
-    , sinks = [] : List A.Sink
     }

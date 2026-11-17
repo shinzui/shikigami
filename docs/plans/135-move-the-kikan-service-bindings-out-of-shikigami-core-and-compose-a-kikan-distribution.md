@@ -103,7 +103,8 @@ service where one runs on this Mac.
   `mori://shinzui/kikan-en/improvement-requests/IR-5` (kikan-en commit 045171f, "Authorize
   a coding-agent launch per action"; not pushed).)
 - [ ] M3: (in progress 2026-11-17: stage a done — the kernel pipeline addresses outputs
-  and dispatches through adapters, still in core; stages c, b with d, and e remain) The five output adapters and the two approval channels run from the binding, and
+  and dispatches through adapters, still in core (`dda65c61`); stage c done — `sinks`
+  left the declaration; stages b with d, and e remain) The five output adapters and the two approval channels run from the binding, and
   the distribution registers `kawa.digest` as its default output. A declared agent's outputs
   reach their services through the distribution worker, a declaration with no outputs gets a
   Kawa digest, and the stock composition refuses a declaration naming a Kikan output kind at
@@ -425,6 +426,28 @@ These came from read-only research on 2026-11-15, before implementation.
   `keiro.keiro_outbox` rows and 0 `shikigami.sink_deliveries` rows); no external wire
   consumer; `git tag --list` prints nothing. The MasterPlan records no EP-11 baseline, so
   the exception stands and the old intent bytes are not decoded.
+  Date: 2026-11-17
+- Decision: (M3 stage c, 2026-11-17) `sinks` and the `Sink` union leave
+  `schema/Agent.dhall` and `Shikigami.Agent.Decl`, together with the three Kizashi enums
+  (`SignalType`, `Priority`, `RecipientFrom`) in the Dhall schema; the journal codec of
+  `AgentDecl` loses the `sinks` key. A declaration lists Kikan outputs in `outputs`,
+  built with `schema/outputs/Kikan.dhall` (`kawaDigest`, `kizashiSignal` over
+  `KizashiSignal::{..}`, `reiAction`, `danwaConversation`, `channelEgress` over
+  `ChannelEgress::{..}`), which renders each kind's JSON configuration; stage b moves that
+  file to the binding. Packs build the typed configurations of `Shikigami.Sink.Outputs`,
+  re-exported by `flow-sdk` until the binding owns them. The watchdog's delivery policy
+  setting carries outputs (`operatorOutput`, `conversationOutput`, each `{kind, config}`)
+  in place of `operatorSink` and `conversationSink`. The HTTP API's agent view reports
+  `outputs` (the declared output kinds; empty means the composition default) in place of
+  `sinks`. `ChannelEgressOutput` always encodes `conversationKey` (null when absent), so a
+  configuration built in Haskell and one rendered by the Dhall helper are equal values.
+  Rationale: the user's decision above; the first freeze must not carry Kikan
+  constructors. Pre-release recheck as for stage a (same day, same facts).
+  Date: 2026-11-17
+- Decision: (M3 stage c) Stage a's commit was verified with stale binaries for the
+  workers, server, agent and pack suites: `cabal build all` here does not build test
+  suites, and those suites did not compile at `dda65c61` (FRIC-98). Stage c fixes them and
+  every suite is now built by name before it runs.
   Date: 2026-11-17
 - Decision: The development stubs (`stub-kawa`, `stub-kanmon`, `publish-fixture`) move to
   the distribution's admin executable.

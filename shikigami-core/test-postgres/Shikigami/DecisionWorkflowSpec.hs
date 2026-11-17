@@ -31,7 +31,7 @@ import Keiro.Workflow (StepName (..), WorkflowId (..), WorkflowOutcome (..), Wor
 import Keiro.Workflow.Child.Schema (lookupChildrenOfParent)
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
 import Shikigami.Activity.Coordinate
-import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Priority (Normal), ProfileRequirement (..), RecipientFrom (SubjectOwner), RouterConfidence (RoutingHigh), SignalType (Reminder), Sink (..))
+import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Priority (Normal), ProfileRequirement (..), RecipientFrom (SubjectOwner), RouterConfidence (RoutingHigh), SignalType (Reminder))
 import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Delegate (delegatedWorkflowIdV2)
 import Shikigami.Agent.ExpertiseKey (ExpertiseKey, parseExpertiseKey)
@@ -73,7 +73,7 @@ import Shikigami.Router.Catalog (CandidateCatalog (..))
 import Shikigami.Router.Decision (RouteDecision (..), RouteOutcome (..), RouteSelection (..))
 import Shikigami.RouterWorkflowSpec qualified as Fixture
 import Shikigami.Sink (GrantSource (StaticGrants))
-import Shikigami.Sink.Outputs (kizashiSignalKind)
+import Shikigami.Sink.Outputs
 import Shikigami.Trigger.Schedule (parseCron)
 import Shikigami.Workflow.Versioning (shikigamiWorkflowRunOptions)
 import Shikumi.Program (Program (FMap))
@@ -198,7 +198,7 @@ tests fixture =
         withRuntime fixture \app store behavior -> do
           (handler, observed) <- scriptedProvider Investigate returned
           hooks <- crashAt False "record"
-          let withSink = (declaration & #sinks .~ ([KizashiSignal (activityCoordinate ("shinzui/shikigami")) Reminder Normal (either (error . show) id (parseSignalImportance (50))) SubjectOwner (fmap declarationCoordinate ((Just "recipient"))) "decision complete" []]))
+          let withSink = (declaration & #outputs .~ ([kizashiSignalOutput (KizashiSignalOutput (activityCoordinate ("shinzui/shikigami")) Reminder Normal (either (error . show) id (parseSignalImportance (50))) SubjectOwner (fmap declarationCoordinate ((Just "recipient"))) "decision complete" [] Nothing)]))
               runtime = (deps app store behavior handler (fixtureDecisionServices catalog)) {Agent.hooks = hooks, Agent.agents = [withSink, Fixture.successSpecialist "first"], Agent.grants = StaticGrants (Map.singleton (compatibilityIdentity (either (error . show) id (mkAgentName "router"))) (Set.singleton kizashiSignalKind))}
               request = job "decision-completed-replay"
           first <- try @SomeException (Agent.runAgentRunWorkflow runtime request)

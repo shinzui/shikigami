@@ -8,7 +8,6 @@ in  A.Agent::{
           , grounding = None Text
           }
     , trigger = A.Trigger.Event { eventType = "proof.research" }
-    , sinks = [] : List A.Sink
     , delegates = [ "web-researcher", "code-researcher" ]
     , delegationBudget = Some 8
     }

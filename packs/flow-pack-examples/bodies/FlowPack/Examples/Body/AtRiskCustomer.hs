@@ -31,6 +31,7 @@ import Data.Text qualified as Text
 import GHC.Generics (Generic)
 import Kioku.Api.Types (MemoryRecord (..))
 import Shikigami.Flow.Sdk
+import Shikigami.Sink.Outputs (KizashiSignalOutput (..), kizashiSignalOutput)
 
 atRiskCustomerFlowName :: DeclarationCoordinate "flow"
 atRiskCustomerFlowName = declarationCoordinate "at-risk-customer"
@@ -72,7 +73,7 @@ atRiskCustomerFlow payload = do
   if (.level) verdict /= HighRisk
     then pure (toJSON verdict)
     else do
-      _ <- emitSignal (declarationCoordinate "examples-alert") (sinkOutput (alertFor verdict activity)) (toJSON verdict)
+      _ <- emitSignal (declarationCoordinate "examples-alert") ((alertFor verdict activity)) (toJSON verdict)
       ack <- awaitAck (StepName "examples-await-ack") (ackRequest verdict activity)
       case ack of
         Acknowledged answer -> do
@@ -82,7 +83,7 @@ atRiskCustomerFlow payload = do
           _ <- remember (declarationCoordinate "examples-declined") (declinedNote verdict reason)
           pure (declinedValue verdict reason)
         TimedOut -> do
-          _ <- emitSignal (declarationCoordinate "examples-escalate") (sinkOutput (escalationFor verdict activity)) (toJSON verdict)
+          _ <- emitSignal (declarationCoordinate "examples-escalate") ((escalationFor verdict activity)) (toJSON verdict)
           _ <- remember (declarationCoordinate "examples-escalated") (escalatedNote verdict)
           pure (escalatedValue verdict)
 
@@ -131,7 +132,7 @@ riskQuery :: ActivityEnvelope -> MemoryQuery
 riskQuery ActivityEnvelope {subject} =
   MemoryQuery ("customer risk history for " <> activityCoordinateText ((.subjectId) subject))
 
-alertFor :: RiskVerdict -> ActivityEnvelope -> Sink
+alertFor :: RiskVerdict -> ActivityEnvelope -> OutputDecl
 alertFor verdict activity =
   riskSignal
     "Relationship at risk: {verdict.rationale}"
@@ -143,7 +144,7 @@ alertFor verdict activity =
       "ticket:" <> activityCoordinateText ((.ticketId) verdict)
     ]
 
-escalationFor :: RiskVerdict -> ActivityEnvelope -> Sink
+escalationFor :: RiskVerdict -> ActivityEnvelope -> OutputDecl
 escalationFor verdict activity =
   riskSignal
     "Escalate unacknowledged at-risk customer: {verdict.rationale}"
@@ -155,18 +156,21 @@ escalationFor verdict activity =
       "ticket:" <> activityCoordinateText ((.ticketId) verdict)
     ]
 
-riskSignal :: Text -> Priority -> SignalImportance -> [Text] -> Sink
+riskSignal :: Text -> Priority -> SignalImportance -> [Text] -> OutputDecl
 riskSignal intentTemplate priority importance extraContextTags =
-  KizashiSignal
-    { source = activityCoordinate "shinzui/shikigami",
-      signalType = Alert,
-      priority,
-      importance,
-      recipientFrom = AreaOwner,
-      defaultRecipient = Just (declarationCoordinate "role_relationship_owner"),
-      intentTemplate,
-      extraContextTags
-    }
+  ( kizashiSignalOutput
+      KizashiSignalOutput
+        { source = activityCoordinate "shinzui/shikigami",
+          signalType = Alert,
+          priority,
+          importance,
+          recipientFrom = AreaOwner,
+          defaultRecipient = Just (declarationCoordinate "role_relationship_owner"),
+          intentTemplate,
+          extraContextTags,
+          recipient = Nothing
+        }
+  )
 
 activitySubjectType :: ActivityEnvelope -> Text
 activitySubjectType ActivityEnvelope {subject = Subject {kind = subjectType}} = activityCoordinateText subjectType

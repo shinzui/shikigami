@@ -13,7 +13,6 @@ in  A.Agent::{
     , description = "Create and progress one objective from a flow."
     , identity = Some { principal = "agent_objective_example" }
     , behavior = A.Behavior.Flow { name = "objective-example" }
-    , sinks = [] : List A.Sink
     , memory =
       { scope = A.MemoryScope.AgentScope
       , recallLimit = 1

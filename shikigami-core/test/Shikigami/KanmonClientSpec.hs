@@ -34,7 +34,7 @@ import Shikigami.Sink.Coordinate (parseSinkSession, zeroSinkOrdinal)
 import Shikigami.Sink.GrantStore (GrantSource (StaticGrants))
 import Shikigami.Sink.Http (HttpEnv (..), HttpFailure (..), HttpFailureReason (..), SinkCredentials (..), SinkHttp (..), credentialsFromConfig, newSinkManager)
 import Shikigami.Sink.KanmonClient
-import Shikigami.Sink.Outputs (ChannelEgressOutput (..), channelEgressKind, channelEgressOutput)
+import Shikigami.Sink.Outputs
 import Shikigami.Sink.Types (OutboxDelivery (..))
 import Shikigami.Sink.Wire (EgressActionRequest (..), EgressActionResponse (..))
 import Shikigami.Trigger.Schedule (parseCron)

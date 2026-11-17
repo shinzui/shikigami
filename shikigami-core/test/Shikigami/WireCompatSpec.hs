@@ -48,7 +48,7 @@ import Shikigami.Fixture.ExecutionIdentity (fixtureRootId)
 import Shikigami.RunJobs qualified as RunJobs
 import Shikigami.Sink.Coordinate (parseSinkSession, zeroSinkOrdinal)
 import Shikigami.Sink.Intent (SinkIntent (..))
-import Shikigami.Sink.Outputs (KizashiSignalOutput (..), kizashiSignalKind, kizashiSignalOutput, reiActionKind)
+import Shikigami.Sink.Outputs
 import Shikigami.Sink.Types
   ( SinkOutcome (Delivered, SkippedLifecycle, Stubbed),
     SinkResult (..),

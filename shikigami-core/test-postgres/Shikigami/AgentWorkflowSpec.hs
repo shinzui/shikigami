@@ -66,7 +66,7 @@ import Shikigami.Agent.Approval.Notification qualified as ApprovalNotification
 import Shikigami.Agent.Approval.Workflow qualified as ApprovalWorkflow
 import Shikigami.Agent.Conversation qualified as Conversation
 import Shikigami.Agent.Conversation.SessionIndex qualified as SessionIndex
-import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), IdentityDecl (..), ProfileRequirement (..), RecordPolicy (..), Sink (..), Trigger (..), defaultDelegationBudget, defaultMemoryPolicy, mkDelegationBudget, mkRecallLimit)
+import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), IdentityDecl (..), ProfileRequirement (..), RecordPolicy (..), Trigger (..), defaultDelegationBudget, defaultMemoryPolicy, mkDelegationBudget, mkRecallLimit)
 import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Delegate (awaitAllDelegated, awaitDelegated, cancelSiblingsOnFailure, delegate, delegatedWorkflowIdV2)
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..), DelegationError (..))
@@ -134,7 +134,7 @@ import Shikigami.Memory.Access (agentActor, shikigamiMemorySpace)
 import Shikigami.Memory.AliasStore qualified as AliasStore
 import Shikigami.Memory.Scope (agentScope, legacyAgentScope)
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
-import Shikigami.Output (emptyOutputRegistry)
+import Shikigami.Output (OutputDecl (..), emptyOutputRegistry)
 import Shikigami.Output.Kikan (KikanServices (..), kikanOutputs)
 import Shikigami.Pack.Setting (noPackSettings)
 import Shikigami.Record (RecordEvent (..), memoryRecord, recordEntry, recordKindText, unspecifiedTier)
@@ -145,7 +145,7 @@ import Shikigami.RunJobs qualified as RunJobs
 import Shikigami.Sink (GrantSource (DbGrants, StaticGrants), defaultGrantTable)
 import Shikigami.Sink.Config (DanwaConfig (..), KanmonConfig (..), KawaConfig (..), KizashiConfig (..), ReiConfig (..))
 import Shikigami.Sink.GrantStore (checkGrant, reconcileGrantPrincipal, revokeGrant, upsertGrant)
-import Shikigami.Sink.Outputs (channelEgressKind, danwaConversationKind, kawaDigestKind, kizashiSignalKind, reiActionKind)
+import Shikigami.Sink.Outputs
 import Shikigami.Trigger.Enqueue qualified as Enqueue
 import Shikigami.Trigger.Schedule (parseCron)
 import Shikigami.Workflow.Registry qualified as Registry
@@ -221,7 +221,7 @@ tests databaseFixture =
                     )
             behaviorEnv <- newBehaviorEnvWithTraceSink (Just traceSink)
             let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
-                declaration = capabilityDecl "overlay-lifecycle" (Skill {path = declarationCoordinate ("../agents/skills/triage-note")}) [workspaceReadId] (Just overlayIdentity) [KawaDigest {subjectType = activityCoordinate ("overlay"), verb = activityCoordinate ("overlay.read")}]
+                declaration = capabilityDecl "overlay-lifecycle" (Skill {path = declarationCoordinate ("../agents/skills/triage-note")}) [workspaceReadId] (Just overlayIdentity) [(kawaDigestOutput KawaDigestOutput {subjectType = activityCoordinate ("overlay"), verb = activityCoordinate ("overlay.read")})]
                 hooks =
                   AgentRunHooks
                     { beforeStepBody = \stepName -> recordCapabilityEvent events ("before:" <> unStepName stepName),
@@ -2576,20 +2576,19 @@ descriptorCapability CapabilityOverlay.CapabilityDescriptor {CapabilityOverlay.c
 overlayIdentity :: IdentityDecl
 overlayIdentity = IdentityDecl {principal = declarationCoordinate ("principal_overlay_test")}
 
-capabilityDecl :: Text -> Behavior -> [CapabilityOverlay.CapabilityId] -> Maybe IdentityDecl -> [Sink] -> AgentDecl
+capabilityDecl :: Text -> Behavior -> [CapabilityOverlay.CapabilityId] -> Maybe IdentityDecl -> [OutputDecl] -> AgentDecl
 capabilityDecl agentName agentBehavior overlays agentIdentity agentSinks =
   AgentDecl
     { name = fixtureAgentName agentName,
       description = "capability overlay workflow test agent",
       trigger = Event {eventType = declarationCoordinate ("test")},
       behavior = agentBehavior,
-      sinks = agentSinks,
+      outputs = agentSinks,
       delegates = map fixtureAgentName [],
       delegationBudget = Nothing,
       sanctionedProfile = Nothing,
       capabilityOverlays = overlays,
       tools = [],
-      outputs = [],
       identity = agentIdentity,
       memory = defaultMemoryPolicy,
       enabled = agentEnablement (True),
@@ -2671,13 +2670,12 @@ decl =
             preferEnrichment = False,
             grounding = Nothing
           },
-      sinks = [KawaDigest {subjectType = activityCoordinate ("heartbeat"), verb = activityCoordinate ("heartbeat.tick")}],
+      outputs = [(kawaDigestOutput KawaDigestOutput {subjectType = activityCoordinate ("heartbeat"), verb = activityCoordinate ("heartbeat.tick")})],
       delegates = map fixtureAgentName [],
       delegationBudget = Nothing,
       sanctionedProfile = Nothing,
       capabilityOverlays = [],
       tools = [],
-      outputs = [],
       identity = Nothing,
       memory = defaultMemoryPolicy,
       enabled = agentEnablement (True),
@@ -2700,7 +2698,6 @@ missingTaskDecl =
             preferEnrichment = False,
             grounding = Nothing
           },
-      sinks = [],
       delegates = map fixtureAgentName [],
       delegationBudget = Nothing,
       sanctionedProfile = Nothing,
@@ -2729,7 +2726,7 @@ profiledDecl =
             preferEnrichment = False,
             grounding = Nothing
           },
-      sinks = [KawaDigest {subjectType = activityCoordinate ("heartbeat"), verb = activityCoordinate ("heartbeat.tick")}],
+      outputs = [(kawaDigestOutput KawaDigestOutput {subjectType = activityCoordinate ("heartbeat"), verb = activityCoordinate ("heartbeat.tick")})],
       delegates = map fixtureAgentName [],
       delegationBudget = Nothing,
       sanctionedProfile =
@@ -2740,7 +2737,6 @@ profiledDecl =
             },
       capabilityOverlays = [],
       tools = [],
-      outputs = [],
       identity = Nothing,
       memory = defaultMemoryPolicy,
       enabled = agentEnablement (True),
@@ -2758,7 +2754,6 @@ profiledSkillDecl =
       description = "workflow test skill with a sanctioned profile",
       trigger = Event {eventType = declarationCoordinate ("test")},
       behavior = Skill {path = declarationCoordinate ("agents/skills/triage-note")},
-      sinks = [],
       delegates = map fixtureAgentName [],
       delegationBudget = Nothing,
       sanctionedProfile =
@@ -2787,7 +2782,6 @@ flowDecl =
       description = "workflow flow test agent",
       trigger = Event {eventType = declarationCoordinate ("test")},
       behavior = Flow {name = acknowledgementFlowName},
-      sinks = [],
       delegates = map fixtureAgentName [],
       delegationBudget = Nothing,
       sanctionedProfile = Nothing,
@@ -2822,7 +2816,6 @@ flowDelegationDecl =
       description = "workflow Flow delegation test agent",
       trigger = Event {eventType = declarationCoordinate ("test")},
       behavior = Flow {name = declarationCoordinate ("delegation-proof")},
-      sinks = [],
       delegates = map fixtureAgentName ["web-researcher"],
       delegationBudget = Just (either (error . Text.unpack) id (mkDelegationBudget 1)),
       sanctionedProfile = Nothing,
@@ -2841,11 +2834,11 @@ flowDelegationDecl =
 
 collectionSupervisorDecl :: AgentDecl
 collectionSupervisorDecl =
-  (decl & #name .~ (fixtureAgentName "test-collection-supervisor") & #sinks .~ ([]) & #delegates .~ (map fixtureAgentName ["heartbeat", "missing-task-agent"]))
+  (decl & #name .~ (fixtureAgentName "test-collection-supervisor") & #outputs .~ ([]) & #delegates .~ (map fixtureAgentName ["heartbeat", "missing-task-agent"]))
 
 conversationDecl :: AgentDecl
 conversationDecl =
-  (decl & #trigger .~ (Event {eventType = declarationCoordinate (addressedMessageEventType)}) & #sinks .~ ([DanwaConversation {topic = "support"}]))
+  (decl & #trigger .~ (Event {eventType = declarationCoordinate (addressedMessageEventType)}) & #outputs .~ ([(danwaConversationOutput DanwaConversationOutput {topic = "support", thread = Nothing})]))
 
 withRecordPolicy :: RecordPolicy -> AgentDecl -> AgentDecl
 withRecordPolicy recordPolicy = #memory . #recordPolicy .~ recordPolicy

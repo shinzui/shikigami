@@ -201,7 +201,6 @@ declForIdentity identity capabilityOverlays =
       description = "workspace scripted agent",
       trigger = Event {eventType = declarationCoordinate ("test")},
       behavior = Skill {path = declarationCoordinate ("unused")},
-      sinks = [],
       delegates = map fixtureAgentName [],
       delegationBudget = Nothing,
       sanctionedProfile = Nothing,

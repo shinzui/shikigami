@@ -36,7 +36,9 @@ data AgentView = AgentView
     enabled :: !Bool,
     trigger :: !Text,
     behavior :: !Text,
-    sinks :: ![Text],
+    -- | The output kinds the declaration lists; empty means the
+    -- composition's default.
+    outputs :: ![Text],
     delegates :: ![Text],
     principalId :: !(Maybe Text),
     lifecycle :: !Text,

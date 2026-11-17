@@ -85,7 +85,6 @@ baseRouter =
             preferEnrichment = False,
             grounding = Nothing
           },
-      sinks = [],
       delegates = map fixtureAgentName ["reviewer-a", "reviewer-b"],
       delegationBudget = Nothing,
       sanctionedProfile = Nothing,

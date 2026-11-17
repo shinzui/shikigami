@@ -152,7 +152,7 @@ workflowCase configFile prefix stage = do
     providers <- Provider.newProviderRegistryFrom [provider]
     now <- getCurrentTime
     http <- right =<< newSinkHttp (HttpLimits config.httpRequestMaxBytes config.httpResponseMaxBytes) (credentialsFromConfig config) (DanwaConfig "http://localhost:1" (declarationCoordinate "fixture"))
-    let declaration = original & #name .~ fixtureAgentName "workspace-upgrade" & #behavior .~ Skill (declarationCoordinate ((Text.pack skill))) & #identity .~ Just (IdentityDecl (declarationCoordinate principal)) & #capabilityOverlays .~ map (.capability) [supervisedWorkspaceEditDescriptor, workspaceExecDescriptor, workspaceGitDescriptor] & #sinks .~ []
+    let declaration = original & #name .~ fixtureAgentName "workspace-upgrade" & #behavior .~ Skill (declarationCoordinate ((Text.pack skill))) & #identity .~ Just (IdentityDecl (declarationCoordinate principal)) & #capabilityOverlays .~ map (.capability) [supervisedWorkspaceEditDescriptor, workspaceExecDescriptor, workspaceGitDescriptor]
         rootId = fixtureRootId "workflow-upgrade-root"
         job = RunJob (fixtureAgentName "workspace-upgrade") initial.binding.request.owner TriggeredBySchedule now Aeson.Null (fixtureRunKey "workspace-durable-upgrade") Nothing Nothing Nothing [] Nothing Nothing (Just rootId) Nothing Nothing AgentWorkflowRoute Nothing
         deps =

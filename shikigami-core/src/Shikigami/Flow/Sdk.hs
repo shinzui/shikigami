@@ -68,8 +68,6 @@ module Shikigami.Flow.Sdk
     OutputKind,
     outputKindText,
     AddressedOutput (..),
-    Sink (..),
-    sinkOutput,
     toRecipient,
     inThread,
     DanwaTarget (..),
@@ -98,7 +96,7 @@ import Keiro.Workflow (StepName (..), Workflow, step)
 import Shikigami.Activity (ActivityEnvelope (..), Subject (..))
 import Shikigami.Activity.Coordinate (ActivityCoordinate, activityCoordinate, activityCoordinateText)
 import Shikigami.Agent.Approval (ApprovalChannel (..), ApprovalRequest (..))
-import Shikigami.Agent.Decl (Priority (..), RecipientFrom (..), SignalType (..), Sink (..))
+import Shikigami.Agent.Decl (Priority (..), RecipientFrom (..), SignalType (..))
 import Shikigami.Agent.DeclarationValue (DeclarationCoordinate, SignalImportance, declarationCoordinate, declarationCoordinateText, parseSignalImportance)
 import Shikigami.Authority (OutputKind, outputKindText)
 import Shikigami.Flow (DecisionMode (..), FlowDef (..), FlowEffects, LifecycleDiagram (..))
@@ -113,9 +111,9 @@ import Shikigami.RuntimePolicy (DefaultModelRequirement (..))
 import Shikigami.Sink.Coordinate (parseSinkSession)
 import Shikigami.Sink.Delivery (SinkMessageId)
 import Shikigami.Sink.Intent (AddressedOutput (..))
-import Shikigami.Sink.Outputs (DanwaTarget (..), inThread, sinkOutput, toRecipient)
+import Shikigami.Sink.Outputs (DanwaTarget (..), inThread, toRecipient)
 import Shikigami.Sink.Types (SinkOutcome (..), SinkResult (..))
 
--- | The capability that emits an output. It is named apart from the legacy
--- 'Sink' declaration; inside the kernel the two share a name across modules.
+-- | The capability that emits an output. Inside the kernel it is the
+-- effect 'Shikigami.Flow.Capability.Sink'.
 type SinkCapability = Capability.Sink

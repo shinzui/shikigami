@@ -23,5 +23,4 @@ in  A.Agent::{
       , recallLimit = 10
       , recordPolicy = A.RecordPolicy.Never
       }
-    , sinks = [] : List A.Sink
     }

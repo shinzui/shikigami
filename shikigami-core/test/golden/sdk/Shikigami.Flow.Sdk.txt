@@ -32,7 +32,6 @@ Priority (..)
 RecipientFrom (..)
 SignalImportance
 SignalType (..)
-Sink (..)
 SinkCapability
 SinkMessageId
 SinkOutcome (..)
@@ -64,6 +63,5 @@ parseSinkSession
 recall
 remember
 send
-sinkOutput
 step
 toRecipient

@@ -58,7 +58,6 @@ packageBoundaryTests =
                   description = "proves shikigami-api may import shikigami-core",
                   trigger = Schedule {cron = cronExpressionClaim "* * * * *"},
                   behavior = Skill {path = declarationCoordinate "skills/none"},
-                  sinks = [],
                   delegates = map fixtureAgentName [],
                   delegationBudget = Nothing,
                   sanctionedProfile = Nothing,

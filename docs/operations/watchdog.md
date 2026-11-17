@@ -51,8 +51,8 @@ defaults:
     "driftSubjectsPerSweep": 4,
     "delivery": {
       "operatorRecipient": "operator",
-      "operatorSink": {"tag": "DanwaConversation", "topic": "watchdog-advisories"},
-      "conversationSink": {"tag": "DanwaConversation", "topic": "watchdog"}
+      "operatorOutput": {"kind": "danwa.conversation", "config": {"topic": "watchdog-advisories"}},
+      "conversationOutput": {"kind": "danwa.conversation", "config": {"topic": "watchdog"}}
     },
     "allowance": {
       "principal": "agent_watchdog",

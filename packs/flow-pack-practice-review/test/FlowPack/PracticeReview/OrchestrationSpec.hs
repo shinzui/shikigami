@@ -690,6 +690,7 @@ attentionEnv recipients runIdentifier =
       occurredAt = Nothing,
       activity = Just reviewActivity,
       grants = StaticGrants (Map.singleton (compatibilityIdentity (fixtureAgentName reviewerAgent)) (Set.fromList [kawaDigestKind, kizashiSignalKind])),
+      outputs = kikanOutputs unreachableServices,
       directory = disabledDirectoryHandle,
       recipients
     }
@@ -744,7 +745,7 @@ specialistAgentRunDeps appEnv behaviorEnv practiceReview =
       AgentWorkflow.agents = [reviewerDecl],
       AgentWorkflow.hooks = AgentWorkflow.defaultAgentRunHooks,
       AgentWorkflow.codingAgents = AgentWorkflow.noCodingAgents,
-      AgentWorkflow.outputs = kikanOutputs (KikanServices {http = testSinkHttp, kizashi = KizashiConfig {baseUrl = "http://localhost:1", defaultRecipient = (declarationCoordinate "recipient_unused")}, kawa = KawaConfig {baseUrl = "http://localhost:1", sourceSegment = (activityCoordinate "shinzui/shikigami")}, kanmon = KanmonConfig {baseUrl = "http://localhost:1"}, danwa = DanwaConfig {baseUrl = "http://localhost:1", agentParticipant = (declarationCoordinate "part_agent_practice_review")}, rei = ReiConfig {baseUrl = Nothing}}),
+      AgentWorkflow.outputs = kikanOutputs unreachableServices,
       AgentWorkflow.declaredTools = AgentWorkflow.noDeclaredTools,
       AgentWorkflow.approvalPolicy = autoApprovePolicy (((either (error . show) id . parseDuration) (secondsToNominalDiffTime 900))),
       AgentWorkflow.approvalWorkflow = ApprovalWorkflow.defaultApprovalWorkflowEnv,
@@ -965,8 +966,8 @@ sinkEnvFixture session =
       agent = fixtureAgentName reviewerAgent,
       runId = session,
       occurredAt = Nothing,
-      danwaTarget = Nothing,
       activity = Just reviewActivity,
+      outputs = kikanOutputs unreachableServices,
       grants = StaticGrants (Map.singleton (compatibilityIdentity (fixtureAgentName reviewerAgent)) (Set.fromList [kawaDigestKind, kizashiSignalKind])),
       directory = disabledDirectoryHandle,
       identity = compatibilityIdentity (fixtureAgentName reviewerAgent)
@@ -979,7 +980,6 @@ reviewerDecl =
       description = "practice-review orchestration fixture",
       trigger = Event {eventType = declarationCoordinate ("practice-review.requested")},
       behavior = Flow {name = declarationCoordinate ("opentelemetry-practice-review")},
-      sinks = [],
       delegates = map fixtureAgentName [],
       delegationBudget = Nothing,
       sanctionedProfile = Nothing,
@@ -1154,3 +1154,7 @@ reviewResolutionKey = either (error . show) id . ReviewValue.parseResolutionKey
 
 reviewTriggerKey :: Text -> ReviewValue.TriggerKey
 reviewTriggerKey = either (error . show) id . ReviewValue.parseTriggerKey
+
+-- | Every Kikan service unreachable; a case that reaches one fails loudly.
+unreachableServices :: KikanServices
+unreachableServices = KikanServices {http = testSinkHttp, kizashi = KizashiConfig {baseUrl = "http://localhost:1", defaultRecipient = (declarationCoordinate "recipient_unused")}, kawa = KawaConfig {baseUrl = "http://localhost:1", sourceSegment = (activityCoordinate "shinzui/shikigami")}, kanmon = KanmonConfig {baseUrl = "http://localhost:1"}, danwa = DanwaConfig {baseUrl = "http://localhost:1", agentParticipant = (declarationCoordinate "part_agent_practice_review")}, rei = ReiConfig {baseUrl = Nothing}}

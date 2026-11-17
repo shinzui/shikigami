@@ -19,7 +19,6 @@ fixtureDecl agentName =
       description = "initiative fixture agent",
       trigger = Event {eventType = declarationCoordinate "test.fixture"},
       behavior = ShikumiProgram {task = declarationCoordinate "noop-summary", preferEnrichment = False, grounding = Nothing},
-      sinks = [],
       delegates = [],
       delegationBudget = Nothing,
       sanctionedProfile = Nothing,

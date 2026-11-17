@@ -33,7 +33,7 @@ import Shikigami.WorkerSession.Input (instructionText)
 supported :: Admission -> P.Placement -> Bool
 supported admission placement =
   placement.assignment.owner == admission.run.identity && placement.target /= admission.declaration.name && case role of
-    Just declaration | Agent.Skill {} <- declaration.behavior -> null declaration.sinks && null (Agent.requestedOverlays declaration) && null declaration.delegates && isNothing declaration.routing && isNothing declaration.sanctionedProfile
+    Just declaration | Agent.Skill {} <- declaration.behavior -> null declaration.outputs && null (Agent.requestedOverlays declaration) && null declaration.delegates && isNothing declaration.routing && isNothing declaration.sanctionedProfile
     _ -> False
   where
     role = find ((== placement.target) . (.name)) admission.declarations

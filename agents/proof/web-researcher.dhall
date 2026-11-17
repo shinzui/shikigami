@@ -8,5 +8,4 @@ in  A.Agent::{
           , grounding = None Text
           }
     , trigger = A.Trigger.Event { eventType = "proof.research.web" }
-    , sinks = [] : List A.Sink
     }

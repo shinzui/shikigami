@@ -39,10 +39,6 @@ module Shikigami.Sink.Outputs
     -- * Validation
     outputConfigErrors,
     validateKanmonRouteSegment,
-
-    -- * From the legacy sink union
-    sinkOutput,
-    declarationOutputs,
   )
 where
 
@@ -52,7 +48,7 @@ import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Aeson.Types (parseEither)
 import Data.Text qualified as Text
 import Shikigami.Activity.Coordinate
-import Shikigami.Agent.Decl (AgentDecl (..), Priority, RecipientFrom (..), SignalType, Sink (..))
+import Shikigami.Agent.Decl (Priority, RecipientFrom (..), SignalType)
 import Shikigami.Agent.DeclarationValue
 import Shikigami.Authority (OutputKind, mkOutputKind, outputKindText)
 import Shikigami.Output (OutputDecl (..))
@@ -166,7 +162,7 @@ instance FromJSON DanwaConversationOutput where
 
 instance ToJSON ChannelEgressOutput where
   toJSON ChannelEgressOutput {channel, action, conversationKey} =
-    object (["channel" .= channel, "action" .= action] <> ["conversationKey" .= value | Just value <- [conversationKey]])
+    object ["channel" .= channel, "action" .= action, "conversationKey" .= conversationKey]
 
 instance FromJSON ChannelEgressOutput where
   parseJSON = withObject "channel.egress" \fields -> ChannelEgressOutput <$> fields .: "channel" <*> fields .: "action" <*> fields .:? "conversationKey"
@@ -263,17 +259,3 @@ routeErrors field value =
   case validateKanmonRouteSegment value of
     Left reason -> [field <> " " <> reason]
     Right _ -> []
-
--- | The output a legacy sink declares.
-sinkOutput :: Sink -> OutputDecl
-sinkOutput = \case
-  KawaDigest {subjectType, verb} -> kawaDigestOutput KawaDigestOutput {subjectType, verb}
-  KizashiSignal {source, signalType, priority, importance, recipientFrom, defaultRecipient, intentTemplate, extraContextTags} ->
-    kizashiSignalOutput KizashiSignalOutput {source, signalType, priority, importance, recipientFrom, defaultRecipient, intentTemplate, extraContextTags, recipient = Nothing}
-  ReiAction {intentionId, note} -> reiActionOutput ReiActionOutput {intentionId, note}
-  DanwaConversation {topic} -> danwaConversationOutput DanwaConversationOutput {topic, thread = Nothing}
-  ChannelEgress {channel, action, conversationKey} -> channelEgressOutput ChannelEgressOutput {channel, action, conversationKey}
-
--- | Every output a declaration lists: its legacy sinks, then its outputs.
-declarationOutputs :: AgentDecl -> [OutputDecl]
-declarationOutputs AgentDecl {sinks, outputs} = (sinkOutput <$> sinks) <> outputs

@@ -246,17 +246,17 @@
           "name": {
             "type": "string"
           },
+          "outputs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
           "principalId": {
             "type": "string"
           },
           "runnable": {
             "type": "boolean"
-          },
-          "sinks": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
           },
           "trigger": {
             "type": "string"
@@ -268,7 +268,7 @@
           "enabled",
           "trigger",
           "behavior",
-          "sinks",
+          "outputs",
           "delegates",
           "lifecycle",
           "runnable"

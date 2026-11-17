@@ -14,8 +14,10 @@ import Shikigami.Agent.Decl qualified as Decl
 import Shikigami.Agent.Name (agentNameText)
 import Shikigami.AgentRun.Handler (agentRunServer)
 import Shikigami.Api.Problem
+import Shikigami.Authority (outputKindText)
 import Shikigami.Caller.Api (ApiCaller)
 import Shikigami.Directory qualified as Directory
+import Shikigami.Output (OutputDecl (..))
 import Shikigami.Prelude
 import Shikigami.Server.Seam
 
@@ -80,7 +82,7 @@ agentView env decl = do
           Decl.Flow {} -> "flow"
           Decl.CodingAgent {} -> "coding_agent"
           Decl.Playbook {} -> "playbook",
-        sinks = fmap sinkKind decl.sinks,
+        outputs = [outputKindText output.kind | output <- decl.outputs],
         delegates = map agentNameText decl.delegates,
         principalId = (Decl.declarationCoordinateText . (.principal)) <$> decl.identity,
         lifecycle = case lifecycle of
@@ -91,10 +93,3 @@ agentView env decl = do
           Catalog.LifecycleUnverified -> "unverified",
         runnable = Catalog.runnable decl lifecycle
       }
-  where
-    sinkKind = \case
-      Decl.KawaDigest {} -> "kawa_digest"
-      Decl.KizashiSignal {} -> "kizashi_signal"
-      Decl.ReiAction {} -> "rei_action"
-      Decl.DanwaConversation {} -> "danwa_conversation"
-      Decl.ChannelEgress {} -> "channel_egress"

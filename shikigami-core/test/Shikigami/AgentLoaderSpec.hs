@@ -20,7 +20,6 @@ import Shikigami.Agent.Decl
     RecordPolicy (Never, OnSuccess),
     RouterConfidence (RoutingMedium),
     RouterPolicy (..),
-    Sink (..),
     delegationBudgetNatural,
     recallLimitNatural,
   )
@@ -41,6 +40,7 @@ import Shikigami.Capability.Overlay (capabilityIdText)
 import Shikigami.Log qualified as Log
 import Shikigami.Router.SelectionLimit (selectionLimitInt)
 import Shikigami.RuntimePolicy (ManifestStrictness (..))
+import Shikigami.Sink.Outputs
 import Shikigami.Trigger.Schedule (parseCron)
 import System.Directory (doesDirectoryExist, listDirectory)
 import System.Exit (ExitCode (ExitFailure))
@@ -108,8 +108,8 @@ tests =
             evidenceHints @?= ["traceparent", "service.name", "instrumentation scope"]
           other -> assertFailure ("unexpected specialist declaration: " <> show other),
       testCase "decodes and round-trips the ChannelEgress proof declaration" do
-        decl@AgentDecl {sinks} <- expectLoaded "../agents/proof/channel-reply.dhall"
-        sinks @?= [ChannelEgress {channel = declarationCoordinate ("intercom"), action = declarationCoordinate ("reply_to_conversation"), conversationKey = fmap declarationCoordinate (Nothing)}]
+        decl@AgentDecl {outputs} <- expectLoaded "../agents/proof/channel-reply.dhall"
+        outputs @?= [(channelEgressOutput ChannelEgressOutput {channel = declarationCoordinate ("intercom"), action = declarationCoordinate ("reply_to_conversation"), conversationKey = fmap declarationCoordinate (Nothing)})]
         eitherDecode (encode decl) @?= Right decl,
       testCase "the v1 declaration JSON shape contains every field and round-trips" do
         decl <- expectLoaded "../agents/heartbeat.dhall"
@@ -135,9 +135,9 @@ tests =
                   "identity",
                   "memory",
                   "name",
+                  "outputs",
                   "routing",
                   "sanctionedProfile",
-                  "sinks",
                   "trigger"
                 ]
           other -> assertFailure ("declaration must encode as an object: " <> show other)

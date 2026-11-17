@@ -290,7 +290,6 @@ triageDecl =
       description = "triage inbound tickets into a short note",
       trigger = Event {eventType = declarationCoordinate ("ticket.received")},
       behavior = Skill {path = declarationCoordinate ("agents/skills/triage-note")},
-      sinks = [],
       delegates = map fixtureAgentName [],
       delegationBudget = Nothing,
       sanctionedProfile = Nothing,
@@ -319,7 +318,6 @@ heartbeatDecl =
             preferEnrichment = False,
             grounding = Nothing
           },
-      sinks = [],
       delegates = map fixtureAgentName [],
       delegationBudget = Nothing,
       sanctionedProfile = Nothing,

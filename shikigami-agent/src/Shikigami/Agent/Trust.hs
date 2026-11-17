@@ -30,7 +30,7 @@ import Data.Text.IO qualified as TextIO
 import Keiro.Workflow (WorkflowId (..))
 import Shikigami.Agent.Capability.OneOff (oneOffCapabilityRuntime, renderOneOffCapabilityError)
 import Shikigami.Agent.Capability.Workspace (renderWorkspaceError, resolveWorkspaceScope, workspaceReadDescriptor, workspaceReadProvider)
-import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Sink (..), codingAgentAccessOf, requestedOverlays)
+import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), codingAgentAccessOf, requestedOverlays)
 import Shikigami.Agent.Name (agentNameText)
 import Shikigami.App.Config (AppConfig (..))
 import Shikigami.Authority
@@ -50,7 +50,6 @@ import Shikigami.DeclaredTool.Workflow (noDeclaredTools)
 import Shikigami.Output (DefaultOutput (..), OutputRegistry, mkOutputRegistry, renderOutputLoadError, validateOutputs)
 import Shikigami.Output.Local (defaultLocalReport, localReportAdapter)
 import Shikigami.Record (ActionRecord (..))
-import Shikigami.Sink.Outputs (declarationOutputs)
 import Shikigami.Trust.LocalOperator.Approvals
 import Shikigami.Trust.LocalOperator.Grant
 import Shikigami.Trust.LocalOperator.Host (codingAgentLauncher, compatibilityPrincipal, gateExecutable, localRunAuthority, nothingGranted, openLocalRun, recordGrantIn, repositorySelectorText)
@@ -121,10 +120,10 @@ lightComposition config organization interaction record =
       -- A declaration naming an output kind this composition does not
       -- register is refused before the run (EP-8 M2).
       LocalOperator
-        | Left problems <- validateOutputs (localOutputs "/") (declarationOutputs decl) -> pure (Left (CompositionFailed (Text.intercalate "; " (renderOutputLoadError <$> foldr (:) [] problems))))
+        | Left problems <- validateOutputs (localOutputs "/") decl.outputs -> pure (Left (CompositionFailed (Text.intercalate "; " (renderOutputLoadError <$> foldr (:) [] problems))))
         | otherwise -> resolveLocal subject
       _
-        | Left problems <- validateOutputs organization (declarationOutputs decl) -> pure (Left (CompositionFailed (Text.intercalate "; " (renderOutputLoadError <$> foldr (:) [] problems))))
+        | Left problems <- validateOutputs organization decl.outputs -> pure (Left (CompositionFailed (Text.intercalate "; " (renderOutputLoadError <$> foldr (:) [] problems))))
       _ | not (null decl.tools) -> pure (Left (CompositionFailed (renderToolResolutionError (ToolsUnsupportedForTier (trustTierText config.trustTier)))))
       _ -> do
         workspace <- sequence <$> traverse (selectRepository processCheckoutResolver emptyApprovals) repository

@@ -1,15 +1,7 @@
 -- schema/Agent.dhall — the canonical C5 agent-definition schema (EP-1, IP-2).
--- This is the SUPERSET reconciling the spec's illustrative schema (docs/initial-spec.md)
--- and the seed detector schema (agents/detectors/schema.dhall). EP-6 re-points the seeds
--- at this file as a mechanical rename (singular `sink` -> `sinks = [ ... ]`; Observe ->
--- Stream; Deterministic kept; RaiseSignal -> KizashiSignal).
-
-let SignalType =
-      < Notification | Alert | Reminder | TaskCandidate | DigestItem | AgentRequest >
-
-let Priority = < Low | Normal | High | Urgent >
-
-let RecipientFrom = < SubjectOwner | AreaOwner | Actor >
+-- It names only kernel vocabulary. Where a run's result goes is an `outputs`
+-- list of registered kinds; the Kikan services' kinds have typed helpers in
+-- schema/outputs/Kikan.dhall (plan 135, M3).
 
 -- C3's three trigger classes, named to match the spec's C5 vocabulary.
 let StreamMatch =
@@ -60,28 +52,6 @@ let Behavior =
           , access : WorkspaceAccess
           , model : Optional Text
           , effort : Optional CodingAgentEffort
-          }
-      >
-
--- The producer sink set. KizashiSignal carries the seeds' rich RaiseSignal fields.
-let Sink =
-      < KawaDigest : { subjectType : Text, verb : Text }
-      | KizashiSignal :
-          { source : Text
-          , signalType : SignalType
-          , priority : Priority
-          , importance : Natural
-          , recipientFrom : RecipientFrom
-          , defaultRecipient : Optional Text
-          , intentTemplate : Text
-          , extraContextTags : List Text
-          }
-      | ReiAction : { intentionId : Text, note : Text }
-      | DanwaConversation : { topic : Text }
-      | ChannelEgress :
-          { channel : Text
-          , action : Text
-          , conversationKey : Optional Text
           }
       >
 
@@ -200,8 +170,8 @@ let McpTools = { server : Text, tools : List Text }
 let Tool = < CliTool : CliTool.Type | McpTools : McpTools >
 
 -- Where the result goes (EP-8 M2): a registered output kind and its JSON
--- configuration. Helpers: schema/outputs/Local.dhall. Empty takes the
--- composition's default.
+-- configuration. Helpers: schema/outputs/Local.dhall and, for the Kikan
+-- services, schema/outputs/Kikan.dhall. Empty takes the composition's default.
 let Output = { kind : Text, config : Text }
 
 let Agent =
@@ -210,7 +180,6 @@ let Agent =
           , description : Text
           , trigger : Trigger
           , behavior : Behavior
-          , sinks : List Sink
           , delegates : List Text
           , execution : Optional Execution
           , harness : Optional Harness.Type
@@ -229,7 +198,6 @@ let Agent =
       , default =
           { description = ""
           , trigger = Trigger.Manual
-          , sinks = [] : List Sink
           , delegates = [] : List Text
           , execution = None Execution
           , harness = None Harness.Type
@@ -247,16 +215,12 @@ let Agent =
           }
       }
 
-in  { SignalType
-    , Priority
-    , RecipientFrom
-    , StreamMatch
+in  { StreamMatch
     , Trigger
     , Behavior
     , CodingAgentProvider
     , WorkspaceAccess
     , CodingAgentEffort
-    , Sink
     , ProfileRequirement
     , Identity
     , MemoryScope

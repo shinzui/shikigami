@@ -35,7 +35,7 @@ import Numeric.Natural (Natural)
 import Shikigami.Activity (ActivityEnvelope (..), Subject (..))
 import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Approval (ApprovalChannel (ViaDanwa), ApprovalRequest (..))
-import Shikigami.Agent.Decl (Priority (High, Urgent), RecipientFrom (AreaOwner), SignalType (Alert), Sink (..))
+import Shikigami.Agent.Decl (Priority (High, Urgent), RecipientFrom (AreaOwner), SignalType (Alert))
 import Shikigami.Agent.DeclarationValue
 import Shikigami.Fixture.ExamplePack (examplesFixturePack)
 import Shikigami.Flow (DecisionMode (..), FlowDef (..), LifecycleDiagram (..))
@@ -44,8 +44,9 @@ import Shikigami.Flow.Builtin (builtinPack)
 import Shikigami.Flow.Capability (Activity, Memory, MemoryQuery (..), currentActivity, emitSignal, recall, remember)
 import Shikigami.Flow.Capability qualified as Capability
 import Shikigami.Flow.Pack (FlowPack (..), FlowRegistry, composeFlowRegistry, kernelCapabilityFlow, noTriggerHooks, parseFlowPackName)
+import Shikigami.Output (OutputDecl (..))
 import Shikigami.RuntimePolicy (DefaultModelRequirement (..))
-import Shikigami.Sink.Outputs (sinkOutput)
+import Shikigami.Sink.Outputs
 
 data RiskLevel = HighRisk | LowRisk deriving stock (Eq, Show)
 
@@ -113,7 +114,7 @@ acknowledgementFlow payload = do
   if (.level) verdict /= HighRisk
     then pure (toJSON verdict)
     else do
-      _ <- emitSignal (declarationCoordinate "alert") (sinkOutput (alertFor verdict activity)) (toJSON verdict)
+      _ <- emitSignal (declarationCoordinate "alert") ((alertFor verdict activity)) (toJSON verdict)
       ack <- awaitAck (StepName "await-ack") (ackRequest verdict activity)
       case ack of
         Acknowledged answer -> do
@@ -123,7 +124,7 @@ acknowledgementFlow payload = do
           _ <- remember (declarationCoordinate "declined") (declinedNote verdict reason)
           pure (declinedValue verdict reason)
         TimedOut -> do
-          _ <- emitSignal (declarationCoordinate "escalate") (sinkOutput (escalationFor verdict activity)) (toJSON verdict)
+          _ <- emitSignal (declarationCoordinate "escalate") ((escalationFor verdict activity)) (toJSON verdict)
           _ <- remember (declarationCoordinate "escalated") (escalatedNote verdict)
           pure (escalatedValue verdict)
 
@@ -172,7 +173,7 @@ riskQuery :: ActivityEnvelope -> MemoryQuery
 riskQuery ActivityEnvelope {subject} =
   MemoryQuery ("customer risk history for " <> activityCoordinateText ((.subjectId) subject))
 
-alertFor :: RiskVerdict -> ActivityEnvelope -> Sink
+alertFor :: RiskVerdict -> ActivityEnvelope -> OutputDecl
 alertFor verdict activity =
   riskSignal
     "Relationship at risk: {verdict.rationale}"
@@ -184,7 +185,7 @@ alertFor verdict activity =
       "ticket:" <> activityCoordinateText ((.ticketId) verdict)
     ]
 
-escalationFor :: RiskVerdict -> ActivityEnvelope -> Sink
+escalationFor :: RiskVerdict -> ActivityEnvelope -> OutputDecl
 escalationFor verdict activity =
   riskSignal
     "Escalate unacknowledged at-risk customer: {verdict.rationale}"
@@ -196,18 +197,21 @@ escalationFor verdict activity =
       "ticket:" <> activityCoordinateText ((.ticketId) verdict)
     ]
 
-riskSignal :: Text -> Priority -> SignalImportance -> [Text] -> Sink
+riskSignal :: Text -> Priority -> SignalImportance -> [Text] -> OutputDecl
 riskSignal intentTemplate priority importance extraContextTags =
-  KizashiSignal
-    { source = activityCoordinate "shinzui/shikigami",
-      signalType = Alert,
-      priority,
-      importance,
-      recipientFrom = AreaOwner,
-      defaultRecipient = Just (declarationCoordinate "role_relationship_owner"),
-      intentTemplate,
-      extraContextTags
-    }
+  ( kizashiSignalOutput
+      KizashiSignalOutput
+        { source = activityCoordinate "shinzui/shikigami",
+          signalType = Alert,
+          priority,
+          importance,
+          recipientFrom = AreaOwner,
+          defaultRecipient = Just (declarationCoordinate "role_relationship_owner"),
+          intentTemplate,
+          extraContextTags,
+          recipient = Nothing
+        }
+  )
 
 activitySubjectType :: ActivityEnvelope -> Text
 activitySubjectType ActivityEnvelope {subject = Subject {kind = subjectType}} = activityCoordinateText subjectType

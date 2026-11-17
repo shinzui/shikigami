@@ -112,7 +112,7 @@ tests fixture =
                             "subjectsPerSweep" .= (9 :: Int),
                             "driftIntervalSeconds" .= (300 :: Int),
                             "driftSubjectsPerSweep" .= (1 :: Int),
-                            "delivery" .= object ["operatorRecipient" .= ("operator" :: Text), "operatorSink" .= object ["tag" .= ("DanwaConversation" :: Text), "topic" .= ("watchdog-advisories" :: Text)], "conversationSink" .= object ["tag" .= ("DanwaConversation" :: Text), "topic" .= ("watchdog" :: Text)]],
+                            "delivery" .= object ["operatorRecipient" .= ("operator" :: Text), "operatorOutput" .= object ["kind" .= ("danwa.conversation" :: Text), "config" .= object ["topic" .= ("watchdog-advisories" :: Text)]], "conversationOutput" .= object ["kind" .= ("danwa.conversation" :: Text), "config" .= object ["topic" .= ("watchdog" :: Text)]]],
                             "allowance" .= object ["principal" .= ("agent_watchdog" :: Text), "flow" .= ("watchdog-sweep" :: Text), "cutoffSeconds" .= (240 :: Int), "limits" .= object ["ActiveWork" .= (1 :: Int), "ModelAttempts" .= (1 :: Int), "Tokens" .= (1000 :: Int), "CostMicroUsd" .= ("unbounded" :: Text)]]
                           ]
                       )

@@ -100,7 +100,6 @@ testDecl sanctionedProfile =
       description = "profile command test",
       trigger = Event {eventType = declarationCoordinate ("test")},
       behavior = Agent.Skill {path = declarationCoordinate ("agents/skills/triage-note")},
-      sinks = [],
       delegates = map fixtureAgentName [],
       delegationBudget = Nothing,
       sanctionedProfile,

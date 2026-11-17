@@ -247,7 +247,6 @@ testDecl capabilityOverlays =
       description = "workspace capability test",
       trigger = Event {eventType = declarationCoordinate ("test")},
       behavior = Skill {path = declarationCoordinate ("unused")},
-      sinks = [],
       delegates = map fixtureAgentName [],
       delegationBudget = Nothing,
       sanctionedProfile = Nothing,
