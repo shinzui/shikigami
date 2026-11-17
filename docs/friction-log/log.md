@@ -1,5 +1,17 @@
 # Bundle Update Log
 
+## 2026-11-17
+
+* **Addition**: FRIC-97 records nuisance tooling friction with mori://shinzui/shikigami: A worker logs light-command approval timers as unknown timer kinds
+
+
+* **Addition**: FRIC-96 records nuisance environment friction with mori://shinzui/shikigami: shikigami-worker's default health port collides with process-compose on this Mac
+
+
+* **Addition**: FRIC-95 records detour interface friction with mori://shinzui/shikigami: workspace.read is an overlay of the light commands only; a worker dead-letters it
+
+* **Addition**: FRIC-94 records detour process friction with mori://shinzui/shikigami/plans/133-give-the-kernel-its-own-action-record-output-approval-and-trigger-contracts-with-local-adapters: EP-8 M3 named a kawa.digest default that M2 had deferred to EP-10
+
 ## 2026-11-16
 
 * **Update**: FRIC-93 resolved: Triage at plan 131 completion: resolved.

@@ -32,6 +32,11 @@ provenance:
       at: 2026-11-15T21:48:46Z
       mode: "implement"
       note: "M2 accepted: outputs beside sinks, local.report default, local inbox approvals, Trigger.Manual"
+    - model: "claude-opus-5-5"
+      harness: "claude-code"
+      at: 2026-11-17T04:08:29Z
+      mode: "implement"
+      note: "M3 accepted: run.admitted/run.finished/output.delivered, record check (K1-K8), kawa.digest adapter and outputs.default, portable-note under stock and Kikan compositions"
 ---
 
 # Give the kernel its own action, record, output, approval and trigger contracts with local adapters
@@ -105,9 +110,21 @@ Its first milestone has no prerequisite and is the first work of that initiative
   the `outputs` group (resolution precedence, load-time refusal naming registered kinds,
   private idempotent report files, the local inbox) and the updated conformance pin; the
   `keiro-diff` finding is recorded in the commit.
-- [ ] M3: The portability check passes. One declaration that uses only kernel vocabulary
+- [x] M3 (2026-11-16): The portability check passes. One declaration that uses only kernel vocabulary
   runs under the stock composition and under a composition with the Kikan adapters, and
   `shikigami record check` asserts invariants K1 to K8 from each run's record. (Needs EP-1.)
+  Evidence: `agents/proof/portable-note.dhall` (a principal and a Skill, nothing else) ran
+  on an isolated scratch database with OpenAI `gpt-5.4-mini` and the fsrs-hs README as its
+  payload. Stock: `shikigami-agent-run` under `local-operator` with
+  `approval.require_outputs=local.report`, parked, `shikigami-local approvals resolve`,
+  `--resume`, report written (run `d7c18bad-3ed9-52d9-9ece-8cf6919c1485`). Kikan:
+  `shikigami-worker` with `authorization.actions.mode=kikan` against the loopback fixture
+  authority and `outputs.default=kawa.digest`, delivered to `shikigami stub-kawa` (run
+  `a5e632c4-93f7-55ed-bf23-192a3b81228c`). Both pinned `sha256:e3fa800f…` and printed
+  `record check: 4 events, 1 effects paired with a decision and a step; K1 K2/K3 K4 K5 K6
+  K8 hold (K7 by construction)`. Both kind-and-tag sequences are `run.admitted`,
+  `authority.decided emit_output`, `output.delivered emit_output`, `run.finished`. The
+  limits are under Outcomes.
 
 
 ## Surprises & Discoveries
@@ -143,6 +160,33 @@ These came from reading the working tree on 2026-11-15, before implementation.
   for `0049-recurring-mandates.sql`. See FRIC-71 (a recurrence of FRIC-58).
 - Observation: The dev database did not exist on this Mac; `just create-database` created and
   migrated it. Nothing was dropped.
+- Observation (M3, 2026-11-16): M3 as written could not pass after M2's decision. It asked for a
+  Kikan registry whose default is `kawa.digest`, but M2 kept the Kikan sinks off the output
+  registry, so the worker resolved a declaration with no outputs to `JournalOnly`. Its record
+  would have had no `emit_output` decision.
+  Evidence: `AgentWorkflow.outputs = emptyOutputRegistry` in
+  `shikigami-workers/src/Shikigami/Workers/Config.hs`. FRIC-94.
+- Observation (M3): `workspace.read` is an overlay of the light commands only. A worker's
+  capability runtime is its workspace host (`workspace.edit`, `workspace.exec`,
+  `workspace.git`), so the declaration M3 first specified is not kernel vocabulary as the
+  MasterPlan defines it.
+  Evidence: `worker.job.dead_lettered … UnknownCapability {capability = CapabilityId
+  "workspace.read"}` for run `a3e54359-…`; that run's record still checks clean
+  (`run.admitted`, `run.finished failed`). FRIC-95.
+- Observation (M3): Before M3 the record held no `approval.requested`, `approval.resolved`,
+  `output.delivered` or `run.admitted` entries, although the M2 text lists them. M2's
+  acceptance evidence rested on `authority.decided`. M3 adds `run.admitted`, `run.finished` and
+  `output.delivered`. Approval entries are still not written. Approvals are not authority
+  decisions (`RequestApproval` was never added), so they do not enter the kind-and-tag
+  comparison.
+- Observation (M3): The two runs also differ in the principal and the directory's answer for
+  it. The light command acts for the compatibility identity `shikigami.agent.v2.…` with no
+  directory (`lifecycle: unmanaged`). The worker resolves the declared
+  `agent_01h000000000000000portable` through its file directory (`lifecycle: active`). K1
+  holds in both.
+- Observation (M3): The worker's default health port 8091 is the dev process-compose's (FRIC-96),
+  and a worker sharing a database with a light command logs that command's approval timers as
+  `scheduler.timer.unknown_kind` errors (FRIC-97).
 - Observation: Approval channels are chosen in code as well as configuration.
   Evidence: `ViaDanwa` is hard-coded in `shikigami-core/src/Shikigami/Execution/Driver.hs`
   (tool permission asks) and in `Flow/AtRiskCustomer.hs`; `ViaKizashi` in
@@ -277,7 +321,84 @@ These came from reading the working tree on 2026-11-15, before implementation.
   regenerated.
   Date: 2026-11-15
 
+- Decision (EP-8 M3, 2026-11-16): The user chose to pull only the `kawa.digest` output adapter
+  forward from EP-10. `Shikigami.Output.Kikan` builds the same C1 envelope as the `KawaDigest`
+  sink, with the idempotency key `<agent>:<run>:output-<n>`. Every `shikigami-worker`
+  registers it. The new setting `outputs.default` (`none` by default, or `kawa.digest`) makes
+  it the default, so a worker's existing behavior is unchanged unless configured.
+  Rationale: This is the only way the two records can be equal before EP-10. EP-10 still moves
+  the module into the Kikan binding package and makes `kawa.digest` its distribution's
+  default.
+- Decision (EP-8 M3): `portable-note` names no capability overlay. The README reaches the
+  Skill as the trigger payload.
+  Rationale: The MasterPlan excludes from kernel vocabulary anything only one composition
+  registers, and `workspace.read` is registered only by the light commands (FRIC-95). Without
+  model-driven tool calls the compared sequence is also deterministic.
+- Decision (EP-8 M3): `run.admitted` and `run.finished` are appended in two new journaled steps,
+  `record-admission` (right after `lookup-agent`) and `record-finish` (after the admitted run
+  returns), declared in `domain/shikigami/agent-run.keiro` under the pre-release exception.
+  `output.delivered` is appended inside `deliver-outputs` after the adapter delivers. A failed
+  admission append throws a transient failure, so the run is retried and never runs
+  unaccounted. A failed finish or delivery append is logged
+  (`record.run_finished_unrecorded`, `record.output_delivered_unrecorded`) rather than
+  failing a run whose effect already happened.
+  Rationale: A step journals once, so a replay appends nothing (the new postgres case runs a
+  job twice and finds one admission and one finish). Writing the entries inside existing steps
+  would have hidden them from the gate.
+- Decision (EP-8 M3): A recorded authority also appends the run's own entries
+  (`recordRunEntry`), with the run context and tier it was installed with.
+  Rationale: Every composition root already installs exactly one recorded authority per run.
+  A second record field on `AgentRunDeps` would have to be kept consistent with it.
+- Decision (EP-8 M3): `checkRun` treats any kind other than `run.*`, `authority.decided` and
+  `authority.granted` as an effect. An effect whose payload names `action` and `resource` is
+  paired with an earlier allowed decision for exactly those (K2, K3) and must name its `step`
+  and a unique effect key (K6). An effect that names no action (`tool.called`,
+  `process.finished`, `commit.created`, `workspace.opened`) is counted and printed as
+  unchecked, not passed. K5 holds when the admission names a resource root or a positive
+  lease (`timeoutSeconds`). K8 reads every run whose `run.admitted` carries the same
+  idempotency key.
+  Rationale: The producers that predate M3 do not name the action that allowed them. Changing
+  them is their owners' work, and reporting them as unchecked keeps the gap visible.
+- Decision (EP-8 M3): Pre-release recheck, 2026-11-16: `git tag --list` is empty, and no
+  release, deployment or external wire consumer exists. The developer database holds run
+  `7a28975f`, whose disposition is the user's. It was left alone; on resume the new steps run
+  fresh, which rule 2 of `docs/workflow-versioning.md` calls replay-safe. The M3 runs used the
+  scratch database `shikigami_ep8_m3`, dropped afterwards.
+
 ## Outcomes & Retrospective
+
+M3 (2026-11-16). One declaration in kernel vocabulary ran unchanged under both compositions.
+Both runs pinned the same digest and passed `record check`, and their kind-and-tag sequences
+are equal. Between the two records only `tier` (`local-operator`, `unspecified`), `decidedBy`
+(`operator`, `service:kikan-en`), the output the default resolved to (`local.report`,
+`kawa.digest`, each marked `composition-default`), the principal and its directory answer
+(see Surprises), the run-scoped keys and the delivery location differ. Limits: no Kikan-En
+instance runs on this Mac. The second composition used the loopback fixture authority of
+`tests/objective-tracking/fixture` (admitting the new `portable` principal) and
+`shikigami stub-kawa`, so EP-10 owns the live comparison against its distribution. The worker
+still records the tier as `unspecified`, because it does not yet pass a tier label to
+`recordedIn`.
+
+M3 results on this Mac, with suites run one at a time and `TASTY_NUM_THREADS=2`:
+`cabal build all` passed. `shikigami-core-test` passed 871 of 871 and
+`shikigami-core-postgres-test` 569 of 569, including the new replay case. Under load,
+`shikigami-workers-test` passed 300 of 301: the miss was "accepted integration combines two
+retained worker artifacts", and its Git provider group then passed 17 of 17 at one thread, as
+under M1. `shikigami-server-test` passed 108 of 108 and `shikigami-agent-test` 42 of 42.
+`just haskell-conventions` passed. `just api-baseline` reported `cli-shikigami` CHANGED (the
+added `record check`), re-pinned in the same commit, and `durable-wire` BREAKING, which is the
+gate below. `just keiro-gate HEAD~1` on the committed tree passed check, inspect and scaffold,
+and `keiro-diff` reported the one finding accepted under the pre-release exception:
+
+```text
+BREAKING: AgentRun workflow-body AgentRun: workflow body labels, kinds, result types, or order changed without a new patch guard; wrap a cross-cutting change in patch, or rename the replay label for one changed step [WorkflowBodyChanged]
+    vector: private-history-read=breaking old-binary-read-new-events=breaking snapshot-hydration=advisory rollout=stop-the-world
+    declared: shikigami/agent-run.keiro:5
+replay-neutral: stored-data replay is unchanged by this diff
+```
+
+The generated conformance suite passed after `KeiroConformance/Expectations.hs` was pinned to
+the new body, `record-admission` after `lookup-agent` and `record-finish` after `complete`.
 
 M1 (2026-11-15, commit 3c9ba841). The kernel decides every external action through its own
 `Action` and `Authority`, and every decision is a row in `shikigami.action_record`. Results
@@ -666,9 +787,11 @@ update `docs/user/cli.md` and `docs/operations/configuration.md`.
 ### Milestone 3: the portability check
 
 Add `agents/proof/portable-note.dhall`: a `Skill` agent with a declared principal, no trigger
-line, the `workspace.read` overlay and no `outputs` line, plus its `SKILL.md`, which
-asks the model to summarize a repository's README and then asks for approval before
-reporting. It names nothing Kikan-specific. Add `shikigami record check --run <id>` to
+line, no capability overlay and no `outputs` line, plus its `SKILL.md`, which asks the
+model to summarize the README it receives as the trigger payload. Under the stock
+composition the approval policy asks before reporting. It names nothing Kikan-specific.
+(Revised in M3: the first text gave it the `workspace.read` overlay, which only the light
+commands register; see the Decision Log.) Add `shikigami record check --run <id>` to
 `Command/Record.hs`, backed by a pure `Shikigami.Record.Invariant.checkRun :: RunFacts ->
 [RecordEvent] -> [InvariantViolation]` with one constructor per invariant: a missing or
 paused principal (K1); an effect entry with no preceding `authority.decided` approval for
@@ -682,7 +805,8 @@ Run the declaration twice against the same repository. The first run uses the st
 composition: `shikigami-agent-run` under `LocalOperator`, the operator as authority,
 `local.inbox`, and `local.report` reached through the composition default. The second uses
 `shikigami-worker` configured with the Kikan authority (`authorization.actions.mode` set to
-the Kikan mode) and a registry whose default is `kawa.digest`, against whichever Kikan-En
+the Kikan mode) and a registry whose default is `kawa.digest` (`outputs.default=kawa.digest`,
+with the adapter M3 adds in `Shikigami.Output.Kikan`), against whichever Kikan-En
 instance the operator can run locally; `docs/capabilities/local-integration-fixtures.md`
 describes the local fixtures. Compare the two records with `shikigami record list --json`:
 the sequences of kinds and action tags must be equal, and only `decidedBy`, `reference`,
