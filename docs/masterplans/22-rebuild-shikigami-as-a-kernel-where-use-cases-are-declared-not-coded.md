@@ -1059,8 +1059,12 @@ source that reaches a Kikan client, an outbox delivery is recorded against its r
 deployment-tier one-off run is composed like the worker, and the portability check passed
 against the distribution. By the user's decision the record-into-evidence projection is the
 attestation plan's, the qualification cohort waits for the distribution's Nix package, and
-the Kikan sample declarations stay in `agents/`. Next in order are EP-11 M2 to M4; EP-11 M2
-waits on EP-7 M3 (the keiro campaign), which is the user's call. Stage 1 (the pilot) ends at the declaration baseline, and stage 2 at
+the Kikan sample declarations stay in `agents/`. EP-11 M3 is accepted on 2026-11-17: every
+remaining surface is registered (14, all clean), the core compiles its modules in a private
+`internal` library and exposes only the 273 a consumer imports, a check refuses a pack-owned
+label in the core keiro specifications, and `docs/architecture/kernel-invariants.md` audits
+K1 to K8. EP-11 M2, and M4 after it, wait on EP-7 M3 (the keiro campaign), which is the
+user's call. Stage 1 (the pilot) ends at the declaration baseline, and stage 2 at
 the kernel baseline.
 
 - [ ] Architectural acceptance: the keiro modernization campaign runs for real on at least

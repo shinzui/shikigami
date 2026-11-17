@@ -22,7 +22,7 @@ import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.IO qualified as TextIO
-import System.Directory (doesDirectoryExist, listDirectory)
+import System.Directory (doesDirectoryExist, doesFileExist, listDirectory)
 import System.FilePath (takeExtension, takeFileName, (</>))
 
 data Exposure = Exposure
@@ -99,7 +99,8 @@ measureExposure root = do
   let exposed = parseExposedModules cabal
       defined = parseStanzaModules "library" ["exposed-modules:"] cabal <> parseStanzaModules "library internal" ["exposed-modules:"] cabal
   sources <- concat <$> mapM (haskellSources . (root </>)) consumerDirectories
-  imported <- Set.unions <$> mapM (fmap importedModules . TextIO.readFile) sources
+  borrowed <- borrowedCoreSources root
+  imported <- Set.unions <$> mapM (fmap importedModules . TextIO.readFile) (sources <> borrowed)
   pure Exposure {exposed, defined, imported}
   where
     consumerDirectories =
@@ -116,6 +117,23 @@ measureExposure root = do
         "tools",
         "tests"
       ]
+
+-- | Core test modules a pack's test suite compiles from the core's own test
+-- directories (the watchdog pack borrows 21, ADR-130). They are compiled
+-- outside the core, so what they import must be exposed.
+borrowedCoreSources :: FilePath -> IO [FilePath]
+borrowedCoreSources root = do
+  packs <- listOrEmpty (root </> "packs")
+  cabals <- concat <$> mapM (\pack -> map ((root </> "packs" </> pack) </>) . filter ((== ".cabal") . takeExtension) <$> listOrEmpty (root </> "packs" </> pack)) packs
+  listed <- concat <$> mapM (fmap borrowedModules . TextIO.readFile) cabals
+  let candidates = [root </> "shikigami-core" </> directory </> Text.unpack (Text.replace "." "/" name) <> ".hs" | name <- listed, directory <- ["test", "test-postgres"]]
+  filterM doesFileExist candidates
+  where
+    listOrEmpty directory = do
+      exists <- doesDirectoryExist directory
+      if exists then listDirectory directory else pure []
+    -- A pack names a borrowed module as a @Shikigami.*@ line of a module list.
+    borrowedModules contents = [Text.strip line | line <- Text.lines contents, "    Shikigami." `Text.isPrefixOf` line]
 
 haskellSources :: FilePath -> IO [FilePath]
 haskellSources directory = do

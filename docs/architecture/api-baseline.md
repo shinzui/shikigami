@@ -110,7 +110,7 @@ is not built. A check that cannot run is never reported as clean.
 | `just api-baseline --enforce` | Treat every surface as enforcing, to see what a freeze would refuse. |
 | `just api-baseline-pin <name>` | Rewrite one surface's pinned files from the working tree. |
 | `cabal run -v0 api-baseline -- list api-baseline/surfaces.dhall --freeze declaration` | Name the surfaces of one freeze. |
-| `cabal run -v0 api-baseline -- exposure` | Measure how much of `shikigami-core` is exposed and how much a consumer imports. |
+| `cabal run -v0 api-baseline -- exposure [--needed]` | Measure how much of `shikigami-core` is exposed and how much a consumer imports; `--needed` lists the modules the main library must re-export. |
 
 
 ## Making a deliberate change

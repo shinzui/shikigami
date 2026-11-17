@@ -218,7 +218,13 @@ component boundary in addition to the existing main-library dependency budgets.
 
 ## What may not appear in `shikigami-core`
 
-`shikigami-core` is the domain. Its **library** stanza must not depend on:
+`shikigami-core` is the domain. Its modules are compiled in a private `internal`
+library, and its main library re-exports only the modules something outside the core
+imports, as `cabal run -v0 api-baseline -- exposure --needed` lists them (EP-11 M3). A
+sibling package, a pack or a tool cannot import a hidden module: the compiler refuses it,
+and the `core-exposed-modules` surface makes a newly exposed module a reviewed change.
+The core's own sublibraries and test suites depend on `shikigami-core:internal`. Its
+**production library** (the internal library behind the main one) must not depend on:
 
 - `wai`, `warp`, `servant-server` — HTTP serving belongs to `shikigami-server`.
 - `hs-opentelemetry-sdk`, `hs-opentelemetry-exporter-otlp` — provider and exporter

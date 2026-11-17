@@ -35,6 +35,7 @@ library
     ApiBaseline.Check.CliHelp
     ApiBaseline.Check.DhallSchema
     ApiBaseline.Check.ExportList
+    ApiBaseline.Check.ExposedSet
     ApiBaseline.Check.JournalCodec
     ApiBaseline.Check.KeiroGate
     ApiBaseline.Check.KernelLabels

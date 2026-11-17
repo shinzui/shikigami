@@ -19,6 +19,7 @@ let Check =
           { executable : Text, verbs : List (List Text), goldens : Text }
       | JournalCodec : { corpus : Text, goldens : Text }
       | KeiroGate : { since : Text }
+      | ExposedSet : { cabal : Text, pinned : Text }
       >
 
 let Surface =

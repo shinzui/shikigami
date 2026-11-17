@@ -243,4 +243,17 @@ in  [ { name = "agent-declaration"
       , freeze = S.Freeze.Kernel
       , enforcement = S.Enforcement.Report
       }
+    , { name = "core-exposed-modules"
+      , owner = baselinePlan
+      , stability = S.Stability.Provisional
+      , rule =
+          "A module the core's main library exposes stays exposed; exposing another is a reviewed change."
+      , check =
+          S.Check.ExposedSet
+            { cabal = "shikigami-core/shikigami-core.cabal"
+            , pinned = "api-baseline/goldens/exposed/shikigami-core.txt"
+            }
+      , freeze = S.Freeze.Kernel
+      , enforcement = S.Enforcement.Report
+      }
     ]

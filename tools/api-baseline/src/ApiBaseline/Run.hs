@@ -9,9 +9,11 @@ where
 import ApiBaseline.Check.CliHelp (cliHelpFindings, goldenName)
 import ApiBaseline.Check.DhallSchema (corpusFiles, dhallSchemaFindings, excerpt, loadCorpusFile, semanticHash)
 import ApiBaseline.Check.ExportList (exportListFindings, parseInterfaceExports, parsePinned, renderPinned)
+import ApiBaseline.Check.ExposedSet (exposedSetFindings, parseExposedSet, renderExposedSet)
 import ApiBaseline.Check.JournalCodec (encodeGolden, journalCodecFindings)
 import ApiBaseline.Check.KeiroGate (keiroGateFindings)
 import ApiBaseline.Check.OpenApi (openApiFindings)
+import ApiBaseline.Exposure (parseExposedModules)
 import ApiBaseline.Types
 import Control.Exception (IOException, try)
 import Data.Aeson qualified as Aeson
@@ -79,6 +81,10 @@ checkSurface surface = case surface.check of
     pure do
       current <- sequence exports
       Right (concat [exportListFindings moduleName (Map.findWithDefault mempty moduleName pins) names | (moduleName, names) <- zip modules current])
+  ExposedSet {cabal, pinned} -> do
+    current <- parseExposedModules <$> TextIO.readFile (Text.unpack cabal)
+    pins <- maybe mempty (parseExposedSet . decode) <$> readOptional (Text.unpack pinned)
+    pure (Right (exposedSetFindings pins current))
   KeiroGate {since} -> do
     ran <- try (readProcessWithExitCode "just" ["keiro-gate", Text.unpack since] "") :: IO (Either IOException (ExitCode, String, String))
     pure case ran of
@@ -130,6 +136,9 @@ pinSurface inventory surface = case surface.check of
       Left problem -> pure (Left problem)
       Right current -> Right . pure <$> writeBytes (Text.unpack pinned) (encode (renderPinned (Map.fromList (zip modules current))))
   KeiroGate {} -> pure (Left "the durable wire is pinned by its `since` commit, which the freeze sets in the inventory")
+  ExposedSet {cabal, pinned} -> do
+    current <- parseExposedModules <$> TextIO.readFile (Text.unpack cabal)
+    Right . pure <$> writeBytes (Text.unpack pinned) (encode (renderExposedSet current))
 
 currentOpenApi :: LazyByteString.ByteString
 currentOpenApi = renderOpenApi shikigamiOpenApi
@@ -175,8 +184,18 @@ interfaceExports component moduleName = do
       architectures <- listOrEmpty build
       compilers <- concat <$> mapM (\architecture -> map ((build </> architecture) </>) <$> listOrEmpty (build </> architecture)) architectures
       packages <- concat <$> mapM (\compiler -> map (compiler </>) . filter (Text.isPrefixOf (packageName <> "-") . Text.pack) <$> listOrEmpty compiler) compilers
-      let paths = [maybe (package </> "build") (\name -> package </> "l" </> name </> "build" </> name) library </> relative | package <- packages]
+      paths <- concat <$> mapM candidates packages
       filterExisting paths
+    -- A main library may only re-export modules compiled in a private
+    -- sublibrary (the core's @internal@, EP-11 M3), so its modules are looked
+    -- for there too; module names are unique within a package.
+    candidates package = case library of
+      Just name -> pure [package </> "l" </> name </> "build" </> name </> relative]
+      Nothing -> do
+        sublibraries <- listOrEmpty (package </> "l")
+        -- The sublibraries first: a main library's own build directory may
+        -- still hold interfaces from before its modules moved.
+        pure ([package </> "l" </> name </> "build" </> name </> relative | name <- sublibraries] <> [package </> "build" </> relative])
     listOrEmpty directory = either (const []) id <$> (try (listDirectory directory) :: IO (Either IOException [FilePath]))
     filterExisting = fmap concat . mapM (\path -> (\exists -> [path | exists]) <$> doesFileExist path)
 

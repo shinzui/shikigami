@@ -60,6 +60,8 @@ data Check
     JournalCodec {corpus :: !Text, goldens :: !Text}
   | -- | The durable workflow contract, through @just keiro-gate@.
     KeiroGate {since :: !Text}
+  | -- | The modules a Cabal file's main library exposes or re-exports.
+    ExposedSet {cabal :: !Text, pinned :: !Text}
   deriving stock (Eq, Show, Generic)
   deriving anyclass (FromDhall)
 

@@ -159,7 +159,7 @@ tests =
         case lookup "shikigami-core" stanzas of
           Nothing -> assertFailure "core package missing"
           Just components -> case filter (\component -> component.kind == "library" && component.name == "inspection") components of
-            [component] -> mapM_ (\dependency -> assertBool "inspection component has an explicit dependency budget" (dependency `elem` component.dependencies)) ["shikigami-core", "keiro-ops-http", "kiroku-metrics", "pgmq-inspect"]
+            [component] -> mapM_ (\dependency -> assertBool "inspection component has an explicit dependency budget" (dependency `elem` component.dependencies)) ["shikigami-core:internal", "keiro-ops-http", "kiroku-metrics", "pgmq-inspect"]
             _ -> assertFailure "exactly one named inspection library is required"
         mapM_ (\package -> productionLibraryDeps package stanzas >>= \deps -> assertBool "serving role uses the shared component" ("shikigami-core:inspection" `elem` deps)) ["shikigami-server", "shikigami-workers"],
       testCase "core links the neutral tool registry without a provider adapter" do
@@ -312,7 +312,18 @@ productionLibraryDeps package stanzas =
         (libraryStanza : _)
           | null ((.dependencies) libraryStanza) ->
               assertFailure (Text.unpack package <> ": library stanza parsed with no dependencies")
+          -- A main library that re-exports a private internal library is that
+          -- library's public face (EP-11 M3): its production dependencies are
+          -- the internal library's.
+          | internal `elem` (.dependencies) libraryStanza ->
+              case filter (\s -> (.kind) s == "library" && (.name) s == "internal") packageStanzas of
+                (internalStanza : _)
+                  | not (null ((.dependencies) internalStanza)) ->
+                      pure (filter (/= internal) ((.dependencies) libraryStanza) <> (.dependencies) internalStanza)
+                _ -> assertFailure (Text.unpack package <> ": the main library re-exports an internal library that parsed with no dependencies")
           | otherwise -> pure ((.dependencies) libraryStanza)
+  where
+    internal = package <> ":internal"
 
 -- | @shikigami-migrations:test-support@ names the @shikigami-migrations@ package.
 dropSublibrary :: Text -> Text

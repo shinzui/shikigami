@@ -5,6 +5,7 @@ module Main (main) where
 import ApiBaseline.Check.CliHelp (cliHelpFindings, helpVocabulary)
 import ApiBaseline.Check.DhallSchema (dhallSchemaFindings, excerpt)
 import ApiBaseline.Check.ExportList (exportListFindings, parseInterfaceExports, parsePinned, renderPinned)
+import ApiBaseline.Check.ExposedSet (exposedSetFindings, parseExposedSet, renderExposedSet)
 import ApiBaseline.Check.JournalCodec (encodeGolden, journalCodecFindings)
 import ApiBaseline.Check.KeiroGate (keiroGateFindings)
 import ApiBaseline.Check.KernelLabels (PackLabelInSpec (..), packLabels, packLabelsInSpecs, specLabels)
@@ -259,6 +260,10 @@ exposureTests =
           @?= Set.fromList ["Shikigami.Flow.Sdk", "Shikigami.Agent.Decl", "Shikigami.Log"],
       testCase "the three numbers are exposed, needed and exposed but unneeded" do
         exposureCounts Exposure {exposed = Set.fromList ["A", "B", "C"], defined = Set.fromList ["A", "B", "C"], imported = Set.fromList ["B", "Elsewhere"]} @?= (3, 1, 2),
+      testCase "a hidden module breaks, a newly exposed one is a change, and the pin round-trips" do
+        severities (exposedSetFindings (Set.fromList ["A", "B"]) (Set.fromList ["A", "C"])) @?= [Breaking, Changed]
+        exposedSetFindings (Set.fromList ["A"]) (Set.fromList ["A"]) @?= []
+        parseExposedSet (renderExposedSet (Set.fromList ["B", "A"])) @?= Set.fromList ["A", "B"],
       testCase "a module re-exported from a private library counts as exposed, and a hidden one as defined" do
         let split = Text.unlines ["library", "  reexported-modules:", "    Shikigami.Flow.Sdk,", "", "library internal", "  visibility: private", "  exposed-modules:", "    Shikigami.Flow.Sdk", "    Shikigami.Hidden"]
         parseExposedModules split @?= Set.fromList ["Shikigami.Flow.Sdk"]
@@ -292,7 +297,7 @@ pinTests =
         -- Relative, as every inventory path is.
         let scratch = "api-baseline-pin-test.scratch"
         createDirectoryIfMissing True scratch
-        let schema = scratch </> "Schema.dhall"
+        let schemaFile = scratch </> "Schema.dhall"
             inventory = scratch </> "surfaces.dhall"
             original = "[ { hash = \"\" } ]\n"
             surface =
@@ -301,11 +306,11 @@ pinTests =
                   owner = "fixture",
                   stability = Provisional,
                   rule = "fixture",
-                  check = DhallSchema {schema = Text.pack schema, hash = "", corpus = Text.pack scratch},
+                  check = DhallSchema {schema = Text.pack schemaFile, hash = "", corpus = Text.pack scratch},
                   freeze = Kernel,
                   enforcement = Report
                 }
-        TextIO.writeFile schema "{ field = 1 }"
+        TextIO.writeFile schemaFile "{ field = 1 }"
         TextIO.writeFile inventory original
         result <- pinSurface inventory surface
         after <- TextIO.readFile inventory
