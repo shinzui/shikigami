@@ -256,6 +256,7 @@ These came from read-only research on 2026-11-15, before implementation.
   Evidence: two such lines per finished run in the acceptance worker log;
   `mori://shinzui/kioku` `kioku-core/src/Kioku/Distill/Timer.hs` line 128 (artifact URI
   pending).
+  Planned in `docs/plans/137-settle-kioku-distillation-timers-through-kioku-s-fire-api-in-the-shared-timer-dispatcher.md`.
 
 ## Decision Log
 
