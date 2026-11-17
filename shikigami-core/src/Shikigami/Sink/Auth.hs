@@ -10,6 +10,7 @@ module Shikigami.Sink.Auth
     CredentialFailureReason (..),
     TokenSource (..),
     credentialToken,
+    packSecretToken,
     staticTokenSource,
     matchesBearerHeader,
   )
@@ -17,7 +18,7 @@ where
 
 import Shikigami.App.Config (CredentialRef)
 import Shikigami.Prelude (Generic)
-import Shikigami.Sink.Auth.Internal (BearerToken, credentialToken, matchesBearerHeader)
+import Shikigami.Sink.Auth.Internal (BearerToken, credentialToken, matchesBearerHeader, packSecretToken)
 
 -- | A credential could not be obtained without exposing the credential value.
 data CredentialFailure = CredentialFailure

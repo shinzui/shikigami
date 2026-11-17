@@ -128,18 +128,6 @@ module Shikigami.App.Config
     openaiApiKeyKey,
     typesafeApiKeyKey,
     actionAuthorizationModeKey,
-    kawaTokenKey,
-    kizashiTokenKey,
-    kanmonTokenKey,
-    danwaTokenKey,
-    sinksKawaBaseUrlKey,
-    sinksKawaSourceSegmentKey,
-    sinksKizashiBaseUrlKey,
-    sinksKizashiDefaultRecipientKey,
-    sinksKanmonBaseUrlKey,
-    sinksDanwaBaseUrlKey,
-    sinksDanwaAgentParticipantKey,
-    sinksReiBaseUrlKey,
     declaredKeys,
     declaredKeysWith,
     jsonDecoder,
@@ -180,7 +168,7 @@ import Settei
 import Settei.Env
 import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Approval
-  ( ApprovalChannel (ViaDanwa),
+  ( ApprovalChannel,
     parseApprovalChannel,
     parseRequiredOutputKinds,
     renderApprovalChannel,
@@ -204,6 +192,7 @@ import Shikigami.Execution.Policy.Types qualified as Harness
 import Shikigami.Inspection.Settings (InspectionSettings (..))
 import Shikigami.Objective.Tracker.Config (TrackerSettings, defaultTrackerSettings)
 import Shikigami.Objective.Types (ObjectiveSettings, defaultObjectiveSettings)
+import Shikigami.Output (DefaultOutputChoice (..), parseDefaultOutputChoice, renderDefaultOutputChoice)
 import Shikigami.Pack.Setting (PackSetting (..), PackSettings, SettingDefault (..), SettingShape (..), noPackSettings, packSettingsWithSecrets)
 import Shikigami.RuntimePolicy
 import Shikigami.Trigger.Schedule (CatchUpPolicy (..))
@@ -449,8 +438,11 @@ data AppConfig = AppConfig
     approvalRequiredOutputs :: ![Text],
     -- | The output a worker gives a declaration that lists none
     -- (EP-8 M3): @Nothing@ keeps the result in the journal.
-    defaultOutputKind :: !(Maybe Text),
-    approvalChannel :: !ApprovalChannel,
+    defaultOutputKind :: !DefaultOutputChoice,
+    -- | The channel approval asks go through; absent takes the
+    -- composition's (a composed pack's preferred channel, else the local
+    -- inbox).
+    approvalChannel :: !(Maybe ApprovalChannel),
     approvalDeadline :: !(Duration "approval"),
     -- | How long a parked conversation waits for its next human message before
     -- ending its epoch and completing its kioku session.
@@ -463,35 +455,6 @@ data AppConfig = AppConfig
     -- ('appConfigWith'). Empty in a stock executable, which composes none and
     -- so refuses a pack's key as unknown.
     packSettings :: !PackSettings,
-    -- | Base URL of the kawa ingest doorway.
-    kawaBaseUrl :: !Text,
-    -- | Source segment kawa attributes ingested activity to.
-    kawaSourceSegment :: !(ActivityCoordinate "source"),
-    -- | Bearer token sent to kawa, when that sink requires authentication.
-    kawaToken :: !(Maybe SecretText),
-    -- | Base URL of the kizashi signal service.
-    kizashiBaseUrl :: !Text,
-    -- | Recipient used when a declared signal names none.
-    kizashiDefaultRecipient :: !(DeclarationCoordinate "recipient"),
-    -- | Bearer token sent to kizashi, when that sink requires authentication.
-    kizashiToken :: !(Maybe SecretText),
-    -- | Base URL of the Kanmon guarded channel-action service.
-    kanmonBaseUrl :: !Text,
-    -- | Bearer token authenticating Shikigami to Kanmon. Provider credentials
-    -- remain downstream and never enter this configuration.
-    kanmonToken :: !(Maybe SecretText),
-    -- | Base URL of the danwa conversation server.
-    danwaBaseUrl :: !Text,
-    -- | danwa participant id Shikigami authors messages as.
-    danwaAgentParticipant :: !(DeclarationCoordinate "danwa-participant"),
-    -- | Bearer token sent to danwa, when that sink requires authentication.
-    danwaToken :: !(Maybe SecretText),
-    -- | Base URL of a rei ingestion endpoint, if one exists.
-    --
-    -- This selects the legacy /v1/agent-actions protocol. Objective trackers
-    -- use separately configured Rei v2 connections. Absent means a @ReiAction@
-    -- sink fails visibly into the outbox retry path.
-    reiBaseUrl :: !(Maybe Text),
     -- | Which model the @Skill@ behavior arm dispatches with.
     --
     -- The one field that is not named for a single key, because it is not
@@ -560,23 +523,11 @@ kernelAppConfig =
     <*> withDefault workerRunTimeoutSecondsSetting (constant "worker-run-timeout" "Bound one synchronous behavior attempt" (knownDuration (secondsToNominalDiffTime 300)))
     <*> withDefault approvalRequireSetting (constant "approval-auto-approve" "Ordinary sinks do not require approval" mempty)
     <*> withDefault approvalRequireOutputsSetting (constant "approval-outputs-auto-approve" "Outputs do not require approval" [])
-    <*> withDefault outputsDefaultSetting (constant "outputs-journal-only" "A worker keeps the result of a declaration with no outputs in the journal" Nothing)
-    <*> withDefault approvalChannelSetting (constant "approval-danwa" "Send human approval asks through Danwa" ViaDanwa)
+    <*> withDefault outputsDefaultSetting (constant "outputs-composition" "A declaration with no outputs takes the output a composed pack prefers, or stays in the journal" CompositionPreferred)
+    <*> optional approvalChannelSetting
     <*> withDefault approvalDeadlineSecondsSetting (constant "approval-deadline" "Bound approval and acknowledgement waits" (knownDuration (secondsToNominalDiffTime 900)))
     <*> withDefault conversationIdleTimeoutSecondsSetting (constant "conversation-idle-timeout" "End a conversation epoch after half an hour of silence" (knownDuration (secondsToNominalDiffTime 1800)))
     <*> pure noPackSettings
-    <*> withDefault sinksKawaBaseUrlSetting (constant "local-kawa" "The local kawa (or stub-kawa) doorway" "http://localhost:8088")
-    <*> withDefault sinksKawaSourceSegmentSetting (constant "kawa-source" "This repository's ingest source segment" (activityCoordinate "shinzui/shikigami"))
-    <*> optional kawaTokenSetting
-    <*> withDefault sinksKizashiBaseUrlSetting (constant "local-kizashi" "The local kizashi service" "http://localhost:8089")
-    <*> withDefault sinksKizashiDefaultRecipientSetting (constant "kizashi-recipient" "Recipient used when a signal declares none" (declarationCoordinate "recipient_default"))
-    <*> optional kizashiTokenSetting
-    <*> withDefault sinksKanmonBaseUrlSetting (constant "local-kanmon" "The local Kanmon channel-action service" "http://localhost:8090")
-    <*> optional kanmonTokenSetting
-    <*> withDefault sinksDanwaBaseUrlSetting (constant "local-danwa" "The local danwa server" "http://localhost:8080")
-    <*> withDefault sinksDanwaAgentParticipantSetting (constant "danwa-agent" "Participant id Shikigami authors messages as" (declarationCoordinate "part_shikigami"))
-    <*> optional danwaTokenSetting
-    <*> optional sinksReiBaseUrlSetting
     <*> behaviorProviderConfig
     <*> decisionModelsConfig
     <*> withDefault harnessSetting (constant "default-harness" "Bound Skill execution policy" Harness.defaultHarnessPolicy)
@@ -1167,25 +1118,23 @@ approvalRequireOutputsSetting =
       Left problem -> Left problem
       Right value -> Right (filter (not . Text.null) (Text.strip <$> Text.splitOn "," value))
 
-outputsDefaultSetting :: Setting (Maybe Text)
+outputsDefaultSetting :: Setting DefaultOutputChoice
 outputsDefaultSetting =
   publicSettingWithRenderer
     outputsDefaultKey
-    "The worker's default output for a declaration that lists none: none or kawa.digest"
+    "The default output of a declaration that lists none: composition (a composed pack's preference), none, or a registered output kind"
     defaultDecoder
-    (maybe "none" id)
+    renderDefaultOutputChoice
   where
     defaultDecoder = decoder \key raw -> case runDecoder textDecoder key raw of
       Left problem -> Left problem
-      Right "none" -> Right Nothing
-      Right "kawa.digest" -> Right (Just "kawa.digest")
-      Right _ -> Left (decodeFailure key "none or kawa.digest")
+      Right value -> first (const (decodeFailure key "composition, none or an output kind such as kawa.digest")) (parseDefaultOutputChoice value)
 
 approvalChannelSetting :: Setting ApprovalChannel
 approvalChannelSetting =
   publicSettingWithRenderer
     approvalChannelKey
-    "Channel used for human approval asks (danwa or kizashi)"
+    "Channel used for human approval asks: local-inbox or a channel a composed pack registers (the Kikan binding's danwa or kizashi)"
     (decoder decodeChannel)
     renderApprovalChannel
   where
@@ -1199,7 +1148,7 @@ approvalRequireExpectation =
   "an empty value or a comma-separated unique set of output kinds, such as kizashi.signal,danwa.conversation"
 
 approvalChannelExpectation :: Text
-approvalChannelExpectation = "one of danwa, kizashi"
+approvalChannelExpectation = "an approval channel name, such as local-inbox or danwa"
 
 conversationIdleTimeoutSecondsSetting :: Setting (Duration "conversation-idle")
 conversationIdleTimeoutSecondsSetting =
@@ -1234,64 +1183,6 @@ durationExpectation = "a whole number of seconds between 1 and 86400"
 renderDurationSeconds :: Duration scope -> Text
 renderDurationSeconds duration =
   Text.pack (show (floor (nominalDiffTimeToSeconds (durationTime duration)) :: Integer))
-
-sinksKawaBaseUrlSetting :: Setting Text
-sinksKawaBaseUrlSetting = publicSettingWithRenderer sinksKawaBaseUrlKey "Base URL of the kawa ingest doorway" textDecoder id
-
-sinksKawaSourceSegmentSetting :: Setting (ActivityCoordinate "source")
-sinksKawaSourceSegmentSetting = publicSettingWithRenderer sinksKawaSourceSegmentKey "Source segment kawa attributes ingested activity to" (activityCoordinate <$> textDecoder) activityCoordinateText
-
-kawaTokenSetting :: Setting SecretText
-kawaTokenSetting =
-  secretSetting
-    kawaTokenKey
-    "Bearer token for the kawa sink"
-    (SecretText <$> textDecoder)
-
-sinksKizashiBaseUrlSetting :: Setting Text
-sinksKizashiBaseUrlSetting = publicSettingWithRenderer sinksKizashiBaseUrlKey "Base URL of the kizashi signal service" textDecoder id
-
-sinksKizashiDefaultRecipientSetting :: Setting (DeclarationCoordinate "recipient")
-sinksKizashiDefaultRecipientSetting = publicSettingWithRenderer sinksKizashiDefaultRecipientKey "Recipient used when a signal declares none" (declarationCoordinate <$> textDecoder) declarationCoordinateText
-
-kizashiTokenSetting :: Setting SecretText
-kizashiTokenSetting =
-  secretSetting
-    kizashiTokenKey
-    "Bearer token for the kizashi sink"
-    (SecretText <$> textDecoder)
-
-sinksKanmonBaseUrlSetting :: Setting Text
-sinksKanmonBaseUrlSetting = publicSettingWithRenderer sinksKanmonBaseUrlKey "Base URL of the Kanmon channel-action service" textDecoder id
-
-kanmonTokenSetting :: Setting SecretText
-kanmonTokenSetting =
-  secretSetting
-    kanmonTokenKey
-    "Bearer token authenticating Shikigami to Kanmon"
-    (SecretText <$> textDecoder)
-
-sinksDanwaBaseUrlSetting :: Setting Text
-sinksDanwaBaseUrlSetting = publicSettingWithRenderer sinksDanwaBaseUrlKey "Base URL of the danwa conversation server" textDecoder id
-
-sinksDanwaAgentParticipantSetting :: Setting (DeclarationCoordinate "danwa-participant")
-sinksDanwaAgentParticipantSetting = publicSettingWithRenderer sinksDanwaAgentParticipantKey "danwa participant id Shikigami authors messages as" (declarationCoordinate <$> textDecoder) declarationCoordinateText
-
-danwaTokenSetting :: Setting SecretText
-danwaTokenSetting =
-  secretSetting
-    danwaTokenKey
-    "Bearer token for the danwa sink"
-    (SecretText <$> textDecoder)
-
--- | Deliberately without a default: there is no rei endpoint to default to.
-sinksReiBaseUrlSetting :: Setting Text
-sinksReiBaseUrlSetting =
-  publicSettingWithRenderer
-    sinksReiBaseUrlKey
-    "Base URL of a rei ingestion endpoint; unset means ReiAction sinks fail visibly rather than silently"
-    textDecoder
-    id
 
 behaviorProviderSetting :: Setting ProviderChoice
 behaviorProviderSetting =
@@ -1453,30 +1344,6 @@ approvalDeadlineSecondsKey = stableKey "approval.deadline_seconds"
 conversationIdleTimeoutSecondsKey :: Key
 conversationIdleTimeoutSecondsKey = stableKey "conversation.idle_timeout_seconds"
 
-sinksKawaBaseUrlKey :: Key
-sinksKawaBaseUrlKey = stableKey "sinks.kawa.base_url"
-
-sinksKawaSourceSegmentKey :: Key
-sinksKawaSourceSegmentKey = stableKey "sinks.kawa.source_segment"
-
-sinksKizashiBaseUrlKey :: Key
-sinksKizashiBaseUrlKey = stableKey "sinks.kizashi.base_url"
-
-sinksKizashiDefaultRecipientKey :: Key
-sinksKizashiDefaultRecipientKey = stableKey "sinks.kizashi.default_recipient"
-
-sinksKanmonBaseUrlKey :: Key
-sinksKanmonBaseUrlKey = stableKey "sinks.kanmon.base_url"
-
-sinksDanwaBaseUrlKey :: Key
-sinksDanwaBaseUrlKey = stableKey "sinks.danwa.base_url"
-
-sinksDanwaAgentParticipantKey :: Key
-sinksDanwaAgentParticipantKey = stableKey "sinks.danwa.agent_participant"
-
-sinksReiBaseUrlKey :: Key
-sinksReiBaseUrlKey = stableKey "sinks.rei.base_url"
-
 behaviorProviderKey :: Key
 behaviorProviderKey = stableKey "behavior.provider"
 
@@ -1503,18 +1370,6 @@ openaiApiKeyKey = stableKey "credentials.providers.openai.api_key"
 
 typesafeApiKeyKey :: Key
 typesafeApiKeyKey = stableKey "credentials.providers.typesafe.api_key"
-
-kawaTokenKey :: Key
-kawaTokenKey = stableKey "credentials.sinks.kawa.token"
-
-kizashiTokenKey :: Key
-kizashiTokenKey = stableKey "credentials.sinks.kizashi.token"
-
-kanmonTokenKey :: Key
-kanmonTokenKey = stableKey "credentials.sinks.kanmon.token"
-
-danwaTokenKey :: Key
-danwaTokenKey = stableKey "credentials.sinks.danwa.token"
 
 actionAuthorizationModeKey :: Key
 actionAuthorizationModeKey = stableKey "authorization.actions.mode"
@@ -1609,18 +1464,6 @@ kernelEnvironmentBindings =
     binding (EnvName "SHIKIGAMI_OUTPUTS_DEFAULT") outputsDefaultKey,
     binding (EnvName "SHIKIGAMI_APPROVAL_DEADLINE_SECONDS") approvalDeadlineSecondsKey,
     binding (EnvName "SHIKIGAMI_CONVERSATION_IDLE_TIMEOUT_SECONDS") conversationIdleTimeoutSecondsKey,
-    binding (EnvName "SHIKIGAMI_SINKS_KAWA_BASE_URL") sinksKawaBaseUrlKey,
-    binding (EnvName "SHIKIGAMI_SINKS_KAWA_SOURCE_SEGMENT") sinksKawaSourceSegmentKey,
-    binding (EnvName "SHIKIGAMI_SINKS_KIZASHI_BASE_URL") sinksKizashiBaseUrlKey,
-    binding (EnvName "SHIKIGAMI_SINKS_KIZASHI_DEFAULT_RECIPIENT") sinksKizashiDefaultRecipientKey,
-    binding (EnvName "SHIKIGAMI_SINKS_KANMON_BASE_URL") sinksKanmonBaseUrlKey,
-    binding (EnvName "SHIKIGAMI_SINKS_DANWA_BASE_URL") sinksDanwaBaseUrlKey,
-    binding (EnvName "SHIKIGAMI_SINKS_DANWA_AGENT_PARTICIPANT") sinksDanwaAgentParticipantKey,
-    binding (EnvName "SHIKIGAMI_SINKS_REI_BASE_URL") sinksReiBaseUrlKey,
-    binding (EnvName "SHIKIGAMI_KAWA_TOKEN") kawaTokenKey,
-    binding (EnvName "SHIKIGAMI_KIZASHI_TOKEN") kizashiTokenKey,
-    binding (EnvName "SHIKIGAMI_KANMON_TOKEN") kanmonTokenKey,
-    binding (EnvName "SHIKIGAMI_DANWA_TOKEN") danwaTokenKey,
     binding (EnvName "SHIKIGAMI_BEHAVIOR_PROVIDER") behaviorProviderKey,
     binding (EnvName "SHIKIGAMI_BEHAVIOR_DECISION_MODELS") behaviorDecisionModelsKey,
     binding (EnvName "SHIKIGAMI_BEHAVIOR_HARNESS") behaviorHarnessKey,

@@ -27,7 +27,6 @@ import Shikigami.ObjectiveWorkflowSpec qualified as ObjectiveWorkflowSpec
 import Shikigami.ProfileResolutionSpec qualified as ProfileResolutionSpec
 import Shikigami.RouterWorkflowSpec qualified as RouterWorkflowSpec
 import Shikigami.RunEvidenceSpec qualified as RunEvidenceSpec
-import Shikigami.SinkDeliverySpec qualified as SinkDeliverySpec
 import Shikigami.SpikeWorkflowSpec qualified as SpikeWorkflowSpec
 import Shikigami.TypeSafeDecisionWorkflowSpec qualified as TypeSafeDecisionWorkflowSpec
 import Shikigami.WorkerSessionCapabilitySpec qualified as WorkerSessionCapabilitySpec
@@ -89,7 +88,6 @@ suite = withShikigamiMigratedSuite \databaseFixture ->
           ProfileResolutionSpec.tests databaseFixture,
           RouterWorkflowSpec.tests databaseFixture,
           RunEvidenceSpec.tests databaseFixture,
-          SinkDeliverySpec.tests databaseFixture,
           SpikeWorkflowSpec.tests databaseFixture,
           WorkflowVersioningSpec.tests databaseFixture
         ]

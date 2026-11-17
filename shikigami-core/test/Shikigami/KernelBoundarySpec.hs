@@ -132,12 +132,13 @@ isCoordinatorModule :: Text -> Bool
 isCoordinatorModule name =
   "Shikigami.Coordination." `Text.isPrefixOf` name || name `elem` ["Shikigami.Flow.AdaptiveDelivery", "Shikigami.Program.Decision.Adaptive"]
 
--- | The Kikan service bindings still compiled into the core. EP-10 moves them
--- to a binding package, after which the package dependency rule covers this.
+-- | The Kikan service code still compiled into the core: the Danwa
+-- conversation trigger and loop, which EP-10 M5 moves. The output clients and
+-- the authority left for @kikan-shikigami-binding@ (plan 135, M2 and M3), where
+-- the package dependency rule covers them.
 isBindingModule :: Text -> Bool
 isBindingModule name =
-  name `elem` ["Shikigami.Sink.KawaClient", "Shikigami.Sink.KizashiClient", "Shikigami.Sink.Danwa", "Shikigami.Sink.KanmonClient", "Shikigami.Sink.ReiAction", "Shikigami.Integration.Danwa", "Shikigami.Authority.KikanEn"]
-    || any (`Text.isPrefixOf` name) ["Shikigami.Authority.KikanEn.", "Shikigami.DanwaConversation."]
+  name == "Shikigami.Integration.Danwa" || "Shikigami.DanwaConversation." `Text.isPrefixOf` name
 
 -- ── The rules ───────────────────────────────────────────────────────────────
 
@@ -364,14 +365,14 @@ tests =
       testCase "the adaptive coordinator imports no Kikan binding module" do
         (_, inputs) <- readTree
         assertBool "the walk found the coordinator" (length inputs.coordinatorImports > 5)
-        let planted owner = fixture {coordinatorImports = [(owner, ["Shikigami.Flow.Decision", "Shikigami.Sink.KizashiClient", "Shikigami.DanwaConversation.Loop"])]}
+        let planted owner = fixture {coordinatorImports = [(owner, ["Shikigami.Flow.Decision", "Shikigami.Integration.Danwa", "Shikigami.DanwaConversation.Loop"])]}
         kernelViolations synthetic (planted "Shikigami.Coordination.Workflow")
-          @?= [ CoordinatorImportsBinding "Shikigami.Coordination.Workflow" "Shikigami.Sink.KizashiClient",
+          @?= [ CoordinatorImportsBinding "Shikigami.Coordination.Workflow" "Shikigami.Integration.Danwa",
                 CoordinatorImportsBinding "Shikigami.Coordination.Workflow" "Shikigami.DanwaConversation.Loop"
               ]
-        kernelViolations synthetic (planted "Shikigami.Program.Decision.Adaptive") @?= [CoordinatorImportsBinding "Shikigami.Program.Decision.Adaptive" "Shikigami.Sink.KizashiClient", CoordinatorImportsBinding "Shikigami.Program.Decision.Adaptive" "Shikigami.DanwaConversation.Loop"]
+        kernelViolations synthetic (planted "Shikigami.Program.Decision.Adaptive") @?= [CoordinatorImportsBinding "Shikigami.Program.Decision.Adaptive" "Shikigami.Integration.Danwa", CoordinatorImportsBinding "Shikigami.Program.Decision.Adaptive" "Shikigami.DanwaConversation.Loop"]
         kernelViolations synthetic (planted "Shikigami.Agent.Run") @?= []
-        assertBool "the refusal says why it is a primitive" ("depends on no Kikan service" `Text.isInfixOf` renderKernelViolation synthetic (CoordinatorImportsBinding "Shikigami.Coordination.Workflow" "Shikigami.Sink.KizashiClient")),
+        assertBool "the refusal says why it is a primitive" ("depends on no Kikan service" `Text.isInfixOf` renderKernelViolation synthetic (CoordinatorImportsBinding "Shikigami.Coordination.Workflow" "Shikigami.Integration.Danwa")),
       testCase "each SDK facade exports exactly its golden list" do
         root <- repositoryRoot
         (policy, _) <- readTree

@@ -60,6 +60,7 @@ library bodies
     containers,
     generic-lens,
     keiro,
+    kikan-shikigami-binding:outputs,
     kioku-api,
     mmzk-typeid,
     shikigami-core:flow-sdk,
@@ -92,6 +93,7 @@ library
     hasql-pool,
     hasql-transaction,
     keiro,
+    kikan-shikigami-binding:outputs,
     kioku-api,
     kioku-core,
     kiroku-store,
@@ -108,7 +110,6 @@ test-suite flow-pack-practice-review-test
   main-is: Main.hs
   other-modules:
     FlowPack.PracticeReview.EvidenceSpec
-    FlowPack.PracticeReview.Fixture.SinkHttp
     FlowPack.PracticeReview.MemorySpec
     FlowPack.PracticeReview.OrchestrationSpec
     FlowPack.PracticeReview.PackSpec
@@ -135,6 +136,9 @@ test-suite flow-pack-practice-review-test
     hasql,
     hasql-pool,
     keiro,
+    kikan-shikigami-binding,
+    kikan-shikigami-binding:outputs,
+    kikan-shikigami-binding:test-support,
     kioku-api,
     kioku-core,
     kiroku-store,

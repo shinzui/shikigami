@@ -97,7 +97,7 @@ tests fixture = withResource (newMVar Map.empty) (const (pure ())) $ \resource -
         session <- genSessionId
         duration <- right (parseDuration 900)
         let review = Approval.reviewRequestIdFor Agent.agentRunWorkflowName parent 0 "qualification-permission"
-            body = Approval.requestBoundApproval review session (Approval.ApprovalRequest "PRIVATE_REPLAY_MARKER" (object []) Approval.ViaDanwa) duration
+            body = Approval.requestBoundApproval review session (Approval.ApprovalRequest "PRIVATE_REPLAY_MARKER" (object []) Approval.configuredApprovalChannel) duration
             notifier = Approval.ApprovalWorkflowEnv (Approval.ApprovalNotifier (\_ _ _ _ -> pure ()) (\_ _ _ _ -> pure (Right ())))
         owned w.base (runWorkflow Agent.agentRunWorkflowName parent body) >>= (@?= Suspended)
         owned w.base (runChildWorkflow defaultWorkflowRunOptions Approval.approvalWorkflowName (Approval.approvalWorkflowId review) (Approval.approvalWorkflow notifier Nothing)) >>= (@?= Suspended)

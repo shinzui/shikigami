@@ -1,6 +1,6 @@
 let A = ../../../schema/Agent.dhall
 
-let K = ../../../schema/outputs/Kikan.dhall
+let K = ../../kikan-shikigami-binding/dhall/Outputs.dhall
 in  A.Agent::{
     , name = "qualification-at-risk-customer"
     , description = "Qualification of the existing durable customer approval Flow."

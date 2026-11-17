@@ -71,7 +71,7 @@ The proof manifests need matching directory handles or declared principal ids.
 With the shared environment configured, bind the heartbeat grant before starting:
 
 ```bash
-$ cabal run shikigami -- grants grant heartbeat KawaDigest --by operator
+$ cabal run shikigami -- grants grant heartbeat kawa.digest --by operator
 $ cabal run shikigami -- --set agents.directory=agents/proof agents sync
 ```
 
@@ -80,7 +80,7 @@ $ cabal run shikigami -- --set agents.directory=agents/proof agents sync
 ### 1. Start the kawa stub (republishing)
 
 ```bash
-$ cabal run shikigami -- stub-kawa --port 8088 \
+$ cabal run kikan-shikigami:exe:kikan-shikigami -- stub-kawa --port 8088 \
     --republish-topic activity.v1 --broker 127.0.0.1:9092
 ```
 
@@ -92,10 +92,17 @@ each accepted `KawaDigest` back onto the stream (exactly what real kawa's outbox
 ### 2. Start the worker
 
 ```bash
-$ cabal run shikigami-worker -- --agents agents/proof \
-    --kawa-url http://localhost:8088 --kizashi-url http://localhost:8089
+$ cabal run kikan-shikigami-worker -- --agents agents/proof \
+    --set sinks.kawa.base_url=http://localhost:8088 \
+    --set sinks.kizashi.base_url=http://localhost:8089
 {"event":"agents.manifest.loaded", ...}
 ```
+
+The loop runs under the Kikan distribution: its stub is a verb of `kikan-shikigami`, and
+its worker, `kikan-shikigami-worker`, registers the Kikan outputs the proof agents declare.
+The stock `shikigami-worker` registers no Kikan output (plan 135, M3). The service
+endpoints are the binding's settings, set here with `--set` (or their
+`SHIKIGAMI_SINKS_*` variables).
 
 The worker loads every `.dhall` in `--agents`, then drains `shikigami_run_jobs`: for each job
 it runs the agent's behavior, dispatches its (permission-gated) sinks to the configured kawa
@@ -172,9 +179,9 @@ $ cabal run shikigami-consume-events -- \
 Then start the worker with Danwa HTTP settings:
 
 ```bash
-$ cabal run shikigami-worker -- --agents agents \
-    --danwa-url http://localhost:8080 \
-    --danwa-agent part_shikigami
+$ cabal run kikan-shikigami-worker -- --agents agents \
+    --set sinks.danwa.base_url=http://localhost:8080 \
+    --set sinks.danwa.agent_participant=part_shikigami
 ```
 
 The sample `agents/danwa-heartbeat.dhall` listens for

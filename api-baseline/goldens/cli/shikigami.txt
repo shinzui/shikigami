@@ -38,9 +38,6 @@ Available commands:
   resolve-approval         Approve or reject one pending human approval token
   publish-fixture          Publish one Activity Envelope (JSON) onto the
                            activity stream with keiro-* headers
-  stub-kawa                Run the kawa ingest doorway stub, optionally
-                           republishing to a topic
-  stub-kanmon              Run the authenticated Kanmon channel-egress stub
   grants                   Inspect and change per-agent sink permission grants
                            (C11)
   agents                   Inspect the declared agents this deployment has

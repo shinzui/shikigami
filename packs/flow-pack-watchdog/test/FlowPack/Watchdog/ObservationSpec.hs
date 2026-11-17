@@ -197,7 +197,7 @@ tests fixture =
           duration <- right (parseDuration 900)
           let review = Approval.reviewRequestIdFor agentRunWorkflowName parent 0 "watchdog-observation-approval"
               childEnv = ApprovalWorkflow.ApprovalWorkflowEnv (ApprovalWorkflow.ApprovalNotifier (\_ _ opaque _ -> writeIORef token (Just opaque)) (\_ _ _ _ -> pure (Right ())))
-              parentBody = ApprovalWorkflow.requestBoundApproval review session (Approval.ApprovalRequest "WATCHDOG_PRIVATE_SENTINEL" (object []) Approval.ViaDanwa) duration
+              parentBody = ApprovalWorkflow.requestBoundApproval review session (Approval.ApprovalRequest "WATCHDOG_PRIVATE_SENTINEL" (object []) Approval.configuredApprovalChannel) duration
           run env (runWorkflow agentRunWorkflowName parent parentBody) >>= (@?= Suspended)
           run env (runChildWorkflow defaultWorkflowRunOptions ApprovalWorkflow.approvalWorkflowName (Approval.approvalWorkflowId review) (ApprovalWorkflow.approvalWorkflow childEnv Nothing)) >>= (@?= Suspended)
           grant <- fixtureGrant

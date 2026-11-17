@@ -11,7 +11,7 @@ import Data.UUID qualified as UUID
 import Data.Unique (hashUnique, newUnique)
 import Keiro.Workflow (WorkflowId (..), WorkflowName (..))
 import Keiro.Workflow.Awakeable (AwakeableId (..))
-import Shikigami.Agent.Approval (ApprovalChannel (ViaLocalInbox), ApprovalRequest (..), reviewRequestIdFor)
+import Shikigami.Agent.Approval (ApprovalRequest (..), localInboxChannel, reviewRequestIdFor)
 import Shikigami.Agent.Approval.LocalInbox
 import Shikigami.Agent.Approval.Workflow (ApprovalNotifier (..))
 import Shikigami.Agent.Decl (AgentDecl (..))
@@ -67,7 +67,7 @@ tests =
             reviewId = reviewRequestIdFor (WorkflowName "shikigami.agent-run") (WorkflowId "run-1") 0 "output-local.report-0"
             Right deadline = parseDuration 900
             token = AwakeableId (maybe (error "uuid") id (UUID.fromText "11111111-2222-3333-4444-555555555555"))
-        Right () <- (localInboxNotifier inbox).postAsk reviewId token deadline ApprovalRequest {prompt = "Deliver?", context = Null, channel = ViaLocalInbox}
+        Right () <- (localInboxNotifier inbox).postAsk reviewId token deadline ApprovalRequest {prompt = "Deliver?", context = Null, channel = localInboxChannel}
         [pendingAsk] <- listPendingApprovals inbox
         pendingAsk.prompt @?= "Deliver?"
         pendingToken pendingAsk @?= Just token

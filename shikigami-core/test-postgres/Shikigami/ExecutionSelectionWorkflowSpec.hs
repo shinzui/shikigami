@@ -10,7 +10,6 @@ import Baikai.Response (Response (..), responseError)
 import Baikai.ThinkingLevel (ThinkingLevel (ThinkingHigh, ThinkingLow, ThinkingMedium))
 import Contravariant.Extras (contrazip2)
 import Control.Concurrent.Async (concurrently)
-import Control.Exception (SomeException, try)
 import Control.Monad (when)
 import Data.Aeson (Value, eitherDecode, encode, object, toJSON, (.=))
 import Data.Aeson qualified as Aeson
@@ -40,30 +39,25 @@ import Keiro.Workflow.Awakeable (AwakeableId (..))
 import Keiro.Workflow.Awakeable.Schema (AwakeableRow (..), lookupAwakeable, registerAwakeableTx)
 import Keiro.Workflow.Awakeable.Schema qualified as Awakeable
 import Keiro.Workflow.Child (runChildWorkflow)
-import Keiro.Workflow.Types (WorkflowId (..))
 import Kioku.Id (genSessionId)
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
-import Kiroku.Store.Error (StoreError)
 import Kiroku.Store.Transaction (runTransaction)
 import Network.HTTP.Types (status200, status500)
 import Network.Wai qualified as Wai
 import Network.Wai.Handler.Warp (testWithApplication)
-import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Conversation qualified as Conversation
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..))
 import Shikigami.Agent.DeclarationValue
-import Shikigami.Agent.DeclarationValue (declarationCoordinate, declarationCoordinateText)
 import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (compatibilityIdentity)
-import Shikigami.Agent.Run (AgentRunResult)
-import Shikigami.Agent.RunJob (RunJob (..), runJobWorkflowId)
+import Shikigami.Agent.RunJob (runJobWorkflowId)
 import Shikigami.Agent.Workflow qualified as Agent
 import Shikigami.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
 import Shikigami.Behavior.Provider.Coordinate qualified as Coordinate
 import Shikigami.Behavior.Run (BehaviorEnv (..), completeBehaviorRequest, newBehaviorEnv)
 import Shikigami.Behavior.StubProvider (stubModel)
 import Shikigami.Capability.Overlay (emptyResolvedCapabilitySet)
-import Shikigami.Decision.Contract (ModelAlias, ModelDescriptor (..), versionedDigest)
+import Shikigami.Decision.Contract (ModelDescriptor (..))
 import Shikigami.Decision.ModelAlias qualified as Alias
 import Shikigami.Decision.ModelCatalog
 import Shikigami.Duration (parseDuration)
@@ -91,23 +85,20 @@ import Shikigami.Execution.Transcript qualified as Replay
 import Shikigami.ExecutionDriver.Generated.WorkflowRuntime qualified as DriverGenerated
 import Shikigami.Fixture.ExamplePack (exampleFlowRegistry, fixtureDecisionServices)
 import Shikigami.Fixture.ExecutionIdentity (fixtureAttemptId, fixtureOperationId, fixtureRootId)
-import Shikigami.Fixture.OutboxDispatch (unreachableServices)
+import Shikigami.Fixture.Outputs (unreachableOutputs)
+import Shikigami.Fixture.RawOutput (danwaConversationKind)
 import Shikigami.Flow.Decision qualified as Decision
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Integration.Danwa (AddressedMessage (..))
 import Shikigami.Log.Correlation (runCorrelationId)
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
-import Shikigami.Output.Kikan (kikanOutputs)
 import Shikigami.Prelude ((&), (.~))
 import Shikigami.RouterWorkflowSpec qualified as Fixture
 import Shikigami.RunEvidence.Catalog qualified as Catalog
-import Shikigami.Sink.Config (DanwaConfig (..))
 import Shikigami.Sink.GrantStore (GrantSource (StaticGrants))
-import Shikigami.Sink.Outputs (danwaConversationKind)
 import Shikigami.StateRevision (StateRevision, parseRevision)
 import Shikigami.Trigger.Enqueue (ensureRunQueue)
-import Shikigami.Trigger.Schedule (parseCron)
 import Shikigami.Workflow.Versioning (shikigamiWorkflowRunOptions)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit
@@ -418,9 +409,8 @@ tests fixture =
                     runTimeout = (either (error . show) id (parseDuration (30))),
                     harness = Harness.defaultHarnessPolicy,
                     idleTimeout = (either (error . show) id (parseDuration (1800))),
-                    danwa = DanwaConfig "http://localhost:1" (declarationCoordinate "participant"),
                     agents = [declaration],
-                    outputs = kikanOutputs unreachableServices,
+                    outputs = unreachableOutputs,
                     grants = StaticGrants (Map.singleton (compatibilityIdentity (either (error . show) id (mkAgentName "router"))) (Set.singleton danwaConversationKind)),
                     directory = dependencies.directory
                   }

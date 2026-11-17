@@ -12,6 +12,7 @@ import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Generics.Labels ()
 import Data.IORef
+import Data.List.NonEmpty (NonEmpty (..))
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as Text
@@ -23,14 +24,11 @@ import Hasql.Encoders qualified as E
 import Hasql.Statement (preparable)
 import Hasql.Transaction qualified as Tx
 import Keiro.Workflow (WorkflowId (..), WorkflowOutcome (..), loadStepIndex)
-import Keiro.Workflow.Types (WorkflowId (..))
 import Kiroku.Store.Connection (KirokuStore (..), withStore)
 import Kiroku.Store.Transaction (runTransaction)
-import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Approval (autoApprovePolicy)
 import Shikigami.Agent.Approval.Workflow qualified as Approval
 import Shikigami.Agent.Decl
-import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
 import Shikigami.Agent.Delegate.Depth (DelegationDepth, parseDelegationDepth)
 import Shikigami.Agent.Loader (loadAgent)
@@ -40,9 +38,9 @@ import Shikigami.Agent.Run.Key (RunKey, parseRunKey)
 import Shikigami.Agent.RunJob
 import Shikigami.Agent.Workflow qualified as Agent
 import Shikigami.App (AppEffects, AppEnv (..), runAppIO)
-import Shikigami.App.Config (AppConfig (..), defaultAppConfig)
 import Shikigami.Attestation.Resolve (ProfileResolutionError (UnknownProfile))
 import Shikigami.Authority
+import Shikigami.Authority (mkOutputKind)
 import Shikigami.Behavior.Run (newBehaviorEnv)
 import Shikigami.Behavior.StubProvider (stubApiProvider)
 import Shikigami.Capability.Overlay (CapabilityDescriptor (..))
@@ -50,7 +48,6 @@ import Shikigami.Directory (disabledDirectoryHandle)
 import Shikigami.Duration (parseDuration)
 import Shikigami.Execution.Driver (ExecutionStart (..))
 import Shikigami.Execution.Foreground (driveExecutionForeground)
-import Shikigami.Execution.Identity (ExecutionRootId, OperationId)
 import Shikigami.Execution.Policy.Types (defaultHarnessPolicy)
 import Shikigami.Execution.Resources qualified as Resources
 import Shikigami.Execution.ResourcesStore qualified as Roots
@@ -65,18 +62,16 @@ import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
-import Shikigami.Output (emptyOutputRegistry)
-import Shikigami.Output.Kikan (KikanServices (..), kikanOutputs)
+import Shikigami.Output (DefaultOutput (NoDefaultOutput), OutputAdapter (..), OutputRegistry, OutputRoute (..), mkOutputRegistry)
 import Shikigami.Pack.Setting (noPackSettings)
 import Shikigami.Prelude ((&), (.~))
-import Shikigami.Repository (RepositoryId, repositoryId, repositoryIdText)
+import Shikigami.Repository (repositoryId)
 import Shikigami.RunEvidence.Catalog qualified as Catalog
 import Shikigami.Sink (GrantSource (StaticGrants), defaultGrantTable)
-import Shikigami.Sink.Config
-import Shikigami.Sink.Http (HttpLimits (..), credentialsFromConfig, newSinkHttp)
+import Shikigami.Sink.Types (OutboxRoute (..))
+import Shikigami.Sink.Types qualified as Sink
 import Shikigami.StateRevision (StateRevision, parseRevision)
 import Shikigami.Trigger.Enqueue (ensureRunQueue)
-import Shikigami.Trigger.Schedule (parseCron)
 import Shikigami.WorkerSession.Input (SessionLimit (..))
 import Shikigami.WorkerSession.Input qualified as WorkerInput
 import Shikigami.WorkerSession.Store qualified as Sessions
@@ -340,7 +335,6 @@ withWorkflowAuthority authorizer configure fixture use = Fixture.withFixture fix
   now <- getCurrentTime
   observed <- newIORef []
   base <- newBehaviorEnv
-  http <- right =<< newSinkHttp (HttpLimits defaultAppConfig.httpRequestMaxBytes defaultAppConfig.httpResponseMaxBytes) (credentialsFromConfig defaultAppConfig) (DanwaConfig "http://localhost:1" (declarationCoordinate "fixture"))
   let complete model context options = do
         ordinal <- atomicModifyIORef' observed (\values -> (values <> [context], length values))
         response <- Provider.complete stubApiProvider model context options
@@ -371,7 +365,7 @@ withWorkflowAuthority authorizer configure fixture use = Fixture.withFixture fix
             agents = [declaration],
             hooks = Agent.defaultAgentRunHooks,
             codingAgents = Agent.noCodingAgents,
-            outputs = kikanOutputs (KikanServices {http, kizashi = KizashiConfig "http://localhost:1" (declarationCoordinate "recipient"), kawa = KawaConfig "http://localhost:1" (activityCoordinate "fixture"), kanmon = KanmonConfig "http://localhost:1", danwa = DanwaConfig "http://localhost:1" (declarationCoordinate "fixture"), rei = ReiConfig Nothing}),
+            outputs = unreachableOutputs,
             declaredTools = Agent.noDeclaredTools,
             approvalPolicy = autoApprovePolicy ((either (error . show) id . parseDuration) (900)),
             approvalWorkflow = Approval.defaultApprovalWorkflowEnv,
@@ -493,3 +487,15 @@ corruptTerminalMetadata fixture = withWorkflow fixture \env root job _ deps _ ->
   cleanupWorkspace (maintenance env root) job.identity binding.workspace >>= (@?= Right ())
   doesPathExist (workspaceFiles root binding) >>= (@?= False)
   doesPathExist (workspaceScratch root binding) >>= (@?= False)
+
+-- | The kinds the fixture declarations name; nothing is delivered.
+unreachableOutputs :: OutputRegistry
+unreachableOutputs =
+  either (error . Text.unpack) id (mkOutputRegistry (adapter <$> ["kawa.digest", "kizashi.signal", "danwa.conversation"]) NoDefaultOutput)
+  where
+    adapter name =
+      OutputAdapter
+        { kind = either (error . Text.unpack) id (mkOutputKind name),
+          validate = const (Right ()),
+          route = DeliverByOutbox OutboxRoute {address = const Aeson.Null, target = \_ _ -> Right ("fixture" :| []), dispatch = const (pure (Sink.Failed "the fixture output is unreachable"))}
+        }

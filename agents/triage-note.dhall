@@ -1,6 +1,6 @@
 let A = ../schema/Agent.dhall
 
-let K = ../schema/outputs/Kikan.dhall
+let K = ../packs/kikan-shikigami-binding/dhall/Outputs.dhall
 in  A.Agent::{
     , name = "triage-note"
     , behavior = A.Behavior.Skill { path = "agents/skills/triage-note" }

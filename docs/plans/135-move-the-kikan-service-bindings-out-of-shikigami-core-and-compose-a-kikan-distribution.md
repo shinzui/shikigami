@@ -104,7 +104,10 @@ service where one runs on this Mac.
   a coding-agent launch per action"; not pushed).)
 - [ ] M3: (in progress 2026-11-17: stage a done — the kernel pipeline addresses outputs
   and dispatches through adapters, still in core (`dda65c61`); stage c done — `sinks`
-  left the declaration; stages b with d, and e remain) The five output adapters and the two approval channels run from the binding, and
+  left the declaration (`269a7355`); stages b, d and e done — the adapters, clients,
+  settings, approval channels and stubs run from the binding and the distribution, and
+  the kernel registers outputs and channels from packs. Remaining: the acceptance runs
+  through `kikan-shikigami-worker`.) The five output adapters and the two approval channels run from the binding, and
   the distribution registers `kawa.digest` as its default output. A declared agent's outputs
   reach their services through the distribution worker, a declaration with no outputs gets a
   Kawa digest, and the stock composition refuses a declaration naming a Kikan output kind at
@@ -448,6 +451,72 @@ These came from read-only research on 2026-11-15, before implementation.
   workers, server, agent and pack suites: `cabal build all` here does not build test
   suites, and those suites did not compile at `dda65c61` (FRIC-98). Stage c fixes them and
   every suite is now built by name before it runs.
+  Date: 2026-11-17
+- Decision: (M3 stages b and d, 2026-11-17) A pack registers outputs and approval channels
+  on its `FlowPack`, as it registers authorities. `Shikigami.Output.Registration` gives
+  `OutputRegistration {kind, validate, defaultConfig, preferredDefault, build}`, where
+  `build :: AdapterContext -> IO (Either Text OutputAdapter)` runs once at start from
+  `AdapterContext {logger, settings, httpLimits}`; `validationRegistry` checks declarations
+  with no service at hand (`shikigami validate`), and `buildOutputRegistry` builds the
+  worker's and the light command's registry. `Shikigami.Approval.Channel` gives
+  `ApprovalChannelRegistration {channel, preferred, build}` and
+  `composeApprovalNotifier`, which routes an ask by the channel it names, with the
+  kernel's local inbox always composed. `ApprovalChannel` becomes a name
+  (`mkApprovalChannel`); an ask that names `configuredApprovalChannel` goes to the
+  composition's channel. `outputs.default` takes `composition` (the default: the output a
+  composed pack prefers, else none), `none`, or a registered kind; `approval.channel`
+  is optional (absent: the preferred channel, else `local-inbox`), and an executable
+  refuses to start on a channel or default kind it does not compose.
+  `composeFlowRegistry` refuses a kind or channel two packs register.
+  Rationale: the kernel then names no service, and the stock composition is the empty case
+  of the same mechanism, not a special one.
+  Date: 2026-11-17
+- Decision: (M3 stage b) The binding holds the five adapters, their clients
+  (`Kikan.Shikigami.Binding.Output.{Kawa,Kizashi,Kanmon,Rei,Danwa,Recipient,Wire,Config,Http}`),
+  the Danwa and Kizashi approval channels (`Kikan.Shikigami.Binding.Approval`; Danwa is
+  preferred) and the service settings (`Kikan.Shikigami.Binding.Settings`). The
+  `sinks.*` and `credentials.sinks.*` keys keep their names and variables as the binding's
+  pack settings, the tokens as secret pack settings, so an operator's configuration keeps
+  working with the distribution and a stock executable refuses them as unknown. The typed
+  configurations, the Kizashi enums, `toRecipient`, `inThread` and the binding's approval
+  channel names are a public sublibrary, `kikan-shikigami-binding:outputs`, depending on
+  `flow-sdk` only, so a pack's bodies may import them. `kawa.digest` is the binding's
+  preferred default, with the verb this plan names (`agent.run.completed`, replacing EP-8's
+  `reported`). The Dhall helper moved to `packs/kikan-shikigami-binding/dhall/Outputs.dhall`.
+  The kernel's Danwa conversation still spells its reply as a raw `danwa.conversation`
+  output until M5, with the same configuration JSON as before; the kernel keeps the generic
+  HTTP layer (`Shikigami.Sink.Http`, `Shikigami.Sink.Auth`), now re-exported by `pack-sdk`.
+  Date: 2026-11-17
+- Decision: (M3 stage b) The worker flags `--kawa-url`, `--kizashi-url`, `--kanmon-url`,
+  `--danwa-url` and `--danwa-agent` are removed with the kernel keys they set. An operator
+  sets the binding's keys with `--set` or their variables; pre-release, no deployment uses
+  the flags.
+  Date: 2026-11-17
+- Decision: (M3 stage b) Tests follow the code they test, because no stock package may
+  depend on a pack in any stanza. The Kikan client, dispatch, honesty and approval-channel
+  tests moved to the binding's suite (65 cases); the binding publishes its fixtures as
+  `kikan-shikigami-binding:test-support`. The Kikan delivery suite through the kernel's
+  publisher (`SinkDeliverySpec`, 20 cases) moved to the distribution as
+  `Kikan.OutputDeliverySpec`. Kernel tests spell outputs as raw `OutputDecl`s
+  (`Shikigami.Fixture.RawOutput`) and use neutral adapters that deliver nowhere or record
+  what they are handed (`Shikigami.Fixture.Outputs`); the two kernel cases that used the
+  Kawa and Danwa stubs (revocation between enqueue and publish, approval convergence)
+  assert the same properties on a capturing adapter and a capturing approval channel. The
+  qualification closure's two fixture agents now keep their results in the journal, because
+  that closure is the stock composition (ADR-39).
+  Date: 2026-11-17
+- Decision: (M3 stage e) `stub-kawa` and `stub-kanmon` are verbs of the distribution's
+  `kikan-shikigami` command, from a stub-only `FlowPack` that the admin executable composes;
+  their tokens come from the binding's secret settings. The modules live in
+  `packs/kikan-shikigami/admin/` and are compiled into the admin executable and the test
+  suite, because a distribution has no library by the fitness rule. `publish-fixture` stays
+  stock until M5 moves the stream intake: it publishes a kernel activity envelope and needs
+  no Kikan service.
+  Date: 2026-11-17
+- Decision: (M3) The three sample declarations `agents/{heartbeat,danwa-heartbeat,triage-note}.dhall`
+  stay in `agents/` for now, importing the binding's helper. About 40 files name them,
+  among them core tests that only decode them; moving them changes no behaviour and is
+  left to M6 with the distribution's example set.
   Date: 2026-11-17
 - Decision: The development stubs (`stub-kawa`, `stub-kanmon`, `publish-fixture`) move to
   the distribution's admin executable.

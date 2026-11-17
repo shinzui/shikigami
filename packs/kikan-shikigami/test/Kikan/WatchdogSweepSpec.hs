@@ -14,9 +14,7 @@ import Data.Aeson qualified as Aeson
 import Data.ByteString.Lazy qualified as Lazy
 import Data.Generics.Labels ()
 import Data.IORef (modifyIORef', newIORef, readIORef)
-import Data.List.NonEmpty qualified as NonEmpty
 import Data.Map.Strict qualified as Map
-import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text.Encoding (decodeUtf8)
 import Data.Time (addUTCTime, getCurrentTime)
@@ -30,14 +28,13 @@ import FlowPack.Watchdog.Observation
 import FlowPack.Watchdog.Observation.Read
 import FlowPack.Watchdog.Store qualified as Ledger
 import FlowPack.Watchdog.Types
-import Hasql.Transaction qualified as Tx
 import Keiro.PGMQ (runJobEff, runJobOnce, withJobRuntime)
 import Keiro.Workflow (WorkflowId (..), WorkflowOutcome (..))
 import Kikan.Fixture.ExecutionIdentity (fixtureOperationId, fixtureRootId)
 import Kikan.Fixture.Watchdog (kikanFlows, watchdogAllowances, watchdogPackSettings)
+import Kikan.Shikigami.Binding.Outputs (danwaConversationKind)
 import Kioku.Id (genSessionId)
-import Kiroku.Store.Transaction (runTransaction)
-import Shikigami.Agent.Decl (AgentDecl (..), Behavior (Flow), defaultDelegationBudget)
+import Shikigami.Agent.Decl (AgentDecl (..), defaultDelegationBudget)
 import Shikigami.Agent.DeclarationValue (declarationCoordinate)
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
 import Shikigami.Agent.Delegate.Depth (initialDepth)
@@ -54,7 +51,6 @@ import Shikigami.Directory qualified as Directory
 import Shikigami.Execution.Quantity (parseResourceAmount)
 import Shikigami.Execution.Resources qualified as R
 import Shikigami.Execution.ResourcesStore qualified as Roots
-import Shikigami.Flow.Decision qualified as Decision
 import Shikigami.Flow.Pack (decisionServices)
 import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Log qualified as Log
@@ -62,7 +58,6 @@ import Shikigami.Migrations.TestSupport (DatabaseFixture)
 import Shikigami.Objective.Types qualified as Objective
 import Shikigami.Sink (GrantSource (DbGrants))
 import Shikigami.Sink.GrantStore qualified as Grants
-import Shikigami.Sink.Outputs (danwaConversationKind)
 import Shikigami.StateRevision (advanceRevision, initialRevision)
 import Shikigami.Trigger.Schedule (CatchUpPolicy (SkipMissed), nextDue, parseCron)
 import Shikigami.Trigger.Scheduler (SchedulerEnv (..), armNextRun, runSchedulerTimerWorker)

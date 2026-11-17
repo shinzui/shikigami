@@ -59,8 +59,6 @@ tests =
                 "enqueue-run",
                 "resolve-approval",
                 "publish-fixture",
-                "stub-kawa",
-                "stub-kanmon",
                 "grants",
                 "agents",
                 "runs",
@@ -180,28 +178,6 @@ tests =
                 ("Usage:" `isInfixOf` rendered)
           )
           adminSubcommands,
-      testCase "stub-kawa keeps its republish options" do
-        let rendered = helpTextOf ["stub-kawa", "--help"]
-        mapM_
-          (\flag -> assertBool ("stub-kawa help does not mention " <> flag) (flag `isInfixOf` rendered))
-          ["--port", "--republish-topic", "--broker"],
-      testCase "stub-kanmon exposes only its port and repeatable destination allow-list" do
-        let rendered = helpTextOf ["stub-kanmon", "--help"]
-        mapM_
-          (\flag -> assertBool ("stub-kanmon help does not mention " <> flag) (flag `isInfixOf` rendered))
-          ["--port", "--allow-conversation"]
-        assertBool ("stub-kanmon must not accept a token argument:\n" <> rendered) (not ("--token" `isInfixOf` rendered))
-        case execParserPure adminPrefs adminInfo ["stub-kanmon", "--port", "8090", "--allow-conversation", "conv_1", "--allow-conversation", "conv_2"] of
-          Success (chosen, _) -> assertBool "stub-kanmon did not select an action" (not (isNothing chosen))
-          Failure failure ->
-            let (message, _) = renderFailure failure "shikigami"
-             in assertBool ("stub-kanmon options did not parse:\n" <> message) False
-          CompletionInvoked _ -> assertBool "unexpected completion invocation" False,
-      testCase "stub-kanmon rejects a token flag" $
-        case execParserPure adminPrefs adminInfo ["stub-kanmon", "--port", "8090", "--token", "secret"] of
-          Success _ -> assertBool "stub-kanmon accepted a plaintext token argument" False
-          Failure _ -> pure ()
-          CompletionInvoked _ -> assertBool "unexpected completion invocation" False,
       testCase "resolve-approval accepts exactly one typed decision" do
         let token = "123e4567-e89b-42d3-a456-426614174000"
         case parseResolution [token, "--approve"] of
@@ -267,8 +243,7 @@ tests =
         assertBool ("agents sync help does not mention --json:\n" <> syncHelp) ("--json" `isInfixOf` syncHelp)
         assertBool ("agents sync help does not mention --alias:\n" <> syncHelp) ("--alias" `isInfixOf` syncHelp),
       testCase "a subcommand's downstream flags name the configuration keys they set" do
-        assertMentions ["publish-fixture", "--help"] ["kafka.broker", "kafka.activity.topic"]
-        assertMentions ["stub-kawa", "--help"] ["kafka.broker"],
+        assertMentions ["publish-fixture", "--help"] ["kafka.broker", "kafka.activity.topic"],
       -- The mounted keiro-ops tree is not in `adminSubcommands` -- it cannot be,
       -- because keiro-ops exports its tree as one ParserInfo over an abstract
       -- type -- so nothing above covers it. A mount that silently stopped
@@ -397,5 +372,7 @@ probePack =
             }
         ],
       gauges = [],
-      authorities = []
+      authorities = [],
+      outputs = [],
+      approvalChannels = []
     }

@@ -98,7 +98,7 @@ import Shikigami.Agent.Workflow qualified as AgentWorkflow
 import Shikigami.App (AppEffects, AppEnv (..), runAppIO)
 import Shikigami.Attestation.Profile (ProfileId (..), ProfileVersion (..))
 import Shikigami.Attestation.Resolve (ProfileResolutionError, ResolvedProfile, renderProfileResolutionError)
-import Shikigami.Authority (denyAll)
+import Shikigami.Authority (denyAll, mkOutputKind)
 import Shikigami.Behavior.Error (TransientBehaviorFailure (..), boundedBehaviorDetail)
 import Shikigami.Behavior.Run (BehaviorEnv (..), runBehaviorAttempt, triggerOnly)
 import Shikigami.Behavior.Skill (SkillDir (..))
@@ -129,11 +129,9 @@ import Shikigami.Memory.Scope (agentScope)
 import Shikigami.Objective.Runtime qualified as Objectives
 import Shikigami.Objective.Tools qualified as ObjectiveTools
 import Shikigami.Objective.Types qualified as Objective
-import Shikigami.Output (OutputRegistry)
+import Shikigami.Output (OutputDecl (..), OutputRegistry)
 import Shikigami.Prelude hiding ((.=))
-import Shikigami.Sink.Config (DanwaConfig)
 import Shikigami.Sink.GrantStore (GrantSource)
-import Shikigami.Sink.Outputs (DanwaConversationOutput (..), DanwaTarget (..), danwaConversationOutput)
 import Shikigami.Sink.Types (SinkOutcome (Delivered, Enqueued), SinkResult (..))
 import Shikigami.WorkerSession.Tools qualified as WorkerTools
 import Shikigami.Workflow.Versioning (shikigamiWorkflowRunOptions)
@@ -153,7 +151,6 @@ data ConversationEnv = ConversationEnv
     -- a turn. There is deliberately no rotation cadence beside it: the journal
     -- is bounded by construction, not by a tuning constant.
     idleTimeout :: !(Duration "conversation-idle"),
-    danwa :: !DanwaConfig,
     agents :: ![AgentDecl],
     -- | Which grant source the conversation reply's C11 check consults.
     grants :: !GrantSource,
@@ -1487,12 +1484,7 @@ prepareConversationReplySinkIntent registry directoryHandle grantSource recorded
     -- The shared intent preparation path therefore derives no activity-backed
     -- recipient or channel-egress metadata.
     Nothing
-    ( danwaConversationOutput
-        DanwaConversationOutput
-          { topic = "danwa-conversation",
-            thread = Just DanwaTarget {conversationId = msgConversationId, parentMessageId = Just msgMessageId}
-          }
-    )
+    (danwaReply msgConversationId msgMessageId)
     (Aeson.object ["reply" .= replyText])
     now
 
@@ -1533,3 +1525,18 @@ sinkResultDetail :: SinkResult -> DeclarationCoordinate "reply-receipt"
 sinkResultDetail SinkResult {outcome = Delivered detail} = declarationCoordinate (declarationCoordinateText detail)
 sinkResultDetail SinkResult {outcome = Enqueued detail} = declarationCoordinate (declarationCoordinateText detail)
 sinkResultDetail SinkResult {outcome = other} = declarationCoordinate (Text.pack (show other))
+
+-- | The reply: a @danwa.conversation@ output posted under the addressed
+-- message. The conversation loop is Danwa's own and leaves the core with its
+-- binding (plan 135, M5); until then it spells the output's configuration
+-- here, as the binding's adapter reads it.
+danwaReply :: DeclarationCoordinate "danwa-conversation" -> DeclarationCoordinate "danwa-message" -> OutputDecl
+danwaReply conversation message =
+  OutputDecl
+    { kind = either (error . Text.unpack) id (mkOutputKind "danwa.conversation"),
+      config =
+        Aeson.object
+          [ "topic" .= ("danwa-conversation" :: Text),
+            "thread" .= Aeson.object ["conversationId" .= conversation, "parentMessageId" .= Just message]
+          ]
+    }

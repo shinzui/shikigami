@@ -68,14 +68,13 @@ import Shikigami.Flow.Pack qualified as FlowPack
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations (verifyShikigamiMigrations)
-import Shikigami.Output (DefaultOutput (NoDefaultOutput), OutputReceipt (..), mkOutputRegistry)
-import Shikigami.Output.Kikan (KikanServices (..), kikanOutputAdapters)
+import Shikigami.Output (OutputReceipt (..))
+import Shikigami.Output.Registration (AdapterContext (..), OutputRegistration, buildOutputRegistry)
 import Shikigami.Record (KindFilter (..), RecordEvent (..), RecordQuery (..), mkRecordLimit, observedRecord, postgresRecord, readRecord, recordEntry, recordErrorText)
 import Shikigami.Repository (repositoryIdText)
 import Shikigami.Runtime (registerRuntimeCatalog, runtimeConnectionSettings)
 import Shikigami.Sink (GrantSource (DbGrants))
-import Shikigami.Sink.Config (DanwaConfig (..), KanmonConfig (..), KawaConfig (..), KizashiConfig (..), ReiConfig (..))
-import Shikigami.Sink.Http (HttpLimits (..), credentialsFromConfig, newSinkHttp)
+import Shikigami.Sink.Http (HttpLimits (..))
 import Shikigami.Trigger.Enqueue (ensureRunQueue)
 import Shikigami.Trust.LocalOperator.Approvals (Budget (..))
 import Shikigami.Trust.LocalOperator.Grant (Interaction, defaultStateDirectory)
@@ -133,10 +132,10 @@ runAgentRun packs agentArg mActivity workspace payloadArgument noConfirm resume 
               [] -> pure ()
               problems -> dieAgentRun (Text.intercalate "; " problems)
             interaction <- terminalInteraction noConfirm
-            runDurableAgent flows logger store appEnv (parseWorkspaceArgument <$> workspace) triggerPayload interaction config decl resume
+            runDurableAgent flows (concatMap (.outputs) packs) logger store appEnv (parseWorkspaceArgument <$> workspace) triggerPayload interaction config decl resume
 
-runDurableAgent :: FlowPack.FlowRegistry -> Log.Logger -> KirokuStore -> AppEnv -> Maybe WorkspaceArgument -> Aeson.Value -> Interaction -> AppConfig -> AgentDecl -> Maybe Text -> IO ()
-runDurableAgent flows logger store@KirokuStore {pool} appEnv workspace triggerPayload interaction config decl resume = do
+runDurableAgent :: FlowPack.FlowRegistry -> [OutputRegistration] -> Log.Logger -> KirokuStore -> AppEnv -> Maybe WorkspaceArgument -> Aeson.Value -> Interaction -> AppConfig -> AgentDecl -> Maybe Text -> IO ()
+runDurableAgent flows outputRegistrations logger store@KirokuStore {pool} appEnv workspace triggerPayload interaction config decl resume = do
   occurredAt <- getCurrentTime
   freshKey <- newCliRunKey ((.name) decl)
   -- With --resume, the run is the journaled job of an earlier invocation: the
@@ -176,36 +175,16 @@ runDurableAgent flows logger store@KirokuStore {pool} appEnv workspace triggerPa
             run = Just (runJobWorkflowId unrooted),
             repository = workspaceSelector <$> named
           }
-  -- Outside the local tier a run's outputs are enqueued through the Kikan
-  -- adapters for the worker's publisher (plan 135, M3).
-  let kizashiConfig =
-        KizashiConfig
-          { baseUrl = (.kizashiBaseUrl) config,
-            defaultRecipient = (.kizashiDefaultRecipient) config
-          }
-      kawaConfig =
-        KawaConfig
-          { baseUrl = (.kawaBaseUrl) config,
-            sourceSegment = (.kawaSourceSegment) config
-          }
-      kanmonConfig = KanmonConfig {baseUrl = (.kanmonBaseUrl) config}
-      danwaConfig =
-        DanwaConfig
-          { baseUrl = (.danwaBaseUrl) config,
-            agentParticipant = (.danwaAgentParticipant) config
-          }
-      httpLimits =
+  -- Outside the local tier a run's outputs are enqueued through the adapters
+  -- the composed packs register, for a worker's publisher (plan 135, M3).
+  let httpLimits =
         HttpLimits
           { requestBytes = (.httpRequestMaxBytes) config,
             responseBytes = (.httpResponseMaxBytes) config
           }
-  sinkHttp <-
-    newSinkHttp httpLimits (credentialsFromConfig config) danwaConfig >>= \case
-      Left err -> dieAgentRun ("invalid sink HTTP configuration: " <> Text.pack (show err))
-      Right clients -> pure clients
   organization <-
-    either (\problem -> dieAgentRun ("invalid outputs: " <> problem)) pure $
-      mkOutputRegistry (kikanOutputAdapters KikanServices {http = sinkHttp, kizashi = kizashiConfig, kawa = kawaConfig, kanmon = kanmonConfig, danwa = danwaConfig, rei = ReiConfig {baseUrl = (.reiBaseUrl) config}}) NoDefaultOutput
+    buildOutputRegistry AdapterContext {logger, settings = config.packSettings, httpLimits} [] outputRegistrations config.defaultOutputKind
+      >>= either (\problem -> dieAgentRun ("invalid outputs: " <> problem)) pure
   -- Resolve the run's ports before any model call: a refused grant, an
   -- unavailable repository or an undeliverable output stops here.
   tierRuntime <- (lightComposition config organization interaction record).resolve subject >>= either (dieAgentRun . renderTierRefusal) pure
@@ -226,7 +205,7 @@ runDurableAgent flows logger store@KirokuStore {pool} appEnv workspace triggerPa
   stateDirectory <- maybe defaultStateDirectory pure config.localOperatorStateDirectory
   let localTier = config.trustTier == LocalOperator
       approvalPolicy
-        | localTier = Approval.ApprovalPolicySnapshot {requireFor = Set.fromList (rights (mkOutputKind <$> config.approvalRequiredOutputs)), channel = Approval.ViaLocalInbox, deadline = config.approvalDeadline}
+        | localTier = Approval.ApprovalPolicySnapshot {requireFor = Set.fromList (rights (mkOutputKind <$> config.approvalRequiredOutputs)), channel = Approval.localInboxChannel, deadline = config.approvalDeadline}
         | otherwise = Approval.autoApprovePolicy ((.approvalDeadline) config)
       approvalEnv
         | localTier = ApprovalWorkflow.ApprovalWorkflowEnv {notifier = localInboxNotifier (localInboxDirectory stateDirectory)}

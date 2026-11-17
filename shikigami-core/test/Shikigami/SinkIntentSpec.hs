@@ -1,6 +1,6 @@
 module Shikigami.SinkIntentSpec (tests) where
 
-import Data.Aeson (Value, eitherDecodeStrict, encode)
+import Data.Aeson (Value, eitherDecodeStrict, encode, (.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.ByteString.Char8 qualified as ByteString
@@ -8,20 +8,14 @@ import Data.ByteString.Lazy qualified as LazyByteString
 import Data.ByteString.Lazy.Char8 qualified as LazyChar8
 import Data.Foldable (traverse_)
 import Data.KindID.V7 qualified as KindID
+import Data.Text (Text)
 import Data.Time (UTCTime (..), fromGregorian)
 import Data.UUID qualified as UUID
 import Keiro.Integration.Event (IntegrationEvent (..))
 import Kioku.Id qualified as SinkSession
-import Shikigami.Activity.Coordinate
-import Shikigami.Activity.Coordinate (activityCoordinate)
-import Shikigami.Agent.Decl
-  ( Priority (High),
-    RecipientFrom (SubjectOwner),
-    SignalType (Alert),
-  )
-import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Name qualified as Name
 import Shikigami.Agent.Principal (AgentIdentity (UnresolvedLegacyIdentity, VerifiedIdentity), mkAgentPrincipal)
+import Shikigami.Fixture.RawOutput (rawOutput)
 import Shikigami.Output (OutputDecl)
 import Shikigami.Sink.Coordinate (parseSinkOrdinal, parseSinkSession, sinkOrdinalInt, zeroSinkOrdinal)
 import Shikigami.Sink.Delivery qualified as Delivery
@@ -30,8 +24,6 @@ import Shikigami.Sink.Intent
     decodeSinkIntentEvent,
     sinkIntentEvent,
   )
-import Shikigami.Sink.Outputs
-import Shikigami.Trigger.Schedule (parseCron)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertFailure, testCase, (@?=))
 
@@ -71,7 +63,7 @@ tests =
               Delivery.receiptKeyText (Delivery.subReceiptKey raw "conv") @?= raw <> "#conv"
           )
           ["", "legacy:step", "a#b", "日本"],
-      testCase "round-trips every Kikan output kind through the outbox event" do
+      testCase "round-trips representative output kinds through the outbox event" do
         traverse_ assertRoundTrip representativeSinks,
       testCase "canonical intent encodes to the pinned wire bytes" do
         encode (intentFor canonicalSink) @?= canonicalWireBytes,
@@ -119,34 +111,40 @@ egressIntent =
       runId = sinkSessionFixture,
       ordinal = zeroSinkOrdinal,
       occurredAt = Just sampleTime,
-      output = channelEgressOutput ChannelEgressOutput {channel = declarationCoordinate ("intercom"), action = declarationCoordinate ("reply_to_conversation"), conversationKey = Nothing},
+      output = egressOutput,
       address = Aeson.object [("conversationKey", Aeson.String "conv_55012"), ("triggeringActivityId", Aeson.String "act_1")],
       result = outputValue
     }
 
+-- | The Kikan kinds as the kernel carries them: a kind and its configuration.
 representativeSinks :: [OutputDecl]
 representativeSinks =
-  [ kawaDigestOutput KawaDigestOutput {subjectType = activityCoordinate ("customer"), verb = activityCoordinate ("relationship.at_risk")},
+  [ rawOutput "kawa.digest" ["subjectType" .= text "customer", "verb" .= text "relationship.at_risk"],
     canonicalSink,
-    reiActionOutput ReiActionOutput {intentionId = declarationCoordinate ("intention_01sink"), note = "Escalate the customer risk"},
-    danwaConversationOutput DanwaConversationOutput {topic = "At-risk customer review", thread = Just DanwaTarget {conversationId = declarationCoordinate "conv_1", parentMessageId = Nothing}},
-    channelEgressOutput ChannelEgressOutput {channel = declarationCoordinate ("intercom"), action = declarationCoordinate ("reply_to_conversation"), conversationKey = Nothing}
+    rawOutput "rei.action" ["intentionId" .= text "intention_01sink", "note" .= text "Escalate the customer risk"],
+    rawOutput "danwa.conversation" ["topic" .= text "At-risk customer review", "thread" .= Aeson.object ["conversationId" .= text "conv_1"]],
+    egressOutput
   ]
+
+egressOutput :: OutputDecl
+egressOutput = rawOutput "channel.egress" ["channel" .= text "intercom", "action" .= text "reply_to_conversation", "conversationKey" .= Aeson.Null]
 
 canonicalSink :: OutputDecl
 canonicalSink =
-  kizashiSignalOutput
-    KizashiSignalOutput
-      { source = activityCoordinate ("shikigami"),
-        signalType = Alert,
-        priority = High,
-        importance = either (error . show) id (parseSignalImportance (7)),
-        recipientFrom = SubjectOwner,
-        defaultRecipient = fmap declarationCoordinate (Just "ops"),
-        intentTemplate = "escalate",
-        extraContextTags = ["a"],
-        recipient = Nothing
-      }
+  rawOutput
+    "kizashi.signal"
+    [ "source" .= text "shikigami",
+      "signalType" .= text "Alert",
+      "priority" .= text "High",
+      "importance" .= (7 :: Int),
+      "recipientFrom" .= text "SubjectOwner",
+      "defaultRecipient" .= text "ops",
+      "intentTemplate" .= text "escalate",
+      "extraContextTags" .= [text "a"]
+    ]
+
+text :: Text -> Text
+text = id
 
 outputValue :: Value
 outputValue = either error id (eitherDecodeStrict "{\"summary\":\"x\"}")

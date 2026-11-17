@@ -32,9 +32,6 @@ module Shikigami.Agent.Decl
     declaredToolCapabilities,
     Trigger (..),
     StreamMatch (..),
-    SignalType (..),
-    Priority (..),
-    RecipientFrom (..),
     ProfileRequirement (..),
   )
 where
@@ -207,24 +204,6 @@ data RouterPolicy = RouterPolicy
     onNoMatch :: !NoMatchPolicy,
     onAmbiguous :: !AmbiguousPolicy
   }
-  deriving stock (Eq, Show, Generic)
-  deriving anyclass (FromDhall, ToJSON, FromJSON)
-
-data SignalType
-  = Notification
-  | Alert
-  | Reminder
-  | TaskCandidate
-  | DigestItem
-  | AgentRequest
-  deriving stock (Eq, Show, Generic)
-  deriving anyclass (FromDhall, ToJSON, FromJSON)
-
-data Priority = Low | Normal | High | Urgent
-  deriving stock (Eq, Show, Generic)
-  deriving anyclass (FromDhall, ToJSON, FromJSON)
-
-data RecipientFrom = SubjectOwner | AreaOwner | Actor
   deriving stock (Eq, Show, Generic)
   deriving anyclass (FromDhall, ToJSON, FromJSON)
 

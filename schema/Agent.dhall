@@ -1,7 +1,8 @@
 -- schema/Agent.dhall — the canonical C5 agent-definition schema (EP-1, IP-2).
 -- It names only kernel vocabulary. Where a run's result goes is an `outputs`
 -- list of registered kinds; the Kikan services' kinds have typed helpers in
--- schema/outputs/Kikan.dhall (plan 135, M3).
+-- packs/kikan-shikigami-binding/dhall/Outputs.dhall,
+-- which the binding owns with the adapters (plan 135, M3).
 
 -- C3's three trigger classes, named to match the spec's C5 vocabulary.
 let StreamMatch =
@@ -171,7 +172,8 @@ let Tool = < CliTool : CliTool.Type | McpTools : McpTools >
 
 -- Where the result goes (EP-8 M2): a registered output kind and its JSON
 -- configuration. Helpers: schema/outputs/Local.dhall and, for the Kikan
--- services, schema/outputs/Kikan.dhall. Empty takes the composition's default.
+-- services, packs/kikan-shikigami-binding/dhall/Outputs.dhall. Empty takes the
+-- composition's default.
 let Output = { kind : Text, config : Text }
 
 let Agent =

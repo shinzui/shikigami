@@ -1,7 +1,7 @@
 module Shikigami.AgentLoaderSpec (tests) where
 
 import Control.Exception (try)
-import Data.Aeson (Value (Object), eitherDecode, eitherDecodeStrict, encode, toJSON)
+import Data.Aeson (Value (Null, Object), eitherDecode, eitherDecodeStrict, encode, toJSON, (.=))
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.ByteString (ByteString)
 import Data.ByteString.Char8 qualified as ByteString.Char8
@@ -10,7 +10,6 @@ import Data.IORef (IORef, modifyIORef', newIORef, readIORef, writeIORef)
 import Data.List (find, isInfixOf, isSuffixOf, sort)
 import Data.Text (Text)
 import Data.Text qualified as Text
-import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Decl
   ( AgentDecl (..),
     ExpertiseDecl (..),
@@ -37,11 +36,10 @@ import Shikigami.Agent.Loader
   )
 import Shikigami.Agent.Name (agentNameText)
 import Shikigami.Capability.Overlay (capabilityIdText)
+import Shikigami.Fixture.RawOutput (rawOutput)
 import Shikigami.Log qualified as Log
 import Shikigami.Router.SelectionLimit (selectionLimitInt)
 import Shikigami.RuntimePolicy (ManifestStrictness (..))
-import Shikigami.Sink.Outputs
-import Shikigami.Trigger.Schedule (parseCron)
 import System.Directory (doesDirectoryExist, listDirectory)
 import System.Exit (ExitCode (ExitFailure))
 import System.FilePath (takeBaseName, takeDirectory, takeExtension, takeFileName, (</>))
@@ -109,7 +107,7 @@ tests =
           other -> assertFailure ("unexpected specialist declaration: " <> show other),
       testCase "decodes and round-trips the ChannelEgress proof declaration" do
         decl@AgentDecl {outputs} <- expectLoaded "../agents/proof/channel-reply.dhall"
-        outputs @?= [(channelEgressOutput ChannelEgressOutput {channel = declarationCoordinate ("intercom"), action = declarationCoordinate ("reply_to_conversation"), conversationKey = fmap declarationCoordinate (Nothing)})]
+        outputs @?= [rawOutput "channel.egress" ["channel" .= ("intercom" :: Text), "action" .= ("reply_to_conversation" :: Text), "conversationKey" .= Null]]
         eitherDecode (encode decl) @?= Right decl,
       testCase "the v1 declaration JSON shape contains every field and round-trips" do
         decl <- expectLoaded "../agents/heartbeat.dhall"

@@ -1,5 +1,3 @@
-{-# LANGUAGE DataKinds #-}
-
 -- | An authority a pack registers under a name (plan 135, M2).
 --
 -- The kernel owns the authority port ('Authority') and the setting that
@@ -14,7 +12,6 @@ module Shikigami.Authority.Adapter
 where
 
 import Data.Text (Text)
-import Shikigami.Activity.Coordinate (ActivityCoordinate)
 import Shikigami.Authority (Authority)
 import Shikigami.Log (Logger)
 import Shikigami.Pack.Setting (PackSettings)
@@ -24,10 +21,7 @@ data AuthorityContext = AuthorityContext
   { logger :: !Logger,
     -- | The validated settings of every composed pack, including the
     -- adapter's own.
-    settings :: !PackSettings,
-    -- | The deployment's Kawa source (@sinks.kawa.source_segment@). It is
-    -- here only until plan 135's M3 moves that setting to the Kikan binding.
-    kawaSource :: !(ActivityCoordinate "source")
+    settings :: !PackSettings
   }
 
 data AuthorityAdapter = AuthorityAdapter

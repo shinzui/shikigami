@@ -18,12 +18,6 @@ import Data.Time (UTCTime (..), fromGregorian)
 import Keiro.Workflow.Types (WorkflowId (..), mkWorkflowId)
 import Kioku.Id qualified as SinkSession
 import Shibuya.Core.Types (Attempt (..), Envelope (..), mkEnvelope)
-import Shikigami.Activity.Coordinate
-import Shikigami.Agent.Decl
-  ( Priority (High),
-    RecipientFrom (SubjectOwner),
-    SignalType (Alert),
-  )
 import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (AgentIdentity (UnresolvedLegacyIdentity), compatibilityIdentity)
@@ -42,18 +36,17 @@ import Shikigami.Capability.Overlay
   )
 import Shikigami.Decision.ModelAlias qualified as Alias
 import Shikigami.Execution.Coordinate (executionCoordinate)
-import Shikigami.Execution.Identity (ExecutionRootId)
 import Shikigami.Execution.Request (ExecutionRequest (..))
 import Shikigami.Fixture.ExecutionIdentity (fixtureRootId)
+import Shikigami.Fixture.RawOutput (fixtureKind, rawOutput)
+import Shikigami.Output (OutputDecl)
 import Shikigami.RunJobs qualified as RunJobs
 import Shikigami.Sink.Coordinate (parseSinkSession, zeroSinkOrdinal)
 import Shikigami.Sink.Intent (SinkIntent (..))
-import Shikigami.Sink.Outputs
 import Shikigami.Sink.Types
   ( SinkOutcome (Delivered, SkippedLifecycle, Stubbed),
     SinkResult (..),
   )
-import Shikigami.Trigger.Schedule (parseCron)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertEqual, assertFailure, testCase, (@?=))
 
@@ -242,10 +235,10 @@ outboxTests =
         assertSameJson "sink intent" pinnedSinkIntent (encode sampleSinkIntent),
       testCase "a delivered sink result decodes" do
         decoded <- decodeOrFail @SinkResult pinnedDelivered
-        toJSON decoded @?= toJSON (SinkResult {kind = kizashiSignalKind, outcome = Delivered (declarationCoordinate "sig_1")}),
+        toJSON decoded @?= toJSON (SinkResult {kind = fixtureKind "kizashi.signal", outcome = Delivered (declarationCoordinate "sig_1")}),
       testCase "the deprecated Stubbed outcome still decodes" do
         decoded <- decodeOrFail @SinkResult pinnedStubbed
-        toJSON decoded @?= toJSON (SinkResult {kind = reiActionKind, outcome = Stubbed}),
+        toJSON decoded @?= toJSON (SinkResult {kind = fixtureKind "rei.action", outcome = Stubbed}),
       testCase "an intent with no identity carries unresolved legacy identity" do
         SinkIntent {identity} <- decodeOrFail @SinkIntent pinnedSinkIntent
         identity @?= UnresolvedLegacyIdentity,
@@ -256,7 +249,7 @@ outboxTests =
         decoded <- decodeOrFail @SinkIntent (LazyByteString.toStrict (encode resolved))
         toJSON decoded @?= toJSON resolved,
       testCase "the lifecycle skip outcome round-trips without changing old outcomes" do
-        let skipped = SinkResult {kind = kizashiSignalKind, outcome = SkippedLifecycle "principal lifecycle is paused"}
+        let skipped = SinkResult {kind = fixtureKind "kizashi.signal", outcome = SkippedLifecycle "principal lifecycle is paused"}
         decoded <- decodeOrFail @SinkResult (LazyByteString.toStrict (encode skipped))
         decoded @?= skipped
     ]
@@ -272,24 +265,24 @@ sampleSinkIntent =
       runId = sinkSessionFixture,
       ordinal = zeroSinkOrdinal,
       occurredAt = Just sampleTime,
-      output = kizashiSignalOutput sampleSink,
+      output = sampleSink,
       address = Aeson.object ["recipient" .= Aeson.Null],
       result = outputValue
     }
 
-sampleSink :: KizashiSignalOutput
+sampleSink :: OutputDecl
 sampleSink =
-  KizashiSignalOutput
-    { source = activityCoordinate ("shikigami"),
-      signalType = Alert,
-      priority = High,
-      importance = either (error . show) id (parseSignalImportance (7)),
-      recipientFrom = SubjectOwner,
-      defaultRecipient = fmap declarationCoordinate (Just "ops"),
-      intentTemplate = "escalate",
-      extraContextTags = ["a"],
-      recipient = Nothing
-    }
+  rawOutput
+    "kizashi.signal"
+    [ "source" .= ("shikigami" :: Text),
+      "signalType" .= ("Alert" :: Text),
+      "priority" .= ("High" :: Text),
+      "importance" .= (7 :: Int),
+      "recipientFrom" .= ("SubjectOwner" :: Text),
+      "defaultRecipient" .= ("ops" :: Text),
+      "intentTemplate" .= ("escalate" :: Text),
+      "extraContextTags" .= ["a" :: Text]
+    ]
 
 outputValue :: Value
 outputValue = either error id (eitherDecodeStrict "{\"summary\":\"x\"}")

@@ -55,17 +55,12 @@ library
     Shikigami.Server.Command.ResolveApproval
     Shikigami.Server.Command.Resources
     Shikigami.Server.Command.Runs
-    Shikigami.Server.Command.StubKanmon
-    Shikigami.Server.Command.StubKawa
     Shikigami.Server.Command.Validate
     Shikigami.Server.Command.Workers
     Shikigami.Server.Config
     Shikigami.Server.RequestLog
     Shikigami.Server.Seam
     Shikigami.Server.Telemetry
-    Shikigami.Sink.KanmonStub
-    Shikigami.Sink.KawaStub
-    Shikigami.Sink.KawaStub.Republish
     Shikigami.Trigger.Publish
 
   build-depends:
@@ -75,8 +70,6 @@ library
     bytestring,
     case-insensitive,
     containers >=0.6,
-    danwa-api,
-    danwa-client,
     effectful,
     filepath,
     generic-lens >=2.2,
@@ -163,8 +156,6 @@ test-suite shikigami-server-test
     Shikigami.Server.AgentsSpec
     Shikigami.Server.CommandSpec
     Shikigami.Server.DispatchSpec
-    Shikigami.Server.KanmonStubSpec
-    Shikigami.Server.KawaStubSpec
     Shikigami.Server.ProblemSpec
     Shikigami.Server.RequestLogSpec
     Shikigami.Server.TelemetrySpec

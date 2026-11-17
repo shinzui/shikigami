@@ -1,7 +1,11 @@
 module Main (main) where
 
 import Kikan.Shikigami.Binding (kikanBinding)
+import Kikan.Shikigami.Binding.ApprovalNotificationSpec qualified as ApprovalNotificationSpec
 import Kikan.Shikigami.Binding.AuthoritySpec qualified as AuthoritySpec
+import Kikan.Shikigami.Binding.KanmonClientSpec qualified as KanmonClientSpec
+import Kikan.Shikigami.Binding.OutputDispatchSpec qualified as OutputDispatchSpec
+import Kikan.Shikigami.Binding.SinkHonestySpec qualified as SinkHonestySpec
 import Kikan.Shikigami.Binding.WorkspaceActionProofSpec qualified as WorkspaceActionProofSpec
 import Shikigami.Authority.Adapter (AuthorityAdapter (..))
 import Shikigami.Flow.Builtin (builtinPack)
@@ -21,6 +25,10 @@ main =
               Right registry -> length (registeredFlows registry) @?= either (const (-1)) (length . registeredFlows) (composeFlowRegistry [builtinPack])
             fmap (.mode) kikanBinding.authorities @?= ["kikan"],
           AuthoritySpec.tests,
-          WorkspaceActionProofSpec.tests
+          WorkspaceActionProofSpec.tests,
+          OutputDispatchSpec.tests,
+          SinkHonestySpec.tests,
+          KanmonClientSpec.tests,
+          ApprovalNotificationSpec.tests
         ]
     )

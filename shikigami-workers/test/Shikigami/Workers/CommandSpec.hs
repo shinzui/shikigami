@@ -23,7 +23,6 @@ import Data.List (isInfixOf)
 import Data.Text qualified as Text
 import Options.Applicative
 import Settei.Env (envSnapshot, environmentSource)
-import Shikigami.Agent.DeclarationValue
 import Shikigami.App.Config
 import Shikigami.App.Config.Load (ConfigRun (..), appConfigRun)
 import Shikigami.Trigger.Stream (IncludeAgentActors (..))
@@ -93,10 +92,10 @@ tests =
         mapM_ (`assertHasAll` configurationFlags) workerRoles,
       testCase "every worker executable reports its version offline" $
         mapM_ assertVersion workerRoles,
-      testCase "the worker keeps its downstream options" $
-        assertHasAll
-          workerRoleInfo
-          ["--agents", "--kawa-url", "--kizashi-url", "--kanmon-url", "--danwa-url", "--danwa-agent"],
+      -- Service endpoints are pack settings (plan 135, M3): an operator sets
+      -- them with --set or their variables, so the worker names no service.
+      testCase "the worker keeps its agents option" $
+        assertHasAll workerRoleInfo ["--agents"],
       testCase "workspace maintenance requires an explicit actor and exclusive action" $ do
         mapM_ (\args -> case execParserPure defaultPrefs workerRoleInfo.parserInfo args of Success _ -> pure (); _ -> assertFailure "maintenance command refused") [["--workspace-actor", "agent_01h000000000000000triage", "--workspace-list"], ["--workspace-actor", "agent_01h000000000000000triage", "--workspace-cleanup", replicate 64 'a']]
         mapM_ (\args -> case execParserPure defaultPrefs workerRoleInfo.parserInfo args of Success _ -> assertFailure "incomplete maintenance command admitted"; _ -> pure ()) [["--workspace-list"], ["--workspace-actor", "agent_01h000000000000000triage"], ["--workspace-actor", "agent_01h000000000000000triage", "--workspace-list", "--workspace-cleanup", replicate 64 'a']],
@@ -118,13 +117,7 @@ tests =
                 ("shikigami-worker help does not name " <> key <> ":\n" <> rendered)
                 (key `isInfixOf` rendered)
           )
-          [ "agents.directory",
-            "sinks.kawa.base_url",
-            "sinks.kizashi.base_url",
-            "sinks.kanmon.base_url",
-            "sinks.danwa.base_url",
-            "sinks.danwa.agent_participant"
-          ],
+          ["agents.directory"],
       testCase "the two consumers aim their identically-spelled flags at different keys" do
         let streamHelp = helpTextOf consumeStreamRoleInfo
             eventsHelp = helpTextOf consumeEventsRoleInfo
@@ -147,8 +140,8 @@ tests =
 --
 -- The help-text cases above prove a flag exists and names a key. They cannot
 -- prove it is wired to that key: @namedOption@ takes the spelling and the target
--- key as separate arguments, so a copy-paste that points @--kizashi-url@ at
--- @sinks.kawa.base_url@ produces perfect help text and the wrong deployment.
+-- key as separate arguments, so a copy-paste that points @--topic@ at
+-- @kafka.groups.stream@ produces perfect help text and the wrong deployment.
 -- These cases run the real parser and then the real resolver, with an injected
 -- environment so they do not depend on the developer's shell.
 resolutionTests :: TestTree
@@ -159,25 +152,8 @@ resolutionTests =
         config <-
           resolveArgs
             workerRoleInfo
-            [ "--agents",
-              "/srv/agents",
-              "--kawa-url",
-              "http://kawa.internal",
-              "--kizashi-url",
-              "http://kizashi.internal",
-              "--kanmon-url",
-              "http://kanmon.internal",
-              "--danwa-url",
-              "http://danwa.internal",
-              "--danwa-agent",
-              "part_from_flag"
-            ]
-        (.agentsDirectory) config @?= "/srv/agents"
-        (.kawaBaseUrl) config @?= "http://kawa.internal"
-        (.kizashiBaseUrl) config @?= "http://kizashi.internal"
-        (.kanmonBaseUrl) config @?= "http://kanmon.internal"
-        (.danwaBaseUrl) config @?= "http://danwa.internal"
-        (.danwaAgentParticipant) config @?= (declarationCoordinate ("part_from_flag")),
+            ["--agents", "/srv/agents"]
+        (.agentsDirectory) config @?= "/srv/agents",
       testCase "the stream consumer's flags land on the activity-stream settings" do
         config <-
           resolveArgs

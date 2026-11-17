@@ -29,9 +29,9 @@ import Shikigami.Agent.Run.Key (parseRunKey)
 import Shikigami.Agent.RunJob (RunRouteKind (ConversationWorkflowRoute))
 import Shikigami.App.Config (Role (AdminRole), revealSecretText)
 import Shikigami.App.Config.Load (ConfigOptions (..), DiagnosticMode (NoDiagnostic), requireDatabaseUrl, runAppConfig)
+import Shikigami.Authority (OutputKind, mkOutputKind)
 import Shikigami.Integration.Danwa (AddressedMessage (..))
 import Shikigami.Sink.GrantStore (upsertGrant)
-import Shikigami.Sink.Outputs (danwaConversationKind)
 import Shikigami.Trigger.Enqueue (addressedRunJob, enqueueRunJob)
 import System.Directory (doesFileExist)
 import System.Environment (getArgs)
@@ -105,3 +105,7 @@ authorityApplication prefix = do
   where
     json status body = responseLBS status [("Content-Type", "application/json")] (Aeson.encode body)
     refused = Aeson.object ["type" Aeson..= ("about:blank" :: Text.Text), "title" Aeson..= ("Fixture refusal" :: Text.Text), "status" Aeson..= (403 :: Int), "detail" Aeson..= ("fixture authority refused" :: Text.Text)]
+
+-- | The kind of a conversation reply, as the kernel addresses it.
+danwaConversationKind :: OutputKind
+danwaConversationKind = either (error . show) id (mkOutputKind "danwa.conversation")

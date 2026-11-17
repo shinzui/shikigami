@@ -6,6 +6,7 @@
 module Shikigami.Sink.Auth.Internal
   ( BearerToken,
     credentialToken,
+    packSecretToken,
     matchesBearerHeader,
     renderAuthHeader,
   )
@@ -15,6 +16,7 @@ import Data.ByteArray (constEq)
 import Data.ByteString (ByteString)
 import Data.Text.Encoding qualified as Text
 import Shikigami.App.Config (SecretText, revealSecretText)
+import Shikigami.Pack.Setting (PackSecret, revealPackSecret)
 import Shikigami.Prelude (Text)
 
 -- | An opaque bearer credential with no rendering or serialization instances.
@@ -24,6 +26,10 @@ newtype BearerToken = BearerToken Text
 -- | Convert a resolved secret at the boundary where authentication owns it.
 credentialToken :: SecretText -> BearerToken
 credentialToken = BearerToken . revealSecretText
+
+-- | The same boundary for a pack's secret setting.
+packSecretToken :: PackSecret -> BearerToken
+packSecretToken = BearerToken . revealPackSecret
 
 -- | Compare a received header with the expected bearer header in constant time.
 matchesBearerHeader :: BearerToken -> ByteString -> Bool

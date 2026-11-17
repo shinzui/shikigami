@@ -83,6 +83,12 @@ import Keiro.Workflow.Awakeable (AwakeableId (..))
 import Keiro.Workflow.Resume (defaultWorkflowResumeOptions, resumeWorkflowsOnce)
 import Keiro.Workflow.Sleep (drainWorkflowSleepTimers)
 import Keiro.Workflow.Types (WorkflowOutcome)
+import Kikan.Shikigami.Binding.Approval (renderApprovalMessage)
+import Kikan.Shikigami.Binding.Fixture.OutboxDispatch (unreachableServices)
+import Kikan.Shikigami.Binding.Fixture.SinkHttp (testSinkHttp)
+import Kikan.Shikigami.Binding.Output (KikanServices (..), kikanOutputs)
+import Kikan.Shikigami.Binding.Output.Http (KikanHttp)
+import Kikan.Shikigami.Binding.Outputs (kizashiSignalKind)
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
 import Kiroku.Store.Error (StoreError)
 import Kiroku.Store.Transaction (runTransaction)
@@ -90,7 +96,6 @@ import Pgmq (Message (..), MessageBody (..), ReadMessage (..), readMessage)
 import Shikigami.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
 import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Approval (ApprovalChannel, ApprovalDecision (..), ApprovalRequest (..), approvalTimeoutFireAction, autoApprovePolicy, resolveApproval)
-import Shikigami.Agent.Approval.Notification (renderApprovalMessage)
 import Shikigami.Agent.Approval.Workflow qualified as Approval
 import Shikigami.Agent.Decl (AgentDecl (..), IdentityDecl (..), defaultDelegationBudget)
 import Shikigami.Agent.DeclarationValue (declarationCoordinate)
@@ -124,15 +129,11 @@ import Shikigami.Objective.Command qualified as Command
 import Shikigami.Objective.Runtime qualified as Objectives
 import Shikigami.Objective.Types qualified as Objective
 import Shikigami.Output (emptyOutputRegistry)
-import Shikigami.Output.Kikan (KikanServices (..), kikanOutputs)
 import Shikigami.Pack.Setting (noPackSettings, packSettingsFromList)
 import Shikigami.Repository (RepositoryId, repositoryId, repositoryIdText)
 import Shikigami.RunEvidence.Catalog qualified as Catalog
 import Shikigami.RunJobs qualified as RunJobs
 import Shikigami.Sink (GrantSource (StaticGrants), defaultGrantTable)
-import Shikigami.Sink.Config
-import Shikigami.Sink.Http (HttpLimits (..), SinkHttp, credentialsFromConfig, newSinkHttp)
-import Shikigami.Sink.Outputs (kizashiSignalKind)
 import Shikigami.Trigger.Consumer (RecordDisposition, processDecodedActivityObserving)
 import Shikigami.Trigger.Enqueue (ensureRunQueue, runQueueName)
 import Shikigami.Trigger.Hook (StreamHook (..), streamIntake)
@@ -254,7 +255,7 @@ withProposing fixture options use = withShikigamiFreshDatabase fixture \connecti
             ]
         )
     Directory.refreshDirectory directory >>= either (assertFailure . Text.unpack) pure
-    http <- either (assertFailure . show) pure =<< newSinkHttp (HttpLimits defaultAppConfig.httpRequestMaxBytes defaultAppConfig.httpResponseMaxBytes) (credentialsFromConfig defaultAppConfig) (DanwaConfig "http://localhost:1" (declarationCoordinate "fixture"))
+    let http = testSinkHttp
     let env = AppEnv {connectionSettings = defaultConnectionSettings connection, tracer, metrics = Nothing, store = Nothing}
         provider =
           decisionStubProvider
@@ -303,7 +304,7 @@ proposingDeps ::
   InitiativeSettings ->
   [FlowInitiative.RepositoryOption] ->
   [AgentDecl] ->
-  SinkHttp ->
+  KikanHttp ->
   Directory.DirectoryHandle ->
   Pool.Pool ->
   IORef [Ask] ->
@@ -327,7 +328,7 @@ proposingDeps env behavior provider binding objectiveRuntime settings repository
       agents = declarations,
       hooks = Agent.defaultAgentRunHooks,
       codingAgents = Agent.noCodingAgents,
-      outputs = kikanOutputs (KikanServices {http, kizashi = KizashiConfig "http://localhost:1" (declarationCoordinate "recipient"), kawa = KawaConfig "http://localhost:1" (activityCoordinate "fixture"), kanmon = KanmonConfig "http://localhost:1", danwa = DanwaConfig "http://localhost:1" (declarationCoordinate "fixture"), rei = ReiConfig Nothing}),
+      outputs = kikanOutputs unreachableServices {http},
       declaredTools = Agent.noDeclaredTools,
       approvalPolicy = autoApprovePolicy (either (error . show) id (parseDuration 900)),
       approvalWorkflow = Approval.ApprovalWorkflowEnv {notifier = recordingNotifier recorded},

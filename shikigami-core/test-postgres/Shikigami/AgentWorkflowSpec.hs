@@ -36,7 +36,7 @@ import Keiro.Outbox (OutboxRow (..), defaultPublishOptions, listOutbox, publishC
 import Keiro.Outbox qualified as Outbox
 import Keiro.PGMQ qualified as Job
 import Keiro.Timer qualified as Timer
-import Keiro.Workflow (PatchId (..), StepName (..), Workflow, WorkflowId (..), WorkflowInstanceRow (..), WorkflowName (..), WorkflowOutcome (..), WorkflowRunOptions (..), completedStepName, defaultWorkflowRunOptions, loadStepIndex, patchSetStepName, runWorkflow, runWorkflowWith)
+import Keiro.Workflow (StepName (..), Workflow, WorkflowId (..), WorkflowInstanceRow (..), WorkflowName (..), WorkflowOutcome (..), completedStepName, defaultWorkflowRunOptions, loadStepIndex, patchSetStepName, runWorkflow, runWorkflowWith)
 import Keiro.Workflow.Awakeable (AwakeableId (..), signalAwakeable)
 import Keiro.Workflow.Awakeable.Schema (countPendingAwakeables)
 import Keiro.Workflow.Child (runChildWorkflow)
@@ -56,13 +56,9 @@ import Kioku.Session qualified as Session
 import Kioku.Session.Domain (StartSessionData (..))
 import Kioku.Session.ReadModel (TurnRow (..))
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
-import Kiroku.Store.Error (StoreError)
 import Network.HTTP.Types (hContentType, status200, status204, status400, status404)
 import Network.Wai (Application, pathInfo, requestMethod, responseLBS, strictRequestBody)
-import Network.Wai.Handler.Warp (testWithApplication)
-import Shikigami.Activity.Coordinate
-import Shikigami.Agent.Approval (ApprovalChannel (..), ApprovalDecision (..), ApprovalEnv (..), ApprovalPolicySnapshot (..), ApprovalRequest (..), ApprovalRequirement (..), approvalTimeoutFireAction, autoApprovePolicy, defaultApprovalEnv, resolveApproval)
-import Shikigami.Agent.Approval.Notification qualified as ApprovalNotification
+import Shikigami.Agent.Approval (ApprovalDecision (..), ApprovalEnv (..), ApprovalPolicySnapshot (..), ApprovalRequest (..), ApprovalRequirement (..), approvalTimeoutFireAction, autoApprovePolicy, configuredApprovalChannel, defaultApprovalEnv, mkApprovalChannel, resolveApproval, reviewRequestIdText)
 import Shikigami.Agent.Approval.Workflow qualified as ApprovalWorkflow
 import Shikigami.Agent.Conversation qualified as Conversation
 import Shikigami.Agent.Conversation.SessionIndex qualified as SessionIndex
@@ -80,6 +76,7 @@ import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (..), TriggerKind (..),
 import Shikigami.Agent.Workflow (AgentRunDeps (..), AgentRunFailure (..), AgentRunHooks (..), SinkIntent (..), agentRunFailureDetail, agentRunRegistry, agentRunWorkflow, agentRunWorkflowName, defaultAgentRunHooks, executionRuntime, noCodingAgents, noDeclaredTools, publishSinkIntent, runAgentRunWorkflow)
 import Shikigami.AgentRun.Status qualified as RunStatus
 import Shikigami.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
+import Shikigami.Approval.Channel (composeApprovalNotifier)
 import Shikigami.Attestation.Envelope (profileDigest)
 import Shikigami.Attestation.PolicyValue qualified as PV
 import Shikigami.Attestation.Profile
@@ -112,7 +109,6 @@ import Shikigami.Directory qualified as Directory
 import Shikigami.Duration (parseDuration)
 import Shikigami.Execution.Admission (enrollRootRun)
 import Shikigami.Execution.Driver (ExecutionDriverResult (..))
-import Shikigami.Execution.Identity (ExecutionRootId)
 import Shikigami.Execution.Policy.Types qualified as Harness
 import Shikigami.Execution.Quantity (ResourceAmount, parseResourceAmount)
 import Shikigami.Execution.Resources qualified as Resources
@@ -122,8 +118,8 @@ import Shikigami.Execution.Transcript qualified as Replay
 import Shikigami.ExecutionSelectionWorkflowSpec qualified as ExecutionFixture
 import Shikigami.Fixture.AcknowledgementFlow (acknowledgementFlowName, fixtureFlowRegistry)
 import Shikigami.Fixture.ExecutionIdentity (fixtureRootId)
-import Shikigami.Fixture.KawaStub (kawaDoorwayApplication)
-import Shikigami.Fixture.SinkHttp (testSinkHttp, testSinkHttpFor)
+import Shikigami.Fixture.Outputs (capturingApprovalChannel, capturingOutputs, unreachableOutputs)
+import Shikigami.Fixture.RawOutput (kawaDigest, kawaDigestKind, rawOutput)
 import Shikigami.Flow.Decision qualified as FlowDecision
 import Shikigami.Flow.Pack (noPackMetrics)
 import Shikigami.Flow.Routing qualified as Routing
@@ -134,8 +130,7 @@ import Shikigami.Memory.Access (agentActor, shikigamiMemorySpace)
 import Shikigami.Memory.AliasStore qualified as AliasStore
 import Shikigami.Memory.Scope (agentScope, legacyAgentScope)
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
-import Shikigami.Output (OutputDecl (..), emptyOutputRegistry)
-import Shikigami.Output.Kikan (KikanServices (..), kikanOutputs)
+import Shikigami.Output (OutputDecl (..))
 import Shikigami.Pack.Setting (noPackSettings)
 import Shikigami.Record (RecordEvent (..), memoryRecord, recordEntry, recordKindText, unspecifiedTier)
 import Shikigami.Record.Invariant (RunCheck (..), RunFacts (..), checkRun)
@@ -143,13 +138,10 @@ import Shikigami.RunEvidence.Catalog qualified as ExecutionCatalog
 import Shikigami.RunEvidenceSpec (completeScenarioEvidence)
 import Shikigami.RunJobs qualified as RunJobs
 import Shikigami.Sink (GrantSource (DbGrants, StaticGrants), defaultGrantTable)
-import Shikigami.Sink.Config (DanwaConfig (..), KanmonConfig (..), KawaConfig (..), KizashiConfig (..), ReiConfig (..))
 import Shikigami.Sink.GrantStore (checkGrant, reconcileGrantPrincipal, revokeGrant, upsertGrant)
-import Shikigami.Sink.Outputs
 import Shikigami.Trigger.Enqueue qualified as Enqueue
-import Shikigami.Trigger.Schedule (parseCron)
 import Shikigami.Workflow.Registry qualified as Registry
-import Shikigami.Workflow.Versioning (shikigamiWorkflowResumeOptions, shikigamiWorkflowRunOptions, terminalWorkflowRetention)
+import Shikigami.Workflow.Versioning (shikigamiWorkflowResumeOptions, terminalWorkflowRetention)
 import Shikumi.Schema (FromModel, ToSchema, Validatable)
 import Shikumi.Tool (SomeTool (..), mkTool)
 import Streamly.Data.Fold qualified as Fold
@@ -221,7 +213,7 @@ tests databaseFixture =
                     )
             behaviorEnv <- newBehaviorEnvWithTraceSink (Just traceSink)
             let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
-                declaration = capabilityDecl "overlay-lifecycle" (Skill {path = declarationCoordinate ("../agents/skills/triage-note")}) [workspaceReadId] (Just overlayIdentity) [(kawaDigestOutput KawaDigestOutput {subjectType = activityCoordinate ("overlay"), verb = activityCoordinate ("overlay.read")})]
+                declaration = capabilityDecl "overlay-lifecycle" (Skill {path = declarationCoordinate ("../agents/skills/triage-note")}) [workspaceReadId] (Just overlayIdentity) [(kawaDigest "overlay" "overlay.read")]
                 hooks =
                   AgentRunHooks
                     { beforeStepBody = \stepName -> recordCapabilityEvent events ("before:" <> unStepName stepName),
@@ -520,8 +512,8 @@ tests databaseFixture =
       testCase "a revocation between enqueue and publish delivers nothing" do
         (withShikigamiFreshDatabase databaseFixture) \connStr ->
           withStore (defaultConnectionSettings connStr) \kirokuStore -> do
-            received <- newIORef (Map.empty :: Map (Text, Text) Text)
-            testWithApplication (pure (kawaDoorwayApplication received)) \port -> do
+            (capturing, delivered) <- capturingOutputs
+            do
               tracer <- noopTracer
               behaviorEnv <- newBehaviorEnv
               let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
@@ -529,7 +521,7 @@ tests databaseFixture =
                   deps =
                     (testDeps appEnv behaviorEnv defaultAgentRunHooks)
                       { grants = DbGrants pool',
-                        outputs = kikanOutputs (testKikanServices {kawa = KawaConfig {baseUrl = "http://localhost:" <> Text.pack (show port), sourceSegment = (activityCoordinate "shinzui/shikigami")}})
+                        outputs = capturing
                       }
 
               -- heartbeat/KawaDigest is seeded granted, so the run enqueues.
@@ -543,8 +535,8 @@ tests databaseFixture =
                     traverse (\row -> (outboxId row,) <$> publishSinkIntent deps row) rows
               published <- runAppIO appEnv (publishClaimedOutbox publishBatch defaultPublishOptions Nothing)
 
-              delivered <- readIORef received
-              assertEqual "the kawa stub received nothing" 0 (Map.size delivered)
+              deliveries <- delivered
+              assertEqual "the output received nothing" 0 (length deliveries)
               assertBool ("the publish pass itself succeeded: " <> show published) (isRight' published)
               assertBool ("the run completed: " <> show runResult) (isCompleted runResult),
       testCase "resumes after a crash without rerunning journaled step bodies" do
@@ -1646,26 +1638,24 @@ tests databaseFixture =
         [ testCase "generated job, restart, approval, evidence and delivery converge" do
             (withShikigamiFreshDatabase databaseFixture) \connStr ->
               withStore (defaultConnectionSettings connStr) \kirokuStore -> do
-                asks <- newIORef []
-                remote <- newIORef Map.empty
+                (channelAdapter, asks) <- capturingApprovalChannel
+                (capturing, delivered) <- capturingOutputs
                 tracer <- noopTracer
                 behaviorEnv <- newBehaviorEnv
-                testWithApplication (pure (\request respond -> if take 2 (pathInfo request) == ["v1", "sources"] then kawaDoorwayApplication remote request respond else approvalDanwaApplication asks request respond)) \port -> do
+                do
                   let appEnv = AppEnv {connectionSettings = defaultConnectionSettings connStr, tracer, metrics = Nothing, store = Nothing}
-                      danwaConfig = DanwaConfig {baseUrl = localApprovalBaseUrl port, agentParticipant = (declarationCoordinate "part_agent_test")}
-                      kizashiConfig = KizashiConfig {baseUrl = "http://127.0.0.1:1", defaultRecipient = (declarationCoordinate "recipient:test")}
-                  sinkHttp <- testSinkHttpFor danwaConfig
-                  let notifier = ApprovalNotification.approvalNotifier Log.silentLogger sinkHttp danwaConfig kizashiConfig
+                      fixtureChannel = either (error . Text.unpack) id (mkApprovalChannel "fixture")
+                      notifier = composeApprovalNotifier Log.silentLogger fixtureChannel Nothing [(fixtureChannel, channelAdapter)]
                       deps =
                         (testDepsWithAgents appEnv behaviorEnv defaultAgentRunHooks [decl])
                           { approvalPolicy =
                               ApprovalPolicySnapshot
                                 { requireFor = Set.singleton kawaDigestKind,
-                                  channel = ViaDanwa,
+                                  channel = configuredApprovalChannel,
                                   deadline = either (error . show) id (parseDuration 60)
                                 },
                             approvalWorkflow = ApprovalWorkflow.ApprovalWorkflowEnv {ApprovalWorkflow.notifier = notifier},
-                            outputs = kikanOutputs (testKikanServices {danwa = danwaConfig, http = sinkHttp, kawa = KawaConfig {baseUrl = localApprovalBaseUrl port, sourceSegment = (activityCoordinate "shinzui/shikigami")}}),
+                            outputs = capturing,
                             deliveryPool = Just kirokuStore.pool
                           }
 
@@ -1692,12 +1682,11 @@ tests databaseFixture =
                     other -> assertFailure ("expected one approval child relation, got " <> show other)
 
                   driveApprovalChildToPark appEnv deps
-                  posted <- readIORef asks
-                  message <- case posted of
-                    [single] -> pure single
-                    other -> assertFailure ("expected one Danwa ask, got " <> show other)
-                  assertBool "ask carries stable review id" (childId child `Text.isInfixOf` message)
-                  awakeableId <- either (assertFailure . Text.unpack) pure (approvalTokenFromMessage message)
+                  posted <- asks
+                  (reviewId, awakeableId) <- case posted of
+                    [(reviewId, awakeableId, _)] -> pure (reviewId, awakeableId)
+                    other -> assertFailure ("expected one ask, got " <> show (length other))
+                  assertBool "ask carries stable review id" (childId child `Text.isInfixOf` reviewRequestIdText reviewId)
 
                   childSteps <- runAppIO appEnv (loadStepIndex ApprovalWorkflow.approvalWorkflowName (WorkflowId (childId child)) 0)
                   assertEqual "child records the static notify step" (Right True) (Map.member "notify" <$> childSteps)
@@ -1726,7 +1715,7 @@ tests databaseFixture =
                     other -> assertFailure ("redelivery did not replay completion: " <> show other)
                   assertEqual "redelivered signal remains consumed" False =<< resolveApproval appEnv awakeableId (Approved (object []))
                   assertEqual "receipt prevents another send" Outbox.PublishSucceeded =<< runEff (publishSinkIntent restarted row)
-                  assertEqual "one remote logical effect" 1 . Map.size =<< readIORef remote
+                  assertEqual "one remote logical effect" 1 . length =<< delivered
                   finalOutbox <- runAppIO appEnv (listOutbox "shinzui/shikigami")
                   assertEqual "replayed job emits no second intent" (Right 1) (length <$> finalOutbox)
                   completeScenarioEvidence connStr (runCorrelationId (runJobWorkflowId approvalJob).unWorkflowId) approvalJob.idempotencyKey,
@@ -2032,7 +2021,7 @@ testDepsWithAgents appEnv behaviorEnv hooks agentDecls =
       agents = agentDecls,
       hooks,
       codingAgents = noCodingAgents,
-      outputs = kikanOutputs testKikanServices,
+      outputs = unreachableOutputs,
       declaredTools = noDeclaredTools,
       approvalPolicy = autoApprovePolicy (either (error . show) id (parseDuration 900)),
       approvalWorkflow = ApprovalWorkflow.defaultApprovalWorkflowEnv,
@@ -2069,12 +2058,12 @@ testDepsWithApprovalAndDeadline appEnv behaviorEnv hooks approval deadline =
       agents = [decl],
       hooks,
       codingAgents = noCodingAgents,
-      outputs = kikanOutputs testKikanServices,
+      outputs = unreachableOutputs,
       declaredTools = noDeclaredTools,
       approvalPolicy =
         ApprovalPolicySnapshot
           { requireFor = Set.singleton kawaDigestKind,
-            channel = ViaDanwa,
+            channel = configuredApprovalChannel,
             deadline = either (error . show) id (parseDuration (fromMaybe (secondsToNominalDiffTime 900) deadline))
           },
       approvalWorkflow = approvalWorkflowFromLegacy approval,
@@ -2129,7 +2118,7 @@ approvalRequest =
   ApprovalRequest
     { prompt = "Dispatch heartbeat digest?",
       context = object ["source" .= ("test" :: Text)],
-      channel = ViaDanwa
+      channel = configuredApprovalChannel
     }
 
 readCapturedAwakeable :: IORef (Maybe AwakeableId) -> IO AwakeableId
@@ -2225,8 +2214,7 @@ testConversationEnvIdle idleWindow appEnv behaviorEnv conversationAgents =
       Conversation.runTimeout = (either (error . show) id (parseDuration (secondsToNominalDiffTime 300))),
       Conversation.harness = Harness.defaultHarnessPolicy,
       Conversation.idleTimeout = either (error . show) id (parseDuration idleWindow),
-      Conversation.danwa = DanwaConfig {baseUrl = "http://localhost:1", agentParticipant = (declarationCoordinate "part_agent_test")},
-      Conversation.outputs = kikanOutputs testKikanServices,
+      Conversation.outputs = unreachableOutputs,
       Conversation.agents = conversationAgents,
       Conversation.grants = StaticGrants defaultGrantTable,
       Conversation.directory = disabledDirectoryHandle
@@ -2670,7 +2658,7 @@ decl =
             preferEnrichment = False,
             grounding = Nothing
           },
-      outputs = [(kawaDigestOutput KawaDigestOutput {subjectType = activityCoordinate ("heartbeat"), verb = activityCoordinate ("heartbeat.tick")})],
+      outputs = [(kawaDigest "heartbeat" "heartbeat.tick")],
       delegates = map fixtureAgentName [],
       delegationBudget = Nothing,
       sanctionedProfile = Nothing,
@@ -2726,7 +2714,7 @@ profiledDecl =
             preferEnrichment = False,
             grounding = Nothing
           },
-      outputs = [(kawaDigestOutput KawaDigestOutput {subjectType = activityCoordinate ("heartbeat"), verb = activityCoordinate ("heartbeat.tick")})],
+      outputs = [(kawaDigest "heartbeat" "heartbeat.tick")],
       delegates = map fixtureAgentName [],
       delegationBudget = Nothing,
       sanctionedProfile =
@@ -2838,7 +2826,7 @@ collectionSupervisorDecl =
 
 conversationDecl :: AgentDecl
 conversationDecl =
-  (decl & #trigger .~ (Event {eventType = declarationCoordinate (addressedMessageEventType)}) & #outputs .~ ([(danwaConversationOutput DanwaConversationOutput {topic = "support", thread = Nothing})]))
+  (decl & #trigger .~ (Event {eventType = declarationCoordinate (addressedMessageEventType)}) & #outputs .~ ([(rawOutput "danwa.conversation" ["topic" .= ("support" :: Text)])]))
 
 withRecordPolicy :: RecordPolicy -> AgentDecl -> AgentDecl
 withRecordPolicy recordPolicy = #memory . #recordPolicy .~ recordPolicy
@@ -3542,5 +3530,3 @@ fixtureRunKey = either (error . show) id . parseRunKey
 
 -- | Every Kikan service unreachable: a case that reaches one by accident fails
 -- loudly.
-testKikanServices :: KikanServices
-testKikanServices = KikanServices {http = testSinkHttp, kizashi = KizashiConfig {baseUrl = "http://localhost:1", defaultRecipient = (declarationCoordinate "recipient")}, kawa = KawaConfig {baseUrl = "http://localhost:1", sourceSegment = (activityCoordinate "shinzui/shikigami")}, kanmon = KanmonConfig {baseUrl = "http://localhost:1"}, danwa = DanwaConfig {baseUrl = "http://localhost:1", agentParticipant = (declarationCoordinate "part_agent_test")}, rei = ReiConfig {baseUrl = Nothing}}

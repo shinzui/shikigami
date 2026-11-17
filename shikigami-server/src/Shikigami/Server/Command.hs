@@ -92,8 +92,6 @@ import Shikigami.Server.Command.RenderLifecycle (runRenderLifecycle)
 import Shikigami.Server.Command.ResolveApproval (resolveApprovalOptionsParser, runResolveApproval)
 import Shikigami.Server.Command.Resources (runResourcesInspect)
 import Shikigami.Server.Command.Runs (runRunsShow)
-import Shikigami.Server.Command.StubKanmon (runStubKanmonCmd)
-import Shikigami.Server.Command.StubKawa (runStubKawaCmd)
 import Shikigami.Server.Command.Validate (runValidate)
 import Shikigami.Server.Command.Workers (runWorkersControl, runWorkersInspect, runWorkersInterrupt, runWorkersSend)
 import Shikigami.StateRevision (StateRevision, parseRevision)
@@ -214,8 +212,6 @@ adminSubcommandsWith packs =
     ("enqueue-run", command "enqueue-run" enqueueRunInfo),
     ("resolve-approval", command "resolve-approval" resolveApprovalInfo),
     ("publish-fixture", command "publish-fixture" publishFixtureInfo),
-    ("stub-kawa", command "stub-kawa" stubKawaInfo),
-    ("stub-kanmon", command "stub-kanmon" stubKanmonInfo),
     ("grants", command "grants" grantsInfo),
     ("agents", command "agents" agentsInfo),
     ("runs", command "runs" runsInfo),
@@ -601,29 +597,6 @@ publishFixtureInfo =
       (\file sources -> (runPublishFixture file, sources))
         <$> argument str (metavar "FILE")
         <*> sourcesOf [brokerOption, topicOption]
-
-stubKawaInfo :: ParserInfo AdminAction
-stubKawaInfo =
-  info
-    (parser <**> helper)
-    (progDesc "Run the kawa ingest doorway stub, optionally republishing to a topic")
-  where
-    parser =
-      (\port topic sources -> (runStubKawaCmd port topic, sources))
-        <$> option auto (long "port" <> metavar "PORT" <> help "Port to listen on")
-        <*> optional (strOption (long "republish-topic" <> metavar "TOPIC" <> help "Re-publish accepted envelopes onto this Kafka topic"))
-        <*> sourcesOf [brokerOption]
-
-stubKanmonInfo :: ParserInfo AdminAction
-stubKanmonInfo =
-  info
-    (parser <**> helper)
-    (progDesc "Run the authenticated Kanmon channel-egress stub")
-  where
-    parser =
-      (\port conversations -> (runStubKanmonCmd port conversations, []))
-        <$> option auto (long "port" <> metavar "PORT" <> help "Port to listen on")
-        <*> many (strOption (long "allow-conversation" <> metavar "KEY" <> help "Conversation key the proof route may target (repeatable; default conv_55012)"))
 
 -- ── Command-line configuration sources ──────────────────────────────────────
 

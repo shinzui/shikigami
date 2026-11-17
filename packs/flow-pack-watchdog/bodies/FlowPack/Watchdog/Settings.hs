@@ -13,6 +13,7 @@ import Data.Text (Text)
 import Data.Text qualified as Text
 import FlowPack.Watchdog.Types (WatchdogLimit, limitValue)
 import GHC.Generics (Generic)
+import Kikan.Shikigami.Binding.Outputs (danwaConversationKind, outputConfigErrors)
 import Shikigami.Agent.DeclarationValue (DeclarationCoordinate, declarationCoordinate)
 import Shikigami.Agent.Name (agentNameText, mkAgentName)
 import Shikigami.Agent.Principal (AgentIdentity (..), AgentPrincipal, mkAgentPrincipal, principalText)
@@ -21,7 +22,6 @@ import Shikigami.Execution.Quantity (amountUnits)
 import Shikigami.Execution.Resources qualified as Resources
 import Shikigami.Flow.Sdk (OutputDecl (..))
 import Shikigami.Objective.Types (ObjectiveId)
-import Shikigami.Sink.Outputs (danwaConversationKind, outputConfigErrors)
 
 data ObservationScope = AllObjectives | SelectedObjectives !(NonEmpty ObjectiveId)
   deriving stock (Eq, Show, Generic)

@@ -164,8 +164,8 @@ Sync the declaration, grant both Flow emissions to the reviewer's recorded princ
 
 ```bash
 cabal run kikan-shikigami:exe:kikan-shikigami -- agents sync
-cabal run kikan-shikigami:exe:kikan-shikigami -- grants grant opentelemetry-practice-reviewer KawaDigest --by operator
-cabal run kikan-shikigami:exe:kikan-shikigami -- grants grant opentelemetry-practice-reviewer KizashiSignal --by operator
+cabal run kikan-shikigami:exe:kikan-shikigami -- grants grant opentelemetry-practice-reviewer kawa.digest --by operator
+cabal run kikan-shikigami:exe:kikan-shikigami -- grants grant opentelemetry-practice-reviewer kizashi.signal --by operator
 cabal run kikan-shikigami:exe:kikan-shikigami -- grants list
 ```
 

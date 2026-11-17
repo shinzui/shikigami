@@ -8,8 +8,9 @@ import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import FlowPack.Watchdog.Settings (DeliveryPolicy (..))
 import FlowPack.Watchdog.Types (FindingView (..))
+import Kikan.Shikigami.Binding.Outputs (DanwaTarget (..), inThread, toRecipient)
 import Shikigami.Agent.DeclarationValue (declarationCoordinate)
-import Shikigami.Flow.Sdk (AddressedOutput (..), DanwaTarget (..), inThread, toRecipient)
+import Shikigami.Flow.Sdk (AddressedOutput (..))
 import Shikigami.Objective.Types (ConversationRef, ObjectiveId, conversationRefText)
 
 -- | A finding on an objective that has a conversation is posted into it;

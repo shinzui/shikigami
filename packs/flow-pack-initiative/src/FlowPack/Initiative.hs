@@ -35,5 +35,7 @@ initiativePack =
       triggers = noTriggerHooks {stream = Just (StreamHook (streamDisposition . initiativeSettingsFrom))},
       adminVerbs = [proposalsVerb],
       gauges = [],
-      authorities = []
+      authorities = [],
+      outputs = [],
+      approvalChannels = []
     }

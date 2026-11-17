@@ -27,6 +27,7 @@ import FlowPack.Examples.Lifecycle.AtRiskCustomer (AtRiskCustomerCommand (..), a
 import Keiki.Acceptor qualified as Acceptor
 import Keiro.Workflow (StepName (..))
 import Keiro.Workflow qualified as Keiro
+import Kikan.Shikigami.Binding.Outputs (kizashiSignalKind)
 import Kioku.Api.Types (MemoryRecord (..))
 import Kioku.Id (genMemoryId)
 import Kiroku.Store.Connection (defaultConnectionSettings, withStore)
@@ -47,7 +48,6 @@ import Shikigami.Flow.Decision (decisionStepNames)
 import Shikigami.Flow.Pack
 import Shikigami.Memory.Scope (agentScope)
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase, withShikigamiMigratedSuite)
-import Shikigami.Sink.Outputs (kizashiSignalKind)
 import Shikigami.Sink.Types (SinkOutcome (Enqueued), SinkResult (..))
 import System.FilePath ((</>))
 import Test.Tasty (TestTree, defaultMain, testGroup)

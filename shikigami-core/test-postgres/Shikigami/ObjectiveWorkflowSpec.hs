@@ -35,14 +35,14 @@ import Shikigami.Agent.DeclarationValue (declarationCoordinate, declarationCoord
 import Shikigami.Agent.Principal (AgentIdentity (VerifiedIdentity), mkAgentPrincipal)
 import Shikigami.Agent.Run (AgentRunResult (..))
 import Shikigami.Agent.Run.Key (parseRunKey)
-import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (AgentWorkflowRoute), runJobWorkflowId)
+import Shikigami.Agent.RunJob (RunRouteKind (AgentWorkflowRoute), runJobWorkflowId)
 import Shikigami.Agent.Workflow qualified as Agent
 import Shikigami.AgentRun.Ledger qualified as Ledger
 import Shikigami.AgentRun.RequestKey (parseRequestKey)
 import Shikigami.App (AppEnv (..))
 import Shikigami.Authority (allowAllForTests)
 import Shikigami.Behavior.Error (TransientBehaviorFailure (..))
-import Shikigami.Behavior.Run (BehaviorEnv (..), newBehaviorEnv)
+import Shikigami.Behavior.Run (newBehaviorEnv)
 import Shikigami.Behavior.StubProvider (stubApiProvider)
 import Shikigami.Capability.Provider (emptyCapabilityProviderRegistry)
 import Shikigami.Directory qualified as Directory
@@ -65,8 +65,8 @@ import Shikigami.Execution.Transcript qualified as Replay
 import Shikigami.ExecutionDriver.Generated.WorkflowRuntime qualified as DriverGenerated
 import Shikigami.ExecutionSelectionWorkflowSpec qualified as SelectionFixture
 import Shikigami.ExecutionTranscriptSpec qualified as Fixture
-import Shikigami.Fixture.OutboxDispatch (unreachableServices)
-import Shikigami.Flow.Decision qualified as Decision
+import Shikigami.Fixture.Outputs (unreachableOutputs)
+import Shikigami.Fixture.RawOutput (danwaConversationKind)
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Integration.Danwa (AddressedMessage (..))
@@ -79,12 +79,9 @@ import Shikigami.Objective.Runtime qualified as Objectives
 import Shikigami.Objective.Scope qualified as Scope
 import Shikigami.Objective.Tools qualified as Tools
 import Shikigami.Objective.Types qualified as O
-import Shikigami.Output.Kikan (kikanOutputs)
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.RouterWorkflowSpec qualified as RouterFixture
-import Shikigami.Sink.Config (DanwaConfig (..))
 import Shikigami.Sink.GrantStore (GrantSource (StaticGrants))
-import Shikigami.Sink.Outputs (danwaConversationKind)
 import Shikigami.Trigger.Enqueue (addressedRunJob, ensureRunQueue)
 import Shikigami.Workflow.Versioning (shikigamiWorkflowResumeOptions)
 import Shikumi.Tool (SomeTool (..), runErasedOutput, someToolDescription, someToolName, someToolSchema)
@@ -154,9 +151,8 @@ conversationCreation fixture = Fixture.withConfiguredResourceFixture fixture id 
             runTimeout = dependencies.runTimeout,
             harness = dependencies.harness,
             idleTimeout = checked parseDuration 1800,
-            danwa = DanwaConfig "http://localhost:1" (declarationCoordinate "participant"),
             agents = [declaration],
-            outputs = kikanOutputs unreachableServices,
+            outputs = unreachableOutputs,
             grants = StaticGrants (Map.singleton actor (Set.singleton danwaConversationKind)),
             directory
           }
@@ -249,9 +245,8 @@ oldShapeReplay fixture conversationCase = Fixture.withFixture fixture \env _ _ -
             runTimeout = dependencies.runTimeout,
             harness = dependencies.harness,
             idleTimeout = checked parseDuration 1800,
-            danwa = DanwaConfig "http://localhost:1" (declarationCoordinate "participant"),
             agents = [declaration],
-            outputs = kikanOutputs unreachableServices,
+            outputs = unreachableOutputs,
             grants = StaticGrants (Map.singleton actor (Set.singleton danwaConversationKind)),
             directory
           }

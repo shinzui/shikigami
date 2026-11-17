@@ -81,7 +81,9 @@ withSetting FlowPack {name, flows, decisionPrograms, retainedCodecs, tasks} =
       triggers = noTriggerHooks,
       adminVerbs = [],
       gauges = [],
-      authorities = []
+      authorities = [],
+      outputs = [],
+      approvalChannels = []
     }
 
 probePack :: Text -> [Text] -> FlowPack
@@ -96,7 +98,9 @@ probePack name flowNames =
       triggers = noTriggerHooks,
       adminVerbs = [],
       gauges = [],
-      authorities = []
+      authorities = [],
+      outputs = [],
+      approvalChannels = []
     }
   where
     definition flowName =

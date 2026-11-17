@@ -6,22 +6,17 @@ module Shikigami.RecordInvariantSpec (tests) where
 import Data.Aeson (Value (..), object, (.=))
 import Data.Aeson.Key qualified as Key
 import Data.Aeson.KeyMap qualified as KeyMap
-import Data.Either (isLeft)
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Time (UTCTime (..), fromGregorian)
 import Keiro.Workflow (WorkflowId (..))
-import Shikigami.Activity.Coordinate (activityCoordinate)
 import Shikigami.Agent.RunRecord
 import Shikigami.Authority (Action (EmitOutput), mkOutputKind, mkOutputTarget)
-import Shikigami.Fixture.OutboxDispatch (unreachableServices)
-import Shikigami.Fixture.SinkHttp (testHttpEnv)
-import Shikigami.Output (DefaultOutput (..), OutputAdapter (..), OutputDecl (..), OutputReceipt (..), ResolvedOutputs (..), mkOutputRegistry)
-import Shikigami.Output.Kikan (defaultKawaDigest, kawaDigestAdapter)
+import Shikigami.Fixture.RawOutput (rawOutput)
+import Shikigami.Output (OutputDecl (..), OutputReceipt (..), ResolvedOutputs (..))
 import Shikigami.Record
 import Shikigami.Record.Invariant
-import Shikigami.Sink.Config (KawaConfig (..))
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, testCase, (@?=))
 
@@ -70,19 +65,17 @@ tests =
             entry = either (error . show) id (deliveredEntry "deliver-outputs" action OutputReceipt {kind = "local.report", location = "/r/run-1-0.md", detail = "9 bytes"})
             result = check [admitted, allowed, event "output.delivered" (snd (recordEntry entry))]
         result.violations @?= []
-        result.linkedEffects @?= 1,
-      testCase "kawa.digest needs a subject type and a verb, and is a valid default" do
-        let adapter = kawaDigestAdapter unreachableServices
-        adapter.validate defaultKawaDigest.config @?= Right ()
-        assertBool "verb missing" (isLeft (adapter.validate (object ["subjectType" .= ("agent-run" :: Text)])))
-        assertBool "blank subject type" (isLeft (adapter.validate (object ["subjectType" .= ("  " :: Text), "verb" .= ("reported" :: Text)])))
-        assertBool "registers as the default" (either (const False) (const True) (mkOutputRegistry [adapter] (DefaultOutput defaultKawaDigest)))
+        result.linkedEffects @?= 1
     ]
   where
     hasField value (name, expected) =
       assertBool ("payload carries " <> Text.unpack name) case value of
         Object fields -> KeyMap.lookup (Key.fromText name) fields == Just expected
         _ -> False
+
+-- | A composition's default output, as the kernel carries it.
+defaultKawaDigest :: OutputDecl
+defaultKawaDigest = rawOutput "kawa.digest" ["subjectType" .= ("agent-run" :: Text), "verb" .= ("agent.run.completed" :: Text)]
 
 runId :: WorkflowId
 runId = WorkflowId "run-1"

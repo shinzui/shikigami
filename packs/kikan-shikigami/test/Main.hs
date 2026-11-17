@@ -1,8 +1,13 @@
--- | Tests that span use cases the distribution composes: the watchdog
--- observing work the initiative pack proposed and admitted. Each use case's
--- own tests live with it; only what needs two of them together is here.
+-- | Tests of what the distribution composes: the watchdog observing work the
+-- initiative pack proposed and admitted, the Kikan outputs delivered through
+-- the kernel's publisher, and the development stubs of the Kikan services.
+-- Each use case's own tests live with it.
 module Main (main) where
 
+import Kikan.OutputDeliverySpec qualified as OutputDeliverySpec
+import Kikan.Stub.CommandSpec qualified as StubCommandSpec
+import Kikan.Stub.KanmonSpec qualified as KanmonStubSpec
+import Kikan.Stub.KawaSpec qualified as KawaStubSpec
 import Kikan.WatchdogQualificationSpec qualified as WatchdogQualificationSpec
 import Kikan.WatchdogSweepSpec qualified as WatchdogSweepSpec
 import Kikan.WatchdogTelemetrySpec qualified as WatchdogTelemetrySpec
@@ -16,6 +21,10 @@ main = withShikigamiMigratedSuite \databaseFixture ->
         "kikan-shikigami"
         [ WatchdogSweepSpec.tests databaseFixture,
           WatchdogQualificationSpec.tests databaseFixture,
-          WatchdogTelemetrySpec.tests databaseFixture
+          WatchdogTelemetrySpec.tests databaseFixture,
+          OutputDeliverySpec.tests databaseFixture,
+          KawaStubSpec.tests,
+          KanmonStubSpec.tests,
+          StubCommandSpec.tests
         ]
     )

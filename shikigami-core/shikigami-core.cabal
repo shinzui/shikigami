@@ -43,7 +43,6 @@ library
     Shikigami.AdaptiveDelivery.Generated.WorkflowRuntime
     Shikigami.Agent.Approval
     Shikigami.Agent.Approval.LocalInbox
-    Shikigami.Agent.Approval.Notification
     Shikigami.Agent.Approval.Workflow
     Shikigami.Agent.Catalog
     Shikigami.Agent.Conversation
@@ -75,6 +74,7 @@ library
     Shikigami.App.Config.Load
     Shikigami.App.Role
     Shikigami.App.Version
+    Shikigami.Approval.Channel
     Shikigami.Approval.Observation
     Shikigami.Attestation.Agent
     Shikigami.Attestation.CallFacts
@@ -284,8 +284,8 @@ library
     Shikigami.ObjectiveTrackerLookup.Generated.ReadModelTable
     Shikigami.ObjectiveTrackerLookup.ReadModelHoles
     Shikigami.Output
-    Shikigami.Output.Kikan
     Shikigami.Output.Local
+    Shikigami.Output.Registration
     Shikigami.Pack.Admin
     Shikigami.Pack.Sdk
     Shikigami.Pack.Setting
@@ -320,23 +320,13 @@ library
     Shikigami.Sink
     Shikigami.Sink.Auth
     Shikigami.Sink.Authorization
-    Shikigami.Sink.Config
     Shikigami.Sink.Coordinate
-    Shikigami.Sink.Danwa
     Shikigami.Sink.Delivery
     Shikigami.Sink.GrantStore
     Shikigami.Sink.Http
     Shikigami.Sink.Intent
-    Shikigami.Sink.KanmonClient
-    Shikigami.Sink.KawaClient
-    Shikigami.Sink.KizashiClient
-    Shikigami.Sink.Outputs
     Shikigami.Sink.Permission
-    Shikigami.Sink.Recipient
-    Shikigami.Sink.ReiAction
     Shikigami.Sink.Types
-    Shikigami.Sink.Validate
-    Shikigami.Sink.Wire
     Shikigami.StateRevision
     Shikigami.Telemetry.Metrics
     Shikigami.Telemetry.TraceContext
@@ -634,9 +624,7 @@ library flow-sdk
     Shikigami.Program.Decision.Confidence,
     Shikigami.Repository,
     Shikigami.Router.Decision,
-    Shikigami.Sink.Outputs,
     Shikigami.Sink.Types,
-    Shikigami.Sink.Validate,
     Shikigami.StateRevision,
     Shikigami.WorkerSession.Observation,
     Shikigami.WorkerSession.Types,
@@ -659,6 +647,7 @@ library pack-sdk
     Shikigami.Agent.Run.Key,
     Shikigami.Agent.Workflow.Name,
     Shikigami.App,
+    Shikigami.Approval.Channel,
     Shikigami.Approval.Observation,
     Shikigami.Authority,
     Shikigami.Authority.Adapter,
@@ -672,9 +661,12 @@ library pack-sdk
     Shikigami.Objective.Reference,
     Shikigami.Objective.Store,
     Shikigami.Output,
+    Shikigami.Output.Registration,
     Shikigami.Pack.Sdk,
     Shikigami.Sink,
+    Shikigami.Sink.Auth,
     Shikigami.Sink.Delivery,
+    Shikigami.Sink.Http,
     Shikigami.Sink.Intent,
     Shikigami.Trigger.Enqueue,
     Shikigami.Trigger.RequestKey,
@@ -729,7 +721,6 @@ test-suite shikigami-core-test
     Shikigami.AgentRunValueSpec
     Shikigami.AgentValueSpec
     Shikigami.AppConfigSpec
-    Shikigami.ApprovalNotificationSpec
     Shikigami.AttestationContractsSpec
     Shikigami.AuthoritySpec
     Shikigami.BaikaiStructuredContentSpec
@@ -760,14 +751,11 @@ test-suite shikigami-core-test
     Shikigami.Fixture.ExecutionIdentity
     Shikigami.Fixture.JudgmentExample
     Shikigami.Fixture.JudgmentExampleFlow
-    Shikigami.Fixture.KawaStub
     Shikigami.Fixture.ObjectiveExampleFlow
-    Shikigami.Fixture.OutboxDispatch
-    Shikigami.Fixture.SinkHttp
+    Shikigami.Fixture.RawOutput
     Shikigami.Fixture.TypeSafe
     Shikigami.FlowPackSpec
     Shikigami.FormatVersionSpec
-    Shikigami.KanmonClientSpec
     Shikigami.KeiroSpecificationSpec
     Shikigami.KernelBoundarySpec
     Shikigami.LocalHostSpec
@@ -788,7 +776,6 @@ test-suite shikigami-core-test
     Shikigami.RouterDecisionSpec
     Shikigami.RouterDeclarationSpec
     Shikigami.SinkAuthSpec
-    Shikigami.SinkHonestySpec
     Shikigami.SinkIntentSpec
     Shikigami.TypeSafeDecisionSpec
     Shikigami.WireCompatSpec
@@ -892,10 +879,9 @@ test-suite shikigami-core-postgres-test
     Shikigami.Fixture.ExecutionIdentity
     Shikigami.Fixture.JudgmentExample
     Shikigami.Fixture.JudgmentExampleFlow
-    Shikigami.Fixture.KawaStub
     Shikigami.Fixture.ObjectiveExampleFlow
-    Shikigami.Fixture.OutboxDispatch
-    Shikigami.Fixture.SinkHttp
+    Shikigami.Fixture.Outputs
+    Shikigami.Fixture.RawOutput
     Shikigami.Fixture.TypeSafe
     Shikigami.FlowLifecycleSpec
     Shikigami.GrantStoreSpec
@@ -907,7 +893,6 @@ test-suite shikigami-core-postgres-test
     Shikigami.ProfileResolutionSpec
     Shikigami.RouterWorkflowSpec
     Shikigami.RunEvidenceSpec
-    Shikigami.SinkDeliverySpec
     Shikigami.SpikeWorkflowSpec
     Shikigami.TypeSafeDecisionWorkflowSpec
     Shikigami.WorkerSessionCapabilitySpec

@@ -3,8 +3,8 @@
     "admittedCoordinatorIsDeclared": true,
     "admittedStatus": "admitted",
     "askChannels": [
-        "ViaDanwa",
-        "ViaDanwa"
+        "ApprovalChannel \"configured\"",
+        "ApprovalChannel \"configured\""
     ],
     "ownersAreTheProposer": true,
     "plantedRecipientInAsk": false,

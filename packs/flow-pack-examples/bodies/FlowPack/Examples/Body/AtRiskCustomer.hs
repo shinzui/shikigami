@@ -29,9 +29,9 @@ import Data.Foldable (toList)
 import Data.Text (Text)
 import Data.Text qualified as Text
 import GHC.Generics (Generic)
+import Kikan.Shikigami.Binding.Outputs
 import Kioku.Api.Types (MemoryRecord (..))
 import Shikigami.Flow.Sdk
-import Shikigami.Sink.Outputs (KizashiSignalOutput (..), kizashiSignalOutput)
 
 atRiskCustomerFlowName :: DeclarationCoordinate "flow"
 atRiskCustomerFlowName = declarationCoordinate "at-risk-customer"
@@ -185,7 +185,7 @@ ackRequest verdict activity =
             "activity_id" .= (.activityId) activity,
             "ticket_id" .= (.ticketId) verdict
           ],
-      channel = ViaDanwa
+      channel = configuredApprovalChannel
     }
 
 acknowledgedNote :: RiskVerdict -> Value -> Value

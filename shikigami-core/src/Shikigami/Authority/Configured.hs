@@ -25,7 +25,7 @@ buildConfiguredAuthority adapters logger config = case config.actionAuthorizatio
     Nothing -> pure (Left (missingAuthorityMessage requested ((.mode) <$> adapters)))
     Just adapter ->
       either (\problem -> Left ("authorization.actions.mode=" <> requested <> ": " <> problem)) Right
-        <$> adapter.build AuthorityContext {logger, settings = config.packSettings, kawaSource = config.kawaSourceSegment}
+        <$> adapter.build AuthorityContext {logger, settings = config.packSettings}
 
 -- | Why a mode cannot be honoured here, and where it can.
 missingAuthorityMessage :: Text -> [Text] -> Text

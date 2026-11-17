@@ -6,15 +6,10 @@
 module Shikigami.Sink.Http
   ( HttpLimits (..),
     HttpEnv (..),
-    SinkCredentials (..),
-    SinkHttp (..),
-    SinkHttpError (..),
     HttpFailure (..),
     HttpFailureReason (..),
     newSinkManager,
     newTypedClientManager,
-    credentialsFromConfig,
-    newSinkHttp,
     unauthenticatedHttpEnv,
     classifyDanwaClientError,
     runDanwaClient,
@@ -67,14 +62,12 @@ import Servant.Client
     runClientM,
   )
 import Shikigami.App.Config
-  ( AppConfig (..),
-    ByteLimit,
+  ( ByteLimit,
     byteLimitBytes,
   )
 import Shikigami.Prelude
 import Shikigami.Sink.Auth (CredentialFailure, TokenSource (..), credentialToken, staticTokenSource)
 import Shikigami.Sink.Auth.Internal (renderAuthHeader)
-import Shikigami.Sink.Config (DanwaConfig (..))
 
 -- | Independent encoded-request and streamed-response bounds.
 data HttpLimits = HttpLimits
@@ -89,30 +82,6 @@ data HttpEnv = HttpEnv
     token :: !(Maybe TokenSource),
     limits :: !HttpLimits
   }
-
--- | Per-sink credentials resolved at the process composition root.
-data SinkCredentials = SinkCredentials
-  { kawa :: !(Maybe TokenSource),
-    kizashi :: !(Maybe TokenSource),
-    kanmon :: !(Maybe TokenSource),
-    danwa :: !(Maybe TokenSource)
-  }
-  deriving stock (Generic)
-
--- | Process-lifetime HTTP clients. Kawa and kizashi share a manager but keep
--- separate token sources; danwa owns a dedicated manager behind its 'ClientEnv'
--- so its request hook cannot authenticate another host.
-data SinkHttp = SinkHttp
-  { kawa :: !HttpEnv,
-    kizashi :: !HttpEnv,
-    kanmon :: !HttpEnv,
-    danwa :: !ClientEnv
-  }
-  deriving stock (Generic)
-
--- | Safe startup failures while constructing process-lifetime clients.
-data SinkHttpError = InvalidDanwaBaseUrl
-  deriving stock (Generic, Eq, Show)
 
 -- | Whether retrying the same request may plausibly repair the failure.
 data HttpFailure
@@ -147,38 +116,6 @@ newSinkManager =
     tlsManagerSettings
       { managerResponseTimeout = responseTimeoutMicro 30_000_000
       }
-
--- | Convert redacted Settei values to static opaque sources without exposing
--- their plaintext to any serializable sink configuration.
-credentialsFromConfig :: AppConfig -> SinkCredentials
-credentialsFromConfig AppConfig {kawaToken = configKawa, kizashiToken = configKizashi, kanmonToken = configKanmon, danwaToken = configDanwa} =
-  SinkCredentials
-    { kawa = sourceFromSecret configKawa,
-      kizashi = sourceFromSecret configKizashi,
-      kanmon = sourceFromSecret configKanmon,
-      danwa = sourceFromSecret configDanwa
-    }
-  where
-    sourceFromSecret = fmap (staticTokenSource . credentialToken)
-
--- | Build all sink HTTP clients once, before a worker starts consuming work.
-newSinkHttp :: HttpLimits -> SinkCredentials -> DanwaConfig -> IO (Either SinkHttpError SinkHttp)
-newSinkHttp httpLimits SinkCredentials {kawa = kawaSource, kizashi = kizashiSource, kanmon = kanmonSource, danwa = danwaSource} DanwaConfig {baseUrl} = do
-  parsed <- trySynchronous (parseBaseUrl (Text.unpack baseUrl)) :: IO (Either SomeException BaseUrl)
-  case parsed of
-    Left _ -> pure (Left InvalidDanwaBaseUrl)
-    Right danwaBaseUrl -> do
-      sharedManager <- newSinkManager
-      danwaManager <- newDanwaManager httpLimits danwaSource
-      pure
-        ( Right
-            SinkHttp
-              { kawa = HttpEnv {manager = sharedManager, token = kawaSource, limits = httpLimits},
-                kizashi = HttpEnv {manager = sharedManager, token = kizashiSource, limits = httpLimits},
-                kanmon = HttpEnv {manager = sharedManager, token = kanmonSource, limits = httpLimits},
-                danwa = mkClientEnv danwaManager danwaBaseUrl
-              }
-        )
 
 -- | Reuse an environment's manager and limits without sending its credential.
 unauthenticatedHttpEnv :: HttpEnv -> HttpEnv

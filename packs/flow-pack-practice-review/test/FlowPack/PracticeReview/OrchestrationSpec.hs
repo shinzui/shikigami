@@ -69,7 +69,6 @@ import FlowPack.PracticeReview.EvidenceSpec
     completeOpenTelemetryTrigger,
     completeReferenceRevision,
   )
-import FlowPack.PracticeReview.Fixture.SinkHttp (testSinkHttp)
 import FlowPack.PracticeReview.Identity (attentionKeyForDigest, newReviewId)
 import FlowPack.PracticeReview.IdentityRef (allocatedReviewId)
 import FlowPack.PracticeReview.IdentityStore qualified as IdentityStore
@@ -121,6 +120,9 @@ import Hasql.Session qualified as Session
 import Hasql.Statement (Statement, preparable)
 import Keiro.Outbox (listOutbox)
 import Keiro.Workflow (StepName (..), WorkflowId (..), WorkflowName (..), WorkflowOutcome (..), loadStepIndex, runWorkflowWith)
+import Kikan.Shikigami.Binding.Fixture.OutboxDispatch (unreachableServices)
+import Kikan.Shikigami.Binding.Output (kikanOutputs)
+import Kikan.Shikigami.Binding.Outputs (kawaDigestKind, kizashiSignalKind)
 import Kioku.Id (SessionId, genSessionId, idText)
 import Kioku.Id qualified as NominalId
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
@@ -157,14 +159,11 @@ import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Shikigami.Output (emptyOutputRegistry)
-import Shikigami.Output.Kikan (KikanServices (..), kikanOutputs)
 import Shikigami.Pack.Setting (noPackSettings)
 import Shikigami.Repository (RepoRef (..), revisionText)
 import Shikigami.RunJobs (decodeRunJob)
-import Shikigami.Sink.Config (DanwaConfig (..), KanmonConfig (..), KawaConfig (..), KizashiConfig (..), ReiConfig (..))
 import Shikigami.Sink.Delivery (sinkMessageId)
 import Shikigami.Sink.GrantStore (GrantSource (StaticGrants))
-import Shikigami.Sink.Outputs (kawaDigestKind, kizashiSignalKind)
 import Shikigami.Trigger.Enqueue (ensureRunQueue, runQueueName)
 import Shikigami.Trigger.Schedule (parseCron)
 import Shikigami.Workflow.Versioning (shikigamiWorkflowRunOptions)
@@ -1156,5 +1155,3 @@ reviewTriggerKey :: Text -> ReviewValue.TriggerKey
 reviewTriggerKey = either (error . show) id . ReviewValue.parseTriggerKey
 
 -- | Every Kikan service unreachable; a case that reaches one fails loudly.
-unreachableServices :: KikanServices
-unreachableServices = KikanServices {http = testSinkHttp, kizashi = KizashiConfig {baseUrl = "http://localhost:1", defaultRecipient = (declarationCoordinate "recipient_unused")}, kawa = KawaConfig {baseUrl = "http://localhost:1", sourceSegment = (activityCoordinate "shinzui/shikigami")}, kanmon = KanmonConfig {baseUrl = "http://localhost:1"}, danwa = DanwaConfig {baseUrl = "http://localhost:1", agentParticipant = (declarationCoordinate "part_agent_practice_review")}, rei = ReiConfig {baseUrl = Nothing}}

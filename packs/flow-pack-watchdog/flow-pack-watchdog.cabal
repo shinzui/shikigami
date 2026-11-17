@@ -65,6 +65,7 @@ library bodies
     effectful-core,
     generic-lens,
     keiro,
+    kikan-shikigami-binding:outputs,
     lens,
     mmzk-typeid,
     shikigami-core:flow-sdk,
@@ -123,6 +124,7 @@ library
     hasql,
     hasql-transaction,
     keiro,
+    kikan-shikigami-binding:outputs,
     kiroku-store,
     lens,
     mmzk-typeid,
@@ -170,9 +172,9 @@ test-suite flow-pack-watchdog-test
     Shikigami.Fixture.ExecutionIdentity
     Shikigami.Fixture.JudgmentExample
     Shikigami.Fixture.JudgmentExampleFlow
-    Shikigami.Fixture.KawaStub
     Shikigami.Fixture.ObjectiveExampleFlow
-    Shikigami.Fixture.SinkHttp
+    Shikigami.Fixture.Outputs
+    Shikigami.Fixture.RawOutput
     Shikigami.FlowLifecycleSpec
     Shikigami.ObjectiveStoreSpec
     Shikigami.RouterWorkflowSpec
@@ -219,6 +221,7 @@ test-suite flow-pack-watchdog-test
     keiro,
     keiro-pgmq,
     kikan-en-contract,
+    kikan-shikigami-binding:outputs,
     kioku-api,
     kioku-core,
     kiroku-store,

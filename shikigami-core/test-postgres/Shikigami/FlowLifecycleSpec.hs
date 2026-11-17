@@ -16,7 +16,7 @@ import Data.Time (UTCTime (..), addUTCTime, fromGregorian, getCurrentTime, secon
 import Effectful (Eff, IOE, runEff, (:>))
 import Effectful.Error.Static (runErrorNoCallStack)
 import Keiro.Outbox (listOutbox)
-import Keiro.Workflow (StepName (..), Workflow, WorkflowId (..), WorkflowName (..), WorkflowOutcome (..), WorkflowRunOptions (..), loadStepIndex, runWorkflowWith, step)
+import Keiro.Workflow (StepName (..), Workflow, WorkflowId (..), WorkflowName (..), WorkflowOutcome (..), loadStepIndex, runWorkflowWith, step)
 import Keiro.Workflow.Awakeable (AwakeableId)
 import Keiro.Workflow.Awakeable.Schema (countPendingAwakeables)
 import Keiro.Workflow.Sleep (runWorkflowTimerWorker, sleepNamed)
@@ -34,7 +34,7 @@ import Shibuya.Telemetry.Effect (runTracingNoop)
 import Shikigami.Activity (ActivityEnvelope (..), Actor (..), Subject (..))
 import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Approval qualified as Approval
-import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Priority (Normal), RecipientFrom (SubjectOwner), SignalType (Reminder), Trigger (..), defaultDelegationBudget, defaultMemoryPolicy)
+import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Trigger (..), defaultDelegationBudget, defaultMemoryPolicy)
 import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Delegate.Context (DelegateCtx (..))
 import Shikigami.Agent.Delegate.Depth (DelegationDepth, parseDelegationDepth)
@@ -48,7 +48,8 @@ import Shikigami.Coordination.Capability qualified as Adaptive
 import Shikigami.Directory (disabledDirectoryHandle)
 import Shikigami.Duration (parseDuration)
 import Shikigami.Fixture.AcknowledgementFlow (acknowledgementFlow, acknowledgementFlowName, fixtureFlowRegistry)
-import Shikigami.Fixture.OutboxDispatch (unreachableServices)
+import Shikigami.Fixture.Outputs (unreachableOutputs)
+import Shikigami.Fixture.RawOutput (kizashiSignal, kizashiSignalKind)
 import Shikigami.Flow (FlowDef (..), FlowEffects, FlowRuntime (..))
 import Shikigami.Flow.Acknowledgement (Ack (..), ackFromDecision, runAcknowledgement)
 import Shikigami.Flow.Builtin (builtinFlowRegistry)
@@ -82,13 +83,9 @@ import Shikigami.Memory.Access (shikigamiMemorySpace)
 import Shikigami.Memory.Scope (agentScope)
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Shikigami.Output (OutputDecl (..))
-import Shikigami.Output.Kikan (kikanOutputs)
-import Shikigami.RuntimePolicy (DefaultModelRequirement (..))
 import Shikigami.Sink.GrantStore (GrantSource (StaticGrants))
-import Shikigami.Sink.Outputs
 import Shikigami.Sink.Permission (defaultGrantTable)
 import Shikigami.Sink.Types (SinkOutcome (DeniedOutcome, Enqueued), SinkResult (..))
-import Shikigami.Trigger.Schedule (parseCron)
 import Shikigami.WorkerSession.Capability (CoordinatorRun (..))
 import Shikigami.Workflow.Versioning (shikigamiWorkflowRunOptions)
 import Test.Tasty (TestTree, testGroup)
@@ -622,7 +619,7 @@ runFlowBodyUsing decision onAppend appEnv runtime flowAgent SpikeFlow {run} work
           -- The same activity the flow's own capability sees, so a signal
           -- emitted from inside it resolves recipientFrom the way production does.
           activity = Just sampleActivity,
-          outputs = kikanOutputs unreachableServices,
+          outputs = unreachableOutputs,
           grants = StaticGrants defaultGrantTable,
           directory = disabledDirectoryHandle,
           identity = compatibilityIdentity (fixtureAgentName flowAgent)
@@ -734,19 +731,16 @@ sampleActivity =
 
 sampleKizashiSink :: OutputDecl
 sampleKizashiSink =
-  ( kizashiSignalOutput
-      KizashiSignalOutput
-        { source = activityCoordinate ("shinzui/shikigami"),
-          signalType = Reminder,
-          priority = Normal,
-          importance = either (error . show) id (parseSignalImportance (50)),
-          recipientFrom = SubjectOwner,
-          defaultRecipient = fmap declarationCoordinate (Just "recipient_x"),
-          intentTemplate = "triage this",
-          extraContextTags = ["verb:customer.risk_detected"],
-          recipient = Nothing
-        }
-  )
+  kizashiSignal
+    [ "source" .= ("shinzui/shikigami" :: Text),
+      "signalType" .= ("Reminder" :: Text),
+      "priority" .= ("Normal" :: Text),
+      "importance" .= (50 :: Int),
+      "recipientFrom" .= ("SubjectOwner" :: Text),
+      "defaultRecipient" .= ("recipient_x" :: Text),
+      "intentTemplate" .= ("triage this" :: Text),
+      "extraContextTags" .= (["verb:customer.risk_detected"] :: [Text])
+    ]
 
 -- | An agent declaration that differs from 'flowAgentDecl' only in its behavior,
 -- so a behavior-validation assertion is about the behavior and nothing else.

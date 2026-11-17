@@ -16,10 +16,10 @@ generated:
 requires: ["CAP-7"]
 evidence:
   - kind: test
-    resource: "shikigami-core/test/Shikigami/SinkHonestySpec.hs"
+    resource: "packs/kikan-shikigami-binding/test/Kikan/Shikigami/Binding/SinkHonestySpec.hs"
     proves: "Real configured action POSTs, missing-endpoint failure, recipient limits, and truthful outcome classification."
   - kind: test
-    resource: "shikigami-core/test-postgres/Shikigami/SinkDeliverySpec.hs"
+    resource: "packs/kikan-shikigami/test/Kikan/OutputDeliverySpec.hs"
     proves: "HTTP receipt-gap redelivery, transient retries, permanent rejection, and downstream deduplication."
   - kind: test
     resource: "shikigami-core/test-postgres/Shikigami/AgentWorkflowSpec.hs"
@@ -40,8 +40,8 @@ Builds on [CAP-7: Exact external-action authorization](exact-action-authorizatio
 
 ## Evidence
 
-- [SinkHonestySpec.hs](../../shikigami-core/test/Shikigami/SinkHonestySpec.hs): Real configured action POSTs, missing-endpoint failure, recipient limits, and truthful outcome classification.
-- [SinkDeliverySpec.hs](../../shikigami-core/test-postgres/Shikigami/SinkDeliverySpec.hs): HTTP receipt-gap redelivery, transient retries, permanent rejection, and downstream deduplication.
+- [SinkHonestySpec.hs](../../packs/kikan-shikigami-binding/test/Kikan/Shikigami/Binding/SinkHonestySpec.hs): Real configured action POSTs, missing-endpoint failure, recipient limits, and truthful outcome classification.
+- [OutputDeliverySpec.hs](../../packs/kikan-shikigami/test/Kikan/OutputDeliverySpec.hs): HTTP receipt-gap redelivery, transient retries, permanent rejection, and downstream deduplication.
 - [AgentWorkflowSpec.hs](../../shikigami-core/test-postgres/Shikigami/AgentWorkflowSpec.hs): Revocation after enqueue prevents publication.
 
 ## Limits

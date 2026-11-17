@@ -34,7 +34,7 @@ import Data.Aeson (Value (String), (.=))
 import Data.Bifunctor (first)
 import Data.Either (isRight)
 import Data.List.NonEmpty (NonEmpty (..))
-import Data.Maybe (isNothing)
+import Data.Maybe (fromMaybe, isNothing)
 import Data.Set (Set)
 import Data.Set qualified as Set
 import Data.Text (Text)
@@ -74,9 +74,10 @@ import Kikan.En.Action
   )
 import Kikan.En.Action qualified as Kikan
 import Kikan.En.Client (KikanEnClient, authorizeAgentAction, newActionProofVerifier, newKikanEnClient)
+import Kikan.Shikigami.Binding.Settings (kawaSourceKey)
 import Network.HTTP.Client.TLS (newTlsManager)
 import Servant.Client (ClientEnv, mkClientEnv, parseBaseUrl)
-import Shikigami.Activity.Coordinate (ActivityCoordinate, activityCoordinateText)
+import Shikigami.Activity.Coordinate (ActivityCoordinate, activityCoordinate, activityCoordinateText)
 import Shikigami.Agent.DeclarationValue (DeclarationCoordinate, declarationCoordinate, declarationCoordinateText)
 import Shikigami.Authority hiding (mkCapabilityTarget)
 import Shikigami.Authority.Adapter (AuthorityAdapter (..), AuthorityContext (..))
@@ -92,7 +93,7 @@ import Shomei.Servant.OAuth (TokenResponse (..))
 kikanAuthorityAdapter :: AuthorityAdapter
 kikanAuthorityAdapter = AuthorityAdapter {mode = "kikan", build}
   where
-    build AuthorityContext {logger, settings, kawaSource} = case loadKikanEnSettings settings of
+    build AuthorityContext {logger, settings} = case loadKikanEnSettings settings of
       Left problem -> pure (Left problem)
       Right KikanEnSettings {kikanBaseUrl, shomeiBaseUrl, shomeiClientId, shomeiClientSecret, issuerPublicKeys, acceptedSchemaHashes, callerId} ->
         case (parseBaseUrl (Text.unpack kikanBaseUrl), parseBaseUrl (Text.unpack shomeiBaseUrl)) of
@@ -101,6 +102,7 @@ kikanAuthorityAdapter = AuthorityAdapter {mode = "kikan", build}
             let verifier = newActionProofVerifier issuerPublicKeys acceptedSchemaHashes (const (pure False))
                 client = newKikanEnClient (mkClientEnv manager kikanBase) verifier
                 tokenSource = shomeiClientCredentialsToken (mkClientEnv manager shomeiBase) shomeiClientId shomeiClientSecret
+            let kawaSource = activityCoordinate (fromMaybe "shinzui/shikigami" (packSettingText kawaSourceKey settings))
             pure (Right (kikanEnAuthority logger callerId KikanEnMapping {kawaSource} client tokenSource))
           _ -> pure (Left "invalid Kikan-En or Shomei authorization base URL")
 

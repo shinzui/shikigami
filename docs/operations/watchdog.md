@@ -86,7 +86,7 @@ Configure the Danwa sink endpoint, C11 grant and exact C13 action authorization
 for the intended destinations ([action authorization](action-authorization.md)):
 
 ```bash
-shikigami --config config.json grants grant watchdog DanwaConversation --by operator
+shikigami --config config.json grants grant watchdog danwa.conversation --by operator
 shikigami --config config.json grants list
 ```
 

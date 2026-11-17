@@ -14,7 +14,10 @@ module Kikan.Shikigami.Binding
   )
 where
 
+import Kikan.Shikigami.Binding.Approval (kikanApprovalChannels)
 import Kikan.Shikigami.Binding.Authority (authoritySettings, kikanAuthorityAdapter)
+import Kikan.Shikigami.Binding.Output (kikanOutputRegistrations)
+import Kikan.Shikigami.Binding.Settings (serviceSettings)
 import Shikigami.Flow.Sdk
 
 kikanBindingName :: FlowPackName
@@ -30,10 +33,13 @@ kikanBinding =
       decisionPrograms = [],
       retainedCodecs = [],
       tasks = [],
-      -- The Kikan-En authority's settings keep their kernel-era keys.
-      settings = authoritySettings,
+      -- The Kikan-En authority's and the services' settings keep their
+      -- kernel-era keys.
+      settings = authoritySettings <> serviceSettings,
       triggers = noTriggerHooks,
       adminVerbs = [],
       gauges = [],
-      authorities = [kikanAuthorityAdapter]
+      authorities = [kikanAuthorityAdapter],
+      outputs = kikanOutputRegistrations,
+      approvalChannels = kikanApprovalChannels
     }

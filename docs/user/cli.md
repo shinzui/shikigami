@@ -30,11 +30,9 @@ shikigami render-lifecycle <FILE>
 shikigami enqueue-run <AGENT> [--payload <JSON>] [--conversation] [--key <TEXT>] [--workspace <DIR|mori://…>]
 shikigami resolve-approval <TOKEN> (--approve | --reject <REASON>)
 shikigami publish-fixture <FILE> [--broker <HOST:PORT>] [--topic <TOPIC>]
-shikigami stub-kawa --port <PORT> [--republish-topic <TOPIC>] [--broker <HOST:PORT>]
 shikigami grants list [--limit <N>] [--after <AGENT:KIND>]
 shikigami grants grant <AGENT> <KIND> [--by <WHO>]
 shikigami grants revoke <AGENT> <KIND> [--by <WHO>]
-shikigami stub-kanmon --port <PORT> [--allow-conversation <KEY>]
 shikigami agents list [--json]
 shikigami agents sync [--json] [--alias <LEGACY_NAME=agent_...>]
 shikigami runs show <WORKFLOW-NAME> <WORKFLOW-ID> [--json]
@@ -74,7 +72,7 @@ shikigami-agent-run --agent <NAME|FILE> [--from-activity <FILE>] [--workspace <D
 **Long-running roles** — from `shikigami-workers`:
 
 ```text
-shikigami-worker [--agents <DIR>] [--kawa-url <URL>] [--kizashi-url <URL>] [--kanmon-url <URL>] [--danwa-url <URL>] [--danwa-agent <PARTICIPANT>]
+shikigami-worker [--agents <DIR>]
 shikigami-scheduler [--agents <DIR>]
 shikigami-consume-stream [--agents <DIR>] [--broker <HOST:PORT>] [--topic <TOPIC>] [--group <GROUP>] [--include-agent-actors]
 shikigami-consume-events [--agents <DIR>] [--broker <HOST:PORT>] [--topic <TOPIC>] [--group <GROUP>]
@@ -324,17 +322,27 @@ child and its parent, dispatching an approved sink or suppressing a rejected one
 
 **Needs the DB** (`database.connection_string`).
 
-## `shikigami stub-kawa`
+## `kikan-shikigami stub-kawa` and `kikan-shikigami stub-kanmon`
 
 ```bash
-$ shikigami stub-kawa --port <PORT> [--republish-topic <TOPIC>] [--broker <HOST:PORT>]
+$ kikan-shikigami stub-kawa --port <PORT> [--republish-topic <TOPIC>] [--broker <HOST:PORT>]
+$ kikan-shikigami stub-kanmon --port <PORT> [--allow-conversation <KEY>]
 ```
 
-Run the **kawa ingest doorway stub** (contract C2). Accepts
+The Kikan service stubs are verbs of the Kikan distribution's admin command,
+`kikan-shikigami` (from `packs/kikan-shikigami`); the stock `shikigami` command does not
+offer them. Each requires the bearer token the binding's outputs send, read from
+`credentials.sinks.kawa.token` (`SHIKIGAMI_KAWA_TOKEN`) or
+`credentials.sinks.kanmon.token` (`SHIKIGAMI_KANMON_TOKEN`).
+
+`stub-kawa` runs the **kawa ingest doorway stub** (contract C2). Accepts
 `POST /v1/sources/{source_id}/events`, returns `{ "activity_id": "<uuid>", "deduplicated": false }`,
 enforces idempotency on `(source, source_event_id)`, and logs each envelope. With
 `--republish-topic` (and `--broker`) it re-publishes each accepted envelope onto that Kafka
 topic — the mechanism that **closes the living loop**.
+
+`stub-kanmon` runs the authenticated Kanmon channel-action route, accepting only the
+conversations given with `--allow-conversation` (default `conv_55012`).
 
 → See [The Living Loop](./living-loop.md), [Sinks](./sinks.md).
 
@@ -387,17 +395,21 @@ database, event store, read models, or outbox tables.
 ## `shikigami-worker`
 
 ```bash
-$ shikigami-worker [--agents <DIR>] [--kawa-url <URL>] [--kizashi-url <URL>] [--kanmon-url <URL>] [--danwa-url <URL>] [--danwa-agent <PARTICIPANT>]
+$ shikigami-worker [--agents <DIR>]
 ```
 
 Boot the supervised worker. Loads every `.dhall` in `--agents`, then drains
-`shikigami_run_jobs`: for each job, run the agent's behavior, dispatch its (permission-gated)
-sinks to the configured services, and record a kioku session. Defaults:
-`--agents agents`, `--kawa-url http://localhost:8088`, `--kizashi-url http://localhost:8089`,
-`--kanmon-url http://localhost:8090`, `--danwa-url http://localhost:8080`,
-`--danwa-agent part_shikigami`. Each of those flags
-sets a declared configuration key, so `--kawa-url URL` and `--set sinks.kawa.base_url=URL`
-are the same thing.
+`shikigami_run_jobs`: for each job, run the agent's behavior, deliver its (permission-gated)
+outputs through the adapters the composed packs register, and record a kioku session.
+Default: `--agents agents`.
+
+The stock worker registers no output kind, so its declarations keep their results in the
+journal. The Kikan distribution's `kikan-shikigami-worker` registers the five Kikan outputs
+and reads their endpoints from the binding's settings: set them with `--set`, for example
+`--set sinks.kawa.base_url=http://localhost:8088`, or with their variables
+(`SHIKIGAMI_SINKS_KAWA_BASE_URL` and so on). The worker flags `--kawa-url`, `--kizashi-url`,
+`--kanmon-url`, `--danwa-url` and `--danwa-agent` were removed with the kernel keys they set
+(plan 135, M3).
 **Needs the DB** (`database.connection_string`).
 
 → See [The Living Loop](./living-loop.md).

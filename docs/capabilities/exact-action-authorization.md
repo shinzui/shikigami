@@ -16,7 +16,7 @@ generated:
 requires: ["CAP-6"]
 evidence:
   - kind: module
-    resource: "shikigami-core/src/Shikigami/Action/Authorization.hs"
+    resource: "shikigami-core/src/Shikigami/Authority.hs"
     proves: "Production authorizer, locally checked decision coordinates, distinct failure classes, and deny-all default."
   - kind: test
     resource: "shikigami-core/test/Shikigami/BehaviorToolSpec.hs"
@@ -40,7 +40,7 @@ Builds on [CAP-6: Principal lifecycle and continuity](principal-lifecycle-and-co
 
 ## Evidence
 
-- [Authorization.hs](../../shikigami-core/src/Shikigami/Action/Authorization.hs): Production authorizer, locally checked decision coordinates, distinct failure classes, and deny-all default.
+- [Authority.hs](../../shikigami-core/src/Shikigami/Authority.hs): The kernel authority port, locally checked decision coordinates, distinct failure classes, and deny-all default.
 - [BehaviorToolSpec.hs](../../shikigami-core/test/Shikigami/BehaviorToolSpec.hs): An exact tool denial prevents the leased tool callback from running.
 - [action-authorization.md](../../docs/operations/action-authorization.md): Trust configuration, boundary gate order, outages, revocation, and key rotation.
 

@@ -34,7 +34,7 @@ import Keiro.Workflow.Resume (WorkflowDef (..), WorkflowRegistry)
 import Kioku.Id (SessionId)
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Transaction (runTransaction)
-import Shikigami.Agent.Approval (ApprovalChannel (ViaDanwa), ApprovalDecision (..), ApprovalRequest (..))
+import Shikigami.Agent.Approval (ApprovalDecision (..), ApprovalRequest (..), configuredApprovalChannel)
 import Shikigami.Agent.Approval.Workflow qualified as Approval
 import Shikigami.Agent.Name (agentNameFromNonEmpty)
 import Shikigami.Agent.Run.Key (runKeyWithPrefix)
@@ -119,7 +119,7 @@ executionWorkflow runtime initial = do
         Approval.requestBoundApproval
           permission.reviewRequestId
           session
-          (ApprovalRequest ("Allow tool " <> executionCoordinateText tool <> "?") (Aeson.object ["executionId" .= start.executionId, "fingerprint" .= permission.fingerprint, "scopeDigest" .= permission.scopeDigest]) ViaDanwa)
+          (ApprovalRequest ("Allow tool " <> executionCoordinateText tool <> "?") (Aeson.object ["executionId" .= start.executionId, "fingerprint" .= permission.fingerprint, "scopeDigest" .= permission.scopeDigest]) configuredApprovalChannel)
           (remainingDuration (diffUTCTime permission.expiresAt now))
       _ <- step (StepName "resolve-tool-permission") do
         metadata <- liftIO (runExecutionStore runtime (Store.inspectExecution start.executionId)) >>= require

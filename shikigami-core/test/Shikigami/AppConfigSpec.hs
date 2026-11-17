@@ -54,24 +54,24 @@ import Settei.Env (EnvName (..), EnvSnapshot, bindingKey, bindingName, bindingsL
 import Settei.Key (parseKey)
 import Settei.Optparse (CliOverride, cliOverride, cliSources)
 import Settei.Yaml (decodeYamlSource, yamlSourceOptions)
-import Shikigami.Activity.Coordinate
-import Shikigami.Agent.Approval (ApprovalChannel (ViaDanwa, ViaKizashi))
+import Shikigami.Agent.Approval (ApprovalChannel, mkApprovalChannel)
 import Shikigami.Agent.Decl (delegationBudgetNatural)
 import Shikigami.Agent.DeclarationValue
-import Shikigami.Agent.Principal (AgentIdentity (VerifiedIdentity), mkAgentPrincipal, principalText)
+import Shikigami.Agent.Principal (principalText)
 import Shikigami.App.Config
 import Shikigami.App.Config.Load
+import Shikigami.Authority (OutputKind)
 import Shikigami.Duration (parseDuration)
 import Shikigami.Execution.Capacity qualified as Capacity
 import Shikigami.Execution.Policy.Limits (PolicyNumber (..))
 import Shikigami.Execution.Policy.Types qualified as Harness
+import Shikigami.Fixture.RawOutput (fixtureKind)
 import Shikigami.Inspection.Settings qualified as Inspection
 import Shikigami.Objective.Types (ObjectiveService (..), ObjectiveSettings (..), defaultObjectiveSettings, parseOperatorId)
 import Shikigami.Pack.Setting (PackSetting (..), SettingDefault (..), SettingShape (..), noPackSettings, packSettingSecret, packSettingText, packSettingValue, revealPackSecret)
 import Shikigami.RuntimePolicy (ManifestStrictness (..))
 import Shikigami.Sink.Auth (TokenSource (..), credentialToken, matchesBearerHeader, staticTokenSource)
-import Shikigami.Sink.Outputs (danwaConversationKind, kizashiSignalKind)
-import Shikigami.Trigger.Schedule (CatchUpPolicy (..), parseCron)
+import Shikigami.Trigger.Schedule (CatchUpPolicy (..))
 import Shikigami.Trigger.Stream (IncludeAgentActors (..))
 import Shikigami.Workspace.Settings (WorkspaceSettings (..), WorkspaceSupervisorSettings (..))
 import Shikigami.Workspace.Value
@@ -132,10 +132,6 @@ surfaceTests =
                 "credentials.providers.anthropic.api_key",
                 "credentials.providers.openai.api_key",
                 "credentials.providers.typesafe.api_key",
-                "credentials.sinks.danwa.token",
-                "credentials.sinks.kanmon.token",
-                "credentials.sinks.kawa.token",
-                "credentials.sinks.kizashi.token",
                 "database.connection_string",
                 "delegation.default_budget",
                 "directory.file.path",
@@ -161,14 +157,6 @@ surfaceTests =
                 "objectives",
                 "outputs.default",
                 "scheduler.catch_up",
-                "sinks.danwa.agent_participant",
-                "sinks.danwa.base_url",
-                "sinks.kanmon.base_url",
-                "sinks.kawa.base_url",
-                "sinks.kawa.source_segment",
-                "sinks.kizashi.base_url",
-                "sinks.kizashi.default_recipient",
-                "sinks.rei.base_url",
                 "trust.local_operator.approvals_file",
                 "trust.local_operator.state_dir",
                 "trust.tier",
@@ -239,19 +227,7 @@ surfaceTests =
               ("SHIKIGAMI_KAFKA_EVENTS_TOPIC", "kafka.events.topic"),
               ("SHIKIGAMI_KAFKA_INCLUDE_AGENT_ACTORS", "kafka.include_agent_actors"),
               ("SHIKIGAMI_KAFKA_STREAM_GROUP", "kafka.groups.stream"),
-              ("SHIKIGAMI_KAWA_TOKEN", "credentials.sinks.kawa.token"),
-              ("SHIKIGAMI_KANMON_TOKEN", "credentials.sinks.kanmon.token"),
-              ("SHIKIGAMI_KIZASHI_TOKEN", "credentials.sinks.kizashi.token"),
-              ("SHIKIGAMI_DANWA_TOKEN", "credentials.sinks.danwa.token"),
-              ("SHIKIGAMI_SINKS_DANWA_AGENT_PARTICIPANT", "sinks.danwa.agent_participant"),
-              ("SHIKIGAMI_SINKS_DANWA_BASE_URL", "sinks.danwa.base_url"),
-              ("SHIKIGAMI_SINKS_KANMON_BASE_URL", "sinks.kanmon.base_url"),
-              ("SHIKIGAMI_SINKS_KAWA_BASE_URL", "sinks.kawa.base_url"),
-              ("SHIKIGAMI_SINKS_KAWA_SOURCE_SEGMENT", "sinks.kawa.source_segment"),
-              ("SHIKIGAMI_SINKS_KIZASHI_BASE_URL", "sinks.kizashi.base_url"),
-              ("SHIKIGAMI_SINKS_KIZASHI_DEFAULT_RECIPIENT", "sinks.kizashi.default_recipient"),
               ("SHIKIGAMI_SCHEDULER_CATCH_UP", "scheduler.catch_up"),
-              ("SHIKIGAMI_SINKS_REI_BASE_URL", "sinks.rei.base_url"),
               ("SHIKIGAMI_TRUST_TIER", "trust.tier"),
               ("SHIKIGAMI_TRUST_LOCAL_OPERATOR_APPROVALS_FILE", "trust.local_operator.approvals_file"),
               ("SHIKIGAMI_TRUST_LOCAL_OPERATOR_STATE_DIR", "trust.local_operator.state_dir"),
@@ -276,7 +252,7 @@ surfaceTests =
         byteLimitBytes ((.httpResponseMaxBytes) defaultAppConfig) @?= 8_388_608
         (.runTimeout) defaultAppConfig @?= (either (error . show) id (parseDuration (secondsToNominalDiffTime 300)))
         (.approvalRequiredSinks) defaultAppConfig @?= Set.empty
-        (.approvalChannel) defaultAppConfig @?= ViaDanwa
+        (.approvalChannel) defaultAppConfig @?= Nothing
         (.approvalDeadline) defaultAppConfig @?= (either (error . show) id (parseDuration (secondsToNominalDiffTime 900)))
         (.packSettings) defaultAppConfig @?= noPackSettings
         (.kafkaBroker) defaultAppConfig @?= "127.0.0.1:9092"
@@ -286,25 +262,10 @@ surfaceTests =
         (.kafkaEventsGroup) defaultAppConfig @?= "shikigami-events"
         (.kafkaIncludeAgentActors) defaultAppConfig @?= ExcludeAgentActors
         queueNameToText ((.kafkaDeadLetterQueue) defaultAppConfig) @?= "shikigami_stream_dead_letters"
-        (.kawaBaseUrl) defaultAppConfig @?= "http://localhost:8088"
-        (.kawaSourceSegment) defaultAppConfig @?= activityCoordinate "shinzui/shikigami"
-        assertBool "kawa has no default credential" (isNothing ((.kawaToken) defaultAppConfig))
-        (.kizashiBaseUrl) defaultAppConfig @?= "http://localhost:8089"
-        (.kizashiDefaultRecipient) defaultAppConfig @?= (declarationCoordinate ("recipient_default"))
-        assertBool "kizashi has no default credential" (isNothing ((.kizashiToken) defaultAppConfig))
-        (.kanmonBaseUrl) defaultAppConfig @?= "http://localhost:8090"
-        assertBool "Kanmon has no default credential" (isNothing ((.kanmonToken) defaultAppConfig))
-        (.danwaBaseUrl) defaultAppConfig @?= "http://localhost:8080"
-        (.danwaAgentParticipant) defaultAppConfig @?= (declarationCoordinate ("part_shikigami"))
-        assertBool "danwa has no default credential" (isNothing ((.danwaToken) defaultAppConfig))
         assertBool "workspace authority is opt-in" (isNothing defaultAppConfig.workspaceSettings)
         case (.actionAuthorization) defaultAppConfig of
           ActionAuthorizationDisabled -> pure ()
           ActionAuthorizationBy {} -> assertFailure "action authorization must default to fail-closed disabled mode"
-        -- Deliberately absent rather than pointing somewhere: rei has no HTTP
-        -- surface, and a defaulted URL would turn "nowhere to send" into
-        -- "connection refused to a host nobody chose".
-        (.reiBaseUrl) defaultAppConfig @?= Nothing
     ]
 
 boundVariables :: [(Text, Text)]
@@ -456,7 +417,7 @@ precedenceTests =
               ("SHIKIGAMI_APPROVAL_CHANNEL", "kizashi")
             ]
         (.approvalRequiredSinks) config @?= Set.fromList [kizashiSignalKind, danwaConversationKind]
-        (.approvalChannel) config @?= ViaDanwa,
+        (.approvalChannel) config @?= Just (channelNamed "danwa"),
       testCase "an empty approval requirement preserves auto-approval" do
         config <-
           resolveOrFail
@@ -464,7 +425,7 @@ precedenceTests =
             []
             [("SHIKIGAMI_APPROVAL_REQUIRE", ""), ("SHIKIGAMI_APPROVAL_CHANNEL", "kizashi")]
         (.approvalRequiredSinks) config @?= Set.empty
-        (.approvalChannel) config @?= ViaKizashi,
+        (.approvalChannel) config @?= Just (channelNamed "kizashi"),
       testCase "file directory settings resolve as one conditional value" do
         config <-
           resolveOrFail
@@ -520,11 +481,15 @@ strictnessTests =
         high <- resolveOrFail (optionsWith [] [cliOverride approvalDeadlineSecondsKey "86400"]) [] []
         (.runTimeout) low @?= (either (error . show) id (parseDuration (secondsToNominalDiffTime 1)))
         (.approvalDeadline) high @?= (either (error . show) id (parseDuration (secondsToNominalDiffTime 86_400))),
-      testCase "approval policy rejects duplicates, malformed output kinds, and unknown channels" do
+      -- Which channels exist is the composition's to say (plan 135, M3): the
+      -- configuration refuses only a name no channel could have.
+      testCase "approval policy rejects duplicates, malformed output kinds, and malformed channel names" do
         mapM_
           (\bad -> (.exitCode) (runWith (optionsWith [] [cliOverride approvalRequireKey bad]) [] []) @?= resolutionExitCode)
           ["KawaDigest,KawaDigest", "KawaDigest,kawa.digest", "KawaDigest,Unknown", ","]
-        (.exitCode) (runWith (optionsWith [] [cliOverride approvalChannelKey "email"]) [] []) @?= resolutionExitCode,
+        mapM_
+          (\bad -> (.exitCode) (runWith (optionsWith [] [cliOverride approvalChannelKey bad]) [] []) @?= resolutionExitCode)
+          ["Email", "e mail", "-danwa"],
       -- A flow pack owns its settings (docs/adr/0129). The kernel accepts a
       -- pack's key only in an executable composed with that pack.
       testCase "a stock executable refuses a pack's key as unknown" do
@@ -800,15 +765,15 @@ secrecyTests =
             ("the environment", [], [("PG_CONNECTION_STRING", planted)], []),
             ("a --set override", [], [], [cliOverride databaseConnectionStringKey planted])
           ],
-      testCase "a planted sink token appears in no rendering, whatever supplied it" $
+      testCase "a planted sink token appears in no rendering, even where its key is unknown" $
         mapM_
           assertNoLeak
           [ ("a sink token in a configuration file", [yaml "file" ("credentials:\n  sinks:\n    kawa:\n      token: " <> plantedTokenBytes <> "\n")], [], []),
             ("a sink token in the environment", [], [("SHIKIGAMI_KAWA_TOKEN", plantedToken)], []),
-            ("a sink token in a --set override", [], [], [cliOverride kawaTokenKey plantedToken]),
+            ("a sink token in a --set override", [], [], [cliOverride (either (error . show) id (parseKey "credentials.sinks.kawa.token")) plantedToken]),
             ("the Kanmon token in a configuration file", [yaml "file" ("credentials:\n  sinks:\n    kanmon:\n      token: " <> plantedTokenBytes <> "\n")], [], []),
             ("the Kanmon token in the environment", [], [("SHIKIGAMI_KANMON_TOKEN", plantedToken)], []),
-            ("the Kanmon token in a --set override", [], [], [cliOverride kanmonTokenKey plantedToken])
+            ("the Kanmon token in a --set override", [], [], [cliOverride (either (error . show) id (parseKey "credentials.sinks.kanmon.token")) plantedToken])
           ],
       testCase "a planted Shomei client secret appears in no rendering, even where its key is unknown" $
         mapM_
@@ -818,9 +783,9 @@ secrecyTests =
             ("the Shomei secret in a --set override", [], [], [cliOverride (either (error . show) id (parseKey "credentials.authorization.actions.shomei.client_secret")) plantedToken])
           ],
       testCase "an opaque token source renders and compares no plaintext at its public boundary" do
-        config <- resolveOrFail (optionsWith [] []) [] [("SHIKIGAMI_KAWA_TOKEN", plantedToken)]
-        case (.kawaToken) config of
-          Nothing -> assertFailure "the configured kawa token did not resolve"
+        config <- resolveOrFail (optionsWith [] []) [] [("PG_CONNECTION_STRING", plantedToken)]
+        case (.databaseUrl) config of
+          Nothing -> assertFailure "the configured connection string did not resolve"
           Just secret -> do
             let token = credentialToken secret
             assertBool "the exact bearer header should match" (matchesBearerHeader token ("Bearer " <> ByteString.pack (Text.unpack plantedToken)))
@@ -1071,3 +1036,10 @@ composedOrFail :: ConfigOptions -> [(Text, Text)] -> IO AppConfig
 composedOrFail options environment =
   let run = composedRun options environment
    in maybe (assertFailure (Text.unpack run.standardError)) pure run.resolved
+
+kizashiSignalKind, danwaConversationKind :: OutputKind
+kizashiSignalKind = fixtureKind "kizashi.signal"
+danwaConversationKind = fixtureKind "danwa.conversation"
+
+channelNamed :: Text -> ApprovalChannel
+channelNamed = either (error . Text.unpack) id . mkApprovalChannel

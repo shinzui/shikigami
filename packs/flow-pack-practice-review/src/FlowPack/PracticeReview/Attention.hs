@@ -65,13 +65,14 @@ import Keiro.Workflow
     prepareJournalAppend,
     step,
   )
+import Kikan.Shikigami.Binding.Outputs (KizashiSignalOutput (..), Priority (High), RecipientFrom (Actor), SignalType (TaskCandidate), kizashiSignalOutput, toRecipient)
 import Kioku.Id (SessionId)
 import Shikigami.Activity (ActivityEnvelope)
 import Shikigami.Agent.Decl qualified as Agent
 import Shikigami.Agent.Name (AgentName)
 import Shikigami.Agent.Principal (AgentIdentity)
 import Shikigami.Directory (DirectoryHandle)
-import Shikigami.Flow.Sdk (Eff, toRecipient, (:>))
+import Shikigami.Flow.Sdk (Eff, (:>))
 import Shikigami.Output (OutputDecl, OutputRegistry)
 import Shikigami.Pack.Sdk (IOE, Store, interpret, runTransaction)
 import Shikigami.Prelude hiding ((.=))
@@ -83,7 +84,6 @@ import Shikigami.Sink.Intent
     prepareSinkIntentWithMessageId,
     preparedSinkResult,
   )
-import Shikigami.Sink.Outputs (KizashiSignalOutput (..), kizashiSignalOutput)
 
 data PracticeReviewAttentionEnv = PracticeReviewAttentionEnv
   { agent :: !AgentName,
@@ -309,10 +309,10 @@ attentionSink AttentionProjection {intent} =
   ( kizashiSignalOutput
       KizashiSignalOutput
         { source = Agent.activityCoordinate "shinzui/shikigami",
-          signalType = Agent.TaskCandidate,
-          priority = Agent.High,
+          signalType = TaskCandidate,
+          priority = High,
           importance = either (error . show) id (Agent.parseSignalImportance 8),
-          recipientFrom = Agent.Actor,
+          recipientFrom = Actor,
           defaultRecipient = Nothing,
           intentTemplate = intent,
           extraContextTags = ["practice-review"],

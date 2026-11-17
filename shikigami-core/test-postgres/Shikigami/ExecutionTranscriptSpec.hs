@@ -8,7 +8,6 @@ import Baikai.Context qualified as Context
 import Baikai.Message qualified as Message
 import Baikai.Options (emptyOptions)
 import Baikai.Provider.Registry qualified as Provider
-import Baikai.Response qualified as Response
 import Baikai.StopReason (StopReason (Stop, ToolUse))
 import Baikai.Stream (liftCompleteToStream)
 import Baikai.Tool qualified as BaikaiTool
@@ -54,7 +53,6 @@ import Keiro.Workflow.Awakeable (AwakeableId (..), awakeableIdText, awakeableNam
 import Keiro.Workflow.Awakeable.Schema (AwakeableRow (..), countPendingAwakeables, lookupAwakeable, registerAwakeableTx)
 import Keiro.Workflow.Awakeable.Schema qualified as Awakeable
 import Keiro.Workflow.Child (runChildWorkflow)
-import Keiro.Workflow.Types (WorkflowId (..))
 import Kioku.Id (genSessionId, idText)
 import Kioku.Session qualified as Memory
 import Kioku.Session.Domain (RecordTurnData (..), StartSessionData (..))
@@ -65,11 +63,9 @@ import Kiroku.Store.Types (CategoryName (..), GlobalPosition (..), StreamInfo (v
 import Pgmq (QueueMetrics (queueLength))
 import Pgmq.Hasql.Statements.Message qualified as PgmqMessage
 import Pgmq.Hasql.Statements.QueueObservability qualified as PgmqQueue
-import Shikigami.Activity.Coordinate
-import Shikigami.Agent.Approval (ApprovalChannel (..), ApprovalDecision (..), ApprovalRequest (..), approvalWorkflowId, resolveApproval)
+import Shikigami.Agent.Approval (ApprovalDecision (..), ApprovalRequest (..), approvalWorkflowId, configuredApprovalChannel, resolveApproval)
 import Shikigami.Agent.Approval.Workflow qualified as Approval
 import Shikigami.Agent.Conversation.SessionIndex qualified as ConversationIndex
-import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Principal (AgentIdentity (VerifiedIdentity), compatibilityIdentity, identityText, mkAgentPrincipal, resolveAgentIdentity)
 import Shikigami.Agent.Run.Key (RunKey, parseRunKey)
@@ -78,7 +74,7 @@ import Shikigami.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
 import Shikigami.Authority (allowAllForTests, denyAll)
 import Shikigami.Behavior.Input (triggerOnly)
 import Shikigami.Behavior.Provider.Coordinate qualified as ProviderValue
-import Shikigami.Behavior.Run (BehaviorEnv (..), newBehaviorEnv)
+import Shikigami.Behavior.Run (newBehaviorEnv)
 import Shikigami.Behavior.Skill (SkillDir (..))
 import Shikigami.Behavior.StubProvider (stubApiProvider, stubModel)
 import Shikigami.Capability.Overlay (emptyResolvedCapabilitySet)
@@ -86,7 +82,6 @@ import Shikigami.Capability.Overlay qualified as Overlay
 import Shikigami.Capability.Provider (emptyCapabilityProviderRegistry)
 import Shikigami.Capability.Provider qualified as Capability
 import Shikigami.Capability.Tools (overlayToolName)
-import Shikigami.Decision.Contract (versionedDigest)
 import Shikigami.Decision.ModelCatalog (modelCatalog)
 import Shikigami.Duration
 import Shikigami.Execution.AssignmentKey (AssignmentKey, conversationAssignmentIdFor, parseAssignmentKey)
@@ -132,12 +127,11 @@ import Shikigami.Objective.Capability qualified as Objective
 import Shikigami.Objective.Origin qualified as Origin
 import Shikigami.Objective.Types qualified as Objective
 import Shikigami.Prelude ((&), (.~))
-import Shikigami.Repository (RepositoryId, repositoryId, repositoryIdText)
+import Shikigami.Repository (repositoryId)
 import Shikigami.RunEvidence.Catalog qualified as Catalog
 import Shikigami.StateRevision (StateRevision, parseRevision)
 import Shikigami.StateRevision qualified as Generation
 import Shikigami.Trigger.Enqueue (addressedRunJob, enqueueRunJobTx, ensureRunQueue, runQueueName)
-import Shikigami.Trigger.Schedule (parseCron)
 import Shikigami.Workspace.Instructions
 import Shikigami.Workspace.Reference (WorkspaceRef (..))
 import Shikigami.Workspace.Value
@@ -754,7 +748,7 @@ tests fixture =
           parked.modelTurns @?= (fixtureProgress 1)
           tokenRef <- newIORef Nothing
           let childEnv = Approval.ApprovalWorkflowEnv (Approval.ApprovalNotifier (\_ _ token _ -> writeIORef tokenRef (Just token)) (\_ _ _ _ -> pure (Right ())))
-              parentBody = Approval.requestBoundApproval permission.reviewRequestId snapshot.sessionId (ApprovalRequest "Allow observe?" (object []) ViaDanwa) ((either (error . show) id . parseDuration) (900))
+              parentBody = Approval.requestBoundApproval permission.reviewRequestId snapshot.sessionId (ApprovalRequest "Allow observe?" (object []) configuredApprovalChannel) ((either (error . show) id . parseDuration) (900))
               parent = runWorkflow (WorkflowName "permission-fixture") (WorkflowId snapshot.executionId.value) parentBody
               child = runChildWorkflow defaultWorkflowRunOptions Approval.approvalWorkflowName (approvalWorkflowId permission.reviewRequestId) (Approval.approvalWorkflow childEnv Nothing)
           run env parent >>= (@?= Suspended)

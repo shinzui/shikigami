@@ -55,11 +55,53 @@ executable kikan-shikigami-scheduler
   main-is: Main.hs
   build-depends: shikigami-workers
 
+-- The admin command, with the development stubs of the Kikan services as
+-- verbs (plan 135, M3). The test suite compiles the same stub modules.
 executable kikan-shikigami
   import: common
-  hs-source-dirs: app/admin
+  hs-source-dirs:
+    app/admin
+    admin
+
   main-is: Main.hs
-  build-depends: shikigami-server
+  default-extensions:
+    BlockArguments
+    DeriveAnyClass
+    DuplicateRecordFields
+    MultilineStrings
+    NoFieldSelectors
+    OverloadedLabels
+    OverloadedRecordDot
+    OverloadedStrings
+
+  other-modules:
+    Kikan.Shikigami.Stub
+    Kikan.Shikigami.Stub.Kanmon
+    Kikan.Shikigami.Stub.Kawa
+    Kikan.Shikigami.Stub.Kawa.Republish
+
+  build-depends:
+    aeson,
+    base,
+    bytestring,
+    containers,
+    effectful,
+    effectful-core,
+    generic-lens,
+    http-types,
+    hw-kafka-client,
+    kafka-effectful,
+    kikan-shikigami-binding,
+    lens,
+    mmzk-typeid,
+    optparse-applicative,
+    shikigami-api,
+    shikigami-core,
+    shikigami-core:pack-sdk,
+    shikigami-server,
+    text,
+    wai,
+    warp,
 
 executable kikan-shikigami-agent-run
   import: common
@@ -82,12 +124,23 @@ test-suite kikan-shikigami-test
     OverloadedRecordDot
     OverloadedStrings
 
-  hs-source-dirs: test
+  hs-source-dirs:
+    test
+    admin
+
   main-is: Main.hs
   other-modules:
     Kikan.Fixture.ExecutionIdentity
     Kikan.Fixture.Watchdog
     Kikan.Fixture.WatchdogExecution
+    Kikan.OutputDeliverySpec
+    Kikan.Shikigami.Stub
+    Kikan.Shikigami.Stub.Kanmon
+    Kikan.Shikigami.Stub.Kawa
+    Kikan.Shikigami.Stub.Kawa.Republish
+    Kikan.Stub.CommandSpec
+    Kikan.Stub.KanmonSpec
+    Kikan.Stub.KawaSpec
     Kikan.WatchdogQualificationSpec
     Kikan.WatchdogSweepSpec
     Kikan.WatchdogTelemetrySpec
@@ -106,10 +159,13 @@ test-suite kikan-shikigami-test
     base,
     bytestring,
     containers,
+    danwa-api,
+    danwa-client,
     directory,
     effectful,
     effectful-core,
     filepath,
+    flow-pack-examples,
     flow-pack-initiative,
     flow-pack-initiative:test-support,
     flow-pack-watchdog,
@@ -119,17 +175,33 @@ test-suite kikan-shikigami-test
     hasql-transaction,
     hs-opentelemetry-api,
     hs-opentelemetry-exporter-in-memory,
+    hs-opentelemetry-propagator-w3c,
     hs-opentelemetry-sdk,
+    http-client,
+    http-types,
+    hw-kafka-client,
+    kafka-effectful,
     keiro,
     keiro-pgmq,
+    kikan-shikigami-binding,
+    kikan-shikigami-binding:outputs,
+    kikan-shikigami-binding:test-support,
     kioku-api,
     kioku-core,
     kiroku-store,
     lens,
+    mmzk-typeid,
+    optparse-applicative,
     pgmq-hasql,
+    servant-client,
+    settei,
+    settei-env,
     shibuya-core,
+    shikigami-api,
     shikigami-core,
+    shikigami-core:pack-sdk,
     shikigami-migrations:test-support,
+    shikigami-server,
     shikigami-workers,
     shikumi-tools,
     tasty,
@@ -139,3 +211,5 @@ test-suite kikan-shikigami-test
     unix,
     uuid,
     vector,
+    wai,
+    warp,

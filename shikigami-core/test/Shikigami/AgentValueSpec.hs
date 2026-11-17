@@ -18,10 +18,11 @@ import Shikigami.Agent.Delegate.Depth (DelegationDepth, initialDepth, nextDepth,
 import Shikigami.Agent.ExpertiseKey (ExpertiseKey, duplicateExpertiseKeys, expertiseKeyText, parseExpertiseKey)
 import Shikigami.Agent.Name (AgentName, agentNameText, mkAgentName)
 import Shikigami.Agent.Principal
+import Shikigami.Authority (OutputKind)
 import Shikigami.Duration
+import Shikigami.Fixture.RawOutput (fixtureKind)
 import Shikigami.Router.Catalog (CatalogVersion)
 import Shikigami.Router.SelectionLimit (SelectionLimit, parseSelectionLimit, selectionLimitNatural)
-import Shikigami.Sink.Outputs (kizashiSignalKind)
 import Shikigami.Sink.Permission (checkGrantStatic)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
@@ -119,3 +120,6 @@ right = either (assertFailure . show) pure
 
 resolved :: Text -> IO ResolvedAgentIdentity
 resolved raw = right (mkAgentName raw >>= resolveAgentIdentity . compatibilityIdentity)
+
+kizashiSignalKind :: OutputKind
+kizashiSignalKind = fixtureKind "kizashi.signal"

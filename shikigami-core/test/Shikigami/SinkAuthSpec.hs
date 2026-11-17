@@ -28,10 +28,9 @@ import Network.HTTP.Types
   )
 import Network.Wai (Application, requestHeaders, responseLBS, strictRequestBody)
 import Network.Wai.Handler.Warp (testWithApplication)
-import Servant.Client (ClientEnv)
+import Servant.Client (ClientEnv, mkClientEnv, parseBaseUrl)
 import Settei (answer, defaultResolveOptions, resolve)
 import Settei.Env (envSnapshot, environmentSource)
-import Shikigami.Agent.DeclarationValue (declarationCoordinate)
 import Shikigami.App.Config (AppConfig (..), ByteLimit, CredentialRef (..), appConfig, byteLimitBytes, environmentBindings, mkByteLimit)
 import Shikigami.Sink.Auth
   ( BearerToken,
@@ -41,16 +40,13 @@ import Shikigami.Sink.Auth
     credentialToken,
     staticTokenSource,
   )
-import Shikigami.Sink.Config (DanwaConfig (..))
 import Shikigami.Sink.Http
   ( HttpEnv (..),
     HttpFailure (..),
     HttpFailureReason (..),
     HttpLimits (..),
-    SinkCredentials (..),
-    SinkHttp (..),
-    newSinkHttp,
     newSinkManager,
+    newTypedClientManager,
     postJSON,
     postJSONWithHeaders,
     renderHttpFailure,
@@ -221,11 +217,11 @@ expectedHeader = "Bearer sink-s3cr3t-auth-spec-42"
 tokenFromConfig :: Text -> BearerToken
 tokenFromConfig value =
   case answer (resolve defaultResolveOptions [source] appConfig) of
-    Right AppConfig {kawaToken = Just secret} -> credentialToken secret
+    Right AppConfig {databaseUrl = Just secret} -> credentialToken secret
     Right _ -> error "test token did not resolve"
     Left _ -> error "test token configuration was rejected"
   where
-    source = environmentSource environmentBindings (envSnapshot [("SHIKIGAMI_KAWA_TOKEN", value)])
+    source = environmentSource environmentBindings (envSnapshot [("PG_CONNECTION_STRING", value)])
 
 defaultLimits :: HttpLimits
 defaultLimits = limitsAt 8_388_608 8_388_608
@@ -250,11 +246,10 @@ testEnv source httpLimits = do
 
 danwaClientEnv :: Int -> HttpLimits -> Maybe TokenSource -> IO ClientEnv
 danwaClientEnv port httpLimits source = do
-  let config = DanwaConfig {baseUrl = localBaseUrl port, agentParticipant = (declarationCoordinate "part_agent_test")}
-      credentials = SinkCredentials {kawa = Nothing, kizashi = Nothing, kanmon = Nothing, danwa = source}
-  newSinkHttp httpLimits credentials config >>= \case
-    Left failure -> assertFailure ("failed to build danwa client: " <> show failure)
-    Right SinkHttp {danwa} -> pure danwa
+  manager <- newTypedClientManager httpLimits source
+  case parseBaseUrl (Text.unpack (localBaseUrl port)) of
+    Nothing -> assertFailure "failed to parse the danwa base URL"
+    Just base -> pure (mkClientEnv manager base)
 
 startConversation :: Conversation.StartConversationRequest
 startConversation =

@@ -69,7 +69,9 @@ practiceReviewPackWith runtime =
       triggers = noTriggerHooks,
       adminVerbs = [],
       gauges = [],
-      authorities = []
+      authorities = [],
+      outputs = [],
+      approvalChannels = []
     }
 
 routerDefinition :: FlowDef

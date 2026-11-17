@@ -92,12 +92,12 @@ import FlowPack.PracticeReview.Types
     validatedVerdictValue,
     zeroConfidence,
   )
+import Kikan.Shikigami.Binding.Outputs (KawaDigestOutput (..), kawaDigestOutput)
 import Kioku.Id (MemoryId, idText)
 import Shikigami.Agent.Name qualified as AgentName
 import Shikigami.Flow.Sdk (Eff, OutputDecl, SinkCapability, SinkOutcome (Enqueued), SinkResult (..), activityCoordinate, declarationCoordinate, emitSignal, (:>))
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.Repository (RepositoryId, repositoryIdText)
-import Shikigami.Sink.Outputs (KawaDigestOutput (..), kawaDigestOutput)
 
 opentelemetryPracticeReviewFlowName :: Text
 opentelemetryPracticeReviewFlowName = "opentelemetry-practice-review"

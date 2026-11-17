@@ -31,13 +31,12 @@ import Effectful (Eff, (:>))
 import GHC.Generics (Generic)
 import Keiro.Workflow (StepName (..), Workflow, step)
 import Kioku.Api.Types (MemoryRecord (..))
-import Numeric.Natural (Natural)
 import Shikigami.Activity (ActivityEnvelope (..), Subject (..))
 import Shikigami.Activity.Coordinate
-import Shikigami.Agent.Approval (ApprovalChannel (ViaDanwa), ApprovalRequest (..))
-import Shikigami.Agent.Decl (Priority (High, Urgent), RecipientFrom (AreaOwner), SignalType (Alert))
+import Shikigami.Agent.Approval (ApprovalRequest (..), configuredApprovalChannel)
 import Shikigami.Agent.DeclarationValue
 import Shikigami.Fixture.ExamplePack (examplesFixturePack)
+import Shikigami.Fixture.RawOutput (kizashiSignal)
 import Shikigami.Flow (DecisionMode (..), FlowDef (..), LifecycleDiagram (..))
 import Shikigami.Flow.Acknowledgement (Ack (..), Acknowledgement, awaitAck)
 import Shikigami.Flow.Builtin (builtinPack)
@@ -46,7 +45,6 @@ import Shikigami.Flow.Capability qualified as Capability
 import Shikigami.Flow.Pack (FlowPack (..), FlowRegistry, composeFlowRegistry, kernelCapabilityFlow, noTriggerHooks, parseFlowPackName)
 import Shikigami.Output (OutputDecl (..))
 import Shikigami.RuntimePolicy (DefaultModelRequirement (..))
-import Shikigami.Sink.Outputs
 
 data RiskLevel = HighRisk | LowRisk deriving stock (Eq, Show)
 
@@ -95,7 +93,9 @@ fixturePack =
       triggers = noTriggerHooks,
       adminVerbs = [],
       gauges = [],
-      authorities = []
+      authorities = [],
+      outputs = [],
+      approvalChannels = []
     }
 
 -- | The builtin pack, the example fixtures and this fixture pack, as a
@@ -177,8 +177,8 @@ alertFor :: RiskVerdict -> ActivityEnvelope -> OutputDecl
 alertFor verdict activity =
   riskSignal
     "Relationship at risk: {verdict.rationale}"
-    High
-    (either (error . show) id (parseSignalImportance 80))
+    "High"
+    80
     [ "verb:relationship.at_risk",
       "subject:" <> activitySubjectType activity,
       "activity:" <> activityCoordinateText ((.activityId) activity),
@@ -189,29 +189,26 @@ escalationFor :: RiskVerdict -> ActivityEnvelope -> OutputDecl
 escalationFor verdict activity =
   riskSignal
     "Escalate unacknowledged at-risk customer: {verdict.rationale}"
-    Urgent
-    (either (error . show) id (parseSignalImportance 95))
+    "Urgent"
+    95
     [ "verb:relationship.escalation_required",
       "subject:" <> activitySubjectType activity,
       "activity:" <> activityCoordinateText ((.activityId) activity),
       "ticket:" <> activityCoordinateText ((.ticketId) verdict)
     ]
 
-riskSignal :: Text -> Priority -> SignalImportance -> [Text] -> OutputDecl
+riskSignal :: Text -> Text -> Int -> [Text] -> OutputDecl
 riskSignal intentTemplate priority importance extraContextTags =
-  ( kizashiSignalOutput
-      KizashiSignalOutput
-        { source = activityCoordinate "shinzui/shikigami",
-          signalType = Alert,
-          priority,
-          importance,
-          recipientFrom = AreaOwner,
-          defaultRecipient = Just (declarationCoordinate "role_relationship_owner"),
-          intentTemplate,
-          extraContextTags,
-          recipient = Nothing
-        }
-  )
+  kizashiSignal
+    [ "source" .= ("shinzui/shikigami" :: Text),
+      "signalType" .= ("Alert" :: Text),
+      "priority" .= priority,
+      "importance" .= importance,
+      "recipientFrom" .= ("AreaOwner" :: Text),
+      "defaultRecipient" .= ("role_relationship_owner" :: Text),
+      "intentTemplate" .= intentTemplate,
+      "extraContextTags" .= extraContextTags
+    ]
 
 activitySubjectType :: ActivityEnvelope -> Text
 activitySubjectType ActivityEnvelope {subject = Subject {kind = subjectType}} = activityCoordinateText subjectType
@@ -226,7 +223,7 @@ ackRequest verdict activity =
             "activity_id" .= (.activityId) activity,
             "ticket_id" .= (.ticketId) verdict
           ],
-      channel = ViaDanwa
+      channel = configuredApprovalChannel
     }
 
 acknowledgedNote :: RiskVerdict -> Value -> Value

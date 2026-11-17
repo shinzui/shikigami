@@ -19,7 +19,7 @@ route type.
 A *vertical* is a domain concept — agent runs, activities, triggers, sinks, flows,
 memory, health. A vertical keeps the same `Shikigami.<Concept>.*` module prefix in
 every package it appears in. **Package names express runtime layers; module names
-express concepts.** `Shikigami.Sink.Danwa` is the danwa sink wherever it lives;
+express concepts.** `Shikigami.Sink.Delivery` is the outbox delivery record wherever it lives;
 the package it lives in tells you whether it is domain logic, server wiring, or a
 worker loop.
 
@@ -127,23 +127,32 @@ no library; each `main` passes its packs to `agentRunRoleInfoWith`, `workerRoleI
 
 `packs/kikan-shikigami` is the distribution for organizational use. It composes the Kikan
 binding and every pack into `kikan-shikigami-worker`, `kikan-shikigami-scheduler`, `kikan-shikigami-consume-stream`, the `kikan-shikigami` admin
-command and `kikan-shikigami-agent-run`, all reading one list in `src-shared/Packs.hs`. Its
-test suite, `kikan-shikigami-test`, holds only what needs two composed use cases together,
-such as the watchdog observing work the initiative pack admitted.
+command and `kikan-shikigami-agent-run`, all reading one list in `src-shared/Packs.hs`. The
+admin command also mounts the Kikan service stubs, `stub-kawa` and `stub-kanmon`, compiled
+from `admin/`. Its test suite, `kikan-shikigami-test`, holds what needs composed use cases
+together, such as the watchdog observing work the initiative pack admitted, the Kikan
+outputs delivered through the kernel's publisher, and the stubs.
 
 `packs/kikan-shikigami-binding` is the *Kikan binding*: the one pack that knows Kikan's
 services. It is held to the same rule as any pack library (the two SDK components, nothing a
 light package forbids), and [plan 135](../plans/135-move-the-kikan-service-bindings-out-of-shikigami-core-and-compose-a-kikan-distribution.md)
 moves the Kikan-En authority, the Kikan outputs and approval channels, the Rei tracker
 provider, the Danwa conversation loop and the Kawa intake into it from `shikigami-core`.
+The authority (M2) and the outputs, their clients, settings and approval channels (M3) have
+moved. The binding also publishes `kikan-shikigami-binding:outputs`, the typed output
+configurations and directing helpers (`toRecipient`, `inThread`) a pack's bodies may import,
+and `kikan-shikigami-binding:test-support`, its fixtures.
 `kikan-shikigami flows` lists it under `packs:` with what it contributes; the stock
 `shikigami flows` does not list it.
 
-A pack contributes six things through its one `FlowPack` value: `flows`, with decision
+A pack contributes these through its one `FlowPack` value: `flows`, with decision
 programs and tasks; `settings`, the configuration keys it owns; `triggers`, its say over
 stream intake and scheduled ticks for the agents that run its flows; `adminVerbs`, its
-operator verbs; `gauges`, levels the worker samples for it; and, at run time, events on the
-kernel's `shikigami.pack.events` counter. A pack may also publish a
+operator verbs; `gauges`, levels the worker samples for it; `authorities`, the action
+authorities it registers; `outputs`, the output kinds it delivers
+(`Shikigami.Output.Registration`); `approvalChannels`, the channels it can ask a person
+through (`Shikigami.Approval.Channel`); and, at run time, events on the kernel's
+`shikigami.pack.events` counter. A pack may also publish a
 `test-support` sublibrary for tests; that one may depend on the worker package, which the
 pack's own library may not. The stock
 executables run kernel behaviors and declared agents only; a use case that ships as a pack
@@ -292,7 +301,7 @@ their role and live in the package that owns that role.
 | Executable | Package | What it does |
 |---|---|---|
 | `shikigami-server` | `shikigami-server` | Serves the public HTTP API, including the declared-agent catalog, and refreshes its lifecycle directory. Starts no background workers. |
-| `shikigami` | `shikigami-server` | Administrative, validation, enqueue, approval-resolution, and test-stub commands: `validate`, `render-lifecycle`, `enqueue-run`, `resolve-approval`, `publish-fixture`, `stub-kawa`, `stub-kanmon`, `flows`, `grants`, `agents`, and `runs` (plus the mounted Keiro operator tree). |
+| `shikigami` | `shikigami-server` | Administrative, validation, enqueue, approval-resolution, and fixture commands: `validate`, `render-lifecycle`, `enqueue-run`, `resolve-approval`, `publish-fixture`, `flows`, `grants`, `agents`, and `runs` (plus the mounted Keiro operator tree). |
 | `shikigami-worker` | `shikigami-workers` | Drains `shikigami_run_jobs`, runs agents, dispatches sinks, publishes the outbox, resumes workflows, fires timers. Opens no application HTTP listener. |
 | `shikigami-scheduler` | `shikigami-workers` | Arms Schedule triggers and drives keiro timer firing. |
 | `shikigami-consume-stream` | `shikigami-workers` | Consumes `activity.v1` and enqueues matching run jobs. |

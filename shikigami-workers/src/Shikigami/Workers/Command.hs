@@ -66,11 +66,6 @@ import Shikigami.App.Config
     kafkaEventsTopicKey,
     kafkaIncludeAgentActorsKey,
     kafkaStreamGroupKey,
-    sinksDanwaAgentParticipantKey,
-    sinksDanwaBaseUrlKey,
-    sinksKanmonBaseUrlKey,
-    sinksKawaBaseUrlKey,
-    sinksKizashiBaseUrlKey,
   )
 import Shikigami.App.Config.Load (withConfigOptions)
 import Shikigami.App.Role (RoleInfo (..), runRole)
@@ -111,17 +106,9 @@ workerRoleInfoWith packs =
       parserInfo =
         withConfigOptions
           "shikigami-worker"
-          "Drain shikigami_run_jobs: run each agent, dispatch its sinks, record the session"
+          "Drain shikigami_run_jobs: run each agent, deliver its outputs, record the session"
           (workerAction packs)
-          ( sourcesOf
-              [ agentsOption,
-                kawaUrlOption,
-                kizashiUrlOption,
-                kanmonUrlOption,
-                danwaUrlOption,
-                danwaAgentOption
-              ]
-          )
+          (sourcesOf [agentsOption])
     }
 
 -- | @shikigami-scheduler@: arm Schedule triggers and drive timer firing.
@@ -255,41 +242,6 @@ eventsGroupOption =
     "--group"
     kafkaEventsGroupKey
     (long "group" <> metavar "GROUP" <> help "Consumer group id (sets kafka.groups.events)")
-
-kawaUrlOption :: Parser (Maybe Source)
-kawaUrlOption =
-  namedOption
-    "--kawa-url"
-    sinksKawaBaseUrlKey
-    (long "kawa-url" <> metavar "URL" <> help "kawa (or stub-kawa) base URL (sets sinks.kawa.base_url)")
-
-kizashiUrlOption :: Parser (Maybe Source)
-kizashiUrlOption =
-  namedOption
-    "--kizashi-url"
-    sinksKizashiBaseUrlKey
-    (long "kizashi-url" <> metavar "URL" <> help "kizashi base URL (sets sinks.kizashi.base_url)")
-
-kanmonUrlOption :: Parser (Maybe Source)
-kanmonUrlOption =
-  namedOption
-    "--kanmon-url"
-    sinksKanmonBaseUrlKey
-    (long "kanmon-url" <> metavar "URL" <> help "Kanmon base URL (sets sinks.kanmon.base_url)")
-
-danwaUrlOption :: Parser (Maybe Source)
-danwaUrlOption =
-  namedOption
-    "--danwa-url"
-    sinksDanwaBaseUrlKey
-    (long "danwa-url" <> metavar "URL" <> help "danwa base URL (sets sinks.danwa.base_url)")
-
-danwaAgentOption :: Parser (Maybe Source)
-danwaAgentOption =
-  namedOption
-    "--danwa-agent"
-    sinksDanwaAgentParticipantKey
-    (long "danwa-agent" <> metavar "PARTICIPANT" <> help "danwa agent participant id (sets sinks.danwa.agent_participant)")
 
 -- Bounded maintenance stays in the resource-owning worker binary; the embedded
 -- server hook cannot interpret the application's Kioku effect row.

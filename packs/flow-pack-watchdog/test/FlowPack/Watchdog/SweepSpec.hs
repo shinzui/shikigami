@@ -38,6 +38,7 @@ import Hasql.Statement (preparable)
 import Hasql.Transaction qualified as Tx
 import Keiro.Outbox qualified as Outbox
 import Keiro.Workflow (StepName (..), WorkflowId (..), WorkflowOutcome (..), WorkflowRunOptions (..), loadStepIndex, runWorkflowWith)
+import Kikan.Shikigami.Binding.Outputs (DanwaTarget (..), danwaConversationKind)
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (Flow))
 import Shikigami.Agent.DeclarationValue (declarationCoordinate)
@@ -65,7 +66,6 @@ import Shikigami.Pack.Setting (PackSettings, packSettingsFromList)
 import Shikigami.RouterWorkflowSpec qualified as RouterFixture
 import Shikigami.Sink (GrantSource (StaticGrants))
 import Shikigami.Sink.Intent (decodeSinkIntentEvent)
-import Shikigami.Sink.Outputs (DanwaTarget (..), danwaConversationKind)
 import Shikigami.StateRevision (initialRevision)
 import Shikigami.Trigger.Enqueue (scheduledRunJob)
 import Shikigami.WorkerSession.Capability qualified as Workers

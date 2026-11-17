@@ -43,7 +43,7 @@ import Data.Text.Encoding qualified as Text.Encoding
 import Effectful (Eff, (:>))
 import Keiro.Workflow (StepName (..))
 import Kioku.Api.Types (MemoryRecord (..))
-import Shikigami.Agent.Approval (ApprovalChannel (..), ApprovalRequest (..))
+import Shikigami.Agent.Approval (ApprovalRequest (..), configuredApprovalChannel)
 import Shikigami.Agent.DeclarationValue (declarationCoordinate)
 import Shikigami.Capability.Declared (mkToolName)
 import Shikigami.CodingAgent.Types
@@ -265,7 +265,7 @@ runSteps agent base bundle payload parameters variables prefix = go []
                     ToolCompleted ToolRun {} -> ([result {outcome = "failed"}], Just (key <> ": " <> renderToolStepOutcome outcome), carried)
                     _ -> ([result], Just (key <> ": " <> renderToolStepOutcome outcome), carried)
             Approval {prompt} -> do
-              ack <- awaitAck (StepName ("playbook-" <> key)) ApprovalRequest {prompt = render carried prompt, context = object ["step" .= key, "playbook" .= bundle.main], channel = ViaLocalInbox}
+              ack <- awaitAck (StepName ("playbook-" <> key)) ApprovalRequest {prompt = render carried prompt, context = object ["step" .= key, "playbook" .= bundle.main], channel = configuredApprovalChannel}
               pure case ack of
                 Acknowledged _ -> ([StepResult key "approved" "approved"], Nothing, carried)
                 Declined reason -> ([StepResult key "declined" reason], Just (key <> ": declined" <> (if Text.null reason then "" else " (" <> reason <> ")")), carried)

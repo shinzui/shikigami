@@ -2,7 +2,11 @@
 
 module Shikigami.Agent.Approval
   ( ApprovalRequest (..),
-    ApprovalChannel (..),
+    ApprovalChannel,
+    mkApprovalChannel,
+    approvalChannelText,
+    localInboxChannel,
+    configuredApprovalChannel,
     ApprovalDecision (..),
     ApprovalRequirement (..),
     ReviewRequestId,
@@ -80,14 +84,41 @@ data ApprovalRequest = ApprovalRequest
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
-data ApprovalChannel
-  = ViaKizashi
-  | ViaDanwa
-  | -- | A file the local operator resolves with @shikigami-local approvals@
-    -- (EP-8 M2).
-    ViaLocalInbox
-  deriving stock (Eq, Show, Generic)
-  deriving anyclass (ToJSON, FromJSON)
+-- | Where an ask is posted: a channel a composition registers by name
+-- (plan 135, M3), such as the kernel's @local-inbox@ or the Kikan binding's
+-- @danwa@ and @kizashi@. A checked lowercase name, at most 64 characters.
+newtype ApprovalChannel = ApprovalChannel Text
+  deriving stock (Eq, Ord, Show)
+
+mkApprovalChannel :: Text -> Either Text ApprovalChannel
+mkApprovalChannel raw
+  | Text.null raw = Left "an approval channel name must be non-empty"
+  | Text.length raw > 64 = Left "an approval channel name has at most 64 characters"
+  | Just (first', _) <- Text.uncons raw,
+    first' >= 'a' && first' <= 'z',
+    Text.all (\c -> (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c `elem` ("-." :: String)) raw =
+      Right (ApprovalChannel raw)
+  | otherwise = Left "an approval channel name is lowercase letters, digits, '-' and '.', starting with a letter"
+
+approvalChannelText :: ApprovalChannel -> Text
+approvalChannelText (ApprovalChannel name) = name
+
+instance ToJSON ApprovalChannel where
+  toJSON = toJSON . approvalChannelText
+
+instance FromJSON ApprovalChannel where
+  parseJSON = Aeson.withText "ApprovalChannel" (either (fail . Text.unpack) pure . mkApprovalChannel)
+
+-- | A file the local operator resolves with @shikigami-local approvals@
+-- (EP-8 M2). The kernel's own channel.
+localInboxChannel :: ApprovalChannel
+localInboxChannel = ApprovalChannel "local-inbox"
+
+-- | Whatever channel the composition is configured with
+-- (@approval.channel@). A flow or the execution driver asks this way; the
+-- run's policy names the channel.
+configuredApprovalChannel :: ApprovalChannel
+configuredApprovalChannel = ApprovalChannel "configured"
 
 data ApprovalDecision
   = Approved !Value
@@ -182,7 +213,7 @@ autoApprovePolicy :: Duration "approval" -> ApprovalPolicySnapshot
 autoApprovePolicy deadline =
   ApprovalPolicySnapshot
     { requireFor = Set.empty,
-      channel = ViaDanwa,
+      channel = configuredApprovalChannel,
       deadline
     }
 
@@ -215,16 +246,10 @@ legacySinkNames =
   ]
 
 parseApprovalChannel :: Text -> Either Text ApprovalChannel
-parseApprovalChannel = \case
-  "danwa" -> Right ViaDanwa
-  "kizashi" -> Right ViaKizashi
-  _ -> Left "approval.channel must be one of danwa, kizashi"
+parseApprovalChannel = mkApprovalChannel . Text.strip
 
 renderApprovalChannel :: ApprovalChannel -> Text
-renderApprovalChannel = \case
-  ViaDanwa -> "danwa"
-  ViaKizashi -> "kizashi"
-  ViaLocalInbox -> "local-inbox"
+renderApprovalChannel = approvalChannelText
 
 data ApprovalTimeoutPayload = ApprovalTimeoutPayload
   { kind :: !Text,

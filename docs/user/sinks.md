@@ -17,32 +17,37 @@ behavior runs and is **gated by lifecycle, sink-kind permission, and exact actio
 authorization**. Default `authorization.actions.mode=disabled` allows no protected
 external action, including delivery to a stub.
 
+An agent lists them in `outputs`. Each output is a registered kind and its JSON
+configuration; the Kikan binding owns the five kinds below and a typed Dhall helper per kind,
+`packs/kikan-shikigami-binding/dhall/Outputs.dhall`. They load only in an executable composed
+with the binding (the `kikan-shikigami-*` distribution); a stock executable refuses them at
+load and names the kinds it does register (plan 135, M3).
+
 ```dhall
-let Sink =
-      < KawaDigest        : { subjectType : Text, verb : Text }
-      | KizashiSignal     : { source : Text, signalType : SignalType, priority : Priority
-                            , importance : Natural, recipientFrom : RecipientFrom
-                            , defaultRecipient : Optional Text, intentTemplate : Text
-                            , extraContextTags : List Text }
-      | ReiAction         : { intentionId : Text, note : Text }
-      | DanwaConversation : { topic : Text }
-      | ChannelEgress     : { channel : Text, action : Text
-                            , conversationKey : Optional Text }
-      >
+let A = ./schema/Agent.dhall
+
+let K = ./packs/kikan-shikigami-binding/dhall/Outputs.dhall
+
+in  A.Agent::{
+    , name = "heartbeat"
+    , trigger = A.Trigger.Schedule { cron = "* * * * *" }
+    , behavior = A.Behavior.ShikumiProgram { task = "noop-summary", preferEnrichment = False, grounding = None Text }
+    , outputs = [ K.kawaDigest { subjectType = "heartbeat", verb = "heartbeat.tick" } ]
+    }
 ```
 
-| Sink | Produces | Status in this runtime |
+| Output kind | Produces | Status in this runtime |
 | --- | --- | --- |
-| **KawaDigest** | a digest activity written back into the stream | fully implemented (against the kawa stub) |
-| **KizashiSignal** | an awareness signal | fully implemented (against the kizashi client/stub) |
-| **ReiAction** | an action recorded against a `rei` intention | implemented when a Rei endpoint is configured; otherwise fails visibly |
-| **DanwaConversation** | an opened/attached conversation | fully implemented through the Danwa client |
-| **ChannelEgress** | a reply or other approved action on an external conversation | fully implemented through Kanmon |
+| **KawaDigest** (`kawa.digest`) | a digest activity written back into the stream | fully implemented (against the kawa stub) |
+| **KizashiSignal** (`kizashi.signal`) | an awareness signal | fully implemented (against the kizashi client/stub) |
+| **ReiAction** (`rei.action`) | an action recorded against a `rei` intention | implemented when a Rei endpoint is configured; otherwise fails visibly |
+| **DanwaConversation** (`danwa.conversation`) | an opened/attached conversation | fully implemented through the Danwa client |
+| **ChannelEgress** (`channel.egress`) | a reply or other approved action on an external conversation | fully implemented through Kanmon |
 
 ## KawaDigest — write back to the stream
 
 ```dhall
-A.Sink.KawaDigest { subjectType = "heartbeat", verb = "heartbeat.tick" }
+K.kawaDigest { subjectType = "heartbeat", verb = "heartbeat.tick" }
 ```
 
 Builds a nine-field **Activity Envelope** from the behavior's output and POSTs it to kawa's
@@ -64,13 +69,14 @@ before HTTP. Architecture-practice reviews use `mori://` project refs and one
 ## KizashiSignal — raise awareness
 
 ```dhall
-A.Sink.KizashiSignal
-  { source = "shinzui/shikigami"
-  , signalType = A.SignalType.TaskCandidate
-  , priority = A.Priority.Normal
+K.kizashiSignal
+  K.KizashiSignal::{
+  , source = "shinzui/shikigami"
+  , signalType = K.SignalType.TaskCandidate
+  , priority = K.Priority.Normal
   , importance = 45
-  , recipientFrom = A.RecipientFrom.SubjectOwner
-  , defaultRecipient = Some "person_nadeem"
+  , recipientFrom = K.RecipientFrom.SubjectOwner
+  , defaultRecipient = Some "person_owner"
   , intentTemplate = "triage this ticket"
   , extraContextTags = [ "verb:ticket.received", "subject:ticket" ]
   }
@@ -95,7 +101,7 @@ resolved `recipient` from the trigger context.
 ## ReiAction — the rei handoff bridge
 
 ```dhall
-A.Sink.ReiAction { intentionId = "intention_01k…", note = "delegation overdue" }
+K.reiAction { intentionId = "intention_01k…", note = "delegation overdue" }
 ```
 
 The explicit, designed bridge from a **shikigami** (system) agent into **rei**'s
@@ -111,7 +117,7 @@ The contract remains an API handoff, never direct access to Rei's store.
 ## DanwaConversation — open/attach a conversation
 
 ```dhall
-A.Sink.DanwaConversation { topic = "incident-42" }
+K.danwaConversation { topic = "incident-42" }
 ```
 
 Opens or attaches a `shinzui/danwa` conversation on the given topic. An addressed
@@ -123,11 +129,8 @@ that stable value is the authorization target available before any Danwa IO.
 ## ChannelEgress — act through Kanmon
 
 ```dhall
-A.Sink.ChannelEgress
-  { channel = "intercom"
-  , action = "reply_to_conversation"
-  , conversationKey = None Text
-  }
+K.channelEgress
+  K.ChannelEgress::{ channel = "intercom", action = "reply_to_conversation" }
 ```
 
 Sends an approved channel action to Kanmon at
@@ -152,7 +155,7 @@ action but before Shikigami recorded the acknowledgement.
 Grant the sink independently of declaring it:
 
 ```bash
-cabal run shikigami -- grants grant channel-reply ChannelEgress --by operator
+cabal run shikigami -- grants grant channel-reply channel.egress --by operator
 ```
 
 Shikigami authenticates with `credentials.sinks.kanmon.token` and never receives the

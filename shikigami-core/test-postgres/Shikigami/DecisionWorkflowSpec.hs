@@ -27,11 +27,10 @@ import Data.Vector qualified as V
 import Hasql.Pool qualified as Pool
 import Hasql.Session qualified as Session
 import Keiro.Outbox qualified as Outbox
-import Keiro.Workflow (StepName (..), WorkflowId (..), WorkflowOutcome (..), WorkflowRunOptions (..), loadStepIndex, runWorkflowWith)
+import Keiro.Workflow (StepName (..), WorkflowId (..), WorkflowOutcome (..), loadStepIndex)
 import Keiro.Workflow.Child.Schema (lookupChildrenOfParent)
 import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, withStore)
-import Shikigami.Activity.Coordinate
-import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), Priority (Normal), ProfileRequirement (..), RecipientFrom (SubjectOwner), RouterConfidence (RoutingHigh), SignalType (Reminder))
+import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..), ProfileRequirement (..), RouterConfidence (RoutingHigh))
 import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Delegate (delegatedWorkflowIdV2)
 import Shikigami.Agent.ExpertiseKey (ExpertiseKey, parseExpertiseKey)
@@ -55,8 +54,8 @@ import Shikigami.Decision.ModelAlias qualified as Alias
 import Shikigami.Decision.ModelCatalog
 import Shikigami.Decision.StubProvider (decisionStubProvider)
 import Shikigami.Fixture.DecisionExamples
-import Shikigami.Fixture.DecisionExamples (parseModelConfidence, proposedRouteJson)
-import Shikigami.Fixture.ExamplePack (exampleFlowRegistry, fixtureDecisionServices, investigationDecisionSlot, judgmentDecisionSlot, triageDecisionSlot)
+import Shikigami.Fixture.ExamplePack (exampleFlowRegistry, fixtureDecisionServices)
+import Shikigami.Fixture.RawOutput (kizashiSignal, kizashiSignalKind)
 import Shikigami.Flow (FlowDef (..))
 import Shikigami.Flow.Builtin (builtinFlowRegistry)
 import Shikigami.Flow.Decision qualified as Decision
@@ -66,6 +65,7 @@ import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Log.Correlation (runCorrelationId)
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
+import Shikigami.Output (OutputDecl)
 import Shikigami.Prelude ((&), (.~))
 import Shikigami.Program.Decision
 import Shikigami.Program.DecisionRunner (DecisionRuntime (..), runDecisionProgram)
@@ -73,9 +73,6 @@ import Shikigami.Router.Catalog (CandidateCatalog (..))
 import Shikigami.Router.Decision (RouteDecision (..), RouteOutcome (..), RouteSelection (..))
 import Shikigami.RouterWorkflowSpec qualified as Fixture
 import Shikigami.Sink (GrantSource (StaticGrants))
-import Shikigami.Sink.Outputs
-import Shikigami.Trigger.Schedule (parseCron)
-import Shikigami.Workflow.Versioning (shikigamiWorkflowRunOptions)
 import Shikumi.Program (Program (FMap))
 import System.Directory (doesFileExist)
 import Test.Tasty (TestTree, testGroup)
@@ -198,7 +195,7 @@ tests fixture =
         withRuntime fixture \app store behavior -> do
           (handler, observed) <- scriptedProvider Investigate returned
           hooks <- crashAt False "record"
-          let withSink = (declaration & #outputs .~ ([kizashiSignalOutput (KizashiSignalOutput (activityCoordinate ("shinzui/shikigami")) Reminder Normal (either (error . show) id (parseSignalImportance (50))) SubjectOwner (fmap declarationCoordinate ((Just "recipient"))) "decision complete" [] Nothing)]))
+          let withSink = (declaration & #outputs .~ ([decisionSignal]))
               runtime = (deps app store behavior handler (fixtureDecisionServices catalog)) {Agent.hooks = hooks, Agent.agents = [withSink, Fixture.successSpecialist "first"], Agent.grants = StaticGrants (Map.singleton (compatibilityIdentity (either (error . show) id (mkAgentName "router"))) (Set.singleton kizashiSignalKind))}
               request = job "decision-completed-replay"
           first <- try @SomeException (Agent.runAgentRunWorkflow runtime request)
@@ -497,3 +494,16 @@ fixtureExpertiseKey = either (error . show) id . parseExpertiseKey
 
 fixtureModelAlias :: AliasText.Text -> Alias.ModelAlias
 fixtureModelAlias = either (error . show) id . Alias.parseModelAlias
+
+decisionSignal :: OutputDecl
+decisionSignal =
+  kizashiSignal
+    [ "source" .= ("shinzui/shikigami" :: Text),
+      "signalType" .= ("Reminder" :: Text),
+      "priority" .= ("Normal" :: Text),
+      "importance" .= (50 :: Int),
+      "recipientFrom" .= ("SubjectOwner" :: Text),
+      "defaultRecipient" .= ("recipient" :: Text),
+      "intentTemplate" .= ("decision complete" :: Text),
+      "extraContextTags" .= ([] :: [Text])
+    ]

@@ -6,9 +6,7 @@ import FlowPack.Initiative.Fixture.Proposing qualified as P
 import FlowPack.Watchdog.Grant
 import FlowPack.Watchdog.Ledger (SweepOrigin (..), SweepSummary (..))
 import FlowPack.Watchdog.Observation (PassCompletion (PassCompleted))
-import FlowPack.Watchdog.Observation.Read
 import FlowPack.Watchdog.Runtime (sweepAgeGauge)
-import FlowPack.Watchdog.Settings (WatchdogSettings (..))
 import FlowPack.Watchdog.Store qualified as Ledger
 import FlowPack.Watchdog.Types
 import Keiro.Workflow (WorkflowId (..), WorkflowName (..))

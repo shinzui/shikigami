@@ -176,8 +176,6 @@ its commands belong to
 | `enqueue-run` | [CAP-2](capabilities/durable-trigger-intake.md) |
 | `resolve-approval` | [CAP-10](capabilities/durable-human-approval.md) |
 | `publish-fixture` | [CAP-20](capabilities/local-integration-fixtures.md) |
-| `stub-kawa` | [CAP-20](capabilities/local-integration-fixtures.md) |
-| `stub-kanmon` | [CAP-20](capabilities/local-integration-fixtures.md) |
 | `grants` | [CAP-9](capabilities/authorized-sink-outbox.md) |
 | `agents` | [CAP-6](capabilities/principal-lifecycle-and-continuity.md) |
 | `runs` | [CAP-17](capabilities/worker-operations-and-telemetry.md), [CAP-25](capabilities/http-agent-run-lifecycle.md) |

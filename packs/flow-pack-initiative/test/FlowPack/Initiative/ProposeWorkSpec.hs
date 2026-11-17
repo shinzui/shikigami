@@ -21,7 +21,7 @@ import FlowPack.Initiative.Notice (nobodyRequested)
 import FlowPack.Initiative.Types (parseProposalId, proposalRefFor)
 import Keiro.Workflow (StepName (..), WorkflowOutcome (..))
 import Shikigami.Activity.Coordinate (activityCoordinate)
-import Shikigami.Agent.Approval (ApprovalChannel (..))
+import Shikigami.Agent.Approval (ApprovalChannel (..), configuredApprovalChannel)
 import Shikigami.Agent.Workflow qualified as Agent
 import Shikigami.Duration (durationTime)
 import Shikigami.Migrations.TestSupport (DatabaseFixture)
@@ -203,7 +203,7 @@ tests fixture =
         [row] <- proposals h
         assertBool "a catalog repository" (field "repository" row.assessment `elem` map (String . repositoryIdText) repositoryIds)
         [ask] <- h.asks
-        ask.channel @?= ViaDanwa
+        ask.channel @?= configuredApprovalChannel
         assertBool "no planted recipient reaches the ask" (not ("#ops" `Text.isInfixOf` ask.message))
         recorded <- stepValue h job "decision-prepare-initiative-propose"
         let prepared = field "input" (field "Right" recorded)

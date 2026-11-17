@@ -19,6 +19,7 @@ import Kiroku.Store.Connection (KirokuStore (..), defaultConnectionSettings, wit
 import Shikigami.Agent.Name (AgentName, agentNameText, mkAgentName)
 import Shikigami.Agent.Principal (AgentIdentity (VerifiedIdentity), AgentPrincipal, compatibilityIdentity, mkAgentPrincipal)
 import Shikigami.Authority (OutputKind, outputKindText)
+import Shikigami.Fixture.RawOutput (danwaConversationKind, kawaDigestKind, kizashiSignalKind, reiActionKind)
 import Shikigami.Memory.AliasStore
   ( AliasReconciliation (..),
     aliasesForPrincipal,
@@ -42,7 +43,6 @@ import Shikigami.Sink.GrantStore
     revokeGrant,
     upsertGrant,
   )
-import Shikigami.Sink.Outputs (danwaConversationKind, kawaDigestKind, kizashiSignalKind, reiActionKind)
 import Shikigami.Sink.Permission (Denied (..))
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertEqual, assertFailure, testCase)

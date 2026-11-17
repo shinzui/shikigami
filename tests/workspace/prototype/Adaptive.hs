@@ -126,8 +126,6 @@ import Shikigami.Program.Decision.Adaptive (AdaptiveInput (..))
 import Shikigami.Repository (RepositoryId, repositoryId)
 import Shikigami.RunEvidence.Catalog qualified as Catalog
 import Shikigami.Sink (GrantSource (StaticGrants), defaultGrantTable)
-import Shikigami.Sink.Config
-import Shikigami.Sink.Http (HttpLimits (..), credentialsFromConfig, newSinkHttp)
 import Shikigami.Trigger.Enqueue (addressedRunJob, ensureRunQueue)
 import Shikigami.WorkerSession.Capability qualified as Workers
 import Shikigami.WorkerSession.Input qualified as Input
@@ -375,7 +373,6 @@ adaptiveCase config prefix requestedStage = withQualification config prefix \ori
       provider = stubApiProvider & #complete .~ complete & #stream .~ liftCompleteToStream complete
       selectedProviders = if live then liveProviders prefix (Decision.builtinDecisionServices catalog).providers else [provider]
   registry <- Provider.newProviderRegistryFrom selectedProviders
-  http <- right =<< newSinkHttp (HttpLimits q.config.httpRequestMaxBytes q.config.httpResponseMaxBytes) (credentialsFromConfig q.config) (DanwaConfig "http://localhost:1" (declarationCoordinate "fixture"))
   let deps = Agent.AgentRunDeps env (baseBehavior & #model .~ resumedDefault & #providerRegistry .~ Just registry) (Decision.builtinDecisionServices catalog & #providers .~ selectedProviders) builtinFlowRegistry q.authorizer nativeHost.capabilities (Just nativeHost) (Just sessions) (Just objectives) (const noPackMetrics) [] declarations (Agent.defaultAgentRunHooks & #afterStepBody .~ (\name -> when (stage == "crash" && name == W.StepName "adaptive-validation") (Bytes.writeFile (prefix </> "adaptive-crashed") "1\n" >> exitImmediately (ExitFailure 86)))) Agent.noCodingAgents Agent.noDeclaredTools emptyOutputRegistry (autoApprovePolicy (checked (parseDuration 900))) Approval.defaultApprovalWorkflowEnv (checked (parseDuration 30)) defaultHarnessPolicy defaultDelegationBudget (StaticGrants defaultGrantTable) directory.handle (Routing.RoutingRuntime (\_ -> error "no routing") (\_ _ _ -> error "no routing")) noPackSettings (Just store.pool) Log.silentLogger (\profile version -> pure (Left (UnknownProfile profile version)))
       -- Trusted integration tools are driven synchronously below. Their factual
       -- receipts still publish normal execution wakes. Supply only those two

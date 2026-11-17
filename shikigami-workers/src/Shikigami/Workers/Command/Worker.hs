@@ -18,7 +18,8 @@ import Hasql.Pool (Pool)
 import Kiroku.Store.Connection qualified as StoreConnection
 import Kiroku.Store.Transaction (runTransaction)
 import Shikigami.Agent.Approval (ApprovalPolicySnapshot (..), renderApprovalChannel)
-import Shikigami.Agent.Approval.Notification qualified as ApprovalNotification
+import Shikigami.Agent.Approval.LocalInbox (localInboxDirectory, localInboxNotifier)
+import Shikigami.Agent.Approval.Workflow (ApprovalNotifier (..))
 import Shikigami.Agent.Decl (AgentDecl (..))
 import Shikigami.Agent.Loader (enabledAgentsFromReport, loadAgentsLoud)
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
@@ -27,6 +28,7 @@ import Shikigami.App (AppEnv (..), runAppIO)
 import Shikigami.App.Config (ActionAuthorizationConfig (ActionAuthorizationDisabled), AppConfig (..), Role (WorkerRole))
 import Shikigami.App.Config qualified as Config
 import Shikigami.App.Config.Load (requireDatabaseUrl)
+import Shikigami.Approval.Channel (ApprovalChannelAdapter (..), buildApprovalChannels, chooseApprovalChannel, composeApprovalNotifier)
 import Shikigami.Authority (Authority, mkOutputKind, recordedIn)
 import Shikigami.Authority.Configured (buildConfiguredAuthority)
 import Shikigami.Behavior.Provider (newBehaviorEnvFor)
@@ -46,21 +48,20 @@ import Shikigami.Objective.Tracker.Config (TrackerEnablement (..), TrackerSettin
 import Shikigami.Objective.Tracker.Runtime qualified as TrackerRuntime
 import Shikigami.Objective.Tracker.Store qualified as Tracker
 import Shikigami.Objective.Tracker.Worker (trackerLoopRegistration)
-import Shikigami.Output (outputKindText, registeredKinds)
-import Shikigami.Output.Kikan (KikanServices (..))
+import Shikigami.Output (outputKindText, registeredKinds, renderDefaultOutputChoice)
+import Shikigami.Output.Registration (AdapterContext (..), buildOutputRegistry)
 import Shikigami.Prelude (Text)
 import Shikigami.Record (observedRecord, postgresRecord)
 import Shikigami.Runtime (registerRuntimeCatalog, runtimeConnectionSettings)
 import Shikigami.Sink (GrantSource (DbGrants))
-import Shikigami.Sink.Config (DanwaConfig (..), KanmonConfig (..), KawaConfig (..), KizashiConfig (..), ReiConfig (..))
-import Shikigami.Sink.Http (HttpLimits (..), SinkHttp, SinkHttpError, credentialsFromConfig, newSinkHttp)
+import Shikigami.Sink.Http (HttpLimits (..))
 import Shikigami.Telemetry (withRunTelemetry)
 import Shikigami.Telemetry.Metrics (ShikigamiMetrics, recordPackEvent)
 import Shikigami.Trust.LocalOperator.Approvals (defaultApprovalsPath)
 import Shikigami.Trust.LocalOperator.Grant (defaultStateDirectory)
 import Shikigami.Trust.LocalOperator.Host (LocalOperatorPaths (..), queuedCodingAgents)
 import Shikigami.Trust.Tier (TrustTier (..))
-import Shikigami.Workers.Config (WorkerEnv (..), directoryLoopRegistration, persistAgentLoadReport, schedulerSchedules, startProcessDirectory, workerOutputs)
+import Shikigami.Workers.Config (WorkerEnv (..), directoryLoopRegistration, persistAgentLoadReport, schedulerSchedules, startProcessDirectory)
 import Shikigami.Workers.Registry (runWorkers)
 import Shikigami.Workspace.ConfiguredHost (configuredWorkspaceHostWithTransfers, configuredWorkspaceTransfers)
 import Shikigami.Workspace.Settings (WorkspaceRepository (..), WorkspaceSettings (..))
@@ -117,40 +118,27 @@ runWorkerCmdWith packs resumeBudget config = do
       agents <- enabledAgentsFromReport logger report
       Log.logInfo logger "worker.agents.loaded" ["count" .= length agents]
       refuseUndeployableAgents flows logger agents
-      let kizashiConfig =
-            KizashiConfig
-              { baseUrl = (.kizashiBaseUrl) config,
-                defaultRecipient = (.kizashiDefaultRecipient) config
-              }
-          kawaConfig =
-            KawaConfig
-              { baseUrl = (.kawaBaseUrl) config,
-                sourceSegment = (.kawaSourceSegment) config
-              }
-          kanmonConfig = KanmonConfig {baseUrl = (.kanmonBaseUrl) config}
-          danwaConfig =
-            DanwaConfig
-              { baseUrl = (.danwaBaseUrl) config,
-                agentParticipant = (.danwaAgentParticipant) config
-              }
-          httpLimits =
+      let httpLimits =
             HttpLimits
               { requestBytes = (.httpRequestMaxBytes) config,
                 responseBytes = (.httpResponseMaxBytes) config
               }
-      sinkHttp <-
-        newSinkHttp httpLimits (credentialsFromConfig config) danwaConfig >>= \case
-          Left failure -> refuseInvalidSinkHttp logger failure
-          Right clients -> pure clients
+          adapterContext = AdapterContext {logger, settings = config.packSettings, httpLimits}
+          channelRegistrations = concatMap (.approvalChannels) packs
+      -- Approval asks go through the channels the composed packs register,
+      -- or the kernel's local inbox (plan 135, M3).
+      approvalChannel <- either (\problem -> Exit.die ("shikigami-worker: refusing to start; " <> Text.unpack problem)) pure (chooseApprovalChannel channelRegistrations config.approvalChannel)
+      channels <- buildApprovalChannels adapterContext channelRegistrations >>= either (\problem -> Exit.die ("shikigami-worker: refusing to start; " <> Text.unpack problem)) pure
+      inboxDirectory <- localInboxDirectory <$> maybe defaultStateDirectory pure config.localOperatorStateDirectory
       actionAuthority <- recordedIn logger (Just shikigamiMetrics) storePool <$> buildActionAuthorizer packs logger config
       codingAgents <- workerCodingAgents logger shikigamiMetrics storePool config agents
       let policy =
             ApprovalPolicySnapshot
               { requireFor = requiredOutputs,
-                channel = (.approvalChannel) config,
+                channel = approvalChannel,
                 deadline = (.approvalDeadline) config
               }
-          notifier = ApprovalNotification.approvalNotifier logger sinkHttp danwaConfig kizashiConfig
+          notifier = composeApprovalNotifier logger approvalChannel (Just (ApprovalChannelAdapter (localInboxNotifier inboxDirectory).postAsk)) channels
           requiredOutputs = (.approvalRequiredSinks) config <> Set.fromList (rights (mkOutputKind <$> config.approvalRequiredOutputs))
           requiredKinds = outputKindText <$> Set.toAscList requiredOutputs
       Log.logInfo
@@ -158,16 +146,8 @@ runWorkerCmdWith packs resumeBudget config = do
         "worker.approval.policy"
         [ "mode" .= if null requiredKinds then ("auto_approve" :: Text) else "required",
           "required_sink_kinds" .= requiredKinds,
-          "channel" .= renderApprovalChannel ((.approvalChannel) config),
+          "channel" .= renderApprovalChannel approvalChannel,
           "deadline_seconds" .= (floor (nominalDiffTimeToSeconds (durationTime ((.approvalDeadline) config))) :: Integer)
-        ]
-      Log.logInfo
-        logger
-        "worker.sink_credentials.configured"
-        [ "kawa" .= credentialPresence ((.kawaToken) config),
-          "kizashi" .= credentialPresence ((.kizashiToken) config),
-          "kanmon" .= credentialPresence ((.kanmonToken) config),
-          "danwa" .= credentialPresence ((.danwaToken) config)
         ]
       -- Resolved here, at the composition root, so an unparseable cron is
       -- reported (and under agents.strict refused) once at boot rather than
@@ -205,12 +185,12 @@ runWorkerCmdWith packs resumeBudget config = do
         case configured of
           Right (Right ()) -> pure ()
           _ -> Exit.die "shikigami-worker: shared execution capacity is unavailable"
-        outputs <- either (\problem -> Exit.die ("shikigami-worker: invalid outputs: " <> Text.unpack problem)) pure (workerOutputs KikanServices {http = sinkHttp, kizashi = kizashiConfig, kawa = kawaConfig, kanmon = kanmonConfig, danwa = danwaConfig, rei = ReiConfig {baseUrl = (.reiBaseUrl) config}} config.defaultOutputKind)
+        outputs <- buildOutputRegistry adapterContext [] (concatMap (.outputs) packs) config.defaultOutputKind >>= either (\problem -> Exit.die ("shikigami-worker: invalid outputs: " <> Text.unpack problem)) pure
         Log.logInfo
           logger
           "worker.outputs"
           [ "registered" .= (outputKindText <$> registeredKinds outputs),
-            "default" .= maybe ("none" :: Text) id config.defaultOutputKind
+            "default" .= renderDefaultOutputChoice config.defaultOutputKind
           ]
         let env =
               WorkerEnv
@@ -237,7 +217,6 @@ runWorkerCmdWith packs resumeBudget config = do
                   conversationIdleTimeout = (.conversationIdleTimeout) config,
                   catchUpPolicy = (.schedulerCatchUp) config,
                   schedules,
-                  danwa = danwaConfig,
                   metrics = shikigamiMetrics,
                   logger,
                   -- The C11 gate reads shikigami.sink_grants over the same pool
@@ -265,14 +244,6 @@ runWorkerCmdWith packs resumeBudget config = do
               storePool
               registry
               (runWorkers env)
-
-credentialPresence :: Maybe a -> Text
-credentialPresence = maybe "none" (const "token")
-
-refuseInvalidSinkHttp :: Log.Logger -> SinkHttpError -> IO SinkHttp
-refuseInvalidSinkHttp logger failure = do
-  Log.logError logger "worker.sink_http.invalid" ["error" .= show failure]
-  Exit.die "shikigami-worker: refusing to start; invalid sink HTTP configuration"
 
 -- | The worker composes every tier. Under @local-operator@ it runs queued
 -- coding-agent steps on the operator's machine, resolving each step's grant,

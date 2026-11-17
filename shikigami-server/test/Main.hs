@@ -24,8 +24,6 @@ import Shikigami.Server.App (shikigamiApplication)
 import Shikigami.Server.Boot (newServerEnvWith)
 import Shikigami.Server.CommandSpec qualified as CommandSpec
 import Shikigami.Server.DispatchSpec qualified as DispatchSpec
-import Shikigami.Server.KanmonStubSpec qualified as KanmonStubSpec
-import Shikigami.Server.KawaStubSpec qualified as KawaStubSpec
 import Shikigami.Server.ProblemSpec qualified as ProblemSpec
 import Shikigami.Server.RequestLogSpec qualified as RequestLogSpec
 import Shikigami.Server.TelemetrySpec qualified as TelemetrySpec
@@ -48,8 +46,6 @@ main = withShikigamiMigratedSuite \databaseFixture ->
           VerifierSpec.tests,
           CommandSpec.tests,
           DispatchSpec.tests,
-          KawaStubSpec.tests,
-          KanmonStubSpec.tests,
           ProblemSpec.tests,
           RequestLogSpec.tests,
           TelemetrySpec.tests

@@ -65,13 +65,10 @@ import Shikigami.Flow.Pack (noPackMetrics)
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.Log qualified as Log
 import Shikigami.Output (emptyOutputRegistry)
-import Shikigami.Output.Kikan (KikanServices (..), kikanOutputs)
 import Shikigami.Pack.Setting (noPackSettings)
 import Shikigami.Prelude ((&), (.~))
 import Shikigami.RunEvidence.Catalog qualified as Catalog
 import Shikigami.Sink (GrantSource (StaticGrants), defaultGrantTable)
-import Shikigami.Sink.Config
-import Shikigami.Sink.Http (HttpLimits (..), credentialsFromConfig, newSinkHttp)
 import Shikigami.StateRevision (initialRevision, revisionNumber)
 import Shikigami.Trigger.Enqueue (ensureRunQueue)
 import Shikigami.Trigger.Schedule (parseCron)
@@ -151,7 +148,6 @@ workflowCase configFile prefix stage = do
         provider = stubApiProvider {Provider.complete = complete, Provider.stream = liftCompleteToStream complete}
     providers <- Provider.newProviderRegistryFrom [provider]
     now <- getCurrentTime
-    http <- right =<< newSinkHttp (HttpLimits config.httpRequestMaxBytes config.httpResponseMaxBytes) (credentialsFromConfig config) (DanwaConfig "http://localhost:1" (declarationCoordinate "fixture"))
     let declaration = original & #name .~ fixtureAgentName "workspace-upgrade" & #behavior .~ Skill (declarationCoordinate ((Text.pack skill))) & #identity .~ Just (IdentityDecl (declarationCoordinate principal)) & #capabilityOverlays .~ map (.capability) [supervisedWorkspaceEditDescriptor, workspaceExecDescriptor, workspaceGitDescriptor]
         rootId = fixtureRootId "workflow-upgrade-root"
         job = RunJob (fixtureAgentName "workspace-upgrade") initial.binding.request.owner TriggeredBySchedule now Aeson.Null (fixtureRunKey "workspace-durable-upgrade") Nothing Nothing Nothing [] Nothing Nothing (Just rootId) Nothing Nothing AgentWorkflowRoute Nothing
@@ -171,7 +167,7 @@ workflowCase configFile prefix stage = do
               agents = [declaration],
               hooks = Agent.defaultAgentRunHooks,
               codingAgents = Agent.noCodingAgents,
-              outputs = kikanOutputs (KikanServices {http, kizashi = KizashiConfig "http://localhost:1" (declarationCoordinate "recipient"), kawa = KawaConfig "http://localhost:1" (activityCoordinate "fixture"), kanmon = KanmonConfig "http://localhost:1", danwa = DanwaConfig "http://localhost:1" (declarationCoordinate "fixture"), rei = ReiConfig Nothing}),
+              outputs = emptyOutputRegistry,
               declaredTools = Agent.noDeclaredTools,
               approvalPolicy = autoApprovePolicy (either (error . show) id (parseDuration 900)),
               approvalWorkflow = Approval.defaultApprovalWorkflowEnv,

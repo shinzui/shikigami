@@ -23,7 +23,7 @@ import FlowPack.Initiative.Types (parseProposalId, proposalRefFor)
 import Keiro.Workflow (WorkflowOutcome (..))
 import Shikigami.Activity (Actor (..))
 import Shikigami.Activity.Coordinate (ActorKind (..), activityCoordinate)
-import Shikigami.Agent.Approval (ApprovalChannel (..))
+import Shikigami.Agent.Approval (ApprovalChannel (..), configuredApprovalChannel)
 import Shikigami.Agent.Decl (AgentDecl (..))
 import Shikigami.Agent.RunJob (RunJob (..))
 import Shikigami.App (runAppIO)
@@ -153,7 +153,7 @@ tests fixture =
         asked <- h.asks
         length asked @?= 2
         forM_ asked \ask -> do
-          ask.channel @?= ViaDanwa
+          ask.channel @?= configuredApprovalChannel
           assertBool "no planted recipient" (not ("#ops" `Text.isInfixOf` ask.message))
         forM_ asked (approve h)
         goals <- objectives h

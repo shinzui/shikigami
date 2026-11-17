@@ -32,7 +32,7 @@ earlier candidate stays visible in `--explain-config` rather than disappearing.
 2. **`--config PATH`**, once per file, in the order the options appear. Files are YAML.
 3. **Environment variables**, but only the ones explicitly bound below. A variable that
    is not in that table does nothing, however plausible its name.
-4. **Named flags** such as `--broker`, `--agents`, or `--kanmon-url`. These are not
+4. **Named flags** such as `--broker` or `--agents`. These are not
    separate parsers: each one sets a declared key, so `--broker HOST:PORT` and
    `--set kafka.broker=HOST:PORT` are the same thing.
 5. **`--set KEY=VALUE`**, once per override, in the order the options appear.
@@ -120,10 +120,10 @@ nested under `kafka`.
 | `scheduler.catch_up` | `skip_missed` | `SHIKIGAMI_SCHEDULER_CATCH_UP` | What the scheduler does about cron minutes that passed while it was down. `skip_missed` arms the first tick after now, so waking a day late produces one run. `fire_all` arms from the tick that just fired, replaying every missed minute — the pre-policy behavior. |
 | `worker.run_timeout_seconds` | `300` | `SHIKIGAMI_RUN_TIMEOUT_SECONDS` | Maximum duration of one synchronous external behavior attempt. |
 | `approval.require` | *(empty)* | `SHIKIGAMI_APPROVAL_REQUIRE` | Comma-separated unique sink kinds requiring human approval: `KawaDigest`, `KizashiSignal`, `ReiAction`, `DanwaConversation`, or `ChannelEgress`. Surrounding whitespace is ignored; empty preserves ordinary sink auto-approval. |
-| `approval.channel` | `danwa` | `SHIKIGAMI_APPROVAL_CHANNEL` | Human approval notification channel: exactly `danwa` or `kizashi`. Explicit Flow acknowledgements always use this channel even when `approval.require` is empty. |
+| `approval.channel` | *(the composition's preferred channel, else `local-inbox`)* | `SHIKIGAMI_APPROVAL_CHANNEL` | Human approval notification channel, by name: `local-inbox`, or a channel a composed pack registers. The Kikan distribution registers `danwa` (its preferred channel) and `kizashi`; an executable refuses to start on a channel it does not compose. Explicit Flow acknowledgements always use this channel even when `approval.require` is empty. |
 | `approval.deadline_seconds` | `900` | `SHIKIGAMI_APPROVAL_DEADLINE_SECONDS` | Maximum duration an approval or flow acknowledgement may remain open. |
 | `approval.require_outputs` | *(empty)* | `SHIKIGAMI_APPROVAL_REQUIRE_OUTPUTS` | Comma-separated output kinds (such as `local.report`) whose delivery waits for an approval. |
-| `outputs.default` | `none` | `SHIKIGAMI_OUTPUTS_DEFAULT` | The worker's output for a declaration that lists none: `none` keeps the result in the journal; `kawa.digest` publishes it to `sinks.kawa.base_url`. |
+| `outputs.default` | `composition` | `SHIKIGAMI_OUTPUTS_DEFAULT` | The worker's output for a declaration that lists none: `composition` takes the output a composed pack prefers (the Kikan distribution prefers `kawa.digest`; the stock worker has none, so the result stays in the journal), `none` keeps the result in the journal, and a registered kind (such as `kawa.digest`) names it. |
 | `practice_review.attention_recipients` | *(empty; fail closed)* | `SHIKIGAMI_PRACTICE_REVIEW_ATTENTION_RECIPIENTS` | Owned by the practice-review flow pack, so only an executable composed with it (`kikan-shikigami-*`) accepts the key; a stock executable refuses it as unknown. Comma-separated semantic-owner to Kizashi `recipient_...` mappings. Joint-owner keys are sorted and joined with `+`; duplicate canonical keys and invalid recipients refuse startup. |
 | `kafka.broker` | `127.0.0.1:9092` | `SHIKIGAMI_KAFKA_BROKER` | Bootstrap broker, `HOST:PORT`. |
 | `kafka.activity.topic` | `activity.v1` | `SHIKIGAMI_KAFKA_ACTIVITY_TOPIC` | Topic carrying `activity.v1` envelopes. |
@@ -135,23 +135,11 @@ nested under `kafka`.
 | `http.host` | `127.0.0.1` | `SHIKIGAMI_HTTP_HOST` | Interface the API binds. `*` binds every interface. |
 | `http.port` | `8080` | `SHIKIGAMI_HTTP_PORT` | Port the API binds. Must be 1–65535; checked at resolution, not at bind. |
 | `health.port` | per role — see below | `SHIKIGAMI_HEALTH_PORT` | Port the probe listener binds on a worker-role process. Must be 1–65535; checked at resolution, not at bind. |
-| `sinks.kawa.base_url` | `http://localhost:8088` | `SHIKIGAMI_SINKS_KAWA_BASE_URL` | Base URL of the kawa ingest doorway. |
-| `sinks.kawa.source_segment` | `shinzui/shikigami` | `SHIKIGAMI_SINKS_KAWA_SOURCE_SEGMENT` | Source segment kawa attributes ingested activity to. |
-| `sinks.kizashi.base_url` | `http://localhost:8089` | `SHIKIGAMI_SINKS_KIZASHI_BASE_URL` | Base URL of the kizashi signal service. |
-| `sinks.kizashi.default_recipient` | `recipient_default` | `SHIKIGAMI_SINKS_KIZASHI_DEFAULT_RECIPIENT` | Recipient used when a declared signal names none. Exact C13 target ids cannot contain `:` or `#`. |
-| `sinks.kanmon.base_url` | `http://localhost:8090` | `SHIKIGAMI_SINKS_KANMON_BASE_URL` | Base URL of Kanmon's guarded channel-action service. |
-| `sinks.danwa.base_url` | `http://localhost:8080` | `SHIKIGAMI_SINKS_DANWA_BASE_URL` | Base URL of the danwa conversation server. |
-| `sinks.danwa.agent_participant` | `part_shikigami` | `SHIKIGAMI_SINKS_DANWA_AGENT_PARTICIPANT` | danwa participant id Shikigami authors messages as. |
-| `sinks.rei.base_url` | *(none)* | `SHIKIGAMI_SINKS_REI_BASE_URL` | Base URL of a rei ingestion endpoint. The one sink URL with no default, because rei has no HTTP surface yet; unset means `ReiAction` sinks fail visibly instead of silently. |
 | `behavior.provider` | `stub` | `SHIKIGAMI_BEHAVIOR_PROVIDER` | Which model runs a `Skill` behavior: `stub` calls no model; `anthropic`, `openai` and `openai-responses` select matching HTTP APIs. Batch CLI choices are refused pending a released cancellation fix. |
 | `behavior.model` | `claude-sonnet-4-6` for Anthropic; required for OpenAI | `SHIKIGAMI_BEHAVIOR_MODEL` | Exact Baikai catalog id matching the selected API/vendor. |
 | `credentials.providers.anthropic.api_key` | *(none — secret)* | `ANTHROPIC_API_KEY` | Anthropic API key. **Required** when the provider is `anthropic`, unused otherwise. |
 | `credentials.providers.openai.api_key` | *(none — secret)* | `OPENAI_API_KEY` | Required only for `openai` and `openai-responses`. |
 | `behavior.base_url` | catalog endpoint | `SHIKIGAMI_BEHAVIOR_BASE_URL` | Optional credential-free HTTP(S) endpoint override. |
-| `credentials.sinks.kawa.token` | *(none — secret)* | `SHIKIGAMI_KAWA_TOKEN` | Optional bearer token sent only to the configured kawa host. |
-| `credentials.sinks.kizashi.token` | *(none — secret)* | `SHIKIGAMI_KIZASHI_TOKEN` | Optional bearer token sent only to the configured kizashi host. |
-| `credentials.sinks.kanmon.token` | *(none — secret)* | `SHIKIGAMI_KANMON_TOKEN` | Optional bearer token authenticating Shikigami to Kanmon; it is not a provider credential. |
-| `credentials.sinks.danwa.token` | *(none — secret)* | `SHIKIGAMI_DANWA_TOKEN` | Optional bearer token sent only to the configured danwa host. |
 | `trust.tier` | `contained` | `SHIKIGAMI_TRUST_TIER` | Who decides a run's actions: `contained` keeps each executable's configured authority; `multi-tenant` additionally requires an authority (`authorization.actions.mode` other than `disabled`, such as `kikan` under the Kikan distribution) in the worker; `local-operator` makes the operator the authority in the two one-off commands and is refused by the worker ([ADR-124](../adr/0124-authority-is-selected-by-trust-tier-and-the-local-operator-grants-a-declaration-once.md)). |
 | `trust.local_operator.approvals_file` | `$XDG_CONFIG_HOME/shikigami/local-operator.dhall` | `SHIKIGAMI_TRUST_LOCAL_OPERATOR_APPROVALS_FILE` | The explicit local-operator approvals file (`schema/LocalOperator.dhall`); a missing file is empty. |
 | `trust.local_operator.state_dir` | `$XDG_STATE_HOME/shikigami` | `SHIKIGAMI_TRUST_LOCAL_OPERATOR_STATE_DIR` | Where confirmed local-operator grants are stored, outside every workspace. |
@@ -160,6 +148,28 @@ nested under `kafka`.
 | `conversation.idle_timeout_seconds` | `1800` | `SHIKIGAMI_CONVERSATION_IDLE_TIMEOUT_SECONDS` | End a rotating conversation epoch after this idle wait. |
 | `http.request_max_bytes` | `8388608` | `SHIKIGAMI_HTTP_REQUEST_MAX_BYTES` | Encoded outbound sink request limit in bytes (1024–67108864). |
 | `http.response_max_bytes` | `8388608` | `SHIKIGAMI_HTTP_RESPONSE_MAX_BYTES` | Outbound sink response limit in bytes (1024–67108864). |
+
+### Kikan service settings
+
+The Kikan binding (`packs/kikan-shikigami-binding`) owns the endpoints and credentials of
+its outputs and approval channels (plan 135, M3). They keep the keys and variables they had
+as kernel settings, so only an executable composed with the binding (`kikan-shikigami-*`)
+accepts them; a stock executable refuses them as unknown.
+
+| Key | Default | Environment | Meaning |
+|---|---|---|---|
+| `sinks.kawa.base_url` | `http://localhost:8088` | `SHIKIGAMI_SINKS_KAWA_BASE_URL` | Base URL of the kawa ingest doorway. |
+| `sinks.kawa.source_segment` | `shinzui/shikigami` | `SHIKIGAMI_SINKS_KAWA_SOURCE_SEGMENT` | Source segment kawa attributes ingested activity to. |
+| `sinks.kizashi.base_url` | `http://localhost:8089` | `SHIKIGAMI_SINKS_KIZASHI_BASE_URL` | Base URL of the kizashi signal service. |
+| `sinks.kizashi.default_recipient` | `recipient_default` | `SHIKIGAMI_SINKS_KIZASHI_DEFAULT_RECIPIENT` | Recipient used when a declared signal names none. Exact C13 target ids cannot contain `:` or `#`. |
+| `sinks.kanmon.base_url` | `http://localhost:8090` | `SHIKIGAMI_SINKS_KANMON_BASE_URL` | Base URL of Kanmon's guarded channel-action service. |
+| `sinks.danwa.base_url` | `http://localhost:8080` | `SHIKIGAMI_SINKS_DANWA_BASE_URL` | Base URL of the danwa conversation server. |
+| `sinks.danwa.agent_participant` | `part_shikigami` | `SHIKIGAMI_SINKS_DANWA_AGENT_PARTICIPANT` | danwa participant id Shikigami authors messages as. |
+| `sinks.rei.base_url` | *(none)* | `SHIKIGAMI_SINKS_REI_BASE_URL` | Base URL of a rei ingestion endpoint. The one service URL with no default, because rei has no HTTP surface yet; unset means `rei.action` outputs fail visibly instead of silently. |
+| `credentials.sinks.kawa.token` | *(none — secret)* | `SHIKIGAMI_KAWA_TOKEN` | Optional bearer token sent only to the configured kawa host. |
+| `credentials.sinks.kizashi.token` | *(none — secret)* | `SHIKIGAMI_KIZASHI_TOKEN` | Optional bearer token sent only to the configured kizashi host. |
+| `credentials.sinks.kanmon.token` | *(none — secret)* | `SHIKIGAMI_KANMON_TOKEN` | Optional bearer token authenticating Shikigami to Kanmon; it is not a provider credential. |
+| `credentials.sinks.danwa.token` | *(none — secret)* | `SHIKIGAMI_DANWA_TOKEN` | Optional bearer token sent only to the configured danwa host. |
 
 The duration settings are whole seconds in the range 1–86400. The upper bound keeps
 conversion to the microsecond timeout representation safe on the 64-bit platforms
@@ -350,11 +360,6 @@ declared key, so it shows up in `--explain-config` with its spelling.
 |---|---|---|
 | `shikigami-server` | `--host`, `--port` | `http.host`, `http.port` |
 | `shikigami-worker` | `--agents` | `agents.directory` |
-| | `--kawa-url` | `sinks.kawa.base_url` |
-| | `--kizashi-url` | `sinks.kizashi.base_url` |
-| | `--kanmon-url` | `sinks.kanmon.base_url` |
-| | `--danwa-url` | `sinks.danwa.base_url` |
-| | `--danwa-agent` | `sinks.danwa.agent_participant` |
 | `shikigami-scheduler` | `--agents` | `agents.directory` |
 | `shikigami-consume-stream` | `--agents`, `--broker` | `agents.directory`, `kafka.broker` |
 | | `--topic`, `--group` | `kafka.activity.topic`, `kafka.groups.stream` |
@@ -362,14 +367,13 @@ declared key, so it shows up in `--explain-config` with its spelling.
 | `shikigami-consume-events` | `--agents`, `--broker` | `agents.directory`, `kafka.broker` |
 | | `--topic`, `--group` | `kafka.events.topic`, `kafka.groups.events` |
 | `shikigami publish-fixture` | `--broker`, `--topic` | `kafka.broker`, `kafka.activity.topic` |
-| `shikigami stub-kawa` | `--broker` | `kafka.broker` |
 
 Note that `--topic` and `--group` mean different keys on the two consumers, because the
 two consumers read different topics. That is why they are separate binaries.
 
 Flags that are *not* configuration stay ordinary arguments, because they name what a single
-invocation is about rather than how the deployment is set up: `shikigami stub-kawa --port`
-and `--republish-topic`,
+invocation is about rather than how the deployment is set up: `kikan-shikigami stub-kawa`'s
+`--port`, `--republish-topic` and `--broker`,
 `shikigami-run-behavior --agent` and `--payload`, `shikigami-agent-run --agent` and
 `--from-activity`, and the file or agent arguments of `validate`, `render-lifecycle`,
 `enqueue-run`, `resolve-approval`, and `publish-fixture`.

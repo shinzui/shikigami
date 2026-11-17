@@ -24,6 +24,9 @@ module Shikigami.Output
     inlineOutputAdapter,
     outboxRouteOf,
     DefaultOutput (..),
+    DefaultOutputChoice (..),
+    parseDefaultOutputChoice,
+    renderDefaultOutputChoice,
     OutputRegistry,
     mkOutputRegistry,
     emptyOutputRegistry,
@@ -104,6 +107,26 @@ outboxRouteOf adapter = case adapter.route of
   DeliverInline _ -> Nothing
 
 data DefaultOutput = NoDefaultOutput | DefaultOutput !OutputDecl
+
+-- | The @outputs.default@ setting: the composition's own preference, no
+-- default, or a registered kind.
+data DefaultOutputChoice
+  = CompositionPreferred
+  | NoDefault
+  | DefaultKind !OutputKind
+  deriving stock (Eq, Show)
+
+parseDefaultOutputChoice :: Text -> Either Text DefaultOutputChoice
+parseDefaultOutputChoice raw = case Text.strip raw of
+  "none" -> Right NoDefault
+  "composition" -> Right CompositionPreferred
+  other -> DefaultKind <$> mkOutputKind other
+
+renderDefaultOutputChoice :: DefaultOutputChoice -> Text
+renderDefaultOutputChoice = \case
+  CompositionPreferred -> "composition"
+  NoDefault -> "none"
+  DefaultKind kind -> outputKindText kind
 
 -- | Sealed: adapters by unique kind and a default whose adapter accepts it.
 data OutputRegistry = OutputRegistry ![OutputAdapter] !DefaultOutput

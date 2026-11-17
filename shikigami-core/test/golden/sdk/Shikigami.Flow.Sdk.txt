@@ -5,9 +5,8 @@ Activity
 ActivityCoordinate
 ActivityEnvelope (..)
 AddressedOutput (..)
-ApprovalChannel (..)
+ApprovalChannel
 ApprovalRequest (..)
-DanwaTarget (..)
 DecisionAbort (..)
 DecisionMode (..)
 DeclarationCoordinate
@@ -28,10 +27,7 @@ MemoryQuery (..)
 OutputDecl (..)
 OutputKind
 PackFlow (..)
-Priority (..)
-RecipientFrom (..)
 SignalImportance
-SignalType (..)
 SinkCapability
 SinkMessageId
 SinkOutcome (..)
@@ -45,6 +41,7 @@ activityCoordinateText
 awaitAck
 awaitAckWithin
 awaitOne
+configuredApprovalChannel
 currentActivity
 declarationCoordinate
 declarationCoordinateText
@@ -53,8 +50,9 @@ emitDirected
 emitSignal
 emitSignals
 flowPackNameText
-inThread
 kernelCapabilityFlow
+mkApprovalChannel
+mkOutputKind
 noTriggerHooks
 outputKindText
 parseFlowPackName
@@ -64,4 +62,3 @@ recall
 remember
 send
 step
-toRecipient

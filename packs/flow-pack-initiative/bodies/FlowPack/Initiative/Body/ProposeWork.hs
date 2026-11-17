@@ -18,13 +18,14 @@ import FlowPack.Initiative.Settings
 import FlowPack.Initiative.Template (deliverAssignment, instructionsFor, objectiveRequest)
 import FlowPack.Initiative.Types hiding (NotActionable, Pending)
 import FlowPack.Initiative.Types qualified as Types
+import Kikan.Shikigami.Binding.Outputs (toRecipient)
 import Shikigami.Decision.Contract (failureCode)
 import Shikigami.Duration (Duration, durationTime, remainingDuration)
 import Shikigami.Execution.Resources (Envelope (..))
 import Shikigami.Flow.Decision (Decision, decide)
 import Shikigami.Flow.Objectives (Objectives)
 import Shikigami.Flow.Objectives qualified as Objectives
-import Shikigami.Flow.Sdk (Ack (..), Acknowledgement, Eff, SinkCapability, StepName (..), awaitAckWithin, declarationCoordinate, emitDirected, toRecipient, (:>))
+import Shikigami.Flow.Sdk (Ack (..), Acknowledgement, Eff, SinkCapability, StepName (..), awaitAckWithin, declarationCoordinate, emitDirected, (:>))
 import Shikigami.Objective.Command qualified as Command
 import Shikigami.Objective.Operation qualified as Operation
 import Shikigami.Objective.Types

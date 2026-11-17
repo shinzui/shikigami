@@ -35,6 +35,21 @@ common common
     -Wpartial-fields
     -Wredundant-constraints
 
+-- The typed configurations of the Kikan output kinds. It depends on the flow
+-- SDK only, so a pack's flow bodies can build a Kikan output.
+library outputs
+  import: common
+  visibility: public
+  hs-source-dirs: outputs
+  exposed-modules:
+    Kikan.Shikigami.Binding.Outputs
+
+  build-depends:
+    aeson,
+    base,
+    shikigami-core:flow-sdk,
+    text,
+
 -- The binding. Like any pack library it may depend on the two SDK components
 -- of shikigami-core and on no other Shikigami component, and on nothing a
 -- light package forbids (the kernel boundary check enforces both).
@@ -43,17 +58,38 @@ library
   hs-source-dirs: src
   exposed-modules:
     Kikan.Shikigami.Binding
+    Kikan.Shikigami.Binding.Approval
     Kikan.Shikigami.Binding.Authority
+    Kikan.Shikigami.Binding.Output
+    Kikan.Shikigami.Binding.Output.Config
+    Kikan.Shikigami.Binding.Output.Danwa
+    Kikan.Shikigami.Binding.Output.Http
+    Kikan.Shikigami.Binding.Output.Kanmon
+    Kikan.Shikigami.Binding.Output.Kawa
+    Kikan.Shikigami.Binding.Output.Kizashi
+    Kikan.Shikigami.Binding.Output.Recipient
+    Kikan.Shikigami.Binding.Output.Rei
+    Kikan.Shikigami.Binding.Output.Wire
+    Kikan.Shikigami.Binding.Settings
 
   build-depends:
     aeson,
     base,
+    bytestring,
     containers,
+    danwa-api,
+    danwa-client,
     en-biscuit,
     http-client-tls,
+    http-types,
+    keiro,
     kikan-en-client,
     kikan-en-contract,
+    kikan-shikigami-binding:outputs,
+    mmzk-typeid,
     servant-client,
+    settei,
+    settei-env,
     shikigami-core:flow-sdk,
     shikigami-core:pack-sdk,
     shomei-client,
@@ -61,6 +97,37 @@ library
     text,
     time,
     uuid,
+
+-- Fixtures for the binding's suites and the distribution's: the Kawa
+-- doorway stub, token-less clients, and one-output dispatch.
+library test-support
+  import: common
+  visibility: public
+  hs-source-dirs: test-support
+  exposed-modules:
+    Kikan.Shikigami.Binding.Fixture.KawaStub
+    Kikan.Shikigami.Binding.Fixture.OutboxDispatch
+    Kikan.Shikigami.Binding.Fixture.Settings
+    Kikan.Shikigami.Binding.Fixture.SinkHttp
+
+  build-depends:
+    aeson,
+    base,
+    bytestring,
+    containers,
+    http-types,
+    kikan-shikigami-binding,
+    kikan-shikigami-binding:outputs,
+    kioku-api,
+    mmzk-typeid,
+    servant-client,
+    settei,
+    settei-env,
+    shikigami-core,
+    shikigami-core:pack-sdk,
+    text,
+    time,
+    wai,
 
 test-suite kikan-shikigami-binding-test
   import: common
@@ -73,25 +140,51 @@ test-suite kikan-shikigami-binding-test
     -with-rtsopts=-N
 
   other-modules:
+    Kikan.Shikigami.Binding.ApprovalNotificationSpec
     Kikan.Shikigami.Binding.AuthoritySpec
     Kikan.Shikigami.Binding.Fixture.ExecutionIdentity
+    Kikan.Shikigami.Binding.KanmonClientSpec
+    Kikan.Shikigami.Binding.OutputDispatchSpec
+    Kikan.Shikigami.Binding.SinkHonestySpec
     Kikan.Shikigami.Binding.WorkspaceActionProofSpec
 
   build-depends:
     aeson,
     base,
     biscuit-haskell,
+    bytestring,
     containers,
+    danwa-api,
+    danwa-client,
+    directory,
     en-biscuit,
     en-core,
+    filepath,
     generic-lens,
+    hs-opentelemetry-api,
+    http-client,
+    http-types,
     keiro,
+    keiro-pgmq,
     kikan-en-client,
     kikan-en-contract,
     kikan-shikigami-binding,
+    kikan-shikigami-binding:outputs,
+    kikan-shikigami-binding:test-support,
+    kioku-api,
+    lens,
+    mmzk-typeid,
+    servant-client,
+    settei,
+    settei-env,
     shikigami-core,
+    shikigami-core:flow-sdk,
+    shikigami-core:pack-sdk,
     tasty,
     tasty-hunit,
+    temporary,
     text,
     time,
     uuid,
+    wai,
+    warp,

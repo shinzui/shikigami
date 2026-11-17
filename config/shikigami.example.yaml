@@ -47,8 +47,11 @@ approval:
   # as kizashi.signal,danwa.conversation. The legacy sink names (KawaDigest, ...)
   # still name their output kinds. Empty preserves auto-approval.
   require: ""
-  # Where approval asks are sent: danwa or kizashi.
-  channel: danwa
+  # Where approval asks are sent, by channel name: local-inbox, or one a composed
+  # pack registers. Unset takes the composition's preferred channel (danwa under
+  # the Kikan distribution), else local-inbox; a stock executable refuses danwa
+  # and kizashi, which only the Kikan binding registers.
+  # channel: danwa
   # Bounds ordinary approval waits and flow acknowledgement waits. Whole
   # seconds, 1-86400.
   deadline_seconds: 900
@@ -130,23 +133,26 @@ behavior:
 #       # ANTHROPIC_API_KEY variable, over writing it into a checked-in file.
 #       api_key: sk-ant-...
 
-sinks:
-  kawa:
-    base_url: http://localhost:8088
-    source_segment: shinzui/shikigami
-  kizashi:
-    base_url: http://localhost:8089
-    default_recipient: recipient_default
-  kanmon:
-    # Shikigami authenticates to this service; Kanmon owns provider credentials.
-    base_url: http://localhost:8090
-  danwa:
-    base_url: http://localhost:8080
-    agent_participant: part_shikigami
-  # rei:
-  #   # No default, and commented out on purpose: rei is a CLI application with
-  #   # no HTTP server, so there is nothing to point this at yet. While it is
-  #   # unset, a ReiAction sink fails into the outbox retry path — visibly, on
-  #   # every publisher pass — rather than reporting a delivery that never
-  #   # happened. Set it when rei grows an endpoint and the backlog drains.
-  #   base_url: http://localhost:8090
+# The Kikan service endpoints are the Kikan binding's settings (plan 135, M3):
+# only a kikan-shikigami-* executable accepts them, and a stock executable
+# refuses them as unknown keys. Uncomment them for the Kikan distribution.
+# sinks:
+#   kawa:
+#     base_url: http://localhost:8088
+#     source_segment: shinzui/shikigami
+#   kizashi:
+#     base_url: http://localhost:8089
+#     default_recipient: recipient_default
+#   kanmon:
+#     # Shikigami authenticates to this service; Kanmon owns provider credentials.
+#     base_url: http://localhost:8090
+#   danwa:
+#     base_url: http://localhost:8080
+#     agent_participant: part_shikigami
+#   # rei:
+#   #   # No default, and commented out on purpose: rei is a CLI application with
+#   #   # no HTTP server, so there is nothing to point this at yet. While it is
+#   #   # unset, a ReiAction sink fails into the outbox retry path — visibly, on
+#   #   # every publisher pass — rather than reporting a delivery that never
+#   #   # happened. Set it when rei grows an endpoint and the backlog drains.
+#   #   base_url: http://localhost:8090

@@ -51,7 +51,9 @@ builtinPack =
       triggers = noTriggerHooks,
       adminVerbs = [],
       gauges = [],
-      authorities = []
+      authorities = [],
+      outputs = [],
+      approvalChannels = []
     }
 
 -- | The builtin pack alone, composed. It cannot fail for a reviewed build, so

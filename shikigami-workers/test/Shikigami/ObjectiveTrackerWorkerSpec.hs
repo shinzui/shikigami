@@ -12,7 +12,7 @@ import Kiroku.Store.Connection (defaultConnectionSettings, withStore)
 import Kiroku.Store.Connection qualified as Connection
 import Shikigami.Agent.Name (mkAgentName)
 import Shikigami.App (AppEffects, AppEnv (..), noopTracer, runAppIO)
-import Shikigami.Authority (allowAllForTests)
+import Shikigami.Authority (OutputKind, allowAllForTests, mkOutputKind)
 import Shikigami.Execution.Identity (OperationId, parseOperationId)
 import Shikigami.Flow.SinkOutbox.Publisher (publishTrackerRow, reconcilePublishedRow)
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
@@ -29,7 +29,6 @@ import Shikigami.Prelude
 import Shikigami.RunEvidence.Catalog qualified as Catalog
 import Shikigami.Sink.Coordinate (parseSinkSession, zeroSinkOrdinal)
 import Shikigami.Sink.Delivery qualified as Delivery
-import Shikigami.Sink.Outputs (kawaDigestKind)
 import Shikigami.StateRevision
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit
@@ -133,3 +132,6 @@ right = either (\err -> assertFailure (show err) >> fail "unreachable") pure
 
 rightEff :: (MonadIO m, Show e) => Either e a -> m a
 rightEff = either (liftIO . fail . show) pure
+
+kawaDigestKind :: OutputKind
+kawaDigestKind = either (error . show) id (mkOutputKind "kawa.digest")

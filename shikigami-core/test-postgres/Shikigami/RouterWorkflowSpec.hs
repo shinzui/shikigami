@@ -24,7 +24,6 @@ import Kiroku.Store.Error (StoreError)
 import OpenTelemetry.Attributes (Attribute (..), PrimitiveAttribute (..), getAttributeMap)
 import OpenTelemetry.Exporter.InMemory.Span (inMemoryListExporter)
 import OpenTelemetry.Trace.Core qualified as Otel
-import Shikigami.Activity.Coordinate
 import Shikigami.Agent.Approval (autoApprovePolicy)
 import Shikigami.Agent.Approval.Workflow qualified as ApprovalWorkflow
 import Shikigami.Agent.Decl
@@ -55,19 +54,17 @@ import Shikigami.Attestation.Resolve (ProfileResolutionError (UnknownProfile))
 import Shikigami.Authority (allowAllForTests)
 import Shikigami.Behavior.Run (BehaviorEnv, newBehaviorEnv)
 import Shikigami.Capability.Provider qualified as CapabilityProvider
-import Shikigami.Directory (DirectorySnapshotVersion, DirectorySourceKind (DirectoryDisabledSource), disabledDirectoryHandle, parseDirectorySnapshotVersion)
+import Shikigami.Directory (DirectorySourceKind (DirectoryDisabledSource), disabledDirectoryHandle, parseDirectorySnapshotVersion)
 import Shikigami.Duration (parseDuration)
 import Shikigami.Execution.Policy.Types qualified as Harness
 import Shikigami.Fixture.ExamplePack (exampleFlowRegistry)
-import Shikigami.Fixture.SinkHttp (testSinkHttp)
+import Shikigami.Fixture.Outputs (unreachableOutputs)
 import Shikigami.Flow.Decision qualified as FlowDecision
 import Shikigami.Flow.Pack (noPackMetrics)
 import Shikigami.Flow.Routing qualified as Routing
 import Shikigami.FormatVersion (FormatVersion (V1))
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
-import Shikigami.Output (emptyOutputRegistry)
-import Shikigami.Output.Kikan (KikanServices (..), kikanOutputs)
 import Shikigami.Pack.Setting (noPackSettings)
 import Shikigami.Router.Catalog
   ( CandidateAvailability (..),
@@ -85,8 +82,6 @@ import Shikigami.Router.Decision
   )
 import Shikigami.Router.SelectionLimit (SelectionLimit, parseSelectionLimit)
 import Shikigami.Sink (GrantSource (StaticGrants), defaultGrantTable)
-import Shikigami.Sink.Config (DanwaConfig (..), KanmonConfig (..), KawaConfig (..), KizashiConfig (..), ReiConfig (..))
-import Shikigami.Trigger.Schedule (parseCron)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertEqual, assertFailure, testCase)
 
@@ -358,7 +353,7 @@ routerDeps appEnv behaviorEnv routing agents =
       AgentWorkflow.agents,
       AgentWorkflow.hooks = AgentWorkflow.defaultAgentRunHooks,
       AgentWorkflow.codingAgents = AgentWorkflow.noCodingAgents,
-      AgentWorkflow.outputs = kikanOutputs (KikanServices {http = testSinkHttp, kizashi = KizashiConfig {baseUrl = "http://localhost:1", defaultRecipient = (declarationCoordinate "recipient")}, kawa = KawaConfig {baseUrl = "http://localhost:1", sourceSegment = (activityCoordinate "shinzui/shikigami")}, kanmon = KanmonConfig {baseUrl = "http://localhost:1"}, danwa = DanwaConfig {baseUrl = "http://localhost:1", agentParticipant = (declarationCoordinate "part_agent_test")}, rei = ReiConfig {baseUrl = Nothing}}),
+      AgentWorkflow.outputs = unreachableOutputs,
       AgentWorkflow.declaredTools = AgentWorkflow.noDeclaredTools,
       AgentWorkflow.approvalPolicy = autoApprovePolicy (((either (error . show) id . parseDuration) (secondsToNominalDiffTime 900))),
       AgentWorkflow.approvalWorkflow = ApprovalWorkflow.defaultApprovalWorkflowEnv,

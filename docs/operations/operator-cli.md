@@ -25,8 +25,9 @@ from a config file, `--set database.connection_string=…`, or the
 Two halves, and it matters which is which when something behaves unexpectedly.
 
 **Shikigami's own**: `agents`, `runs`, `resources`, `executions`, `workers`, and `validate`,
-`render-lifecycle`, `enqueue-run`, `resolve-approval`, `publish-fixture`, `stub-kawa`, `stub-kanmon`,
-and `grants`. These are defined in this repository.
+`render-lifecycle`, `enqueue-run`, `resolve-approval`, `publish-fixture`, and `grants`. These
+are defined in this repository. The Kikan distribution's `kikan-shikigami` adds `stub-kawa` and
+`stub-kanmon`.
 
 **Keiro's**: `wf`, `timer`, `outbox`, `inbox`, `pgmq`, `projection`, `shard`,
 `snapshot`, and `stream`. These come from the `keiro-ops` package, whose command
@@ -99,7 +100,7 @@ Kioku rows. An alias already owned by another principal is a conflict.
 
 ```bash
 SHIKIGAMI_KANMON_TOKEN=test-token \
-  cabal run shikigami -- stub-kanmon --port 8090 --allow-conversation conv_55012
+  cabal run kikan-shikigami:exe:kikan-shikigami -- stub-kanmon --port 8090 --allow-conversation conv_55012
 ```
 
 `--allow-conversation` is repeatable and defaults to `conv_55012` when omitted. The stub

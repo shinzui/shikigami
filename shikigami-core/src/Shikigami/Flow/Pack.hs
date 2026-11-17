@@ -103,10 +103,13 @@ import Kioku.Id (SessionId)
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Error (StoreError)
 import Shikigami.Activity (ActivityEnvelope)
+import Shikigami.Agent.Approval (ApprovalChannel, approvalChannelText)
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (..))
 import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Principal (AgentIdentity, ResolvedAgentIdentity)
 import Shikigami.App (AppEffects, AppEnv)
+import Shikigami.Approval.Channel (ApprovalChannelRegistration (..))
+import Shikigami.Authority (OutputKind, outputKindText)
 import Shikigami.Authority.Adapter (AuthorityAdapter (..))
 import Shikigami.Behavior.Compatibility (renderResponseCompatibilityError, validateResponseRequest)
 import Shikigami.Behavior.Run (BehaviorEnv (..), completeBehaviorRequest)
@@ -119,6 +122,7 @@ import Shikigami.Flow.Decision (DecisionServices (..), decisionProviders)
 import Shikigami.Log qualified as Log
 import Shikigami.Objective.Types (ObjectiveSettings)
 import Shikigami.Output (OutputRegistry)
+import Shikigami.Output.Registration (OutputRegistration (..))
 import Shikigami.Pack.Admin (AdminContext (..), AdminVerb (..))
 import Shikigami.Pack.Setting (PackSetting (..), PackSettings, SettingDefault (..), SettingShape (..), packSettingText, packSettingValue)
 import Shikigami.Program.Decision (ProgramRegistry, ResultCodecRegistry, SomeProgram, SomeResultCodec)
@@ -172,7 +176,11 @@ data FlowPack = FlowPack
     gauges :: ![PackGauge],
     -- | Authorities the pack registers, each under the
     -- @authorization.actions.mode@ value that selects it (plan 135).
-    authorities :: ![AuthorityAdapter]
+    authorities :: ![AuthorityAdapter],
+    -- | Output kinds the pack delivers (plan 135, M3).
+    outputs :: ![OutputRegistration],
+    -- | Approval channels the pack posts asks through (plan 135, M3).
+    approvalChannels :: ![ApprovalChannelRegistration]
   }
 
 -- | One level a pack wants sampled: how stale its last result is, how deep
@@ -306,6 +314,8 @@ data FlowRegistryError
   | DuplicateTaskName !Text !FlowPackName !FlowPackName
   | DuplicateSettingKey !Text !FlowPackName !FlowPackName
   | DuplicateAuthorityMode !Text !FlowPackName !FlowPackName
+  | DuplicateOutputKind !OutputKind !FlowPackName !FlowPackName
+  | DuplicateApprovalChannel !ApprovalChannel !FlowPackName !FlowPackName
   | DecisionProgramsRejected !DecisionFailure
   | ResultCodecsRejected !DecisionFailure
   deriving stock (Eq, Show)
@@ -321,6 +331,10 @@ renderFlowRegistryError = \case
     "setting " <> key <> " is declared by both pack " <> flowPackNameText first <> " and pack " <> flowPackNameText second
   DuplicateAuthorityMode mode first second ->
     "authority " <> mode <> " is registered by both pack " <> flowPackNameText first <> " and pack " <> flowPackNameText second
+  DuplicateOutputKind kind first second ->
+    "output kind " <> outputKindText kind <> " is registered by both pack " <> flowPackNameText first <> " and pack " <> flowPackNameText second
+  DuplicateApprovalChannel channel first second ->
+    "approval channel " <> approvalChannelText channel <> " is registered by both pack " <> flowPackNameText first <> " and pack " <> flowPackNameText second
   DecisionProgramsRejected failure -> "the composed decision programs were refused: " <> Text.pack (show failure)
   ResultCodecsRejected failure -> "the composed result codecs were refused: " <> Text.pack (show failure)
 
@@ -328,7 +342,7 @@ renderFlowRegistryError = \case
 -- first, so one failed start names everything an operator must fix.
 composeFlowRegistry :: [FlowPack] -> Either (NonEmpty FlowRegistryError) FlowRegistry
 composeFlowRegistry composed =
-  case NonEmpty.nonEmpty (packErrors <> flowErrors <> taskErrors <> settingErrors <> authorityErrors <> programErrors <> codecErrors) of
+  case NonEmpty.nonEmpty (packErrors <> flowErrors <> taskErrors <> settingErrors <> authorityErrors <> outputErrors <> channelErrors <> programErrors <> codecErrors) of
     Just errors -> Left errors
     Nothing -> case (programsResult, codecsResult) of
       (Right programs, Right codecs) -> Right FlowRegistry {packs = packNames, entries, taskEntries, hooks = [(pack.name, pack.triggers) | pack <- composed], gaugeEntries = [(pack.name, gauge) | pack <- composed, gauge <- pack.gauges], programs, codecs}
@@ -343,6 +357,8 @@ composeFlowRegistry composed =
     taskErrors = [DuplicateTaskName name first second | (name, first, second) <- repeated [(taskName task, pack) | (pack, task) <- taskEntries]]
     settingErrors = [DuplicateSettingKey key first second | (key, first, second) <- repeated [(setting.key, pack.name) | pack <- composed, setting <- pack.settings]]
     authorityErrors = [DuplicateAuthorityMode mode first second | (mode, first, second) <- repeated [(adapter.mode, pack.name) | pack <- composed, adapter <- pack.authorities]]
+    outputErrors = [DuplicateOutputKind kind first second | (kind, first, second) <- repeated [(registration.kind, pack.name) | pack <- composed, registration <- pack.outputs]]
+    channelErrors = [DuplicateApprovalChannel channel first second | (channel, first, second) <- repeated [(registration.channel, pack.name) | pack <- composed, registration <- pack.approvalChannels]]
     programsResult = Decision.programRegistry (concatMap (.decisionPrograms) composed)
     codecsResult = Decision.resultCodecRegistry (concatMap (.retainedCodecs) composed)
     programErrors = either (pure . DecisionProgramsRejected) (const []) programsResult

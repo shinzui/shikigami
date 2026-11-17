@@ -28,7 +28,6 @@ module Shikigami.Workers.Config
     envDirectory,
     envDirectoryRefresher,
     agentRunDeps,
-    workerOutputs,
     conversationEnv,
     persistAgentLoadReport,
     schedulerSchedules,
@@ -75,14 +74,12 @@ import Shikigami.Log qualified as Log
 import Shikigami.Objective.Runtime qualified as Objectives
 import Shikigami.Objective.Tracker.Store qualified as Tracker
 import Shikigami.Objective.Types (ObjectiveSettings)
-import Shikigami.Output (DefaultOutput (..), OutputRegistry, mkOutputRegistry)
-import Shikigami.Output.Kikan (KikanServices, defaultKawaDigest, kikanOutputAdapters)
+import Shikigami.Output (OutputRegistry)
 import Shikigami.Pack.Setting (PackSettings)
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.Repository (RepositoryId)
 import Shikigami.RuntimePolicy
 import Shikigami.Sink (GrantSource)
-import Shikigami.Sink.Config (DanwaConfig)
 import Shikigami.Sink.GrantStore (withAuthority)
 import Shikigami.Telemetry.Metrics (ShikigamiMetrics)
 import Shikigami.Trigger.Schedule (CatchUpPolicy, CronSchedule, cronExpressionText, parseCron)
@@ -146,8 +143,6 @@ data WorkerEnv = WorkerEnv
     -- by 'schedulerSchedules' so that an unparseable cron is reported there
     -- rather than dropped silently on every timer pass.
     schedules :: !(Map AgentName CronSchedule),
-    -- | The conversation loop's Danwa endpoint. The outputs carry their own.
-    danwa :: !DanwaConfig,
     -- | Shikigami-owned process metrics. The provider may be real or no-op;
     -- recording sites never branch on telemetry configuration.
     metrics :: !ShikigamiMetrics,
@@ -172,8 +167,8 @@ data WorkerEnv = WorkerEnv
     trackers :: !(Maybe Tracker.TrackerHost),
     -- | The validated settings of the composed flow packs.
     packSettings :: !PackSettings,
-    -- | Output adapters and the default for a declaration that lists none
-    -- ('workerOutputs').
+    -- | Output adapters the composed packs register, and the default for a
+    -- declaration that lists none.
     outputs :: !OutputRegistry
   }
 
@@ -232,15 +227,6 @@ envApprovalNotifier WorkerEnv {approvalNotifier = notifier} = notifier
 envConversationIdleTimeout :: WorkerEnv -> Duration "conversation-idle"
 envConversationIdleTimeout WorkerEnv {conversationIdleTimeout = timeout} = timeout
 
--- | The worker's outputs: the five Kikan adapters (plan 135, M3), and as the
--- default either none, so the result of a declaration with no outputs stays
--- in the journal as before, or @kawa.digest@ when @outputs.default@ names it.
-workerOutputs :: KikanServices -> Maybe Text -> Either Text OutputRegistry
-workerOutputs services defaultKind =
-  mkOutputRegistry (kikanOutputAdapters services) case defaultKind of
-    Just "kawa.digest" -> DefaultOutput defaultKawaDigest
-    _ -> NoDefaultOutput
-
 -- | The agent-run workflow's dependencies.
 agentRunDeps :: WorkerEnv -> AgentWorkflow.AgentRunDeps
 agentRunDeps env =
@@ -293,7 +279,6 @@ conversationEnv env =
       Conversation.runTimeout = envRunTimeout env,
       Conversation.harness = (.harness) env,
       Conversation.idleTimeout = envConversationIdleTimeout env,
-      Conversation.danwa = (.danwa) env,
       Conversation.agents = (.agents) env,
       Conversation.grants = envGrants env,
       Conversation.outputs = env.outputs,

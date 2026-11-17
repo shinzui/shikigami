@@ -68,20 +68,17 @@ module Shikigami.Flow.Sdk
     OutputKind,
     outputKindText,
     AddressedOutput (..),
-    toRecipient,
-    inThread,
-    DanwaTarget (..),
+    mkOutputKind,
     SinkResult (..),
     SinkOutcome (..),
     SinkMessageId,
     parseSinkSession,
-    Priority (..),
-    SignalType (..),
-    RecipientFrom (..),
     SignalImportance,
     parseSignalImportance,
     ApprovalRequest (..),
-    ApprovalChannel (..),
+    ApprovalChannel,
+    configuredApprovalChannel,
+    mkApprovalChannel,
     ActivityEnvelope (..),
     Subject (..),
     ActivityCoordinate,
@@ -95,10 +92,9 @@ import Effectful.Dispatch.Dynamic (send)
 import Keiro.Workflow (StepName (..), Workflow, step)
 import Shikigami.Activity (ActivityEnvelope (..), Subject (..))
 import Shikigami.Activity.Coordinate (ActivityCoordinate, activityCoordinate, activityCoordinateText)
-import Shikigami.Agent.Approval (ApprovalChannel (..), ApprovalRequest (..))
-import Shikigami.Agent.Decl (Priority (..), RecipientFrom (..), SignalType (..))
+import Shikigami.Agent.Approval (ApprovalChannel, ApprovalRequest (..), configuredApprovalChannel, mkApprovalChannel)
 import Shikigami.Agent.DeclarationValue (DeclarationCoordinate, SignalImportance, declarationCoordinate, declarationCoordinateText, parseSignalImportance)
-import Shikigami.Authority (OutputKind, outputKindText)
+import Shikigami.Authority (OutputKind, mkOutputKind, outputKindText)
 import Shikigami.Flow (DecisionMode (..), FlowDef (..), FlowEffects, LifecycleDiagram (..))
 import Shikigami.Flow.Acknowledgement (Ack (..), Acknowledgement, awaitAck, awaitAckWithin)
 import Shikigami.Flow.Capability (Activity, Memory, MemoryQuery (..), currentActivity, emitDirected, emitSignal, emitSignals, recall, remember)
@@ -111,7 +107,6 @@ import Shikigami.RuntimePolicy (DefaultModelRequirement (..))
 import Shikigami.Sink.Coordinate (parseSinkSession)
 import Shikigami.Sink.Delivery (SinkMessageId)
 import Shikigami.Sink.Intent (AddressedOutput (..))
-import Shikigami.Sink.Outputs (DanwaTarget (..), inThread, toRecipient)
 import Shikigami.Sink.Types (SinkOutcome (..), SinkResult (..))
 
 -- | The capability that emits an output. Inside the kernel it is the
