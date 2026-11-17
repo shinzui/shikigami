@@ -315,6 +315,35 @@ These came from read-only research on 2026-11-15, before implementation.
   old codec (no codec changed); no external wire consumer; `git tag --list` prints nothing.
   The MasterPlan records no EP-11 baseline gate, so the exception stands.
   Date: 2026-11-17
+- Decision: (M3, user decision 2026-11-17) `sinks` and the closed `Sink` union leave the
+  agent declaration before EP-11's first freeze; the five Kikan kinds become output kinds
+  declared in `outputs` and built with typed Dhall helpers in the binding. The user chose
+  this over keeping `Sink` as kernel declaration data with only the clients moved, which
+  would have frozen Kikan constructors into `schema/Agent.dhall`. No declaration outside
+  this repository uses `sinks` (fsrs-hs and keiro checked); 13 here do.
+  Date: 2026-11-17
+- Decision: (M3 design) The kernel keeps one delivery mechanism, the sink intent, outbox
+  and `shikigami.sink_deliveries` receipts, and addresses it by `OutputDecl` instead of
+  `Sink`. An adapter says how it is delivered: `local.report` stays inline in the run (the
+  light command has no outbox publisher); a Kikan kind is delivered by the outbox publisher,
+  which keeps the lifecycle check, the C11 grant check (keyed by output kind), fresh C13
+  authorization of the adapter-named `EmitOutput` target, and the receipt guard. What the
+  sink intent carries for one service today (`danwaTarget`, the resolved Kizashi
+  recipient, the channel conversation key) becomes adapter-owned JSON computed at enqueue
+  from the trigger activity and the output, so the kernel no longer names a service.
+  Staged so every step builds and passes: (a) the kernel pipeline addresses outputs and
+  dispatches through adapters while the adapters are still in core; (b) the adapters move to
+  the binding; (c) `sinks` leaves the schema and the declarations move to `outputs`;
+  (d) the approval-channel port and the Danwa and Kizashi channels; (e) the stubs become
+  distribution admin verbs. Two consequences found while designing: the flow SDK's emit
+  operations (`emitSignal`, `emitSignalTo`, `emitSignals` in `Shikigami.Flow.Capability`,
+  used by the watchdog pack's `Delivery`) take an `OutputDecl` instead of a `Sink`; and
+  `shikigami.sink_grants` pins the five legacy kind names in a CHECK constraint
+  (migration `0003-sink-grants.sql`), so grants keyed by output kind need a new migration
+  that relaxes the check and renames the stored values (`KawaDigest` to `kawa.digest` and
+  so on). The `dispatch-sinks` journal step stores `[SinkResult]` whose `kind` changes from
+  the closed `SinkKind` to an output kind; `just keiro-gate` will report it.
+  Date: 2026-11-17
 - Decision: The development stubs (`stub-kawa`, `stub-kanmon`, `publish-fixture`) move to
   the distribution's admin executable.
   Rationale: They are fixtures for Kikan services. The stock admin command should not offer
