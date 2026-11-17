@@ -863,11 +863,19 @@ one off.
   work.
 - Signed caller identity (C11): the HTTP API, unchanged and out of scope.
 - Authorization at every tool and sink dispatch, fail closed (C13): invariant K2, with the
-  Kikan-En adapter in the binding.
+  Kikan-En adapter in the binding (EP-10 M2). Met for the actions Kikan-En names; a declared
+  tool and a coding-agent launch are refused under the distribution until Kikan-En adds
+  them (`mori://shinzui/kikan-en/improvement-requests/IR-5`). Outbox deliveries are
+  re-authorized at publish, under their run.
 - "Every action is remembered" (C3) and evidence the agent cannot rewrite: invariant K3.
-  The binding projects the action record into run evidence and Kawa digests.
-- Activity envelopes, signals, commitments and conversations (C1, C4, C5): output and
-  intake adapters in the binding.
+  The action record holds every decision and effect of a run, an outbox delivery included
+  since EP-10 M6, and `record check` asserts K1 to K8. Projecting the record into
+  attestation evidence and a per-run Kawa summary is open (EP-10 M6, user decision).
+- Activity envelopes, signals, commitments and conversations (C1, C4, C5): the binding's
+  output adapters, its Kawa stream and event intake (`kikan-shikigami-consume-stream`,
+  `kikan-shikigami-consume-events`) and its Danwa conversation channel on the kernel's
+  conversation loop. Met against stubs and a real broker; no Kizashi, Danwa or Kanmon
+  instance runs locally (EP-10 M3, M5).
 - One exact behavior artifact per run, and governed evolution: invariant K4. Playbook
   proposals (EP-4) are the only evolution path in scope.
 - Budgets, cost and usage: invariant K5.
@@ -901,8 +909,11 @@ earlier list.
   `Initiative`, `Watchdog`, and the example flows in
   `shikigami-core/src/Shikigami/Flow/`.
 - **Kikan binding:** the service clients under `Shikigami.Sink`, the Kikan-En authorizer,
-  the Meibo directory source, `DanwaConversation`, `Objective.Tracker`'s Rei adapter and
-  the stream and event consumers.
+  the Meibo directory source, the Danwa conversation channel (the conversation loop itself
+  is a kernel primitive, by the user's decision of 2026-11-17), `Objective.Tracker`'s Rei
+  adapter and the stream and event consumers. All but the Meibo source, which does not
+  exist yet, live in `packs/kikan-shikigami-binding` since EP-10 M2 to M5
+  ([ADR-131](../adr/0131-one-kernel-is-composed-two-ways-and-kikan-services-are-bindings.md)).
 - **Playbook:** none of today's subsystems. Each holds state or interpreter logic that a
   playbook cannot express, so EP-6 does not depend on EP-4.
 - **Retire:** the `Deterministic` behavior arm, together with its only declaration,

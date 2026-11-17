@@ -1187,11 +1187,14 @@ runs in the distribution; "partial" names what is missing; "deferred" names the 
 - Authorization at every tool and sink dispatch, fail closed (C13): invariant K2 with
   `kikanAuthority`. Met for the actions Kikan-En names; partial for `RunDeclaredTool` and
   `LaunchCodingAgent`, refused until Kikan-En adds them (improvement request filed in M2).
-- "Every action is remembered" (C3) and evidence the agent cannot rewrite: invariant K3
-  with the M6 projection. Met in the store; the Kawa digest is met only where Kawa runs.
-- Activity envelopes, signals, commitments and conversations (C1, C4, C5): the output and
-  intake adapters. Met against a real service where one runs locally, otherwise against a
-  stub, as Validation and Acceptance records per service.
+- "Every action is remembered" (C3) and evidence the agent cannot rewrite: invariant K3.
+  Met in the store: since M6 an outbox delivery is recorded against its run, with its
+  publish-time decision. The projection into attestation evidence and a per-run Kawa
+  summary is open (see M6).
+- Activity envelopes, signals, commitments and conversations (C1, C4, C5): the output
+  adapters, the Kawa stream and event intake and the Danwa conversation channel. Met against
+  the real Redpanda broker and the distribution's stubs (M3, M5); Kizashi and Danwa against
+  their client tests only, since no sibling stack runs here.
 - One exact behavior artifact per run and governed evolution: invariant K4. Met for
   pinning; evolution beyond playbook proposals is deferred to Shikigami's IR-5.
 - Budgets, cost and usage: invariant K5. Partial: cost capture for ordinary runs is

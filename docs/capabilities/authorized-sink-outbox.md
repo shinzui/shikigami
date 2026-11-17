@@ -34,7 +34,7 @@ Consumers declare Kawa digests, Kizashi signals, Rei actions, Danwa conversation
 
 ## Adopt
 
-Configure endpoints, credentials, recipient defaults, sink-kind grants, and exact-action authority as described in [Sinks](../user/sinks.md). Run the outbox publisher through the worker.
+Configure endpoints, credentials, recipient defaults, sink-kind grants, and exact-action authority as described in [Sinks](../user/sinks.md). The Kikan output kinds are registered by the Kikan binding, so run the outbox publisher through `kikan-shikigami-worker`. Each intent carries the run that enqueued it: the publish-time authority decision and an `output.delivered` entry (step `outbox-publish`) land in that run's action record, so `record check` pairs the delivery with its decision.
 
 Builds on [CAP-7: Exact external-action authorization](exact-action-authorization.md).
 

@@ -140,12 +140,18 @@ outputs delivered through the kernel's publisher, and the stubs.
 `packs/kikan-shikigami-binding` is the *Kikan binding*: the one pack that knows Kikan's
 services. It is held to the same rule as any pack library (the two SDK components, nothing a
 light package forbids), and [plan 135](../plans/135-move-the-kikan-service-bindings-out-of-shikigami-core-and-compose-a-kikan-distribution.md)
-moves the Kikan-En authority, the Kikan outputs and approval channels, the Rei tracker
-provider, the Danwa conversation loop and the Kawa intake into it from `shikigami-core`.
-The authority (M2), the outputs, their clients, settings and approval channels (M3), and
-the Rei objective tracker provider (M4, with its real-Rei qualification suite) have moved. The binding also publishes `kikan-shikigami-binding:outputs`, the typed output
-configurations and directing helpers (`toRecipient`, `inThread`) a pack's bodies may import,
-and `kikan-shikigami-binding:test-support`, its fixtures.
+moved the Kikan-En authority (M2), the Kikan outputs, their clients, settings and approval
+channels (M3), the Rei objective tracker provider (M4, with its real-Rei qualification
+suite), and the Danwa conversation channel and the Kawa intake (M5) into it from
+`shikigami-core`. The conversation workflow itself stays a kernel primitive; the binding's
+`Kikan.Shikigami.Binding.Conversation` is its Danwa channel. The binding also publishes
+`kikan-shikigami-binding:outputs`, the typed output configurations and directing helpers
+(`toRecipient`, `inThread`) a pack's bodies may import, `kikan-shikigami-binding:intake`, the
+Kafka transport and the two consumer roles (the only library here that links a Kafka client,
+and the only one that may depend on `shikigami-workers`), and
+`kikan-shikigami-binding:test-support`, its fixtures. The boundary check refuses any stock
+stanza that depends on a Kikan client or stream library and any stock source that imports a
+Kikan module ([ADR-131](../adr/0131-one-kernel-is-composed-two-ways-and-kikan-services-are-bindings.md)).
 `kikan-shikigami flows` lists it under `packs:` with what it contributes; the stock
 `shikigami flows` does not list it.
 
