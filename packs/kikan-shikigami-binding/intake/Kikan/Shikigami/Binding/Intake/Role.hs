@@ -1,22 +1,48 @@
-module Shikigami.Workers.Subscription
-  ( runConsumeStream,
-    runConsumeStreamWith,
+-- | The Kikan distribution's two consumer roles (plan 135, M5):
+-- @kikan-shikigami-consume-stream@ matches declared stream agents against the
+-- Kawa activity stream, and @kikan-shikigami-consume-events@ matches declared
+-- event agents against a public integration-event topic, such as Danwa's
+-- addressed messages. Both enqueue run jobs that any worker drains.
+--
+-- The stock role set has no consumer: a stock composition still runs a
+-- stream or event agent addressed by @enqueue-run@, but nothing there reads a
+-- broker.
+module Kikan.Shikigami.Binding.Intake.Role
+  ( consumeStreamRoleInfo,
+    consumeEventsRoleInfo,
+    runConsumeStream,
     runConsumeEvents,
   )
 where
 
 import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
+import Data.Maybe (catMaybes)
+import Kikan.Shikigami.Binding.Intake (OnSupervisor, StreamConfig (..), subscribeActivityStream, subscribeIntegrationEventStream)
 import Kiroku.Store.Connection (KirokuStore (..))
+import Options.Applicative
+import Settei.Optparse (cliOverride, cliSources, namedOption)
+import Settei.Source (Source)
 import Shikigami.Agent.Loader (enabledAgentsFromReport, loadAgentsLoud)
 import Shikigami.Agent.Name (agentNameText)
 import Shikigami.App (AppEnv (..))
-import Shikigami.App.Config (AppConfig, Role (EventConsumerRole, StreamConsumerRole))
+import Shikigami.App.Config
+  ( AppConfig,
+    Role (EventConsumerRole, StreamConsumerRole),
+    agentsDirectoryKey,
+    kafkaActivityTopicKey,
+    kafkaBrokerKey,
+    kafkaEventsGroupKey,
+    kafkaEventsTopicKey,
+    kafkaIncludeAgentActorsKey,
+    kafkaStreamGroupKey,
+  )
 import Shikigami.App.Config qualified as Config
-import Shikigami.App.Config.Load (requireDatabaseUrl)
+import Shikigami.App.Config.Load (requireDatabaseUrl, withConfigOptions)
+import Shikigami.App.Role (RoleInfo (..))
 import Shikigami.Directory (DirectoryRuntime (..))
 import Shikigami.Flow.Builtin (builtinPack)
-import Shikigami.Flow.Pack (FlowPack, composeFlowRegistryOrExit, streamIntakeOf)
+import Shikigami.Flow.Pack (FlowPack (..), composeFlowRegistryOrExit, streamIntakeOf)
 import Shikigami.Health.Supervision (superviseLoops)
 import Shikigami.Health.Worker
   ( Heartbeats,
@@ -36,10 +62,44 @@ import Shikigami.Log qualified as Log
 import Shikigami.Migrations (verifyShikigamiMigrations)
 import Shikigami.Runtime (registerRuntimeCatalog, runtimeConnectionSettings)
 import Shikigami.Telemetry (withRunTelemetry)
-import Shikigami.Trigger.Consumer (EventHit (..), OnSupervisor, StreamConfig (..), StreamHit (..), ensureDeadLetterQueue, subscribeActivityStream, subscribeIntegrationEventStream)
 import Shikigami.Trigger.Enqueue (ensureRunQueue)
-import Shikigami.Trigger.Stream (IncludeAgentActors (ExcludeAgentActors, IncludeAgentActors))
+import Shikigami.Trigger.Intake (EventHit (..), StreamHit (..), ensureDeadLetterQueue)
 import Shikigami.Workers.Config (directoryLoopRegistration, persistAgentLoadReport, startProcessDirectory)
+
+-- ── The roles ───────────────────────────────────────────────────────────────
+
+-- | @kikan-shikigami-consume-stream@, composed with the distribution's packs
+-- so a pack's stream hook has its say over the records that match its flows.
+consumeStreamRoleInfo :: [FlowPack] -> RoleInfo
+consumeStreamRoleInfo packs =
+  RoleInfo
+    { binaryName = "kikan-shikigami-consume-stream",
+      role = StreamConsumerRole,
+      packSettings = concatMap (.settings) packs,
+      parserInfo =
+        withConfigOptions
+          "kikan-shikigami-consume-stream"
+          "Consume the activity.v1 stream, match declared stream agents, enqueue run jobs"
+          (pure (runConsumeStream packs))
+          streamConsumerSources
+    }
+
+-- | @kikan-shikigami-consume-events@. Event agents have no pack hook, so the
+-- packs contribute only their settings, which the shared configuration file
+-- may carry.
+consumeEventsRoleInfo :: [FlowPack] -> RoleInfo
+consumeEventsRoleInfo packs =
+  RoleInfo
+    { binaryName = "kikan-shikigami-consume-events",
+      role = EventConsumerRole,
+      packSettings = concatMap (.settings) packs,
+      parserInfo =
+        withConfigOptions
+          "kikan-shikigami-consume-events"
+          "Consume public integration events, match Event triggers, and enqueue run jobs"
+          (pure runConsumeEvents)
+          (sourcesOf [agentsOption, brokerOption, eventsTopicOption, eventsGroupOption])
+    }
 
 -- | Run the @activity.v1@ stream consumer; for each declared stream agent that
 -- matches an incoming envelope, log the match and enqueue a run job (the
@@ -49,21 +109,18 @@ import Shikigami.Workers.Config (directoryLoopRegistration, persistAgentLoadRepo
 -- come from the resolved configuration under @kafka.*@ and @agents.directory@;
 -- the @--broker@, @--topic@, @--group@, @--agents@ and
 -- @--include-agent-actors@ flags are command-line sources for those keys.
-runConsumeStream :: AppConfig -> IO ()
-runConsumeStream = runConsumeStreamWith []
-
--- | The stream consumer composed with flow packs beside the builtin pack. A
--- pack's stream hook has a say over the records that match its flows' agents
--- (docs/adr/0129).
-runConsumeStreamWith :: [FlowPack] -> AppConfig -> IO ()
-runConsumeStreamWith packs config = do
+--
+-- The packs are composed beside the builtin pack. A pack's stream hook has a
+-- say over the records that match its flows' agents (docs/adr/0129).
+runConsumeStream :: [FlowPack] -> AppConfig -> IO ()
+runConsumeStream packs config = do
   logger <- Log.newStderrLogger Log.Info
   let include = (.kafkaIncludeAgentActors) config
       broker = (.kafkaBroker) config
       topic = (.kafkaActivityTopic) config
-  connStr <- Config.revealSecretText <$> requireDatabaseUrl "shikigami-consume-stream" config
+  connStr <- Config.revealSecretText <$> requireDatabaseUrl "kikan-shikigami-consume-stream" config
   verifyShikigamiMigrations connStr
-  withRunTelemetry "shikigami.consume-stream" \tr keiroMetrics shikigamiMetrics -> do
+  withRunTelemetry "kikan-shikigami.consume-stream" \tr keiroMetrics shikigamiMetrics -> do
     let settings = runtimeConnectionSettings logger keiroMetrics connStr
     withObservedStore tr settings $ \st storeMetrics -> do
       registerRuntimeCatalog st
@@ -105,7 +162,7 @@ runConsumeStreamWith packs config = do
           ((ConsumerLoop, loopStaleAfter ConsumerLoop) : directoryLoopRegistration ((.directorySettings) config))
       DirectoryRuntime {handle = directory, refresher = directoryRefresher} <-
         startProcessDirectory logger registry ((.directorySettings) config)
-      flows <- composeFlowRegistryOrExit logger "shikigami-consume-stream" (builtinPack : packs)
+      flows <- composeFlowRegistryOrExit logger "kikan-shikigami-consume-stream" (builtinPack : packs)
       let intake = streamIntakeOf flows config.packSettings
           consumerLoop = subscribeActivityStream logger (consumerSupervisor registry) shikigamiMetrics appEnv directory intake cfg include agents onHit
           directoryLoops = maybe [] (pure . (DirectoryLoop,)) directoryRefresher
@@ -128,9 +185,9 @@ runConsumeEvents config = do
   logger <- Log.newStderrLogger Log.Info
   let broker = (.kafkaBroker) config
       topic = (.kafkaEventsTopic) config
-  connStr <- Config.revealSecretText <$> requireDatabaseUrl "shikigami-consume-events" config
+  connStr <- Config.revealSecretText <$> requireDatabaseUrl "kikan-shikigami-consume-events" config
   verifyShikigamiMigrations connStr
-  withRunTelemetry "shikigami.consume-events" \tr keiroMetrics shikigamiMetrics -> do
+  withRunTelemetry "kikan-shikigami.consume-events" \tr keiroMetrics shikigamiMetrics -> do
     let settings = runtimeConnectionSettings logger keiroMetrics connStr
     withObservedStore tr settings $ \st storeMetrics -> do
       registerRuntimeCatalog st
@@ -207,3 +264,75 @@ consumerSupervisor registry = \case
     clearReport registry ConsumerLoop
   Just (master, processorId) ->
     registerReport registry ConsumerLoop (supervisedLoopVerdict ConsumerLoop master processorId)
+
+-- ── Command-line configuration sources ──────────────────────────────────────
+
+-- | Collect the flags that were actually given. An absent flag contributes no
+-- source, which leaves a configuration file, the environment, or the declared
+-- default in place.
+sourcesOf :: [Parser (Maybe Source)] -> Parser [Source]
+sourcesOf parsers = catMaybes <$> sequenceA parsers
+
+-- | The stream consumer's flags.
+streamConsumerSources :: Parser [Source]
+streamConsumerSources =
+  (<>)
+    <$> sourcesOf [agentsOption, brokerOption, activityTopicOption, streamGroupOption]
+    <*> includeAgentActorsSwitch
+
+-- | @--include-agent-actors@ takes no value, so it cannot be a 'namedOption'.
+-- Passing it contributes the same source a @--set@ override would, carrying the
+-- literal @true@; not passing it contributes nothing, which leaves the
+-- feedback-guard default in place.
+includeAgentActorsSwitch :: Parser [Source]
+includeAgentActorsSwitch =
+  toSources
+    <$> switch
+      ( long "include-agent-actors"
+          <> help "Match agent-produced activities too (meta-detectors; sets kafka.include_agent_actors)"
+      )
+  where
+    toSources False = []
+    toSources True = cliSources "--include-agent-actors" [cliOverride kafkaIncludeAgentActorsKey "true"]
+
+agentsOption :: Parser (Maybe Source)
+agentsOption =
+  namedOption
+    "--agents"
+    agentsDirectoryKey
+    (long "agents" <> metavar "DIR" <> help "Agents manifest directory (sets agents.directory)")
+
+brokerOption :: Parser (Maybe Source)
+brokerOption =
+  namedOption
+    "--broker"
+    kafkaBrokerKey
+    (long "broker" <> metavar "HOST:PORT" <> help "Kafka broker (sets kafka.broker)")
+
+activityTopicOption :: Parser (Maybe Source)
+activityTopicOption =
+  namedOption
+    "--topic"
+    kafkaActivityTopicKey
+    (long "topic" <> metavar "TOPIC" <> help "Activity topic (sets kafka.activity.topic)")
+
+eventsTopicOption :: Parser (Maybe Source)
+eventsTopicOption =
+  namedOption
+    "--topic"
+    kafkaEventsTopicKey
+    (long "topic" <> metavar "TOPIC" <> help "Integration-event topic (sets kafka.events.topic)")
+
+streamGroupOption :: Parser (Maybe Source)
+streamGroupOption =
+  namedOption
+    "--group"
+    kafkaStreamGroupKey
+    (long "group" <> metavar "GROUP" <> help "Consumer group id (sets kafka.groups.stream)")
+
+eventsGroupOption :: Parser (Maybe Source)
+eventsGroupOption =
+  namedOption
+    "--group"
+    kafkaEventsGroupKey
+    (long "group" <> metavar "GROUP" <> help "Consumer group id (sets kafka.groups.events)")

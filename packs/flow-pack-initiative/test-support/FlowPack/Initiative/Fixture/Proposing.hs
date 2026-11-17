@@ -134,9 +134,9 @@ import Shikigami.Repository (RepositoryId, repositoryId, repositoryIdText)
 import Shikigami.RunEvidence.Catalog qualified as Catalog
 import Shikigami.RunJobs qualified as RunJobs
 import Shikigami.Sink (GrantSource (StaticGrants), defaultGrantTable)
-import Shikigami.Trigger.Consumer (RecordDisposition, processDecodedActivityObserving)
 import Shikigami.Trigger.Enqueue (ensureRunQueue, runQueueName)
 import Shikigami.Trigger.Hook (StreamHook (..), streamIntake)
+import Shikigami.Trigger.Intake (RecordDisposition, processDecodedActivityObserving)
 import Shikigami.Trigger.Stream (IncludeAgentActors (ExcludeAgentActors, IncludeAgentActors))
 import System.Directory (doesFileExist)
 import System.FilePath ((</>))

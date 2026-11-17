@@ -50,7 +50,7 @@ library
     Shikigami.Objective.Tracker.Worker
     Shikigami.Telemetry
     Shikigami.Telemetry.Sampler
-    Shikigami.Trigger.Consumer
+    Shikigami.Trigger.Intake
     Shikigami.Trigger.Scheduler
     Shikigami.Trigger.Timer
     Shikigami.Workers.Command
@@ -59,7 +59,6 @@ library
     Shikigami.Workers.Config
     Shikigami.Workers.Registry
     Shikigami.Workers.Shutdown
-    Shikigami.Workers.Subscription
     Shikigami.Workspace.Allocation
     Shikigami.Workspace.Cleanup
     Shikigami.Workspace.Collector
@@ -103,8 +102,6 @@ library
     hs-opentelemetry-sdk,
     http-client,
     http-client-tls,
-    hw-kafka-client,
-    kafka-effectful,
     keiro,
     keiro-ops-http,
     keiro-pgmq,
@@ -124,7 +121,6 @@ library
     settei ==0.2.0.0,
     settei-optparse-applicative ==0.2.0.0,
     shibuya-core,
-    shibuya-kafka-adapter,
     shibuya-metrics >=0.12.0.0 && <0.13,
     shikigami-core,
     shikigami-core:inspection,
@@ -175,34 +171,6 @@ executable shikigami-scheduler
   import: common
   main-is: Main.hs
   hs-source-dirs: app/scheduler
-  ghc-options:
-    -threaded
-    -rtsopts
-    -with-rtsopts=-N
-
-  build-depends:
-    base,
-    optparse-applicative,
-    shikigami-workers,
-
-executable shikigami-consume-stream
-  import: common
-  main-is: Main.hs
-  hs-source-dirs: app/consume-stream
-  ghc-options:
-    -threaded
-    -rtsopts
-    -with-rtsopts=-N
-
-  build-depends:
-    base,
-    optparse-applicative,
-    shikigami-workers,
-
-executable shikigami-consume-events
-  import: common
-  main-is: Main.hs
-  hs-source-dirs: app/consume-events
   ghc-options:
     -threaded
     -rtsopts
@@ -274,7 +242,6 @@ test-suite shikigami-workers-test
     hs-opentelemetry-sdk,
     http-client,
     http-types,
-    hw-kafka-client,
     keiro,
     keiro-pgmq,
     kioku-api,

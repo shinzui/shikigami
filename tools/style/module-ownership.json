@@ -126,7 +126,6 @@
     "Shikigami.Workers.Config",
     "Shikigami.Workers.Registry",
     "Shikigami.Workers.Shutdown",
-    "Shikigami.Workers.Subscription",
     "Shikigami.Workflow.Registry",
     "Shikigami.Workflow.Versioning",
     "Shikigami.Server.Command.Mandates"

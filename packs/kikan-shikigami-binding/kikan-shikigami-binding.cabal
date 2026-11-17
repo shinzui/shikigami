@@ -108,6 +108,39 @@ library
     time,
     uuid,
 
+-- The Kafka transport of the Kawa stream and integration-event intake, and
+-- the distribution's two consumer roles (plan 135, M5). It is a separate
+-- library so that only the consumer executables link a Kafka client: the
+-- binding itself stays within the SDK and the light-package rule.
+library intake
+  import: common
+  visibility: public
+  hs-source-dirs: intake
+  exposed-modules:
+    Kikan.Shikigami.Binding.Intake
+    Kikan.Shikigami.Binding.Intake.Role
+
+  build-depends:
+    aeson,
+    base,
+    bytestring,
+    effectful,
+    hw-kafka-client,
+    kafka-effectful,
+    keiro,
+    kiroku-store,
+    optparse-applicative,
+    pgmq-hasql,
+    settei,
+    settei-optparse-applicative,
+    shibuya-core,
+    shibuya-kafka-adapter,
+    shikigami-core,
+    shikigami-core:inspection,
+    shikigami-migrations,
+    shikigami-workers,
+    text,
+
 -- Fixtures for the binding's suites and the distribution's: the Kawa
 -- doorway stub, token-less clients, and one-output dispatch.
 library test-support
@@ -153,6 +186,7 @@ test-suite kikan-shikigami-binding-test
     Kikan.Shikigami.Binding.ApprovalNotificationSpec
     Kikan.Shikigami.Binding.AuthoritySpec
     Kikan.Shikigami.Binding.Fixture.ExecutionIdentity
+    Kikan.Shikigami.Binding.IntakeSpec
     Kikan.Shikigami.Binding.KanmonClientSpec
     Kikan.Shikigami.Binding.OutputDispatchSpec
     Kikan.Shikigami.Binding.SinkHonestySpec
@@ -174,16 +208,19 @@ test-suite kikan-shikigami-binding-test
     hs-opentelemetry-api,
     http-client,
     http-types,
+    hw-kafka-client,
     keiro,
     keiro-pgmq,
     kikan-en-client,
     kikan-en-contract,
     kikan-shikigami-binding,
+    kikan-shikigami-binding:intake,
     kikan-shikigami-binding:outputs,
     kikan-shikigami-binding:test-support,
     kioku-api,
     lens,
     mmzk-typeid,
+    optparse-applicative,
     servant-client,
     settei,
     settei-env,

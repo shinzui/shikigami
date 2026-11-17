@@ -29,7 +29,6 @@ shikigami validate <FILE>
 shikigami render-lifecycle <FILE>
 shikigami enqueue-run <AGENT> [--payload <JSON>] [--conversation] [--key <TEXT>] [--workspace <DIR|mori://…>]
 shikigami resolve-approval <TOKEN> (--approve | --reject <REASON>)
-shikigami publish-fixture <FILE> [--broker <HOST:PORT>] [--topic <TOPIC>]
 shikigami grants list [--limit <N>] [--after <AGENT:KIND>]
 shikigami grants grant <AGENT> <KIND> [--by <WHO>]
 shikigami grants revoke <AGENT> <KIND> [--by <WHO>]
@@ -74,8 +73,8 @@ shikigami-agent-run --agent <NAME|FILE> [--from-activity <FILE>] [--workspace <D
 ```text
 shikigami-worker [--agents <DIR>]
 shikigami-scheduler [--agents <DIR>]
-shikigami-consume-stream [--agents <DIR>] [--broker <HOST:PORT>] [--topic <TOPIC>] [--group <GROUP>] [--include-agent-actors]
-shikigami-consume-events [--agents <DIR>] [--broker <HOST:PORT>] [--topic <TOPIC>] [--group <GROUP>]
+kikan-shikigami-consume-stream [--agents <DIR>] [--broker <HOST:PORT>] [--topic <TOPIC>] [--group <GROUP>] [--include-agent-actors]
+kikan-shikigami-consume-events [--agents <DIR>] [--broker <HOST:PORT>] [--topic <TOPIC>] [--group <GROUP>]
 ```
 
 **The rest**: `shikigami-server` serves the public HTTP API, `shikigami-client` calls a running
@@ -93,8 +92,8 @@ $ cabal run shikigami-server:exe:shikigami-server
 Every other binary is unambiguous, because no other executable shares its package's name.
 
 Binaries that record sessions, use the run queue, or use the Keiro inbox
-(`shikigami-agent-run`, `shikigami enqueue-run`, `shikigami resolve-approval`, `shikigami-consume-stream`,
-`shikigami-consume-events`, `shikigami-worker`, `shikigami-scheduler`) need the
+(`shikigami-agent-run`, `shikigami enqueue-run`, `shikigami resolve-approval`, `kikan-shikigami-consume-stream`,
+`kikan-shikigami-consume-events`, `shikigami-worker`, `shikigami-scheduler`) need the
 `database.connection_string` setting and a migrated database (`just create-database`). The
 dev shell exports `PG_CONNECTION_STRING`, the environment variable bound to that setting.
 `shikigami validate`, `shikigami render-lifecycle`, and `shikigami-run-behavior` need neither a
@@ -346,25 +345,28 @@ conversations given with `--allow-conversation` (default `conv_55012`).
 
 → See [The Living Loop](./living-loop.md), [Sinks](./sinks.md).
 
-## `shikigami publish-fixture`
+## `kikan-shikigami publish-fixture`
 
 ```bash
-$ shikigami publish-fixture <FILE> [--broker <HOST:PORT>] [--topic <TOPIC>]
+$ kikan-shikigami publish-fixture <FILE> [--broker <HOST:PORT>] [--topic <TOPIC>]
 ```
 
 Publish one Activity Envelope (JSON) onto the activity stream **with the required `keiro-*`
 headers** so the keiro inbox accepts it. Defaults: `--broker 127.0.0.1:9092`,
-`--topic activity.v1`. Useful for driving the stream from fixtures (`fixtures/*.json`).
+`--topic activity.v1`. Useful for driving the stream from fixtures (`fixtures/*.json`). It is a
+verb of the Kikan distribution's admin command, because no stock package links a Kafka client
+(plan 135, M5); unlike the consumers it takes its broker and topic as flags, not settings.
 
 → See [The Living Loop](./living-loop.md).
 
-## `shikigami-consume-stream`
+## `kikan-shikigami-consume-stream`
 
 ```bash
-$ shikigami-consume-stream [--agents <DIR>] [--broker <HOST:PORT>] [--topic <TOPIC>] [--group <GROUP>] [--include-agent-actors]
+$ kikan-shikigami-consume-stream [--agents <DIR>] [--broker <HOST:PORT>] [--topic <TOPIC>] [--group <GROUP>] [--include-agent-actors]
 ```
 
-Consume the `activity.v1` stream, reconstruct each envelope (deduped via the keiro idempotent
+The Kikan distribution's stream consumer (the stock role set has no consumer). Consume the
+`activity.v1` stream, reconstruct each envelope (deduped via the keiro idempotent
 inbox), match it against every declared **Stream** agent's predicate, and enqueue a run job per
 match. Defaults: `--agents agents`, `--broker 127.0.0.1:9092`, `--topic activity.v1`,
 `--group shikigami-stream`.
@@ -374,13 +376,13 @@ default** is the feedback guard.
 
 → See [Triggers](./triggers.md), [Detectors](./detectors.md).
 
-## `shikigami-consume-events`
+## `kikan-shikigami-consume-events`
 
 ```bash
-$ shikigami-consume-events [--agents <DIR>] [--broker <HOST:PORT>] [--topic <TOPIC>] [--group <GROUP>]
+$ kikan-shikigami-consume-events [--agents <DIR>] [--broker <HOST:PORT>] [--topic <TOPIC>] [--group <GROUP>]
 ```
 
-Consume a public integration-event topic, reconstruct each Keiro integration event, match it
+The Kikan distribution's event consumer. Consume a public integration-event topic, reconstruct each Keiro integration event, match it
 against declared **Event** agents by `eventType`, and enqueue a run job per match. Defaults:
 `--agents agents`, `--broker 127.0.0.1:9092`, `--topic danwa.message-addressed.v1`,
 `--group shikigami-events`.

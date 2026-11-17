@@ -279,8 +279,8 @@ the binary you ran it on.
 |---|---|
 | `shikigami-worker` | `database.connection_string` |
 | `shikigami-scheduler` | `database.connection_string` |
-| `shikigami-consume-stream` | `database.connection_string` |
-| `shikigami-consume-events` | `database.connection_string` |
+| `kikan-shikigami-consume-stream` | `database.connection_string` |
+| `kikan-shikigami-consume-events` | `database.connection_string` |
 | `shikigami-agent-run` | `database.connection_string` |
 | `shikigami-server` | `database.connection_string` |
 | `shikigami-run-behavior` | nothing |
@@ -317,8 +317,8 @@ host and a shared default would leave three of them unable to bind. Each role ha
 |---|---|
 | `shikigami-worker` | `8091` |
 | `shikigami-scheduler` | `8092` |
-| `shikigami-consume-stream` | `8093` |
-| `shikigami-consume-events` | `8094` |
+| `kikan-shikigami-consume-stream` | `8093` |
+| `kikan-shikigami-consume-events` | `8094` |
 | `shikigami-server` | none — probes are served on `http.port` |
 
 Setting `health.port` overrides the role default. Because one declaration serves every
@@ -361,12 +361,11 @@ declared key, so it shows up in `--explain-config` with its spelling.
 | `shikigami-server` | `--host`, `--port` | `http.host`, `http.port` |
 | `shikigami-worker` | `--agents` | `agents.directory` |
 | `shikigami-scheduler` | `--agents` | `agents.directory` |
-| `shikigami-consume-stream` | `--agents`, `--broker` | `agents.directory`, `kafka.broker` |
+| `kikan-shikigami-consume-stream` | `--agents`, `--broker` | `agents.directory`, `kafka.broker` |
 | | `--topic`, `--group` | `kafka.activity.topic`, `kafka.groups.stream` |
 | | `--include-agent-actors` | `kafka.include_agent_actors` (sets it to `true`) |
-| `shikigami-consume-events` | `--agents`, `--broker` | `agents.directory`, `kafka.broker` |
+| `kikan-shikigami-consume-events` | `--agents`, `--broker` | `agents.directory`, `kafka.broker` |
 | | `--topic`, `--group` | `kafka.events.topic`, `kafka.groups.events` |
-| `shikigami publish-fixture` | `--broker`, `--topic` | `kafka.broker`, `kafka.activity.topic` |
 
 Note that `--topic` and `--group` mean different keys on the two consumers, because the
 two consumers read different topics. That is why they are separate binaries.
@@ -376,7 +375,8 @@ invocation is about rather than how the deployment is set up: `kikan-shikigami s
 `--port`, `--republish-topic` and `--broker`,
 `shikigami-run-behavior --agent` and `--payload`, `shikigami-agent-run --agent` and
 `--from-activity`, and the file or agent arguments of `validate`, `render-lifecycle`,
-`enqueue-run`, `resolve-approval`, and `publish-fixture`.
+`enqueue-run`, `resolve-approval`, and `kikan-shikigami publish-fixture` (whose `--broker` and
+`--topic` are plain flags with the local defaults).
 
 For `shikigami`, the configuration and diagnostic options are global and go *before* the
 subcommand:

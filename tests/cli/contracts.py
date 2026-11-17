@@ -30,8 +30,7 @@ with tempfile.TemporaryDirectory(prefix="shikigami-cli-contract-") as directory:
     clean = {key: value for key, value in os.environ.items()
              if not key.startswith(("SHIKIGAMI_", "PG", "DATABASE_URL", "OPENAI_", "ANTHROPIC_"))}
     for binary in ["shikigami", "shikigami-server", "shikigami-worker",
-                   "shikigami-scheduler", "shikigami-consume-stream",
-                   "shikigami-consume-events", "shikigami-agent-run",
+                   "shikigami-scheduler", "shikigami-agent-run",
                    "shikigami-run-behavior", "shikigami-agent-launch",
                    "shikigami-client", "shikigami-migrate"]:
         assert b"0.1.0.0" in run(binary, ["--version"], env=clean)

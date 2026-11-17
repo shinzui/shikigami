@@ -126,10 +126,14 @@ no library; each `main` passes its packs to `agentRunRoleInfoWith`, `workerRoleI
 `shikigami-migrations:test-support`; its libraries may not.
 
 `packs/kikan-shikigami` is the distribution for organizational use. It composes the Kikan
-binding and every pack into `kikan-shikigami-worker`, `kikan-shikigami-server`, `kikan-shikigami-scheduler`, `kikan-shikigami-consume-stream`, the `kikan-shikigami` admin
-command and `kikan-shikigami-agent-run`, all reading one list in `src-shared/Packs.hs`. The
-admin command also mounts the Kikan service stubs, `stub-kawa` and `stub-kanmon`, compiled
-from `admin/`. Its test suite, `kikan-shikigami-test`, holds what needs composed use cases
+binding and every pack into `kikan-shikigami-worker`, `kikan-shikigami-server`, `kikan-shikigami-scheduler`, `kikan-shikigami-consume-stream`, `kikan-shikigami-consume-events`,
+the `kikan-shikigami` admin command and `kikan-shikigami-agent-run`, all reading one list in
+`src-shared/Packs.hs`. The two consumers are the only stream consumers there are: their Kafka
+transport and roles are the binding's `intake` library (`Kikan.Shikigami.Binding.Intake`), kept
+apart from the binding so nothing else links a Kafka client, and the record processing they
+hand each delivery to is the kernel's `Shikigami.Trigger.Intake` in `shikigami-workers`
+(plan 135, M5). The admin command also mounts the Kikan service stubs, `stub-kawa` and
+`stub-kanmon`, and the `publish-fixture` producer, compiled from `admin/`. Its test suite, `kikan-shikigami-test`, holds what needs composed use cases
 together, such as the watchdog observing work the initiative pack admitted, the Kikan
 outputs delivered through the kernel's publisher, and the stubs.
 
@@ -216,8 +220,9 @@ component boundary in addition to the existing main-library dependency budgets.
   `hs-opentelemetry-api` for the domain-level span/tracer types Keiro requires.
 - `shibuya-pgmq-adapter`, `pgmq-effectful` — the supervised queue *adapter* and its
   effect interpreter belong to `shikigami-workers`.
-- `hw-kafka-client`, `kafka-effectful` — stream consumers belong to
-  `shikigami-workers`; the fixture producer belongs to `shikigami-server`.
+- `hw-kafka-client`, `kafka-effectful` — no stock package links a Kafka client. The
+  consumers are the Kikan binding's `intake` library and the fixture producer is a verb of
+  the distribution's admin command (plan 135, M5).
 
 Core *does* keep `pgmq-hasql`. `Shikigami.Trigger.Enqueue` is the domain contract for
 producing a run job — a `SendMessage` against a named queue through the shared hasql
@@ -248,8 +253,8 @@ overlay registry and cannot be replaced by an adapter.
 ## Module placement rules
 
 1. A module lands in the package that owns its *runtime role*, and keeps the module
-   name of its *concept*. Moving `Shikigami.Trigger.Consumer` from core to workers does
-   not rename it; it is still the trigger vertical.
+   name of its *concept*. Moving the trigger intake from core to workers did
+   not rename it; it is still the trigger vertical (`Shikigami.Trigger.Intake`).
 2. Technical composition module names are limited to this allowlist:
    - `Shikigami.Runtime`, `Shikigami.Workflow.Registry` — validated runtime startup
      wiring and the shared five-family workflow registry (plan 65 / ADR 0038).
@@ -261,8 +266,7 @@ overlay registry and cannot be replaced by an adapter.
      standard `OTEL_*` variables remain SDK-owned. See `docs/operations/configuration.md`.
    - `Shikigami.Server.App`, `Shikigami.Server.Boot`, `Shikigami.Server.Config`,
      `Shikigami.Server.Seam`
-   - `Shikigami.Workers.Config`, `Shikigami.Workers.Registry`,
-     `Shikigami.Workers.Subscription`
+   - `Shikigami.Workers.Config`, `Shikigami.Workers.Registry`
    - `Shikigami.App.Role` — the `RoleInfo` record and `runRole`, in `shikigami-core`.
      Application-configured executables resolve configuration through it, for the same
      reason they all resolve settings through `Shikigami.App.Config`: `runRole` *is* the
@@ -302,11 +306,9 @@ their role and live in the package that owns that role.
 | Executable | Package | What it does |
 |---|---|---|
 | `shikigami-server` | `shikigami-server` | Serves the public HTTP API, including the declared-agent catalog, and refreshes its lifecycle directory. Starts no background workers. |
-| `shikigami` | `shikigami-server` | Administrative, validation, enqueue, approval-resolution, and fixture commands: `validate`, `render-lifecycle`, `enqueue-run`, `resolve-approval`, `publish-fixture`, `flows`, `grants`, `agents`, and `runs` (plus the mounted Keiro operator tree). |
+| `shikigami` | `shikigami-server` | Administrative, validation, enqueue, approval-resolution, and fixture commands: `validate`, `render-lifecycle`, `enqueue-run`, `resolve-approval`, `flows`, `grants`, `agents`, and `runs` (plus the mounted Keiro operator tree). |
 | `shikigami-worker` | `shikigami-workers` | Drains `shikigami_run_jobs`, runs agents, dispatches sinks, publishes the outbox, resumes workflows, fires timers. Opens no application HTTP listener. |
 | `shikigami-scheduler` | `shikigami-workers` | Arms Schedule triggers and drives keiro timer firing. |
-| `shikigami-consume-stream` | `shikigami-workers` | Consumes `activity.v1` and enqueues matching run jobs. |
-| `shikigami-consume-events` | `shikigami-workers` | Consumes public integration events and enqueues addressed run jobs. |
 | `shikigami-run-behavior` | `shikigami-agent` | Runs a registered program or Skill without a database; the provider defaults to a stub. Workspace requests currently fail action authorization. |
 | `shikigami-agent-run` | `shikigami-agent` | Runs one agent through the kioku session/memory lifecycle; a workspace overlay lease covers only the behavior call. |
 | `shikigami-migrate` | `shikigami-migrations` | Applies database migrations. |

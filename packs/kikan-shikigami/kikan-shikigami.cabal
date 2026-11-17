@@ -49,11 +49,23 @@ executable kikan-shikigami-workspace-supervisor
   main-is: Main.hs
   build-depends: shikigami-workers
 
+-- The two consumers link Kafka through the binding's intake library; no
+-- other executable here does (plan 135, M5).
 executable kikan-shikigami-consume-stream
   import: common
   hs-source-dirs: app/consume-stream
   main-is: Main.hs
-  build-depends: shikigami-workers
+  build-depends:
+    kikan-shikigami-binding:intake,
+    shikigami-workers,
+
+executable kikan-shikigami-consume-events
+  import: common
+  hs-source-dirs: app/consume-events
+  main-is: Main.hs
+  build-depends:
+    kikan-shikigami-binding:intake,
+    shikigami-workers,
 
 executable kikan-shikigami-scheduler
   import: common
@@ -85,6 +97,7 @@ executable kikan-shikigami
     Kikan.Shikigami.Stub.Kanmon
     Kikan.Shikigami.Stub.Kawa
     Kikan.Shikigami.Stub.Kawa.Republish
+    Kikan.Shikigami.Stub.Publish
 
   build-depends:
     aeson,
@@ -144,6 +157,7 @@ test-suite kikan-shikigami-test
     Kikan.Shikigami.Stub.Kanmon
     Kikan.Shikigami.Stub.Kawa
     Kikan.Shikigami.Stub.Kawa.Republish
+    Kikan.Shikigami.Stub.Publish
     Kikan.Stub.CommandSpec
     Kikan.Stub.KanmonSpec
     Kikan.Stub.KawaSpec

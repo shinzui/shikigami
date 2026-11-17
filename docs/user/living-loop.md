@@ -114,7 +114,7 @@ Run the consumer in a separate terminal against the same proof directory. Enable
 agent-produced activity so `digest-watcher` can observe the heartbeat output:
 
 ```bash
-$ cabal run shikigami-consume-stream -- --agents agents/proof \
+$ cabal run kikan-shikigami-consume-stream -- --agents agents/proof \
     --broker 127.0.0.1:9092 --include-agent-actors
 ```
 
@@ -125,7 +125,7 @@ $ cabal run shikigami -- enqueue-run heartbeat --payload '{}' --key living-loop-
 ```
 
 Use a new `--key` when deliberately starting another run. To test ordinary stream
-matching independently, `shikigami publish-fixture fixtures/envelope.json` publishes
+matching independently, `kikan-shikigami publish-fixture fixtures/envelope.json` publishes
 the ticket fixture, but it does not address the Schedule-triggered heartbeat.
 
 ### 4. Watch the loop close
@@ -142,7 +142,7 @@ agent-produced activities**, so the consumer must explicitly opt in for this wal
 meta-detectors match agent output:
 
 ```bash
-$ cabal run shikigami-consume-stream -- --agents agents/proof --include-agent-actors
+$ cabal run kikan-shikigami-consume-stream -- --agents agents/proof --include-agent-actors
 ```
 
 Publishing `fixtures/envelope-agent.json` (an `actor.kind: "agent"` envelope) without that
@@ -169,7 +169,7 @@ configured with integration publishing enabled, it emits
 Start the event consumer:
 
 ```bash
-$ cabal run shikigami-consume-events -- \
+$ cabal run kikan-shikigami-consume-events -- \
     --agents agents \
     --broker 127.0.0.1:9092 \
     --topic danwa.message-addressed.v1 \

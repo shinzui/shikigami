@@ -8,7 +8,7 @@ status: "shipped"
 stability: "experimental"
 since: "unreleased"
 packages: ["shikigami-server", "kikan-shikigami"]
-interface: ["shikigami publish-fixture", "kikan-shikigami stub-kawa", "kikan-shikigami stub-kanmon"]
+interface: ["kikan-shikigami publish-fixture", "kikan-shikigami stub-kawa", "kikan-shikigami stub-kanmon"]
 tags: ["fixtures", "integration", "local-development"]
 generated:
   by: "process:shikigami-capabilities-bootstrap"
@@ -42,7 +42,7 @@ creation, participant joins, posting, and replies against a configured service.
 
 ## Adopt
 
-Use `publish-fixture` with an activity envelope and configured broker/topic.
+Use `kikan-shikigami publish-fixture` with an activity envelope and configured broker/topic.
 Start `kikan-shikigami stub-kawa` with an optional `--republish-topic`, or
 `kikan-shikigami stub-kanmon` with its destination allow-list. [The Living Loop](../user/living-loop.md) describes the local
 topology; configure the current authorization prerequisites separately before

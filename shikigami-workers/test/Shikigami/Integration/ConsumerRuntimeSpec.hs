@@ -7,8 +7,6 @@ import Data.Either (isLeft)
 import Data.IORef (modifyIORef', newIORef, readIORef)
 import Effectful (IOE, liftIO, runEff, (:>))
 import Effectful.Exception qualified as Exception
-import Kafka.Consumer (RdKafkaRespErrT (RdKafkaRespErrAllBrokersDown, RdKafkaRespErrFatal, RdKafkaRespErrSaslAuthenticationFailed))
-import Kafka.Types (KafkaError (..))
 import Keiro.PGMQ (JobTuning (..))
 import Shibuya (ProcessorFailure (..))
 import Shibuya.Adapter (Adapter (..))
@@ -20,7 +18,6 @@ import Shibuya.Core.Ingested (DeliveryStatus (..), Ingested (..), Message (..), 
 import Shibuya.Core.Types (Envelope (..), MessageId (..), mkEnvelope)
 import Shibuya.Telemetry.Effect (runTracingNoop)
 import Shikigami.Integration.ConsumerRuntime (ConsumerProcessorFailure, consumerAppConfig, withConsumerApp)
-import Shikigami.Trigger.Consumer (kafkaReconnectAllowed)
 import Shikigami.Workers.Registry (queueTuningFor)
 import System.Timeout (timeout)
 import Test.Tasty (TestTree, testGroup)
@@ -30,10 +27,7 @@ tests :: TestTree
 tests =
   testGroup
     "ConsumerApp"
-    [ testCase "Kafka deterministic and authentication failures do not reconnect forever" do
-        map kafkaReconnectAllowed [KafkaBadConfiguration, KafkaBadSpecification "invalid", KafkaResponseError RdKafkaRespErrFatal, KafkaResponseError RdKafkaRespErrSaslAuthenticationFailed] @?= replicate 4 False
-        kafkaReconnectAllowed (KafkaResponseError RdKafkaRespErrAllBrokersDown) @?= True,
-      testCase "queue policy rejects nonpositive and overflowing timeouts before acquisition" do
+    [ testCase "queue policy rejects nonpositive and overflowing timeouts before acquisition" do
         assertBool "zero timeout" (isLeft (queueTuningFor 0))
         assertBool "negative timeout" (isLeft (queueTuningFor (-1)))
         assertBool "oversized timeout" (isLeft (queueTuningFor 2147483647)),

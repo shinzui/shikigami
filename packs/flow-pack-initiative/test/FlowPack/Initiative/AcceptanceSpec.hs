@@ -34,7 +34,7 @@ import Shikigami.Objective.Keys (ObservedSource (..))
 import Shikigami.Objective.Types qualified as Objective
 import Shikigami.Repository (repositoryIdText)
 import Shikigami.StateRevision (initialRevision)
-import Shikigami.Trigger.Consumer (RecordDisposition (..))
+import Shikigami.Trigger.Intake (RecordDisposition (..))
 import System.Directory (createDirectoryIfMissing)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))

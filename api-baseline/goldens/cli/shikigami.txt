@@ -36,8 +36,6 @@ Available commands:
                            requirement and decision slots
   enqueue-run              Enqueue an addressed run job for a named agent
   resolve-approval         Approve or reject one pending human approval token
-  publish-fixture          Publish one Activity Envelope (JSON) onto the
-                           activity stream with keiro-* headers
   grants                   Inspect and change per-agent sink permission grants
                            (C11)
   agents                   Inspect the declared agents this deployment has

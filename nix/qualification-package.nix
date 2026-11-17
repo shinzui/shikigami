@@ -157,7 +157,7 @@ pkgs.stdenv.mkDerivation {
       mkdir -p "$out/bin" "$out/share/shikigami"
       ln -s ${deadlineGuard}/bin/shikigami-workspace-deadline "$out/bin/shikigami-workspace-deadline"
       for executable in ${if workspaceFixture != null then lib.concatStringsSep " " prototypeExecutables else ''shikigami shikigami-server shikigami-worker shikigami-migrate \
-        shikigami-scheduler shikigami-consume-stream shikigami-consume-events \
+        shikigami-scheduler \
         shikigami-agent-run shikigami-run-behavior shikigami-agent-launch shikigami-openapi shikigami-client \
         shikigami-workspace-collector shikigami-workspace-supervisor''}; do
         cp "$(cabal list-bin --offline exe:$executable)" "$out/bin/$executable"

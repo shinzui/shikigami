@@ -8,7 +8,7 @@ status: "shipped"
 stability: "experimental"
 since: "unreleased"
 packages: ["shikigami-core", "shikigami-workers", "shikigami-migrations"]
-interface: ["shikigami-scheduler", "shikigami-consume-stream", "shikigami-consume-events", "shikigami enqueue-run", "Shikigami.RunJobs", "Shikigami.Trigger.Enqueue"]
+interface: ["shikigami-scheduler", "kikan-shikigami-consume-stream", "kikan-shikigami-consume-events", "shikigami enqueue-run", "Shikigami.RunJobs", "Shikigami.Trigger.Enqueue"]
 tags: ["durable-trigger-intake"]
 generated:
   by: "process:shikigami-capabilities-bootstrap"

@@ -25,12 +25,9 @@ import Options.Applicative
 import Settei.Env (envSnapshot, environmentSource)
 import Shikigami.App.Config
 import Shikigami.App.Config.Load (ConfigRun (..), appConfigRun)
-import Shikigami.Trigger.Stream (IncludeAgentActors (..))
 import Shikigami.Trust.Tier (TrustTier (..))
 import Shikigami.Workers.Command
   ( RoleInfo (..),
-    consumeEventsRoleInfo,
-    consumeStreamRoleInfo,
     schedulerRoleInfo,
     workerRoleInfo,
     workerRoles,
@@ -71,21 +68,19 @@ tests =
           workerRoles,
       -- The one-off roles moved to shikigami-agent; see
       -- "Shikigami.Agent.CommandSpec". Their absence here is the assertion that
-      -- they did not stay behind and quietly keep linking Kafka and PGMQ.
+      -- they did not stay behind and quietly keep linking PGMQ. The stream and
+      -- event consumers are the Kikan distribution's (plan 135, M5); their
+      -- cases are in the binding's suite.
       testCase "the worker roles are named exactly once each" $
         fmap (.binaryName) workerRoles
           @?= [ "shikigami-worker",
                 "shikigami-scheduler",
-                "shikigami-consume-stream",
-                "shikigami-consume-events",
                 "shikigami-workspace-supervisor"
               ],
       testCase "each binary is wired to the role whose requirements it must meet" $
         fmap (.role) workerRoles
           @?= [ WorkerRole,
                 SchedulerRole,
-                StreamConsumerRole,
-                EventConsumerRole,
                 WorkspaceSupervisorRole
               ],
       testCase "every worker executable offers the same configuration and diagnostic options" $
@@ -101,14 +96,6 @@ tests =
         mapM_ (\args -> case execParserPure defaultPrefs workerRoleInfo.parserInfo args of Success _ -> assertFailure "incomplete maintenance command admitted"; _ -> pure ()) [["--workspace-list"], ["--workspace-actor", "agent_01h000000000000000triage"], ["--workspace-actor", "agent_01h000000000000000triage", "--workspace-list", "--workspace-cleanup", replicate 64 'a']],
       testCase "the scheduler keeps its agents directory option" $
         assertHasAll schedulerRoleInfo ["--agents"],
-      testCase "the stream consumer keeps its topic and feedback-guard options" $
-        assertHasAll
-          consumeStreamRoleInfo
-          ["--agents", "--broker", "--topic", "--group", "--include-agent-actors"],
-      testCase "the event consumer keeps its topic and group options" $
-        assertHasAll
-          consumeEventsRoleInfo
-          ["--agents", "--broker", "--topic", "--group"],
       testCase "each downstream flag names the configuration key it sets" do
         let rendered = helpTextOf workerRoleInfo
         mapM_
@@ -118,21 +105,6 @@ tests =
                 (key `isInfixOf` rendered)
           )
           ["agents.directory"],
-      testCase "the two consumers aim their identically-spelled flags at different keys" do
-        let streamHelp = helpTextOf consumeStreamRoleInfo
-            eventsHelp = helpTextOf consumeEventsRoleInfo
-        assertBool
-          ("consume-stream --topic must set kafka.activity.topic:\n" <> streamHelp)
-          ("kafka.activity.topic" `isInfixOf` streamHelp)
-        assertBool
-          ("consume-events --topic must set kafka.events.topic:\n" <> eventsHelp)
-          ("kafka.events.topic" `isInfixOf` eventsHelp)
-        assertBool
-          ("consume-stream --group must set kafka.groups.stream:\n" <> streamHelp)
-          ("kafka.groups.stream" `isInfixOf` streamHelp)
-        assertBool
-          ("consume-events --group must set kafka.groups.events:\n" <> eventsHelp)
-          ("kafka.groups.events" `isInfixOf` eventsHelp),
       resolutionTests
     ]
 
@@ -154,28 +126,6 @@ resolutionTests =
             workerRoleInfo
             ["--agents", "/srv/agents"]
         (.agentsDirectory) config @?= "/srv/agents",
-      testCase "the stream consumer's flags land on the activity-stream settings" do
-        config <-
-          resolveArgs
-            consumeStreamRoleInfo
-            ["--broker", "b:9092", "--topic", "activity.test", "--group", "stream-test", "--include-agent-actors"]
-        (.kafkaBroker) config @?= "b:9092"
-        (.kafkaActivityTopic) config @?= "activity.test"
-        (.kafkaStreamGroup) config @?= "stream-test"
-        (.kafkaIncludeAgentActors) config @?= IncludeAgentActors
-        -- The event consumer's settings must be untouched by the stream
-        -- consumer's identically-spelled flags.
-        (.kafkaEventsTopic) config @?= (.kafkaEventsTopic) defaultAppConfig
-        (.kafkaEventsGroup) config @?= (.kafkaEventsGroup) defaultAppConfig,
-      testCase "the event consumer's flags land on the integration-event settings" do
-        config <- resolveArgs consumeEventsRoleInfo ["--topic", "events.test", "--group", "events-test"]
-        (.kafkaEventsTopic) config @?= "events.test"
-        (.kafkaEventsGroup) config @?= "events-test"
-        (.kafkaActivityTopic) config @?= (.kafkaActivityTopic) defaultAppConfig
-        (.kafkaStreamGroup) config @?= (.kafkaStreamGroup) defaultAppConfig,
-      testCase "omitting the feedback-guard switch leaves the guard on" do
-        config <- resolveArgs consumeStreamRoleInfo ["--broker", "b:9092"]
-        (.kafkaIncludeAgentActors) config @?= ExcludeAgentActors,
       testCase "a --set override beats the equivalent named flag" do
         config <- resolveArgs workerRoleInfo ["--agents", "/from-flag", "--set", "agents.directory=/from-set"]
         (.agentsDirectory) config @?= "/from-set"

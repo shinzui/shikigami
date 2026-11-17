@@ -25,9 +25,9 @@ from a config file, `--set database.connection_string=…`, or the
 Two halves, and it matters which is which when something behaves unexpectedly.
 
 **Shikigami's own**: `agents`, `runs`, `resources`, `executions`, `workers`, and `validate`,
-`render-lifecycle`, `enqueue-run`, `resolve-approval`, `publish-fixture`, and `grants`. These
-are defined in this repository. The Kikan distribution's `kikan-shikigami` adds `stub-kawa` and
-`stub-kanmon`.
+`render-lifecycle`, `enqueue-run`, `resolve-approval`, and `grants`. These
+are defined in this repository. The Kikan distribution's `kikan-shikigami` adds `stub-kawa`,
+`stub-kanmon` and `publish-fixture`.
 
 **Keiro's**: `wf`, `timer`, `outbox`, `inbox`, `pgmq`, `projection`, `shard`,
 `snapshot`, and `stream`. These come from the `keiro-ops` package, whose command

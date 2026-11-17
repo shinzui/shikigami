@@ -270,6 +270,15 @@ These came from read-only research on 2026-11-15, before implementation.
   pending).
   Planned in `docs/plans/137-settle-kioku-distillation-timers-through-kioku-s-fire-api-in-the-shared-timer-dispatcher.md`.
 
+- Observation: (M5 acceptance) The stream and event consumers share keiro's inbox, which
+  dedupes on the integration message id across topics. Publishing the same envelope to the
+  activity topic and the events topic fired only the stream agent: the event consumer saw a
+  duplicate and enqueued nothing. A distinct `activity_id` fired the event agent. This is
+  the inbox doing its job, not a regression, but an operator replaying one fixture onto two
+  topics will see it.
+  Evidence: the first `m5-acceptance.sh` run; `processIntegrationEvent` runs
+  `runInboxTransaction ... PreferIntegrationMessageId`.
+
 ## Decision Log
 
 - Decision: The binding is one package, `kikan-shikigami-binding`, with modules under
@@ -605,6 +614,40 @@ These came from read-only research on 2026-11-15, before implementation.
   Rationale: They are fixtures for Kikan services. The stock admin command should not offer
   a Kawa stub to an operator who has no Kawa.
   Date: 2026-11-15
+- Decision: (M5, intake, 2026-11-17) The intake splits at the broker. The kernel keeps the
+  record intake in `shikigami-workers`, renamed `Shikigami.Trigger.Intake`: a delivered
+  `KafkaInboundRecord` (keiro's plain delivery type, which links no Kafka client) becomes
+  exactly one `RecordDisposition` after decoding, matching, the packs' stream hooks and the
+  enqueue transaction, and `ackDecisionFor` maps it to Shibuya's ack. The Kafka transport
+  (`subscribeActivityStream`, `subscribeIntegrationEventStream`, `kafkaReconnectAllowed`)
+  and the two roles moved to the binding's public `intake` library
+  (`Kikan.Shikigami.Binding.Intake`, `.Intake.Role`), which may depend on
+  `shikigami-workers` because only the binding's main library is held to the SDK. The
+  distribution runs them as `kikan-shikigami-consume-stream` and
+  `kikan-shikigami-consume-events`; the stock `shikigami-consume-*` executables, their Nix
+  packages and `hw-kafka-client`, `kafka-effectful` and `shibuya-kafka-adapter` left
+  `shikigami-workers`. The `kafka.*` setting keys stay where they are, in the kernel's
+  configuration, as plan 135 requires of every setting.
+  Rationale: the initiative pack's tests drive `processDecodedActivityObserving` and the
+  worker's queue loop uses the Shibuya consumer runtime, neither of which knows Kafka.
+  Moving them to the binding would have made a pack's tests depend on the binding and
+  duplicated the ack boundary.
+  Date: 2026-11-17
+- Decision: (M5) A stock composition does not refuse a declaration with a `Stream` or
+  `Event` trigger at load, though the plan proposed it. `Trigger.Event` is how 14 stock
+  sample agents, `local-maintainer` and `repo-inventory` among them, are addressed by
+  `enqueue-run`, which works in every composition, and a stream agent is just as
+  addressable. Refusing them would break working stock agents to report that no broker
+  consumer exists, and `FlowPack` gains no intake field without an executed consumer
+  (ADR-1). The stock role set simply has no consumer.
+  Date: 2026-11-17
+- Decision: (M5) `publish-fixture` is a verb of the distribution's admin command beside the
+  stubs (`Kikan.Shikigami.Stub.Publish`), taking `--broker` and `--topic` as flags with the
+  local defaults rather than as settings, because `AdminContext` carries no `AppConfig` and
+  one fixture verb does not justify widening it. `shikigami-server` no longer links Kafka.
+  The stock `shikigami` command loses `publish-fixture`, a breaking change to the
+  provisional `cli-shikigami` surface, re-pinned in the same commit.
+  Date: 2026-11-17
 
 
 ## Outcomes & Retrospective

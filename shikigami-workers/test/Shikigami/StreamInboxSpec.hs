@@ -41,7 +41,9 @@ import Shikigami.Execution.Resources (Dimension (..), Envelope (..), Limit (..))
 import Shikigami.Log qualified as Log
 import Shikigami.Migrations.TestSupport (DatabaseFixture, withShikigamiFreshDatabase)
 import Shikigami.RunJobs qualified as RunJobs
-import Shikigami.Trigger.Consumer
+import Shikigami.Trigger.Enqueue (enqueueAddressedRunWithKey, ensureRunQueue, runQueueName)
+import Shikigami.Trigger.Hook (PackDisposition (..), StreamDisposition (..), StreamEvaluation (..), StreamSkip (..))
+import Shikigami.Trigger.Intake
   ( DeadLetterId (..),
     DeadLetterRecord (..),
     PayloadEvidence (..),
@@ -55,8 +57,6 @@ import Shikigami.Trigger.Consumer
     processDecodedActivityWithDirectory,
     processDecodedIntegrationEvent,
   )
-import Shikigami.Trigger.Enqueue (enqueueAddressedRunWithKey, ensureRunQueue, runQueueName)
-import Shikigami.Trigger.Hook (PackDisposition (..), StreamDisposition (..), StreamEvaluation (..), StreamSkip (..))
 import Shikigami.Trigger.RequestKey qualified as Addressed
 import Shikigami.Trigger.Schedule (parseCron)
 import Shikigami.Trigger.Stream (IncludeAgentActors (ExcludeAgentActors, IncludeAgentActors))

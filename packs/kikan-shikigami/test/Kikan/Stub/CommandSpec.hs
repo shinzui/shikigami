@@ -20,6 +20,15 @@ tests =
               _ -> pure ()
           )
           ["stub-kawa", "stub-kanmon"],
+      testCase "the stock admin command does not publish to Kafka" $
+        case execParserPure adminPrefs adminInfo ["publish-fixture", "envelope.json"] of
+          Success _ -> assertBool "publish-fixture parsed in the stock admin command" False
+          _ -> pure (),
+      testCase "publish-fixture takes a file, a broker and a topic" do
+        let rendered = helpTextOf ["publish-fixture", "--help"]
+        mapM_
+          (\needle -> assertBool ("publish-fixture help does not mention " <> needle) (needle `isInfixOf` rendered))
+          ["FILE", "--broker", "--topic", "activity.v1"],
       testCase "stub-kawa keeps its republish options" do
         let rendered = helpTextOf ["stub-kawa", "--help"]
         mapM_

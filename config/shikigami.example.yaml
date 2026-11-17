@@ -67,10 +67,10 @@ conversation:
 kafka:
   broker: 127.0.0.1:9092
   activity:
-    # Consumed by shikigami-consume-stream.
+    # Consumed by kikan-shikigami-consume-stream.
     topic: activity.v1
   events:
-    # Consumed by shikigami-consume-events.
+    # Consumed by kikan-shikigami-consume-events.
     topic: danwa.message-addressed.v1
   groups:
     stream: shikigami-stream

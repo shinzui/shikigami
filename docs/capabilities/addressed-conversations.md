@@ -8,7 +8,7 @@ status: "shipped"
 stability: "experimental"
 since: "unreleased"
 packages: ["shikigami-core", "shikigami-workers", "shikigami-migrations"]
-interface: ["Shikigami.Integration.Danwa", "Shikigami.Agent.Conversation", "shikigami-consume-events"]
+interface: ["Shikigami.Integration.Danwa", "Shikigami.Agent.Conversation", "kikan-shikigami-consume-events"]
 tags: ["addressed-conversations"]
 generated:
   by: "process:shikigami-capabilities-bootstrap"

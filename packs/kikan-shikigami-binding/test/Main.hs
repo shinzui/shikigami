@@ -3,6 +3,7 @@ module Main (main) where
 import Kikan.Shikigami.Binding (kikanBinding)
 import Kikan.Shikigami.Binding.ApprovalNotificationSpec qualified as ApprovalNotificationSpec
 import Kikan.Shikigami.Binding.AuthoritySpec qualified as AuthoritySpec
+import Kikan.Shikigami.Binding.IntakeSpec qualified as IntakeSpec
 import Kikan.Shikigami.Binding.KanmonClientSpec qualified as KanmonClientSpec
 import Kikan.Shikigami.Binding.OutputDispatchSpec qualified as OutputDispatchSpec
 import Kikan.Shikigami.Binding.SinkHonestySpec qualified as SinkHonestySpec
@@ -32,6 +33,7 @@ main =
           OutputDispatchSpec.tests,
           SinkHonestySpec.tests,
           KanmonClientSpec.tests,
-          ApprovalNotificationSpec.tests
+          ApprovalNotificationSpec.tests,
+          IntakeSpec.tests
         ]
     )

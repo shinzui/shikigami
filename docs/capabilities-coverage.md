@@ -158,8 +158,8 @@ mechanism remain grouped under that provision.
 | `shikigami` | shikigami-server | [CAP-1](capabilities/typed-agent-declarations.md), [CAP-2](capabilities/durable-trigger-intake.md), [CAP-4](capabilities/durable-agent-flows.md), [CAP-6](capabilities/principal-lifecycle-and-continuity.md), [CAP-9](capabilities/authorized-sink-outbox.md), [CAP-10](capabilities/durable-human-approval.md), [CAP-17](capabilities/worker-operations-and-telemetry.md), [CAP-20](capabilities/local-integration-fixtures.md) |
 | `shikigami-worker` | shikigami-workers | [CAP-4](capabilities/durable-agent-flows.md), [CAP-9](capabilities/authorized-sink-outbox.md), [CAP-17](capabilities/worker-operations-and-telemetry.md) |
 | `shikigami-scheduler` | shikigami-workers | [CAP-2](capabilities/durable-trigger-intake.md), [CAP-17](capabilities/worker-operations-and-telemetry.md) |
-| `shikigami-consume-stream` | shikigami-workers | [CAP-2](capabilities/durable-trigger-intake.md), [CAP-17](capabilities/worker-operations-and-telemetry.md) |
-| `shikigami-consume-events` | shikigami-workers | [CAP-2](capabilities/durable-trigger-intake.md), [CAP-11](capabilities/addressed-conversations.md), [CAP-17](capabilities/worker-operations-and-telemetry.md) |
+| `kikan-shikigami-consume-stream` | shikigami-workers | [CAP-2](capabilities/durable-trigger-intake.md), [CAP-17](capabilities/worker-operations-and-telemetry.md) |
+| `kikan-shikigami-consume-events` | shikigami-workers | [CAP-2](capabilities/durable-trigger-intake.md), [CAP-11](capabilities/addressed-conversations.md), [CAP-17](capabilities/worker-operations-and-telemetry.md) |
 
 ## Administrative command families
 
@@ -175,7 +175,7 @@ its commands belong to
 | `render-lifecycle` | [CAP-4](capabilities/durable-agent-flows.md) |
 | `enqueue-run` | [CAP-2](capabilities/durable-trigger-intake.md) |
 | `resolve-approval` | [CAP-10](capabilities/durable-human-approval.md) |
-| `publish-fixture` | [CAP-20](capabilities/local-integration-fixtures.md) |
+| `kikan-shikigami publish-fixture` | [CAP-20](capabilities/local-integration-fixtures.md) |
 | `grants` | [CAP-9](capabilities/authorized-sink-outbox.md) |
 | `agents` | [CAP-6](capabilities/principal-lifecycle-and-continuity.md) |
 | `runs` | [CAP-17](capabilities/worker-operations-and-telemetry.md), [CAP-25](capabilities/http-agent-run-lifecycle.md) |

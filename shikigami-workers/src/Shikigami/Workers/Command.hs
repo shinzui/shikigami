@@ -1,10 +1,15 @@
 -- | Command-line surfaces of the worker-role executables.
 --
 -- Each worker role is its own binary — @shikigami-worker@,
--- @shikigami-scheduler@, @shikigami-consume-stream@, @shikigami-consume-events@
--- — because an operator scales, restarts, and rolls them out independently, and
+-- @shikigami-scheduler@, @shikigami-workspace-supervisor@ — because an operator scales, restarts, and rolls them out independently, and
 -- because a single umbrella process could not honestly import both server and
 -- worker implementations without violating the package dependency graph.
+--
+-- The stream and event consumers are not stock roles. They link a Kafka
+-- client and consume the Kawa activity stream, so they are the Kikan
+-- distribution's @kikan-shikigami-consume-stream@ and
+-- @kikan-shikigami-consume-events@ (plan 135, M5; the binding's @intake@
+-- library).
 --
 -- The two one-off commands that used to live here, @shikigami-run-behavior@ and
 -- @shikigami-agent-run@, moved to @shikigami-agent@. They never needed anything
@@ -18,10 +23,10 @@
 -- Every role's parser produces a pair: the action to run, which takes the
 -- resolved 'AppConfig', and the command-line configuration
 -- sources its own flags supplied. The flags an operator already knows —
--- @--agents@, @--broker@, @--topic@, @--group@, @--kawa-url@ and the rest —
+-- @--agents@ and the rest —
 -- survive, but as ordinary Settei sources aimed at declared keys rather than as
--- private parsers. @--broker 10.0.0.1:9092@ and
--- @--set kafka.broker=10.0.0.1:9092@ are the same thing, both appear in
+-- private parsers. @--agents agents@ and
+-- @--set agents.directory=agents@ are the same thing, both appear in
 -- @--explain-config@ with their spelling, and neither can disagree with the
 -- other about what the default is.
 --
@@ -46,33 +51,23 @@ module Shikigami.Workers.Command
     workspaceSupervisorRoleInfoWith,
     schedulerRoleInfo,
     schedulerRoleInfoWith,
-    consumeStreamRoleInfo,
-    consumeStreamRoleInfoWith,
-    consumeEventsRoleInfo,
   )
 where
 
 import Data.Maybe (catMaybes)
 import Options.Applicative
-import Settei.Optparse (cliOverride, cliSources, namedOption)
+import Settei.Optparse (namedOption)
 import Settei.Source (Source)
 import Shikigami.App.Config
   ( AppConfig,
     Role (..),
     agentsDirectoryKey,
-    kafkaActivityTopicKey,
-    kafkaBrokerKey,
-    kafkaEventsGroupKey,
-    kafkaEventsTopicKey,
-    kafkaIncludeAgentActorsKey,
-    kafkaStreamGroupKey,
   )
 import Shikigami.App.Config.Load (withConfigOptions)
 import Shikigami.App.Role (RoleInfo (..), runRole)
 import Shikigami.Flow.Pack (FlowPack (..))
 import Shikigami.Workers.Command.Scheduler (runSchedulerCmd)
 import Shikigami.Workers.Command.Worker (runResumeCmd, runWorkerCmd)
-import Shikigami.Workers.Subscription (runConsumeEvents, runConsumeStreamWith)
 import Shikigami.Workspace.Daemon (runWorkspaceSupervisor)
 import Shikigami.Workspace.Maintenance (WorkspaceMaintenance (..), runWorkspaceMaintenance)
 
@@ -84,8 +79,6 @@ workerRoles :: [RoleInfo]
 workerRoles =
   [ workerRoleInfo,
     schedulerRoleInfo,
-    consumeStreamRoleInfo,
-    consumeEventsRoleInfo,
     workspaceSupervisorRoleInfo
   ]
 
@@ -131,46 +124,6 @@ schedulerRoleInfoWith packs =
           (sourcesOf [agentsOption])
     }
 
--- | @shikigami-consume-stream@: match declared stream agents against @activity.v1@.
-consumeStreamRoleInfo :: RoleInfo
-consumeStreamRoleInfo = consumeStreamRoleInfoWith []
-
--- | The stream consumer composed with flow packs beside the builtin pack.
-consumeStreamRoleInfoWith :: [FlowPack] -> RoleInfo
-consumeStreamRoleInfoWith packs =
-  RoleInfo
-    { binaryName = "shikigami-consume-stream",
-      role = StreamConsumerRole,
-      packSettings = concatMap (.settings) packs,
-      parserInfo =
-        withConfigOptions
-          "shikigami-consume-stream"
-          "Consume the activity.v1 stream, match declared stream agents, enqueue run jobs"
-          (pure (runConsumeStreamWith packs))
-          streamConsumerSources
-    }
-
--- | @shikigami-consume-events@: match declared event agents against a public topic.
-consumeEventsRoleInfo :: RoleInfo
-consumeEventsRoleInfo =
-  RoleInfo
-    { binaryName = "shikigami-consume-events",
-      role = EventConsumerRole,
-      packSettings = [],
-      parserInfo =
-        withConfigOptions
-          "shikigami-consume-events"
-          "Consume public integration events, match Event triggers, and enqueue run jobs"
-          (pure runConsumeEvents)
-          ( sourcesOf
-              [ agentsOption,
-                brokerOption,
-                eventsTopicOption,
-                eventsGroupOption
-              ]
-          )
-    }
-
 -- ── Command-line configuration sources ──────────────────────────────────────
 
 -- | Collect the flags that were actually given. An absent flag contributes no
@@ -179,69 +132,12 @@ consumeEventsRoleInfo =
 sourcesOf :: [Parser (Maybe Source)] -> Parser [Source]
 sourcesOf parsers = catMaybes <$> sequenceA parsers
 
--- | The stream consumer's flags.
-streamConsumerSources :: Parser [Source]
-streamConsumerSources =
-  (<>)
-    <$> sourcesOf [agentsOption, brokerOption, activityTopicOption, streamGroupOption]
-    <*> includeAgentActorsSwitch
-
--- | @--include-agent-actors@ takes no value, so it cannot be a 'namedOption'.
--- Passing it contributes the same source a @--set@ override would, carrying the
--- literal @true@; not passing it contributes nothing, which leaves the
--- feedback-guard default in place.
-includeAgentActorsSwitch :: Parser [Source]
-includeAgentActorsSwitch =
-  toSources
-    <$> switch
-      ( long "include-agent-actors"
-          <> help "Match agent-produced activities too (meta-detectors; sets kafka.include_agent_actors)"
-      )
-  where
-    toSources False = []
-    toSources True = cliSources "--include-agent-actors" [cliOverride kafkaIncludeAgentActorsKey "true"]
-
 agentsOption :: Parser (Maybe Source)
 agentsOption =
   namedOption
     "--agents"
     agentsDirectoryKey
     (long "agents" <> metavar "DIR" <> help "Agents manifest directory (sets agents.directory)")
-
-brokerOption :: Parser (Maybe Source)
-brokerOption =
-  namedOption
-    "--broker"
-    kafkaBrokerKey
-    (long "broker" <> metavar "HOST:PORT" <> help "Kafka broker (sets kafka.broker)")
-
-activityTopicOption :: Parser (Maybe Source)
-activityTopicOption =
-  namedOption
-    "--topic"
-    kafkaActivityTopicKey
-    (long "topic" <> metavar "TOPIC" <> help "Activity topic (sets kafka.activity.topic)")
-
-eventsTopicOption :: Parser (Maybe Source)
-eventsTopicOption =
-  namedOption
-    "--topic"
-    kafkaEventsTopicKey
-    (long "topic" <> metavar "TOPIC" <> help "Integration-event topic (sets kafka.events.topic)")
-
-streamGroupOption :: Parser (Maybe Source)
-streamGroupOption =
-  namedOption
-    "--group"
-    kafkaStreamGroupKey
-    (long "group" <> metavar "GROUP" <> help "Consumer group id (sets kafka.groups.stream)")
-
-eventsGroupOption :: Parser (Maybe Source)
-eventsGroupOption =
-  namedOption
-    "--group"
-    kafkaEventsGroupKey
-    (long "group" <> metavar "GROUP" <> help "Consumer group id (sets kafka.groups.events)")
 
 -- Bounded maintenance stays in the resource-owning worker binary; the embedded
 -- server hook cannot interpret the application's Kioku effect row.

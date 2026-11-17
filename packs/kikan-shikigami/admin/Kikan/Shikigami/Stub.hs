@@ -2,7 +2,8 @@
 -- distribution's @kikan-shikigami@ command (plan 135, M3).
 --
 -- @stub-kawa@ and @stub-kanmon@ stand in for Kawa's ingest doorway and
--- Kanmon's channel-action route in a local end-to-end run. They are fixtures
+-- Kanmon's channel-action route in a local end-to-end run, and
+-- @publish-fixture@ puts one activity envelope on the Kawa stream (M5). They are fixtures
 -- for Kikan services, so the stock admin command no longer offers them. Each
 -- requires the bearer token the binding's outputs send, read from the
 -- binding's secret setting.
@@ -15,6 +16,7 @@ import Data.Set qualified as Set
 import Data.Text qualified as Text
 import Kikan.Shikigami.Stub.Kanmon (StubKanmonOptions (..), runStubKanmon)
 import Kikan.Shikigami.Stub.Kawa (StubKawaOptions (..), runStubKawa)
+import Kikan.Shikigami.Stub.Publish (runPublishFixture)
 import Options.Applicative
 import Shikigami.Agent.DeclarationValue (declarationCoordinate)
 import Shikigami.Flow.Sdk (FlowPack (..), noTriggerHooks, parseFlowPackName)
@@ -32,7 +34,7 @@ stubsPack =
       tasks = [],
       settings = [],
       triggers = noTriggerHooks,
-      adminVerbs = [stubKawa, stubKanmon],
+      adminVerbs = [stubKawa, stubKanmon, publishFixture],
       gauges = [],
       authorities = [],
       outputs = [],
@@ -64,6 +66,23 @@ stubKawa =
         <$> option auto (long "port" <> metavar "PORT" <> help "Port to listen on")
         <*> optional (strOption (long "republish-topic" <> metavar "TOPIC" <> help "Re-publish accepted envelopes onto this Kafka topic"))
         <*> strOption (long "broker" <> metavar "HOST:PORT" <> value "127.0.0.1:9092" <> showDefault <> help "Kafka broker the republisher writes to")
+
+-- | @publish-fixture FILE [--broker <host:port>] [--topic <topic>]@.
+publishFixture :: AdminVerb
+publishFixture =
+  AdminVerb
+    { name = "publish-fixture",
+      parser =
+        info
+          (verb <**> helper)
+          (progDesc "Publish one Activity Envelope (JSON) onto the activity stream with keiro-* headers")
+    }
+  where
+    verb =
+      (\file broker topic _context -> runPublishFixture (Text.pack broker) (Text.pack topic) file)
+        <$> strArgument (metavar "FILE")
+        <*> strOption (long "broker" <> metavar "HOST:PORT" <> value "127.0.0.1:9092" <> showDefault <> help "Kafka broker")
+        <*> strOption (long "topic" <> metavar "TOPIC" <> value "activity.v1" <> showDefault <> help "Activity topic")
 
 -- | @stub-kanmon --port <n> [--allow-conversation <key>]...@.
 stubKanmon :: AdminVerb

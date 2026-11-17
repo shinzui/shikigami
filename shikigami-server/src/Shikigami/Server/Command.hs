@@ -2,12 +2,13 @@
 --
 -- One binary with subcommands, rather than one binary per command, because these
 -- are short-lived operator actions rather than long-running roles: validating a
--- manifest, rendering a lifecycle diagram, enqueuing a run, publishing a fixture
--- envelope, or standing up a downstream stub for a local end-to-end run. Nothing
--- here supervises anything, and none of it is what @shikigami-server@ serves.
+-- manifest, rendering a lifecycle diagram, enqueuing a run, resolving an
+-- approval. Nothing here supervises anything, and none of it is what
+-- @shikigami-server@ serves. The Kikan service stubs and @publish-fixture@ are
+-- admin verbs of the Kikan distribution's @kikan-shikigami@ (plan 135).
 --
--- It lives in @shikigami-server@ because these commands reach downstream HTTP and
--- Kafka surfaces the server package already owns, and because the package
+-- It lives in @shikigami-server@ because these commands reach downstream HTTP
+-- surfaces the server package already owns, and because the package
 -- dependency graph gives them nowhere else to live: @shikigami-workers@ may not
 -- be imported by the server, and core may hold no listener.
 --
@@ -16,10 +17,9 @@
 -- Each subcommand parser produces a pair: the action to run, which takes the
 -- resolved 'Shikigami.App.Config.AppConfig', and any command-line configuration
 -- sources the subcommand itself contributes. Sources are how a flag like
--- @--broker@ survives the move to typed configuration: it is not a private
--- parser feeding a private value, it is an ordinary Settei source aimed at the
--- declared @kafka.broker@ key. So @--broker@ and @--set kafka.broker=…@ mean the
--- same thing, both appear in @--explain-config@ with their spelling, and neither
+-- @--agents@ survives the move to typed configuration: it is not a private
+-- parser feeding a private value, it is an ordinary Settei source aimed at a
+-- declared key. So a flag and the @--set@ of its key mean the same thing, both appear in @--explain-config@ with their spelling, and neither
 -- can disagree with the other about defaults.
 --
 -- The subcommand is optional so that @shikigami --describe-config@ works with no
@@ -47,12 +47,10 @@ import Control.Lens ((&), (.~))
 import Data.Bifunctor (first)
 import Data.Generics.Labels ()
 import Data.List (nub, tails)
-import Data.Maybe (catMaybes)
 import Data.Text qualified as Text
 import Data.Time.Format.ISO8601 (iso8601ParseM)
 import Kiroku.Store.Connection (withStore)
 import Options.Applicative hiding (action)
-import Settei.Optparse (namedOption)
 import Settei.Source (Source)
 import Shikigami.Agent.DeclarationValue (declarationCoordinate)
 import Shikigami.Agent.Loader (loadAgentsReport, loadedAgents)
@@ -60,7 +58,7 @@ import Shikigami.Agent.Name (AgentName, mkAgentName)
 import Shikigami.Agent.Payload (payloadArgument)
 import Shikigami.Agent.Principal (principalText)
 import Shikigami.App (AppEnv (..), noopTracer, runAppIO)
-import Shikigami.App.Config (AppConfig (..), Role (AdminRole), kafkaActivityTopicKey, kafkaBrokerKey, revealSecretText)
+import Shikigami.App.Config (AppConfig (..), Role (AdminRole), revealSecretText)
 import Shikigami.App.Config.Load
   ( ConfigOptions (..),
     configOptions,
@@ -87,7 +85,6 @@ import Shikigami.Server.Command.Mandates
 import Shikigami.Server.Command.ObjectiveTrackers
 import Shikigami.Server.Command.Objectives
 import Shikigami.Server.Command.Ops (opsConfigSources, opsInvocationParser, runOps)
-import Shikigami.Server.Command.PublishFixture (runPublishFixture)
 import Shikigami.Server.Command.Record (RecordCheckOptions (..), RecordListOptions (..), runRecordCheck, runRecordList)
 import Shikigami.Server.Command.RenderLifecycle (runRenderLifecycle)
 import Shikigami.Server.Command.ResolveApproval (resolveApprovalOptionsParser, runResolveApproval)
@@ -212,7 +209,6 @@ adminSubcommandsWith packs =
     ("flows", command "flows" (flowsInfo packs)),
     ("enqueue-run", command "enqueue-run" enqueueRunInfo),
     ("resolve-approval", command "resolve-approval" resolveApprovalInfo),
-    ("publish-fixture", command "publish-fixture" publishFixtureInfo),
     ("grants", command "grants" grantsInfo),
     ("agents", command "agents" agentsInfo),
     ("runs", command "runs" runsInfo),
@@ -587,38 +583,6 @@ resolveApprovalInfo =
     parser =
       (\(awakeableId, decision) -> (runResolveApproval awakeableId decision, []))
         <$> resolveApprovalOptionsParser
-
-publishFixtureInfo :: ParserInfo AdminAction
-publishFixtureInfo =
-  info
-    (parser <**> helper)
-    (progDesc "Publish one Activity Envelope (JSON) onto the activity stream with keiro-* headers")
-  where
-    parser =
-      (\file sources -> (runPublishFixture file, sources))
-        <$> argument str (metavar "FILE")
-        <*> sourcesOf [brokerOption, topicOption]
-
--- ── Command-line configuration sources ──────────────────────────────────────
-
--- | Collect the flags that were actually given. An absent flag contributes no
--- source, which is what leaves the environment or the declared default in place.
-sourcesOf :: [Parser (Maybe Source)] -> Parser [Source]
-sourcesOf parsers = catMaybes <$> sequenceA parsers
-
-brokerOption :: Parser (Maybe Source)
-brokerOption =
-  namedOption
-    "--broker"
-    kafkaBrokerKey
-    (long "broker" <> metavar "HOST:PORT" <> help "Kafka broker (sets kafka.broker)")
-
-topicOption :: Parser (Maybe Source)
-topicOption =
-  namedOption
-    "--topic"
-    kafkaActivityTopicKey
-    (long "topic" <> metavar "TOPIC" <> help "Activity topic (sets kafka.activity.topic)")
 
 revisionReader :: ReadM (StateRevision scope)
 revisionReader = eitherReader \raw -> case reads raw of

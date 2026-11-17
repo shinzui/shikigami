@@ -29,7 +29,7 @@ import Shikigami.Objective.Keys (ObservedSource (..))
 import Shikigami.Objective.Types qualified as Objective
 import Shikigami.Pack.Setting (noPackSettings)
 import Shikigami.Repository (repositoryIdText)
-import Shikigami.Trigger.Consumer (RecordDisposition (..))
+import Shikigami.Trigger.Intake (RecordDisposition (..))
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
 

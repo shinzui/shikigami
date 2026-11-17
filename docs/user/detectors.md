@@ -33,7 +33,7 @@ so neither could run. See [Behaviors](./behaviors.md) and [Flows](./flows.md).
 2. Validate it with `cabal run shikigami -- validate <file>.dhall`. Validation
    refuses a Flow the executable was not composed with; it does not prove that a
    program task can execute.
-3. Point both `shikigami-worker` and `shikigami-consume-stream` at the directory
+3. Point both `kikan-shikigami-worker` and `kikan-shikigami-consume-stream` at the directory
    that holds it with `--agents`. Directory loading is not recursive.
 4. Configure the agent directory, sink grants, and
    [per-action authorization](../operations/action-authorization.md) before expecting

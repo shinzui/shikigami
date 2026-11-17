@@ -1,11 +1,15 @@
 -- | The fixture publisher: produce ONE Activity Envelope onto the @activity.v1@ topic
 -- with the exact @keiro-*@ header set the keiro inbox requires (IP-6 — identical to
 -- EP-3's @stub-kawa --republish@). The message key is the envelope's @subject.id@.
--- Used by the @publish-fixture@ CLI to drive the stream trigger.
-module Shikigami.Trigger.Publish
+-- Used by the distribution's @kikan-shikigami publish-fixture@ verb to drive the
+-- stream trigger (plan 135, M5: no stock package links a Kafka client).
+module Kikan.Shikigami.Stub.Publish
   ( publishEnvelope,
+    runPublishFixture,
   )
 where
+
+import Data.Aeson qualified as Aeson
 
 import Data.Aeson (encode)
 import Data.ByteString.Lazy qualified as LBS
@@ -19,6 +23,25 @@ import Kafka.Types (KafkaError, headersFromList)
 import Shikigami.Activity (ActivityEnvelope (..), Subject (..))
 import Shikigami.Activity.Coordinate (activityCoordinateText)
 import Shikigami.Prelude
+import System.Exit (exitFailure)
+import System.IO (hPutStrLn, stderr)
+
+-- | @publish-fixture FILE [--broker B] [--topic T]@: publish one Activity
+-- Envelope from a JSON file onto the activity stream with the keiro-* headers.
+runPublishFixture :: Text -> Text -> FilePath -> IO ()
+runPublishFixture broker topic path = do
+  decoded <- Aeson.eitherDecodeFileStrict' path
+  case decoded :: Either String ActivityEnvelope of
+    Left e -> do
+      hPutStrLn stderr ("publish-fixture: cannot decode " <> path <> ": " <> e)
+      exitFailure
+    Right env -> do
+      r <- publishEnvelope broker topic env
+      case r of
+        Left e -> do
+          hPutStrLn stderr ("publish-fixture: " <> Text.unpack e)
+          exitFailure
+        Right () -> putStrLn ("published " <> path <> " to topic " <> Text.unpack topic)
 
 -- | Publish one envelope to the topic on the broker. Returns a typed error on failure.
 publishEnvelope :: Text -> Text -> ActivityEnvelope -> IO (Either Text ())

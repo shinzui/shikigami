@@ -101,8 +101,8 @@ forbiddenInLightPackages =
     ("hs-opentelemetry-exporter-otlp", "an exporter belongs at an executable boundary"),
     ("shibuya-pgmq-adapter", "the supervised queue adapter belongs to shikigami-workers"),
     ("pgmq-effectful", "the queue effect interpreter belongs to shikigami-workers"),
-    ("hw-kafka-client", "stream clients belong to shikigami-workers"),
-    ("kafka-effectful", "stream clients belong to shikigami-workers")
+    ("hw-kafka-client", "stream clients belong to the Kikan binding's intake library"),
+    ("kafka-effectful", "stream clients belong to the Kikan binding's intake library")
   ]
 
 tests :: TestTree

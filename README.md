@@ -157,8 +157,9 @@ shikigami-agent-run --agent <NAME|FILE> [--workspace <DIR>]
 
 shikigami-worker [--agents <DIR>]      # long-running, from shikigami-workers
 shikigami-scheduler [--agents <DIR>]
-shikigami-consume-stream [--agents <DIR>]
-shikigami-consume-events [--agents <DIR>]
+
+kikan-shikigami-consume-stream [--agents <DIR>]  # stream intake, Kikan distribution only
+kikan-shikigami-consume-events [--agents <DIR>]
 
 shikigami-server                       # the public HTTP API
 shikigami-migrate up                   # database migrations

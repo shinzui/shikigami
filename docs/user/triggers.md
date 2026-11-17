@@ -90,7 +90,7 @@ To intentionally match agent-produced activities (a "meta-detector" that watches
 agents), pass `--include-agent-actors` to the stream consumer:
 
 ```bash
-$ cabal run shikigami-consume-stream -- --agents agents --include-agent-actors
+$ cabal run kikan-shikigami-consume-stream -- --agents agents --include-agent-actors
 ```
 
 See **[The Living Loop](./living-loop.md)** for how a digest *does* legitimately trigger a
@@ -114,7 +114,7 @@ run job.
 Consume a public integration-event topic with `consume-events`:
 
 ```bash
-$ cabal run shikigami-consume-events -- \
+$ cabal run kikan-shikigami-consume-events -- \
     --agents agents \
     --broker 127.0.0.1:9092 \
     --topic danwa.message-addressed.v1

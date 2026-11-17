@@ -58,7 +58,6 @@ tests =
                 "flows",
                 "enqueue-run",
                 "resolve-approval",
-                "publish-fixture",
                 "grants",
                 "agents",
                 "runs",
@@ -242,8 +241,6 @@ tests =
           ["list", "sync"]
         assertBool ("agents sync help does not mention --json:\n" <> syncHelp) ("--json" `isInfixOf` syncHelp)
         assertBool ("agents sync help does not mention --alias:\n" <> syncHelp) ("--alias" `isInfixOf` syncHelp),
-      testCase "a subcommand's downstream flags name the configuration keys they set" do
-        assertMentions ["publish-fixture", "--help"] ["kafka.broker", "kafka.activity.topic"],
       -- The mounted keiro-ops tree is not in `adminSubcommands` -- it cannot be,
       -- because keiro-ops exports its tree as one ParserInfo over an abstract
       -- type -- so nothing above covers it. A mount that silently stopped
@@ -317,14 +314,6 @@ tests =
           "redaction dropped the verb"
           ("wf list" `Text.isInfixOf` redactDatabaseUrl ["wf", "list", "--database-url", secret])
     ]
-
-assertMentions :: [String] -> [String] -> IO ()
-assertMentions args expected =
-  mapM_
-    (\needle -> assertBool (unwords args <> " does not mention " <> needle <> ":\n" <> rendered) (needle `isInfixOf` rendered))
-    expected
-  where
-    rendered = helpTextOf args
 
 -- | Run the administrative parser on the given arguments and return what it
 -- printed.
