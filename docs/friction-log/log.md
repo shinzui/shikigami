@@ -2,6 +2,9 @@
 
 ## 2026-11-17
 
+* **Update**: FRIC-98 accepted: Accepted at EP-10 completion: the by-name build is the documented workaround and recurred once more.
+
+
 * **Addition**: FRIC-99 records detour tooling friction with mori://shinzui/shikigami: The objective continuity scenario strands its run after the injected worker kill
 
 

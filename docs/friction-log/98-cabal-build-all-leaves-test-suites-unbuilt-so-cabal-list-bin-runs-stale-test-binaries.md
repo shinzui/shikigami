@@ -6,7 +6,7 @@ generated:
   by: "claude-code/claude-opus-5-5"
   at: "2026-11-17T15:48:20Z"
 frictionId: FRIC-98
-status: logged
+status: "accepted"
 impact: detour
 kind: tooling
 origin: "mori://shinzui/shikigami"
@@ -17,6 +17,11 @@ workaround: "Build every test suite by name before running its binary (or use ca
 tags:
   - "build"
   - "testing"
+resolution: "cabal build all builds no test suites here, so the project builds each suite by name (cabal build pkg:test:suite) before cabal list-bin; the workaround held through M5 and M6, once after a stale core binary ran."
+amended:
+  - by: "claude-code/claude-opus-5-5"
+    at: "2026-11-17T20:45:45Z"
+    change: "Accepted at EP-10 completion: the by-name build is the documented workaround and recurred once more."
 ---
 # cabal build all leaves test suites unbuilt, so cabal list-bin runs stale test binaries
 

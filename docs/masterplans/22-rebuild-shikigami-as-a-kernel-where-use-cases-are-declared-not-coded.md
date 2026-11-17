@@ -422,7 +422,7 @@ rule.
 | EP-7 | Modernize the keiro services with a declared campaign playbook | [docs/plans/132-modernize-the-keiro-services-with-a-declared-campaign-playbook.md](../plans/132-modernize-the-keiro-services-with-a-declared-campaign-playbook.md) | EP-3, EP-4 | EP-5 | In Progress |
 | EP-8 | Give the kernel its own action, record, output, approval and trigger contracts with local adapters | [docs/plans/133-give-the-kernel-its-own-action-record-output-approval-and-trigger-contracts-with-local-adapters.md](../plans/133-give-the-kernel-its-own-action-record-output-approval-and-trigger-contracts-with-local-adapters.md) | EP-1 (for M2 and M3) | None | Complete |
 | EP-9 | Declare and run a routine agent with one file and one command | [docs/plans/134-declare-and-run-a-routine-agent-with-one-file-and-one-command.md](../plans/134-declare-and-run-a-routine-agent-with-one-file-and-one-command.md) | EP-1; EP-8 M2; EP-2 M2b (for the scheduled milestone) | EP-3 | Complete |
-| EP-10 | Move the Kikan service bindings out of shikigami-core and compose a Kikan distribution | [docs/plans/135-move-the-kikan-service-bindings-out-of-shikigami-core-and-compose-a-kikan-distribution.md](../plans/135-move-the-kikan-service-bindings-out-of-shikigami-core-and-compose-a-kikan-distribution.md) | EP-5, EP-8 | EP-6 | In Progress |
+| EP-10 | Move the Kikan service bindings out of shikigami-core and compose a Kikan distribution | [docs/plans/135-move-the-kikan-service-bindings-out-of-shikigami-core-and-compose-a-kikan-distribution.md](../plans/135-move-the-kikan-service-bindings-out-of-shikigami-core-and-compose-a-kikan-distribution.md) | EP-5, EP-8 | EP-6 | Complete |
 | EP-11 | Freeze the v1 API baseline with a surface inventory and compatibility checks | [docs/plans/136-freeze-the-v1-api-baseline-with-a-surface-inventory-and-compatibility-checks.md](../plans/136-freeze-the-v1-api-baseline-with-a-surface-inventory-and-compatibility-checks.md) | EP-1 to EP-4, EP-8, EP-9; EP-6 M1; EP-7 M3 (for M2); EP-5, EP-6, EP-10 (for M3 and M4) | None | In Progress |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
@@ -1053,8 +1053,14 @@ Kafka. By the user's decision the conversation loop stays in the kernel behind a
 conversation-channel port, with Danwa as the binding's channel and the workflow renamed
 `shikigami.conversation`. Against the global Redpanda, a published envelope and a Danwa
 addressed message each ran end to end through the distribution. The objective continuity
-scenario now composes the distribution but exposes a restart-recovery defect (FRIC-99). Next
-in order are EP-10 M6 and EP-11 M2 to M4. Stage 1 (the pilot) ends at the declaration baseline, and stage 2 at
+scenario now composes the distribution but exposes a restart-recovery defect (FRIC-99).
+EP-10 is complete on 2026-11-17 (ADR-131): the boundary check refuses any stock stanza or
+source that reaches a Kikan client, an outbox delivery is recorded against its run, a
+deployment-tier one-off run is composed like the worker, and the portability check passed
+against the distribution. By the user's decision the record-into-evidence projection is the
+attestation plan's, the qualification cohort waits for the distribution's Nix package, and
+the Kikan sample declarations stay in `agents/`. Next in order are EP-11 M2 to M4; EP-11 M2
+waits on EP-7 M3 (the keiro campaign), which is the user's call. Stage 1 (the pilot) ends at the declaration baseline, and stage 2 at
 the kernel baseline.
 
 - [ ] Architectural acceptance: the keiro modernization campaign runs for real on at least
@@ -1063,10 +1069,13 @@ the kernel baseline.
 - [x] Routine-agent acceptance: EP-9's one-file, one-command, confirm-once agent runs by
   hand and on a local schedule on this Mac. (2026-11-15: `repo-digest` by hand in keiro and
   three scheduled runs under `shikigami-local up`; `readme-keeper` committed in fsrs-hs.)
-- [ ] Portability acceptance: one declaration runs unchanged under the stock composition
+- [x] Portability acceptance: one declaration runs unchanged under the stock composition
   and the Kikan distribution, with K1 to K8 holding in both. (2026-11-16: EP-8 M3 passed
-  against a Kikan composition with the fixture authority; EP-10 reruns it against the
-  distribution.)
+  against a Kikan composition with the fixture authority. 2026-11-17: EP-10 M6 reran it
+  against the distribution: `agents/proof/portable-note.dhall` under `shikigami-agent-run`
+  (local-operator, `local.report`) and `kikan-shikigami-agent-run` (contained, Kikan-En
+  fixture, `kawa.digest` published by `kikan-shikigami-worker`); both records pass
+  `record check`, with the same action decided and delivered.)
 - [ ] Declaration baseline: the declaration, playbook, operator-file and local-command
   checks enforce.
 - [ ] Kernel baseline: every remaining compatibility check enforces, and the end of the
@@ -1217,6 +1226,21 @@ the kernel baseline.
   loop.
   Evidence: `docs/plans/134-declare-and-run-a-routine-agent-with-one-file-and-one-command.md`,
   Decision Log, M3.
+
+- Observation (EP-10 M6, 2026-11-17): EP-8 M3's portability evidence went stale when EP-10
+  M3 moved the Kikan outputs onto the outbox: an outbox delivery left no `output.delivered`
+  in its run's record and its publish-time decision was run-less, a K3 gap no suite caught.
+  The rerun against the distribution found it, and EP-10 fixed it (`5bd2c94b`). Rerun the
+  portability check whenever an adapter's delivery path changes.
+- Observation (EP-10 M5 and EP-6 M6): two subsystems a plan proposed to move out of the
+  kernel, the conversation loop and the adaptive coordinator, ran on most of the agent-run
+  runtime and had a small service edge. Both stayed kernel primitives by the user's decision,
+  the conversation loop behind a channel port. Measure that dependence before planning a
+  move.
+- Observation (EP-10 M5): the objective continuity scenario (`tests/objective-tracking/`),
+  which predates this initiative, had not run since EP-10 M2. Composed with the
+  distribution, it strands its run after its injected kill (FRIC-99); the scenario is
+  restart-recovery qualification, outside the initiative's scope.
 
 ## Decision Log
 

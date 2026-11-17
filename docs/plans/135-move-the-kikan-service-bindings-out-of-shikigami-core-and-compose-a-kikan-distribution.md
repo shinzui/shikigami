@@ -178,27 +178,31 @@ service where one runs on this Mac.
   on `danwa-api` and `danwa-client` for `SinkAuthSpec`, left to M6 (Decision Log);
   `tests/objective-tracking/run.sh` now composes the distribution but strands its run after
   the injected kill, before its conversation step (FRIC-99).)
-- [ ] M6: `shikigami-core` and the other six packages link no Kikan client library and the
+- [x] M6: `shikigami-core` and the other six packages link no Kikan client library and the
   fitness check enforces it. The action record is projected into run evidence. The
   portability check passes against the Kikan distribution, with the default output resolved
   to `local.report` in one run and `kawa.digest` in the other. The ADR and the requirement
-  mapping are published.
-  (In progress, 2026-11-17. Done: both measurement commands print 0 and the boundary check
-  enforces the rule, proven on a planted `import Rei.Client` and a planted `rei-api-client`
-  (`1f6d582f`); outbox deliveries are recorded against their run (`5bd2c94b`); ADR-131, the
-  packages guide, the outbox capability page and both requirement maps (`dd1f1ad0`). The
+  mapping are published. (2026-11-17, amended by the user's decisions. Both measurement
+  commands print 0 (they were 15 and 17 before M1) and the boundary check refuses a planted
+  `import Rei.Client` and a planted `rei-api-client` in a test stanza (`1f6d582f`). An
+  outbox delivery is recorded against its run (`5bd2c94b`), and a deployment-tier one-off
+  run is admitted as its principal under the configured authority (`2cc1fe29`). The
   portability check ran `agents/proof/portable-note.dhall` unchanged under
-  `shikigami-agent-run` (local-operator) and through `kikan-shikigami enqueue-run` and
-  `kikan-shikigami-worker`; `record check` holds K1 to K8 for both. Stock: `run.admitted`
-  (`local.report`, composition default), `authority.decided emit_output` (operator),
-  `output.delivered`, `run.finished`. Distribution: `run.admitted` (`kawa.digest`, composition
-  default), `authority.decided emit_output` (`service:kikan-en`), `run.finished`, then the
-  publish-time `authority.decided emit_output` and `output.delivered` (step
-  `outbox-publish`). The same action is decided and delivered in both; they differ in the
-  authority, the default output, the tier label (`unspecified` for the worker) and, by
-  design since M3, the organizational delivery happening after the run under a second
-  decision. Open: the record-into-evidence projection, the stale qualification cohort and the
-  move of the three Kikan sample agents, each awaiting the user.)
+  `shikigami-agent-run` (local-operator) and `kikan-shikigami-agent-run` (contained, the
+  fixture Kikan-En, outputs published by `kikan-shikigami-worker` to `stub-kawa`) on one
+  disposable PostgreSQL and the stub behavior provider; `record check` holds K1 to K8 for
+  both. Stock: `run.admitted` (`local.report`, composition default), `authority.decided
+  emit_output` (operator), `output.delivered`, `run.finished`. Distribution: `run.admitted`
+  (`kawa.digest`, composition default, lifecycle `active`), `authority.decided emit_output`
+  (`service:kikan-en`), `run.finished`, then at publish `authority.decided emit_output` and
+  `output.delivered` (step `outbox-publish`). The same action is decided and delivered in
+  both; they differ in the authority, the default output, the tier label and the
+  organizational delivery's place after the run under a second decision, by design since
+  M3. ADR-131, the packages guide, the outbox and conversation capability pages and both
+  requirement maps are published (`dd1f1ad0`). By the user's decision the projection into
+  attestation evidence is the attestation plan's, the qualification cohort is regenerated
+  with the distribution's Nix package, and the three Kikan sample declarations stay in
+  `agents/`.)
 
 
 ## Surprises & Discoveries
@@ -815,7 +819,40 @@ These came from read-only research on 2026-11-15, before implementation.
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Completed 2026-11-17. Every piece of Shikigami that knew a Kikan service now lives in
+`packs/kikan-shikigami-binding`, behind a kernel port, and the Kikan distribution
+`packs/kikan-shikigami` composes it with the organizational packs into eight executables.
+The seven stock packages link no Kikan client or stream library in any stanza and import no
+Kikan module, which the boundary check enforces; both measurement commands went from 15 and
+17 to 0. A declaration in kernel vocabulary runs unchanged under both compositions, and the
+distribution's outputs reached a real Redpanda broker, a disposable Rei and the stubs.
+[ADR-131](../adr/0131-one-kernel-is-composed-two-ways-and-kikan-services-are-bindings.md)
+records the result.
+
+What differs from the plan as written, each by a recorded decision: the conversation loop
+stayed in the kernel behind a conversation-channel port, with Danwa as the binding's
+channel, so no pack contributes a workflow family and `RunRouteKind` stays closed (the user,
+M5); the intake split at the broker, so the record processing stayed kernel and only the
+Kafka transport moved (M5); the stock composition does not refuse stream or event triggers,
+because event triggers are how stock agents are addressed (M5); and the record-into-evidence
+projection, the cohort and the sample declarations were deferred or kept (the user, M6).
+
+What the moves exposed and fixed outside their own scope: an outbox delivery had left no
+effect in its run's record since M3, which EP-8's portability evidence predated; a
+deployment-tier one-off run ran as its compatibility identity under a deny-all authority;
+`grants grant` hung under a file directory. The objective continuity scenario, unrun since
+M2, now composes the distribution but strands its run after its injected kill.
+
+Friction: FRIC-98 (`cabal build all` leaves test suites unbuilt) is accepted with the
+by-name build as the workaround; FRIC-99 (the continuity scenario's restart-recovery
+defect) stays logged for a follow-up that investigates the stranded execution.
+
+Lessons. A portability check is evidence about the adapters as they were when it ran; when
+an adapter moves (here, Kawa onto the outbox) the check has to run again, and it is the
+cheapest way to find a record gap. A plan that proposes moving a subsystem should measure how
+much of the kernel the subsystem runs on before committing to the move: the conversation
+loop and the adaptive coordinator both turned out to be primitives with a small service
+edge, and a port at that edge was the smaller change.
 
 
 ## Context and Orientation
