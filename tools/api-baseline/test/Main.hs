@@ -7,6 +7,7 @@ import ApiBaseline.Check.DhallSchema (dhallSchemaFindings, excerpt)
 import ApiBaseline.Check.ExportList (exportListFindings, parseInterfaceExports, parsePinned, renderPinned)
 import ApiBaseline.Check.JournalCodec (encodeGolden, journalCodecFindings)
 import ApiBaseline.Check.KeiroGate (keiroGateFindings)
+import ApiBaseline.Check.KernelLabels (PackLabelInSpec (..), packLabels, packLabelsInSpecs, specLabels)
 import ApiBaseline.Check.OpenApi (OpenApiChange (..), openApiChanges)
 import ApiBaseline.Exposure (Exposure (..), exposureCounts, importedModules, parseExposedModules)
 import ApiBaseline.Run (pinSurface)
@@ -18,7 +19,7 @@ import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.IO qualified as TextIO
-import System.Directory (createDirectoryIfMissing, removeDirectoryRecursive)
+import System.Directory (createDirectoryIfMissing, doesFileExist, listDirectory, removeDirectoryRecursive)
 import System.FilePath ((</>))
 import Test.Tasty (TestTree, defaultMain, testGroup)
 import Test.Tasty.HUnit (assertBool, testCase, (@?=))
@@ -28,7 +29,7 @@ main =
   defaultMain
     ( testGroup
         "api-baseline"
-        [verdictTests, schemaTests, codecTests, openApiTests, cliTests, exportTests, gateTests, exposureTests, pinTests]
+        [verdictTests, schemaTests, codecTests, openApiTests, cliTests, exportTests, gateTests, exposureTests, pinTests, labelTests]
     )
 
 severities :: [Finding] -> [Severity]
@@ -307,4 +308,36 @@ pinTests =
         removeDirectoryRecursive scratch
         assertBool ("the empty pin was accepted: " <> show result) (either (Text.isInfixOf "empty") (const False) result)
         after @?= original
+    ]
+
+-- | The core keiro specification declares kernel labels only: no label a
+-- flow pack pins in its golden inventory (EP-11 M3).
+labelTests :: TestTree
+labelTests =
+  testGroup
+    "kernel labels"
+    [ testCase "a label a pack owns is refused in a core specification" do
+        let spec = "workflow AgentRun\n  body\n    step lookup-agent -> AgentDecl\n    step watchdog-observe -> Observed\n"
+            packs = [("packs/flow-pack-watchdog/test/golden/labels.txt", "watchdog-observe\nwatchdog-open\n")]
+        specLabels spec @?= ["lookup-agent", "watchdog-observe"]
+        packLabelsInSpecs [("domain/shikigami/agent-run.keiro", spec)] packs
+          @?= [PackLabelInSpec {label = "watchdog-observe", spec = "domain/shikigami/agent-run.keiro", pack = "packs/flow-pack-watchdog/test/golden/labels.txt"}]
+        packLabelsInSpecs [("domain/shikigami/agent-run.keiro", "    step lookup-agent -> AgentDecl\n")] packs @?= [],
+      testCase "the real core specifications declare no pack label" do
+        let root = "../.."
+        specNames <- filter (Text.isSuffixOf ".keiro" . Text.pack) <$> listDirectory (root </> "domain/shikigami")
+        specs <- mapM (\name -> (("domain/shikigami" </> name),) <$> TextIO.readFile (root </> "domain/shikigami" </> name)) specNames
+        packDirectories <- listDirectory (root </> "packs")
+        inventories <-
+          fmap concat
+            . mapM
+              ( \directory -> do
+                  let path = "packs" </> directory </> "test/golden/labels.txt"
+                  exists <- doesFileExist (root </> path)
+                  if exists then (\contents -> [(path, contents)]) <$> TextIO.readFile (root </> path) else pure []
+              )
+            $ packDirectories
+        assertBool "the core declares its agent-run labels" (any (elem "lookup-agent" . specLabels . snd) specs)
+        assertBool "at least four packs pin their labels" (length inventories >= 4 && all (not . null . packLabels . snd) inventories)
+        packLabelsInSpecs specs inventories @?= []
     ]

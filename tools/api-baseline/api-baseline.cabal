@@ -37,6 +37,7 @@ library
     ApiBaseline.Check.ExportList
     ApiBaseline.Check.JournalCodec
     ApiBaseline.Check.KeiroGate
+    ApiBaseline.Check.KernelLabels
     ApiBaseline.Check.OpenApi
     ApiBaseline.Exposure
     ApiBaseline.Inventory
