@@ -102,7 +102,8 @@ service where one runs on this Mac.
   no workflow body change. The Kikan-En gap is filed, by the user's decision, as
   `mori://shinzui/kikan-en/improvement-requests/IR-5` (kikan-en commit 045171f, "Authorize
   a coding-agent launch per action"; not pushed).)
-- [ ] M3: The five output adapters and the two approval channels run from the binding, and
+- [ ] M3: (in progress 2026-11-17: approach decided and staged, inventory recorded in
+  Surprises & Discoveries; no code yet) The five output adapters and the two approval channels run from the binding, and
   the distribution registers `kawa.digest` as its default output. A declared agent's outputs
   reach their services through the distribution worker, a declaration with no outputs gets a
   Kawa digest, and the stock composition refuses a declaration naming a Kikan output kind at
@@ -172,6 +173,43 @@ These came from read-only research on 2026-11-15, before implementation.
   coding-agent launch.
   Evidence: `toAgentAction` in `packs/kikan-shikigami-binding/src/Kikan/Shikigami/Binding/Authority.hs`;
   `ls $(mori path mori://shinzui/kikan-en)/docs/improvement-requests`.
+
+- Observation: (M3 inventory, 2026-11-17) What depends on the closed `Sink` union, the
+  map stage (a) and (c) work from. Definition: `Agent/Decl.hs` (`data Sink`, derived
+  `FromDhall`/JSON; `sinks :: [Sink]`) and `schema/Agent.dhall` (`Sink` union, `sinks`
+  field and default). Kernel pattern matches: `Sink.hs` (`sinkKindOf`, `runSink`),
+  `Sink/Authorization.hs` (`sinkOutputKind`, `sinkAction` targets), `Sink/Intent.hs`
+  (`SinkIntent.sink`, `egressMetadata`), `Sink/Recipient.hs`, `Sink/Validate.hs`,
+  `Sink/Types.hs` (`AddressedSignal.sink`), `Flow/Capability.hs` (`EmitSignal*` effect),
+  `Flow/Sdk.hs` (re-exports `Sink (..)`), `Agent/Workflow.hs` (`approveSinks`, sink kind in
+  approval keys `sink-<Kind>-<n>`, spans and logs), `Agent/Conversation.hs:1489` (a
+  hard-coded `DanwaConversation` reply sink). Readers of `decl.sinks`: `Agent/Workflow.hs`,
+  `Sink/Validate.hs` via `shikigami-server/.../Command/Validate.hs`, `Coordination/Direct.hs`
+  (`null declaration.sinks`), `shikigami-agent/.../Agent/Trust.hs` (`sinkKindNames`, the
+  light tier's `OutputsUnavailable` refusal), and `shikigami-server/.../Agent/Handler.hs`
+  feeding `shikigami-api/.../Agent/Api.hs` `sinks :: [Text]` (snake_case) printed by
+  `shikigami-client/.../Client/Command.hs`. Packs that build `Sink` values: examples
+  `AtRiskCustomer`, initiative `Notice`, practice-review `OpenTelemetryReview` and
+  `Attention`, watchdog `Settings` (`operatorSink`, `conversationSink`). `SinkKind` users:
+  `Agent/Approval.hs` (`approval.require` parses PascalCase names), `App/Config.hs`
+  (`approvalRequiredSinks`), `Sink/Delivery.hs` (`sink_deliveries.sink_kind`),
+  `Sink/GrantStore.hs` and `shikigami-server/.../Command/Grants.hs` (`sink_grants`),
+  `Workers/Command/Worker.hs`, `Agent/Command/AgentRun.hs`. Stored legacy names: migrations
+  `0003-sink-grants.sql` (CHECK and seed rows), `0008-sink-deliveries.sql`,
+  `0011-agent-principal-state.sql` (indexes), `shikigami-migrations/expected-schema.txt`,
+  `api-baseline/goldens/exports/flow-sdk.txt`, `shikigami-core/test/fixtures/wire/agent-decl-v1.json`,
+  `config/shikigami.example.yaml`, `tests/cli/contracts.py`. Declarations with non-empty
+  sinks: `agents/{heartbeat,danwa-heartbeat,triage-note}.dhall`,
+  `agents/proof/{heartbeat,channel-reply}.dhall`,
+  `packs/flow-pack-examples/agents/qualification-at-risk-customer.dhall`,
+  `tests/hurl/agents/disabled-heartbeat.dhall`,
+  `fixtures/qualification/agents/service-health-{observer,reporter}.dhall`; nine more
+  declare `sinks = []`. About 45 test files construct sinks or kinds (largest:
+  `AppConfigSpec` 36, `SinkDeliverySpec` 30, `SinkHonestySpec` 14, `AgentWorkflowSpec` 13).
+  The five kinds are spelled three ways today: PascalCase (`SinkKind`, the database,
+  `approval.require`), dotted (`sinkOutputKind`, `Trust.sinkKindNames`) and snake_case
+  (the HTTP API); after M3 only the dotted output kind remains.
+  Evidence: an Explore-agent inventory of the working tree at 177d9b4e.
 
 ## Decision Log
 
