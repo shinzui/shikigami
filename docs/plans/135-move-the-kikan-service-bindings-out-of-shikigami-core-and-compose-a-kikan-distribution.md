@@ -37,6 +37,11 @@ provenance:
       at: 2026-11-17T17:46:08Z
       mode: "implement"
       note: "M3 implemented: outputs, approval channels, settings and stubs run from the binding and distribution; acceptance recorded"
+    - model: "claude-opus-5-5"
+      harness: "claude-code"
+      at: 2026-11-17T19:50:51Z
+      mode: "implement"
+      note: "EP-10 M4 recorded; M5 accepted: intake to the binding's intake library, conversation channel port with Danwa channel (user decision)"
 ---
 
 # Move the Kikan service bindings out of shikigami-core and compose a Kikan distribution

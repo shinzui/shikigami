@@ -61,6 +61,11 @@ provenance:
       at: 2026-11-17T17:46:08Z
       mode: "implement"
       note: "EP-10 M3 accepted; progress snapshot and FRIC-98 and test-placement observations"
+    - model: "claude-opus-5-5"
+      harness: "claude-code"
+      at: 2026-11-17T19:50:51Z
+      mode: "implement"
+      note: "EP-10 M4 and M5 accepted; conversation-channel decision; FRIC-99 recorded"
 ---
 
 # Rebuild Shikigami as a kernel where use cases are declared, not coded
