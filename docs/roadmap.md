@@ -102,6 +102,13 @@ not feature readiness or effort percentages.
 | [14](masterplans/14-deliver-adaptive-autonomous-objectives-with-durable-workers.md) | 5 of 7 complete; plan 86 native milestones pass | Guarded live adapter plus actual-model trial; recurrence (87 not started) |
 | [21](masterplans/21-execute-governed-work-through-enrolled-machine-daemons.md) | 0 of 5 complete; all not started | Enrollment, local policy, machine-hosted operations, relay/partition fencing and qualification |
 
+MasterPlan 22 ([kernel rebuild](masterplans/22-rebuild-shikigami-as-a-kernel-where-use-cases-are-declared-not-coded.md))
+moves through three adoption stages:
+- Stage 1, the pilot, is complete. The declaration baseline was reached at `c54933b5` on
+  2026-11-17, after the keiro campaign upgraded koyomi.
+- Stage 2, the kernel baseline (EP-11 M4), is next.
+- Stage 3 is organizational use through the Kikan distribution.
+
 Recent completed work:
 
 | Owner | Accepted delivery and limits |

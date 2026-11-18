@@ -32,6 +32,11 @@ provenance:
       at: 2026-11-17T21:21:43Z
       mode: "implement"
       note: "EP-11 M3 accepted: 6 surfaces registered, ExposedSet check, private internal library exposing 273 modules, kernel-label check, K1-K8 audit"
+    - model: "claude-opus-5-5"
+      harness: "claude-code"
+      at: 2026-11-18T04:40:16Z
+      mode: "implement"
+      note: "M2 accepted: declaration baseline frozen at c54933b5; corpus loaders hardened (0e26cf31); real runs on kanmon"
 ---
 
 # Freeze the v1 API baseline with a surface inventory and compatibility checks
@@ -106,12 +111,39 @@ It owns that plan's fourth acceptance test, "Baseline", and its "Public surfaces
   - The package-architecture and kernel-boundary groups of `shikigami-core-test` pass (17
     tests), `just haskell-conventions` passes, `nix/qualification/cohort.json` is unchanged and
     `.#packages.aarch64-darwin.shikigami-worker.drvPath` evaluates.
-- [ ] M2 (first freeze, the declaration baseline): the agent declaration, its journal codec,
+- [x] M2 (first freeze, the declaration baseline): the agent declaration, its journal codec,
   the playbook format, the operator files, the `local.report` helper and the stock
   local-work commands are registered by their owners, pinned and enforcing. A deliberate
   breaking edit to each is caught, an additive one re-pins cleanly, the commit is recorded,
   and the routine agent and the campaign's one-step playbook run for real on the frozen
   declaration surface.
+  - Evidence, 2026-11-17. The freeze is `c54933b5`, and `0e26cf31` hardens its corpus loading.
+    `just api-baseline` reports 19 surfaces, 8 enforcing, all clean; `git tag --list` is
+    empty.
+  - Breaking edits caught, each exiting 1 and then reverted:
+    - renaming `trigger` in `schema/Agent.dhall` (stable policy text)
+    - removing the `Probe` step kind from `schema/Playbook.dhall`
+    - renaming `identity` in `schema/LocalOperator.dhall`
+    - an `AgentDecl` decoder that drops the `name` key, failing every stored golden
+    - removing `shikigami-local run --in`, which reports the provisional policy because
+      that CLI froze as provisional
+  - Additive change: a new exported helper in `schema/Agent.dhall` reports CHANGED, and
+    `just api-baseline-pin agent-declaration` makes it clean. A defaulted field added to the
+    Dhall schema alone is correctly BREAKING, because the runtime decodes into `AgentDecl`;
+    a real new field lands in both in one commit. The same experiment on
+    `schema/LocalOperator.dhall` showed the check had only evaluated non-agent corpora. It
+    now loads each through its runtime loader (FRIC-118, `0e26cf31`).
+  - Real runs on the frozen surface, each confirmed once by the user:
+    - `agents/playbooks/mori-status-agent.dhall` on kanmon (run `f352af57-…`) ran the
+      declared `mori status --json`, recorded 2 approved decisions and 0 refused, and
+      stopped on mori's exit 1, as kanmon's pre-freeze readiness probe did.
+    - The routine coder agent `repo-digest`, created by `shikigami-local new --coder`, ran
+      by hand in kanmon (run `ebf038f8-…`). It changed nothing and delivered its report
+      through the composition default (`output.delivered`).
+  - Kernel surface still free: removing `PackGauge` from `Shikigami.Pack.Sdk` prints a
+    pack-sdk finding and exits 0.
+  - Friction: FRIC-116 to FRIC-119.
+
 - [x] M3: every remaining surface is registered in report mode, `shikigami-core` exposes only
   what the SDK and the sibling packages need, the core keiro specification holds kernel
   labels only, and the audit of invariants K1 to K8 and the three requirements is checked in

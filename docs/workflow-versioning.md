@@ -13,8 +13,7 @@ it first appears.
 
 ## Current first-release baseline exception
 
-**Declaration baseline (EP-11 M2 of MasterPlan 22, 2026-11-17).** From the declaration
-baseline commit recorded in MasterPlan 22's Decision Log, the agent declaration
+**Declaration baseline (EP-11 M2 of MasterPlan 22, 2026-11-17).** From commit `c54933b5`, the agent declaration
 (`schema/Agent.dhall`, with `schema/Routine.dhall` checked through its corpus) and its journal
 codec change only compatibly. So do the playbook bundle, the local-operator approvals file and
 the `local.report` helper. `just api-baseline` enforces this. Workflow bodies remain under the

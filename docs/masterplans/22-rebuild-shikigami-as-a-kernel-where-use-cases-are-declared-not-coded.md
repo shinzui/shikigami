@@ -71,6 +71,11 @@ provenance:
       at: 2026-11-18T02:50:27Z
       mode: "implement"
       note: "FRIC-99 resolved by ADR-132; EP-7 M3 accepted on koyomi; EP-11 M2 unblocked"
+    - model: "claude-opus-5-5"
+      harness: "claude-code"
+      at: 2026-11-18T04:40:16Z
+      mode: "implement"
+      note: "Declaration baseline reached at c54933b5; stage 1 complete"
 ---
 
 # Rebuild Shikigami as a kernel where use cases are declared, not coded
@@ -1078,7 +1083,8 @@ approved and took koyomi from keiro 0.22 to 0.25 one release edge at a time. An 
 `just check` on the result is green. Before that, FRIC-99 turned out to be a runtime-capacity
 deadlock, and ADR-132 resolves it: a stopped process instance releases its permits. Getting the
 campaign through on this machine cost the operator-experience gaps FRIC-100 to FRIC-115 record.
-EP-11 M2 is the next step.
+EP-11 M2 is accepted the same day: the declaration baseline is frozen at `c54933b5`, and stage 1, the
+pilot, is complete. EP-11 M4, the kernel baseline, is next.
 
 - [ ] Architectural acceptance: the keiro modernization campaign runs for real on at least
   two of the user's repositories with no change to `shikigami-core` in the commits that
@@ -1093,8 +1099,9 @@ EP-11 M2 is the next step.
   (local-operator, `local.report`) and `kikan-shikigami-agent-run` (contained, Kikan-En
   fixture, `kawa.digest` published by `kikan-shikigami-worker`); both records pass
   `record check`, with the same action decided and delivered.)
-- [ ] Declaration baseline: the declaration, playbook, operator-file and local-command
-  checks enforce.
+- [x] Declaration baseline: the declaration, playbook, operator-file and local-command
+  checks enforce. (2026-11-17: EP-11 M2, freeze commit `c54933b5`; eight declaration surfaces
+  enforce, and the real runs and breaking-edit checks are in plan 136.)
 - [ ] Kernel baseline: every remaining compatibility check enforces, and the end of the
   pre-release exception is recorded.
 
@@ -1265,6 +1272,14 @@ EP-11 M2 is the next step.
   default capacity of one.
 
 ## Decision Log
+
+- Decision: The declaration baseline is reached at `c54933b5` (EP-11 M2, stage 1 complete). From
+  that commit the agent declaration and its journal codec, the playbook bundle, the
+  local-operator approvals file and the `local.report` helper change only compatibly, and
+  `just api-baseline` enforces it beside `just keiro-gate`. Workflow bodies stay under the
+  pre-release exception and the drain rule until the kernel baseline (EP-11 M4). No tag is
+  created.
+  Date: 2026-11-17
 
 - Decision: EP-8 M1 declares only the two executed actions (`UseCapability`, `EmitOutput`);
   the Integration Points sketch now shows each later constructor with the plan that adds it.
