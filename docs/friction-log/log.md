@@ -1,6 +1,15 @@
 # Bundle Update Log
 
 ## 2026-11-18
+
+* **Addition**: FRIC-115 records detour interface friction with mori://shinzui/shikigami: The Reflect step quotes the whole test output and exceeds the 64 KiB prompt limit
+
+
+* **Addition**: FRIC-114 records detour interface friction with mori://shinzui/shikigami: The campaign's test probe runs bare cabal test all, which a repository's database suites cannot pass
+
+
+* **Addition**: FRIC-113 records slowdown process friction with mori://shinzui/shikigami: Each migration edge pays for two cold coding-agent sessions and a redundant build probe
+
 * **Addition**: FRIC-112 records detour interface friction with mori://shinzui/shikigami: The campaign quoted a whole multi-edge migration window into one 64 KiB coding-agent prompt
 
 ## 2026-11-17

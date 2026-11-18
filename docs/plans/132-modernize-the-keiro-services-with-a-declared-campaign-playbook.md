@@ -32,6 +32,11 @@ provenance:
       at: 2026-11-16T00:26:35Z
       mode: "implement"
       note: "M1 accepted: campaign declared, kanmon readiness in place; M2 waits on operator decisions"
+    - model: "claude-opus-5-5"
+      harness: "claude-code"
+      at: 2026-11-18T02:50:27Z
+      mode: "implement"
+      note: "M3 accepted on koyomi: R8 readiness, per-edge selection, independent just check green; FRIC-100 to FRIC-115"
 ---
 
 # Modernize the keiro services with a declared campaign playbook
@@ -116,9 +121,28 @@ it ships as declarations with no change to `shikigami-core`.
     `failed`. A later run's `fix-build` prompt quoted the earlier run's three learnings. This
     exposed and fixed FRIC-78 (a coding agent refused a checkout path over 128 characters) and
     FRIC-79 (learnings were never recalled across runs).
-- [ ] Milestone 3: a run on the second repository uses the improved playbook, and its
+- [x] Milestone 3: a run on the second repository uses the improved playbook, and its
   transcript shows the repository-1 learning applied: a step skipped, reordered or given
   better instructions.
+  - Evidence, 2026-11-17. Koyomi run `aa2b77a1-04e7-5384-8398-07b7e33947e0` approved all four
+    gates (readiness, selection, MasterPlan, close) with the user, and took koyomi from keiro
+    0.22 to 0.25 in commits `02f933f` to `1fe7bb7` on its master. The repository-1 learning
+    shows in the transcript three ways:
+    - The new `seihou outdated` probe and readiness check R8 ran before any planning and
+      reported keiro-upgrade 0.14.1 current. The operator had upgraded it first, which is
+      what the kizashi pilot lacked.
+    - `migrate-keiro-stack` was skipped as deferred.
+    - The upgrade ran one release edge at a time.
+  - Koyomi's MasterPlan 2 and ExecPlan 9 record `just check` exit 0 on each committed edge. An
+    independent `nix develop -c just check` on `1fe7bb7` exits 0, with 33 suites passing and
+    no formatting change.
+  - The first M3 run (`17f5c2fb-…`) stopped at its apply step on the 64 KiB prompt limit
+    (FRIC-112). That led to the per-edge decision above.
+  - The run ended `stopped` at `reflect`, because Reflect quotes the whole test output
+    (FRIC-115). It therefore recorded no learning.
+  - The playbook's bare `cabal test all` probe exited 1 on setup alone (FRIC-114).
+  - Taking the run to its first gate on this machine took four launches (FRIC-100 to
+    FRIC-105). Per-edge overhead is in FRIC-113.
 - [ ] Milestone 4: the remaining confirmed repositories are modernized in batches, each batch
   using the playbook as improved by the previous one. The commits that introduced the
   campaign contain no `shikigami-core/` path, and EP-5's fitness check passes. This milestone

@@ -66,6 +66,11 @@ provenance:
       at: 2026-11-17T19:50:51Z
       mode: "implement"
       note: "EP-10 M4 and M5 accepted; conversation-channel decision; FRIC-99 recorded"
+    - model: "claude-opus-5-5"
+      harness: "claude-code"
+      at: 2026-11-18T02:50:27Z
+      mode: "implement"
+      note: "FRIC-99 resolved by ADR-132; EP-7 M3 accepted on koyomi; EP-11 M2 unblocked"
 ---
 
 # Rebuild Shikigami as a kernel where use cases are declared, not coded
@@ -1066,6 +1071,14 @@ label in the core keiro specifications, and `docs/architecture/kernel-invariants
 K1 to K8. EP-11 M2, and M4 after it, wait on EP-7 M3 (the keiro campaign), which is the
 user's call. Stage 1 (the pilot) ends at the declaration baseline, and stage 2 at
 the kernel baseline.
+
+On 2026-11-17 the user chose to unblock EP-11 M2 by slimming the playbook and running koyomi,
+and EP-7 M3 is accepted. Run `aa2b77a1-04e7-5384-8398-07b7e33947e0` passed four gates the user
+approved and took koyomi from keiro 0.22 to 0.25 one release edge at a time. An independent
+`just check` on the result is green. Before that, FRIC-99 turned out to be a runtime-capacity
+deadlock, and ADR-132 resolves it: a stopped process instance releases its permits. Getting the
+campaign through on this machine cost the operator-experience gaps FRIC-100 to FRIC-115 record.
+EP-11 M2 is the next step.
 
 - [ ] Architectural acceptance: the keiro modernization campaign runs for real on at least
   two of the user's repositories with no change to `shikigami-core` in the commits that
