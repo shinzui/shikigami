@@ -1,0 +1,7 @@
+Invalid option `--help'
+
+Usage: shikigami-local grant AGENT [--in DIR|mori://…] 
+                             [--placement in-place|separate-worktree]
+
+  Confirm a declaration on a repository in this terminal, without starting a
+  run; choose where its runs work

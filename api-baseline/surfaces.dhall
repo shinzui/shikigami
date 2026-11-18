@@ -47,6 +47,7 @@ let localVerbs =
       , [ "approvals" ]
       , [ "approvals", "pending" ]
       , [ "approvals", "resolve" ]
+      , [ "grant" ]
       , [ "revoke" ]
       , [ "ledger" ]
       , [ "tools" ]

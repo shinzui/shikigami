@@ -31,6 +31,7 @@ module Shikigami.Agent.Command
   )
 where
 
+import Data.Bifunctor (first)
 import Data.Text qualified as Text
 import Options.Applicative
 import Shikigami.Agent.Command.AgentRun (runAgentRun)
@@ -45,6 +46,7 @@ import Shikigami.App.Config (Role (..))
 import Shikigami.App.Config.Load (withConfigOptions)
 import Shikigami.App.Role (RoleInfo (..), runRole)
 import Shikigami.Flow.Pack (FlowPack (..))
+import Shikigami.Trust.LocalOperator.Approvals (parsePlacement)
 
 -- | Every one-off executable, in the order they are documented.
 --
@@ -127,7 +129,7 @@ localRoleInfo =
         withConfigOptions
           "shikigami-local"
           "Inspect local-operator grants and the action record"
-          (subparser (newRoutine <> runRoutineCommand <> runsCommand <> doctor <> up) <|> (runLocal <$> subparser (approvals <> revoke <> ledger <> tools <> mcp <> gate <> toolAttempt <> playbook)))
+          (subparser (newRoutine <> runRoutineCommand <> runsCommand <> doctor <> up) <|> (runLocal <$> subparser (approvals <> grant <> revoke <> ledger <> tools <> mcp <> gate <> toolAttempt <> playbook)))
           (pure [])
     }
   where
@@ -246,6 +248,17 @@ localRoleInfo =
                 <|> pure ShowApprovals
             )
             (progDesc "Validate the approvals file and list every grant; or `pending` / `resolve` approval asks")
+        )
+    grant =
+      command
+        "grant"
+        ( info
+            ( GrantDeclaration
+                <$> strArgument (metavar "AGENT" <> help "A routine agent's name, or a declaration path such as a playbook campaign's")
+                <*> optional (strOption (long "in" <> metavar "DIR|mori://…" <> help "The repository (default: the current checkout)"))
+                <*> optional (option (eitherReader (first Text.unpack . parsePlacement . Text.pack)) (long "placement" <> metavar "in-place|separate-worktree" <> help "Where its runs work (default: the stored grant's, else the approvals file's, else separate-worktree)"))
+            )
+            (progDesc "Confirm a declaration on a repository in this terminal, without starting a run; choose where its runs work")
         )
     revoke = command "revoke" (info (RevokeGrant . Text.pack <$> strArgument (metavar "DIGEST" <> help "At least eight characters of a stored grant's digest")) (progDesc "Delete a stored confirmation"))
     ledger =

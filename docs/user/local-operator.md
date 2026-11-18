@@ -51,8 +51,22 @@ redirected, or `--no-confirm`) never asks; with no stored grant it refuses befor
 model:
 
 ```text
-agent-run: no stored grant for this declaration; run it once in a terminal to confirm it
+agent-run: no stored grant for this declaration on mori://shinzui/fsrs-hs; confirm it once in a terminal with: shikigami-local grant <DECLARATION> --in mori://shinzui/fsrs-hs
 ```
+
+To confirm without starting a run, for example before a long playbook or for a run you will
+start unattended, use `shikigami-local grant`. It takes a routine agent's name or any declaration
+path, shows the same request and asks once:
+
+```bash
+shikigami-local grant agents/campaigns/keiro-modernization/keiro-modernization.dhall \
+  --in mori://shinzui/keiei --placement in-place
+```
+
+It must run in a terminal. A pipe such as `| tee` makes its output not a terminal, and it then
+refuses rather than ask. It prints `already granted` when the stored grant already has that
+placement, and leaves an approvals-file grant to the file. `shikigami-local doctor --agent <file>
+--workspace <repository>` shows each grant's placement and the `grant` command for a missing one.
 
 Until local outputs exist (EP-8 M2 of MasterPlan 22), a declaration that lists a Kikan sink is
 refused when it is resolved, before any model call:
@@ -82,8 +96,15 @@ Your checkout and its current branch are untouched. Review with
 `git log shikigami/local-maintainer/<suffix>`; discard with `git worktree remove <root>` and
 `git branch -D <branch>`.
 
-A repository marked `placement = L.Placement.InPlace` is worked on directly, on its current
-branch, with no worktree or branch. Use it only where nobody else is working. The run refuses a
+A run works where its grant says. A grant from the approvals file takes the placement of the
+file's repository entry. A confirmation takes the placement shown when you confirmed it, which is
+the file's entry, or a separate worktree for an unlisted repository, unless you chose another with
+`shikigami-local grant --placement`. Confirming again with another placement replaces the stored
+grant.
+
+A repository worked `in-place` (`placement = L.Placement.InPlace` in the file, or
+`--placement in-place`) is worked on directly, on its current branch, with no worktree or
+branch. Use it only where nobody else is working. The run refuses a
 dirty tree or a detached `HEAD`, holds an exclusive lock under `<state>/locks/` until it ends, and
 records the starting commit, so `git reset --hard <base>` undoes it. A run that mutates the
 repository spends under a resource root sized by the grant's budget; tokens are bounded only when
@@ -92,7 +113,8 @@ repository spends under a resource root sized by the grant's budget; tokens are 
 ## What you granted, and what happened
 
 ```bash
-shikigami-local approvals                 # the approvals file and every stored grant
+shikigami-local approvals                 # the approvals file and every stored grant, with its placement
+shikigami-local grant <AGENT> --in <REPO> # confirm without a run (--placement in-place|separate-worktree)
 shikigami-local revoke 7a43f1bf4d53       # delete a stored confirmation (8+ digest characters)
 shikigami-local ledger --run <workflow-id> [--refusals] [--limit N] [--json]
 ```

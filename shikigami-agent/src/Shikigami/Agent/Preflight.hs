@@ -25,7 +25,7 @@ import Shikigami.Agent.Name (agentNameText)
 import Shikigami.Capability.Declared (cliTools)
 import Shikigami.CodingAgent.Types (CodingAgentProvider (..), WorkspaceAccess, accessText, providerText)
 import Shikigami.Repository (repositoryIdText)
-import Shikigami.Trust.LocalOperator.Approvals (LocalApprovals, RepositorySelector, renderApprovalsError, selectRepository)
+import Shikigami.Trust.LocalOperator.Approvals (LocalApprovals, RepositorySelector, placementText, renderApprovalsError, selectRepository)
 import Shikigami.Trust.LocalOperator.Grant (GrantRefusal (..), GrantStore, renderGrantRefusal, resolveGrant)
 import Shikigami.Trust.LocalOperator.Grant qualified as Grant
 import Shikigami.Trust.LocalOperator.Host (codingAgentLauncher, gateExecutable)
@@ -159,15 +159,15 @@ ceilingCheck name provider access needsArguments = do
 -- | Whether the operator already granted this declaration on a repository,
 -- through the approvals file or a stored terminal confirmation. Nothing is
 -- asked or recorded.
-grantCheck :: LocalApprovals -> GrantStore -> AgentDecl -> RepositorySelector -> IO Check
-grantCheck approvals store decl selector = do
+grantCheck :: LocalApprovals -> GrantStore -> FilePath -> AgentDecl -> RepositorySelector -> IO Check
+grantCheck approvals store path decl selector = do
   let name = agentNameText decl.name
   selectRepository processCheckoutResolver approvals selector >>= \case
     Left problem -> pure (Check (name <> ": repository selectable") (Just (Problem (renderApprovalsError problem) "add the repository to ~/.config/shikigami/local-operator.dhall")))
     Right repository -> do
       let label = name <> ": granted on " <> repositoryIdText repository.identity
       resolveGrant Grant.Unattended approvals store (\_ -> pure (Right ())) decl repository >>= \case
-        Right _ -> pure (Check label Nothing)
-        Left (NoStoredGrant _) ->
-          pure (Check label (Just (Problem "no stored grant" "run it once from a real terminal (not through a pipe such as tee) and confirm the grant")))
+        Right grant -> pure (Check (label <> ", " <> placementText grant.placement) Nothing)
+        Left NoStoredGrant {} ->
+          pure (Check label (Just (Problem "no stored grant" ("in a terminal, run: shikigami-local grant " <> Text.pack path <> " --in " <> repositoryIdText repository.identity <> " [--placement in-place]"))))
         Left refusal -> pure (Check label (Just (Problem (renderGrantRefusal refusal) "correct the approvals file entry, or revoke and confirm again")))

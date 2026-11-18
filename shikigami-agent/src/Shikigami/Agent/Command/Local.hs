@@ -2,8 +2,10 @@
 -- what their agents did (ADR-124).
 --
 -- @approvals@ validates the explicit approvals file and lists its
--- repositories and approvals beside every stored confirmation. @revoke@
--- deletes a stored confirmation, so the next interactive run asks again.
+-- repositories and approvals beside every stored confirmation. @grant@
+-- confirms a declaration on a repository without starting a run, under the
+-- placement the operator chooses. @revoke@ deletes a stored confirmation, so
+-- the next interactive run asks again.
 -- @ledger@ prints the action record, the single record of every grant and
 -- decision in the stock composition.
 module Shikigami.Agent.Command.Local
@@ -14,12 +16,13 @@ module Shikigami.Agent.Command.Local
 where
 
 import Control.Exception (IOException, try)
+import Control.Monad (when)
 import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.ByteString.Lazy.Char8 qualified as LazyChar8
 import Data.List (find)
-import Data.Maybe (isJust)
+import Data.Maybe (fromMaybe, isJust, isNothing)
 import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as Text
@@ -33,9 +36,11 @@ import Numeric.Natural (Natural)
 import Shikigami.Agent.Approval (ApprovalDecision (Rejected), resolveApproval)
 import Shikigami.Agent.Approval qualified as Approval
 import Shikigami.Agent.Approval.LocalInbox (PendingApproval (..), listPendingApprovals, localInboxDirectory, pendingToken, readPendingApproval, removePendingApproval)
-import Shikigami.Agent.Decl (AgentDecl (..))
+import Shikigami.Agent.Command.Routine (resolveAgent)
+import Shikigami.Agent.Decl (AgentDecl (..), codingAgentAccessOf, requestedOverlays)
 import Shikigami.Agent.Loader (loadAgent)
 import Shikigami.Agent.Name (agentNameText)
+import Shikigami.Agent.Trust (terminalInteraction)
 import Shikigami.App (AppEnv (..), noopTracer)
 import Shikigami.App.Config (AppConfig (..), revealSecretText)
 import Shikigami.App.Config.Load (requireDatabaseUrl)
@@ -53,17 +58,21 @@ import Shikigami.Record
 import Shikigami.Repository (repositoryId, repositoryIdText)
 import Shikigami.Trust.LocalOperator.Approvals
 import Shikigami.Trust.LocalOperator.Grant
+import Shikigami.Trust.LocalOperator.Host (compatibilityPrincipal, recordGrantIn)
 import Shikigami.Workspace.Launch (CapturedOutput (..), LaunchOutcome (..), LaunchRequest (..), LaunchResult (..), ProcessLauncher (..), renderLaunchRefusal, worktreeRoot)
 import Shikigami.Workspace.Local.Checkout (processCheckoutResolver)
 import Shikigami.Workspace.Local.Launcher (hostProcessLauncher)
 import System.Directory (getCurrentDirectory)
 import System.Environment (getEnvironment)
-import System.Exit (ExitCode (..), exitFailure, exitWith)
+import System.Exit (ExitCode (..), exitFailure, exitSuccess, exitWith)
 import System.FilePath (takeDirectory, (</>))
 import System.IO (hPutStrLn, stderr)
 
 data LocalCommand
   = ShowApprovals
+  | -- | Confirm a declaration (a routine agent's name or a path) on a
+    -- repository, optionally under a chosen placement, without a run.
+    GrantDeclaration !String !(Maybe FilePath) !(Maybe WorkspacePlacement)
   | RevokeGrant !Text
   | Ledger !LedgerOptions
   | -- | A declaration file and the repository it would run in.
@@ -102,6 +111,42 @@ runLocal command config = case command of
     store <- stateStore
     grants <- store.list >>= either (die . Text.pack . show) pure
     if null grants then putStrLn "no stored grants" else mapM_ (TextIO.putStrLn . renderGrant) grants
+  GrantDeclaration agent workspace chosen -> do
+    path <- resolveAgent agent
+    decl <- loadAgent path >>= either (die . Text.pack . show) pure
+    let name = agentNameText decl.name
+    when (null (requestedOverlays decl) && null decl.tools && isNothing (codingAgentAccessOf decl.behavior)) do
+      TextIO.putStrLn (name <> " asks for nothing to grant: no capabilities, declared tools or coding agent")
+      exitSuccess
+    when (not (null (requestedOverlays decl)) && isNothing decl.identity) do
+      die (name <> " requests capabilities but declares no identity; add identity = Some { principal = \"principal_<name>\" }")
+    approvalsPath <- maybe defaultApprovalsPath pure config.localOperatorApprovalsFile
+    approvals <- loadLocalApprovals processCheckoutResolver approvalsPath >>= either (die . renderApprovalsError) pure
+    selected <- selectRepository processCheckoutResolver approvals (maybe (SelectByPath ".") repositorySelector workspace) >>= either (die . renderApprovalsError) pure
+    let on = name <> " on " <> repositoryIdText selected.identity
+    case approvalFor approvals decl.name selected of
+      Just _ -> do
+        TextIO.putStrLn (on <> " is granted by " <> Text.pack approvalsPath <> ", " <> placementText selected.placement <> "; edit that file to change it")
+        when (maybe False (/= selected.placement) chosen) (die "an approvals-file grant takes its placement from the file's repositories entry")
+      Nothing -> do
+        store <- stateStore
+        existing <- store.lookup (grantDigest decl selected) >>= either (die . Text.pack . show) pure
+        let placement = fromMaybe (maybe selected.placement (.placement) existing) chosen
+        case existing of
+          Just grant
+            | grant.placement == placement ->
+                TextIO.putStrLn ("already granted " <> shortDigest grant.digest <> " " <> on <> ", " <> placementText placement <> renderConfirmed grant)
+          _ ->
+            terminalInteraction False >>= \case
+              Unattended ->
+                die "grant asks for your confirmation on a terminal; run it where standard input and output are both a terminal (a pipe such as tee makes the output not a terminal)"
+              Interactive ask -> do
+                connection <- revealSecretText <$> requireDatabaseUrl "shikigami-local grant" config
+                verifyShikigamiMigrations connection
+                withStore (defaultConnectionSettings connection) \KirokuStore {pool} ->
+                  confirmGrant ask store (recordGrantIn (postgresRecord pool) (compatibilityPrincipal decl.name) Nothing decl.name) decl (withPlacement placement selected) >>= \case
+                    Left refusal -> die (renderGrantRefusal refusal)
+                    Right grant -> TextIO.putStrLn ("granted " <> shortDigest grant.digest <> " " <> on <> ", " <> placementText grant.placement)
   RevokeGrant prefix -> do
     store <- stateStore
     removed <- store.revoke prefix >>= either (die . Text.pack . show) pure
@@ -138,7 +183,7 @@ runLocal command config = case command of
         granted <- resolveGrant Unattended approvals store (\_ -> pure (Right ())) decl repository
         let status = case granted of
               Right _ -> "granted"
-              Left (NoStoredGrant _) -> "needs confirmation"
+              Left NoStoredGrant {} -> "needs confirmation"
               Left refusal -> "refused: " <> renderGrantRefusal refusal
             bounded tool = if any (\bound -> bound.name == tool.name) catalog.cli then "bounded by " <> Text.pack catalogPath else "no ceiling"
         mapM_
@@ -162,7 +207,7 @@ runLocal command config = case command of
           located
         case granted of
           Right _ -> pure ()
-          Left (NoStoredGrant _) -> exitWith (ExitFailure 3)
+          Left NoStoredGrant {} -> exitWith (ExitFailure 3)
           Left _ -> exitWith (ExitFailure 1)
   Gate toolsFile -> runGate toolsFile
   ValidatePlaybook path ->
@@ -322,10 +367,15 @@ renderGrant grant =
     <> " on "
     <> repositoryIdText grant.repository
     <> ": "
-    <> Text.intercalate ", " (capabilityIdText <$> Set.toList grant.capabilities)
-    <> case grant.grantedBy of
-      ConfirmedByOperator at -> " (confirmed " <> Text.pack (iso8601Show at) <> ")"
-      FromApprovalsFile -> " (approvals file)"
+    <> (if Set.null grant.capabilities then "no capabilities" else Text.intercalate ", " (capabilityIdText <$> Set.toList grant.capabilities))
+    <> "; "
+    <> placementText grant.placement
+    <> renderConfirmed grant
+
+renderConfirmed :: LocalGrant -> Text
+renderConfirmed grant = case grant.grantedBy of
+  ConfirmedByOperator at -> " (confirmed " <> Text.pack (iso8601Show at) <> ")"
+  FromApprovalsFile -> " (approvals file)"
 
 die :: Text -> IO a
 die detail = do

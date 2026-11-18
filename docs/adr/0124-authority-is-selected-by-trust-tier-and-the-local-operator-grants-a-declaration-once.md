@@ -93,6 +93,21 @@ EP-2, EP-3 and EP-8 M2 extend the local policy for coding-agent launches, declar
 and approvals. EP-9 builds the routine-agent commands on `resolveGrant`.
 
 
+## Amendment — 2026-11-18: confirming without a run, and the grant's placement
+
+A stored confirmation can now be given without starting a run:
+`shikigami-local grant <DECLARATION> [--in <REPOSITORY>] [--placement in-place|separate-worktree]`
+shows the same request and asks once. It refuses unless both standard input and standard output
+are terminals, and it has no flag that answers for the operator, so an agent still cannot grant
+itself. As before, a yes is appended to the action record as `authority.granted` before it is
+stored. A confirmation with another placement replaces the earlier one for the same digest.
+
+A run now works under the placement its grant holds. For an approvals-file grant that is the
+file's repository entry. For a stored confirmation it is the placement the operator confirmed.
+Before this, the placement shown at the prompt came from the approvals file alone, and the
+stored placement was never read (FRIC-102, FRIC-103). Every grant stored before the change
+matched its effective placement, so no run changes where it works.
+
 ## References
 
 * [ADR 0036](0036-external-agent-actions-require-fresh-exact-authorization.md) and

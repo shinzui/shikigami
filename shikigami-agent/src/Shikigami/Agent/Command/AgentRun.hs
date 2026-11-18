@@ -41,7 +41,7 @@ import Shikigami.Agent.Principal (AgentIdentity, compatibilityIdentity)
 import Shikigami.Agent.Run (AgentRunResult (..), recordActivityAsMemory, renderMemoryRecord)
 import Shikigami.Agent.Run.Key (newCliRunKey)
 import Shikigami.Agent.RunJob (RunJob (..), RunRouteKind (AgentWorkflowRoute), TriggerKind (TriggeredByOperator), runJobWorkflowId)
-import Shikigami.Agent.Trust (WorkspaceArgument (..), compatibilityPrincipal, lightComposition, parseWorkspaceArgument, terminalInteraction, workspaceArgumentText, workspaceSelector)
+import Shikigami.Agent.Trust (WorkspaceArgument (..), compatibilityPrincipal, lightComposition, parseWorkspaceArgument, terminalInteraction, withGrantHint, workspaceArgumentText, workspaceSelector)
 import Shikigami.Agent.Workflow qualified as AgentWorkflow
 import Shikigami.Agent.Workflow.Name (agentRunWorkflowName, ingestJobStepName)
 import Shikigami.App (AppEnv (..), noopTracer, runAppIO)
@@ -142,7 +142,10 @@ runAgentRun packs agentArg mActivity workspace payloadArgument noConfirm resume 
               unless (null failures) do
                 mapM_ (TIO.hPutStrLn stderr . renderCheck) failures
                 dieAgentRun "this machine is not ready for the run; shikigami-local doctor --agent <declaration> checks it again"
-            interaction <- terminalInteraction noConfirm
+            interaction <-
+              withGrantHint
+                ("  (to choose where it works, answer N and run: shikigami-local grant " <> Text.pack agentArg <> maybe "" ((" --in " <>) . Text.pack) workspace <> " --placement in-place|separate-worktree)")
+                <$> terminalInteraction noConfirm
             runDurableAgent flows (concatMap (.outputs) packs) (concatMap (.authorities) packs) logger store appEnv (parseWorkspaceArgument <$> workspace) triggerPayload interaction config decl resume
 
 -- | The declared principal, admitted by a snapshot of the configured

@@ -10,6 +10,8 @@ module Shikigami.Trust.LocalOperator.Approvals
   ( -- * Placement
     WorkspacePlacement (..),
     placementText,
+    parsePlacement,
+    withPlacement,
 
     -- * Validated approvals
     LocalApprovals,
@@ -85,6 +87,14 @@ instance ToJSON WorkspacePlacement where
   toJSON = \case
     SeparateWorktree -> "separate-worktree"
     InPlace -> "in-place"
+
+-- | @in-place@ or @separate-worktree@, the spelling of the grant store and
+-- of @shikigami-local grant --placement@.
+parsePlacement :: Text -> Either Text WorkspacePlacement
+parsePlacement = \case
+  "separate-worktree" -> Right SeparateWorktree
+  "in-place" -> Right InPlace
+  other -> Left ("unknown placement " <> other <> "; use in-place or separate-worktree")
 
 instance FromJSON WorkspacePlacement where
   parseJSON = Aeson.withText "WorkspacePlacement" \case
@@ -198,6 +208,11 @@ instance HasField "source" LocalRepository FilePath where getField (LocalReposit
 instance HasField "base" LocalRepository Text where getField (LocalRepository _ _ base _) = base
 
 instance HasField "placement" LocalRepository WorkspacePlacement where getField (LocalRepository _ _ _ placement) = placement
+
+-- | The same repository worked under another placement: the one a grant
+-- holds, which is what the operator confirmed.
+withPlacement :: WorkspacePlacement -> LocalRepository -> LocalRepository
+withPlacement placement (LocalRepository identity source base _) = LocalRepository identity source base placement
 
 -- | One explicit approval of an agent on a repository.
 data AgentApproval = AgentApproval !AgentName !RepositoryId !(Set CapabilityId) ![ApprovedRule] !(Maybe Budget)

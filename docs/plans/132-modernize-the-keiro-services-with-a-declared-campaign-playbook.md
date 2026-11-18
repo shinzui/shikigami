@@ -161,6 +161,24 @@ it ships as declarations with no change to `shikigami-core`.
     declaration exits 1 before any step, naming both missing helpers and their fixes; doctor
     reports the ceiling refusal with an empty `XDG_CONFIG_HOME`. The PlaybookSpec case "a stop
     names whether the machine or the work stopped it" covers the stop cause.
+- [x] Grants before the batches (2026-11-18, user-approved): FRIC-102 and FRIC-103.
+  - `shikigami-local grant <declaration> --in <repository> [--placement in-place|separate-worktree]`
+    confirms the campaign on a repository without starting a run. It shows the same request,
+    records `authority.granted`, and refuses unless input and output are both a terminal.
+  - A run now works under its grant's placement. A confirmation's placement is the one the
+    operator chose, and an approvals-file grant's is the file's entry (ADR-124, amended).
+  - The unattended refusal, the run's prompt and `doctor --workspace` each name the `grant`
+    command with the declaration and the repository.
+  - Before a batch, run the `grant` command for each repository with `--placement in-place` in
+    a terminal. The campaign can then start with `--no-confirm`.
+  - Evidence:
+    - Without a terminal, `grant` refuses and names the reason.
+    - An existing grant prints `already granted … separate worktree`.
+    - `doctor --agent agents/campaigns/keiro-modernization/keiro-modernization.dhall
+      --workspace mori://shinzui/keiei` prints the exact `grant` command.
+    - LocalOperatorSpec covers a placement that replaces an earlier confirmation, the prompt
+      showing the placement and the refusal naming the command. LocalHostSpec covers
+      "a run works under the placement its grant holds, not the repository entry's".
 - [ ] Milestone 4: the remaining confirmed repositories are modernized in batches, each batch
   using the playbook as improved by the previous one. The commits that introduced the
   campaign contain no `shikigami-core/` path, and EP-5's fitness check passes. This milestone

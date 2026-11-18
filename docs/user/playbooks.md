@@ -174,7 +174,10 @@ shikigami-agent-run --set trust.tier=local-operator \
 ```
 
 You confirm the declaration for the run's repository; a step in another repository asks once
-for that repository too, and the grant is kept. The bundle is loaded, checked and pinned when
+for that repository too, and the grant is kept. To confirm before the run, and to choose where
+each repository is worked, run `shikigami-local grant <declaration> --in <repository>
+--placement in-place|separate-worktree` once per repository in a terminal. The run can then start
+with `--no-confirm`, or from a pane whose output is piped. The bundle is loaded, checked and pinned when
 the run starts, so editing the file affects only later runs.
 
 Before the first step the run checks this machine: the vendor CLI, `shikigami-agent-launch`,

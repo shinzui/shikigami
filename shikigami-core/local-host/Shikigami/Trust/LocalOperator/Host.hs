@@ -72,9 +72,11 @@ recordGrantIn record principal run agentName grant = do
         <$> record.append RecordEvent {at, run, principal = declarationCoordinateText principal, tier = tierLabel, agent = Just agentName, entry}
 
 -- | Open the run's worktree and the workspace its local tools and coding
--- agents act in.
+-- agents act in. The placement is the grant's: what the operator confirmed,
+-- or the approvals file's repository entry for a grant that file gives
+-- (FRIC-103).
 openLocalRun :: FilePath -> ActionRecord -> AgentDecl -> Authority -> LocalGrant -> LocalRepository -> WorkflowId -> IO (Either Text (LocalWorkspace, RunWorktree))
-openLocalRun stateDirectory record decl runAuthority grant repo runId =
+openLocalRun stateDirectory record decl runAuthority grant granted runId =
   openRunWorktree stateDirectory decl.name runId repo >>= \case
     Left problem -> pure (Left (renderWorktreeError problem))
     Right worktree ->
@@ -98,6 +100,8 @@ openLocalRun stateDirectory record decl runAuthority grant repo runId =
                   worktree
                 )
             )
+  where
+    repo = withPlacement grant.placement granted
 
 -- | The coding-agent runners of a worker: each step's grant, repository and
 -- worktree are resolved from its input, and nothing is asked.

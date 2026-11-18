@@ -15,6 +15,7 @@ module Shikigami.Agent.Trust
     workspaceArgumentText,
     lightComposition,
     terminalInteraction,
+    withGrantHint,
     compatibilityPrincipal,
   )
 where
@@ -103,6 +104,14 @@ terminalInteraction noConfirm = do
           Right line -> Text.toLower (Text.strip line) `elem` ["y", "yes"]
           Left (problem :: IOException) | isEOFError problem -> False
           Left _ -> False
+
+-- | Add a line under the request a run shows, naming the command that
+-- confirms the same grant under another placement or without a run
+-- (FRIC-102, FRIC-103).
+withGrantHint :: Text -> Interaction -> Interaction
+withGrantHint hint = \case
+  Interactive ask -> Interactive (\request -> ask (request <> hint <> "\n"))
+  Unattended -> Unattended
 
 -- | The composition of one light command invocation.
 -- | @organization@ is the output registry of the non-local tiers: the

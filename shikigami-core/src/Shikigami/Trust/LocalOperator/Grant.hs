@@ -33,6 +33,7 @@ module Shikigami.Trust.LocalOperator.Grant
     GrantRefusal (..),
     renderGrantRefusal,
     resolveGrant,
+    confirmGrant,
     grantsForAgent,
   )
 where
@@ -307,7 +308,7 @@ data Interaction
 data GrantRefusal
   = -- | Nothing granted this declaration on this repository and the command
     -- could not ask.
-    NoStoredGrant !GrantDigest
+    NoStoredGrant !GrantDigest !RepositoryId
   | OperatorDeclined
   | -- | The approvals-file entry does not list these requested capabilities.
     RequestExceedsApproval !(Set CapabilityId)
@@ -316,7 +317,11 @@ data GrantRefusal
 
 renderGrantRefusal :: GrantRefusal -> Text
 renderGrantRefusal = \case
-  NoStoredGrant _ -> "no stored grant for this declaration; run it once in a terminal to confirm it"
+  NoStoredGrant _ repository ->
+    "no stored grant for this declaration on "
+      <> repositoryIdText repository
+      <> "; confirm it once in a terminal with: shikigami-local grant <DECLARATION> --in "
+      <> repositoryIdText repository
   OperatorDeclined -> "the operator declined the grant"
   RequestExceedsApproval missing -> "the declaration requests capabilities its approval does not list: " <> Text.intercalate ", " (capabilityIdText <$> Set.toList missing)
   GrantUnavailable detail -> "the grant could not be read or recorded: " <> detail
@@ -347,24 +352,39 @@ resolveGrant interaction approvals store recordGrant decl repository =
         Left problem -> pure (Left (GrantUnavailable (renderGrantError problem)))
         Right (Just stored) -> pure (Right stored)
         Right Nothing -> case interaction of
-          Unattended -> pure (Left (NoStoredGrant digest))
-          Interactive ask -> do
-            accepted <- ask (renderGrantRequest request)
-            if not accepted
-              then pure (Left OperatorDeclined)
-              else do
-                now <- getCurrentTime
-                let grant = confirmed now
-                recordGrant grant >>= \case
-                  Left problem -> pure (Left (GrantUnavailable problem))
-                  Right () -> either (Left . GrantUnavailable . renderGrantError) (const (Right grant)) <$> store.save grant
+          Unattended -> pure (Left (NoStoredGrant digest repository.identity))
+          Interactive ask -> confirmGrant ask store recordGrant decl repository
   where
     request = requestedGrant decl repository
     digest = grantDigest decl repository
     fromApproval approval =
       LocalGrant request.agent repository.identity repository.source repository.placement approval.capabilities approval.rules (maybe defaultBudget id approval.budget) FromApprovalsFile digest
-    confirmed now =
-      LocalGrant request.agent repository.identity repository.source request.placement request.capabilities [] request.budget (ConfirmedByOperator now) digest
+
+-- | Show what the declaration asks for on the repository, under the
+-- repository's placement, and on a yes record the grant (before it is stored)
+-- and store it, replacing any earlier confirmation of the same declaration on
+-- the same repository. @shikigami-local grant@ calls this directly, so a grant
+-- is confirmed without starting a run (FRIC-102) and with the placement the
+-- operator chose (FRIC-103).
+confirmGrant ::
+  (Text -> IO Bool) ->
+  GrantStore ->
+  (LocalGrant -> IO (Either Text ())) ->
+  AgentDecl ->
+  LocalRepository ->
+  IO (Either GrantRefusal LocalGrant)
+confirmGrant ask store recordGrant decl repository = do
+  accepted <- ask (renderGrantRequest request)
+  if not accepted
+    then pure (Left OperatorDeclined)
+    else do
+      now <- getCurrentTime
+      let grant = LocalGrant request.agent repository.identity repository.source request.placement request.capabilities [] request.budget (ConfirmedByOperator now) (grantDigest decl repository)
+      recordGrant grant >>= \case
+        Left problem -> pure (Left (GrantUnavailable problem))
+        Right () -> either (Left . GrantUnavailable . renderGrantError) (const (Right grant)) <$> store.save grant
+  where
+    request = requestedGrant decl repository
 
 renderGrantError :: GrantError -> Text
 renderGrantError = \case

@@ -78,8 +78,8 @@ tests =
         assertHasAll runBehaviorRoleInfo ["--agent", "--payload", "--workspace"],
       testCase "agent-run keeps its agent and activity options" $
         assertHasAll agentRunRoleInfo ["--agent", "--from-activity", "--workspace", "--payload", "--no-confirm"],
-      testCase "shikigami-local names its three verbs" $
-        assertHasAll localRoleInfo ["approvals", "revoke", "ledger"],
+      testCase "shikigami-local names its grant and record verbs" $
+        assertHasAll localRoleInfo ["approvals", "grant", "revoke", "ledger"],
       testCase "a mori:// workspace argument selects an identity and anything else a path" do
         parseWorkspaceArgument "mori://shinzui/fsrs-hs" @?= WorkspaceRepository "mori://shinzui/fsrs-hs"
         parseWorkspaceArgument "../fsrs-hs" @?= WorkspacePath "../fsrs-hs",

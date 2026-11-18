@@ -458,6 +458,7 @@ $ shikigami-local up [--for <MINUTES>]
 $ shikigami-local approvals
 $ shikigami-local approvals pending
 $ shikigami-local approvals resolve <REVIEW-ID> [--reject <REASON>]
+$ shikigami-local grant <AGENT> [--in <DIR|mori://…>] [--placement in-place|separate-worktree]
 $ shikigami-local revoke <DIGEST>
 $ shikigami-local ledger [--run <WORKFLOW-ID>] [--refusals] [--limit <N>] [--json]
 $ shikigami-local tools <AGENT.dhall> [--workspace <DIR|mori://…>]
@@ -477,7 +478,10 @@ a declaration outside the agents directory, such as a playbook campaign; `--work
 checks that each declaration is granted on that repository). `shikigami-agent-run` makes the
 same machine checks before a local run's first step and refuses to start when one fails; `up` runs scheduled routine agents that have a stored approval and says why the
 others are skipped ([Routine agents](./routine-agents.md)). `approvals` validates the
-approvals file and lists its repositories, approvals and every stored confirmation; `revoke`
+approvals file and lists its repositories, approvals and every stored confirmation with its
+placement; `grant` confirms a declaration (a routine agent's name or a path) on a repository in a
+terminal without starting a run, under the placement `--placement` chooses, and its runs then work
+there; `revoke`
 deletes a stored confirmation (give at least eight characters of its digest); `ledger` prints the
 action record oldest first; `approvals pending` and `approvals resolve` list and answer the asks
 in the local approval inbox ([Where a run's result goes](./outputs.md)); `tools` checks a declaration's CLI tools without running it (exit 0

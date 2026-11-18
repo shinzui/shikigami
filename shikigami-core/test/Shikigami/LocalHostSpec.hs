@@ -15,7 +15,8 @@ import Shikigami.Authority (allowAllForTests)
 import Shikigami.Record (memoryRecord, unspecifiedTier)
 import Shikigami.Repository (repositoryId)
 import Shikigami.Trust.LocalOperator.Approvals
-import Shikigami.Trust.LocalOperator.Grant (Interaction (..), openGrantStore, resolveGrant)
+import Shikigami.Trust.LocalOperator.Grant (Interaction (..), confirmGrant, openGrantStore, resolveGrant)
+import Shikigami.Trust.LocalOperator.Host (openLocalRun)
 import Shikigami.Workspace.Launch
 import Shikigami.Workspace.Local.Adapters (LocalWorkspace (..), editTool, gitTool)
 import Shikigami.Workspace.Local.Launcher (hostProcessLauncher)
@@ -110,6 +111,17 @@ tests =
         trailers @?= "run-a"
         again <- git' "commit" (object ["message" .= ("docs: nothing" :: Text), "expectedParent" .= commit])
         assertBool "nothing to commit is refused" (isLeft' again),
+      testCase "a run works under the placement its grant holds, not the repository entry's" $ withRepository \repo state -> do
+        (record, _) <- memoryRecord
+        store <- either (fail . show) pure =<< openGrantStore state
+        grant <- either (fail . show) pure =<< confirmGrant (\_ -> pure True) store (\_ -> pure (Right ())) fixtureDecl (localRepo repo InPlace)
+        openLocalRun state record fixtureDecl allowAllForTests grant (localRepo repo SeparateWorktree) (WorkflowId "run-a") >>= \case
+          Right (local, worktree) -> do
+            worktree.placement @?= InPlace
+            worktree.root @?= worktreeRoot repo
+            local.repository.placement @?= InPlace
+            releaseRunWorktree state (WorkflowId "run-a") worktree
+          Left problem -> assertFailure (Text.unpack problem),
       testCase "in place needs a clean tree and admits one run at a time" $ withRepository \repo state -> do
         let repository = localRepo repo InPlace
         Right held <- openRunWorktree state agent (WorkflowId "run-a") repository

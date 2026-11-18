@@ -93,6 +93,9 @@ approvalsTests =
         loadLocalApprovals testResolver path >>= \case
           Left RepositoryNotGitToplevel {} -> pure ()
           other -> assertFailure ("expected RepositoryNotGitToplevel, got " <> show other),
+      testCase "a placement parses from its stored spelling and an unknown one is refused" do
+        traverse parsePlacement ["in-place", "separate-worktree"] @?= Right [InPlace, SeparateWorktree]
+        assertBool "unknown placement refused" (isLeft (parsePlacement "elsewhere")),
       testCase "an unlisted checkout is selected by path with the default placement" $ withCheckout \checkout _ -> do
         selected <- selectRepository testResolver emptyApprovals (SelectByPath checkout)
         case selected of
@@ -147,6 +150,30 @@ grantTests =
         let original = decl ["workspace.read"]
             edited = original {description = "x"}
         assertBool "digest changes" (grantDigest original repository /= grantDigest edited repository),
+      testCase "a confirmation under a chosen placement replaces the earlier one and is what a run reads" $ withCheckout \checkout state -> do
+        repository <- either (fail . show) pure =<< selectRepository testResolver emptyApprovals (SelectByPath checkout)
+        store <- openStore state
+        (ask, _) <- countingPrompt True
+        first' <- either (fail . show) pure =<< resolveGrant ask emptyApprovals store noRecord (decl ["workspace.read"]) repository
+        first'.placement @?= SeparateWorktree
+        again <- either (fail . show) pure =<< confirmGrant (\_ -> pure True) store noRecord (decl ["workspace.read"]) (withPlacement InPlace repository)
+        again.digest @?= first'.digest
+        store.list >>= \listed -> fmap (fmap (\g -> g.placement)) listed @?= Right [InPlace]
+        resolveGrant Unattended emptyApprovals store noRecord (decl ["workspace.read"]) repository >>= \stored -> fmap (\g -> g.placement) stored @?= Right InPlace,
+      testCase "the confirmation shows the chosen placement" $ withCheckout \checkout state -> do
+        repository <- either (fail . show) pure =<< selectRepository testResolver emptyApprovals (SelectByPath checkout)
+        store <- openStore state
+        shown <- newIORef ""
+        _ <- confirmGrant (\request -> modifyIORef' shown (const request) >> pure False) store noRecord (decl ["workspace.read"]) (withPlacement InPlace repository)
+        readIORef shown >>= \request -> assertBool (Text.unpack request) (placementText InPlace `Text.isInfixOf` request),
+      testCase "an unattended refusal names the repository and the grant command" $ withCheckout \checkout state -> do
+        repository <- either (fail . show) pure =<< selectRepository testResolver emptyApprovals (SelectByPath checkout)
+        store <- openStore state
+        resolveGrant Unattended emptyApprovals store noRecord (decl ["workspace.read"]) repository >>= \case
+          Left refusal -> do
+            let text = renderGrantRefusal refusal
+            assertBool (Text.unpack text) ("shikigami-local grant" `Text.isInfixOf` text && repositoryIdText repository.identity `Text.isInfixOf` text)
+          Right _ -> assertFailure "expected a refusal",
       testCase "a failing record refuses the confirmation and stores nothing" $ withCheckout \checkout state -> do
         repository <- either (fail . show) pure =<< selectRepository testResolver emptyApprovals (SelectByPath checkout)
         store <- openStore state

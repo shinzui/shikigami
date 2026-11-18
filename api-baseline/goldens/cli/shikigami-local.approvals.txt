@@ -34,6 +34,9 @@ Available commands:
                            others are not armed
   approvals                Validate the approvals file and list every grant; or
                            `pending` / `resolve` approval asks
+  grant                    Confirm a declaration on a repository in this
+                           terminal, without starting a run; choose where its
+                           runs work
   revoke                   Delete a stored confirmation
   ledger                   Print the action record, oldest first
   tools                    Check a declaration's CLI tools: located, within any

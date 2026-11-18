@@ -72,7 +72,7 @@ runDoctor options config = do
               (_, Left failure) -> Just (Problem (renderToolResolutionError failure) "bind the server in ~/.config/shikigami/tools.dhall; shikigami-local mcp SERVER lists its tools")
               _ -> Nothing
       machine <- localRunChecks decl
-      granted <- grants decl
+      granted <- grants path decl
       pure (Check (name <> " loads") Nothing : [Check (name <> ": declared tools resolve") toolCheck | not (null decl.tools)] <> machine <> granted)
   let directoryCheck = Check ("agents directory " <> Text.pack agentsDirectory) (if exists then Nothing else Just (Problem "missing" "create a routine agent: shikigami-local new NAME"))
       checks = databaseCheck : providerCheck : directoryCheck : concat agentChecks
@@ -80,13 +80,13 @@ runDoctor options config = do
   unless (all passed checks) exitFailure
   where
     grantChecker = case options.workspace of
-      Nothing -> pure (\_ -> pure [])
+      Nothing -> pure (\_ _ -> pure [])
       Just named -> do
         approvalsPath <- maybe defaultApprovalsPath pure config.localOperatorApprovalsFile
         stateDirectory <- maybe defaultStateDirectory pure config.localOperatorStateDirectory
         approvals <- loadLocalApprovals processCheckoutResolver approvalsPath
         store <- openGrantStore stateDirectory
         pure case (approvals, store) of
-          (Left problem, _) -> \_ -> pure [Check ("approvals file " <> Text.pack approvalsPath) (Just (Problem (renderApprovalsError problem) "fix the approvals file"))]
-          (_, Left problem) -> \_ -> pure [Check "grant store" (Just (Problem (Text.pack (show problem)) ("check the permissions of " <> Text.pack stateDirectory)))]
-          (Right loadedApprovals, Right grantStore) -> \decl -> (: []) <$> grantCheck loadedApprovals grantStore decl (repositorySelectorText named)
+          (Left problem, _) -> \_ _ -> pure [Check ("approvals file " <> Text.pack approvalsPath) (Just (Problem (renderApprovalsError problem) "fix the approvals file"))]
+          (_, Left problem) -> \_ _ -> pure [Check "grant store" (Just (Problem (Text.pack (show problem)) ("check the permissions of " <> Text.pack stateDirectory)))]
+          (Right loadedApprovals, Right grantStore) -> \path decl -> (: []) <$> grantCheck loadedApprovals grantStore path decl (repositorySelectorText named)

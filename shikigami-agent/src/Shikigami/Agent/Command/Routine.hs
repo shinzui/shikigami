@@ -16,6 +16,7 @@ module Shikigami.Agent.Command.Routine
     RoutineRefusal (..),
     renderRoutineRefusal,
     defaultAgentsDirectory,
+    resolveAgent,
   )
 where
 
