@@ -194,7 +194,7 @@ in  [ { name = "agent-declaration"
       }
     , { name = "http-api"
       , owner = baselinePlan
-      , stability = S.Stability.Provisional
+      , stability = S.Stability.Stable
       , rule =
           "No path, operation, response status, response property or response enumeration value is removed; no property changes type; no request property becomes required."
       , check =
@@ -203,20 +203,22 @@ in  [ { name = "agent-declaration"
             , frozen = "api-baseline/frozen/openapi.json"
             }
       , freeze = S.Freeze.Kernel
-      , enforcement = S.Enforcement.Report
+      , enforcement = S.Enforcement.Enforce
       }
     , { name = "durable-wire"
       , owner = baselinePlan
-      , stability = S.Stability.Provisional
+      , stability = S.Stability.Stable
       , rule =
           "A workflow body, event or stored value changes only as docs/workflow-versioning.md allows."
-      , check = S.Check.KeiroGate { since = "HEAD" }
+      , -- The baseline itself: every later change to domain/ is compared with the
+        -- tagged freeze commit (ADR-133).
+        check = S.Check.KeiroGate { since = "api-baseline-v1" }
       , freeze = S.Freeze.Kernel
-      , enforcement = S.Enforcement.Report
+      , enforcement = S.Enforcement.Enforce
       }
     , { name = "cli-shikigami"
       , owner = baselinePlan
-      , stability = S.Stability.Provisional
+      , stability = S.Stability.Stable
       , rule =
           "An option or command that existed keeps its name and meaning; new ones may be added."
       , check =
@@ -226,11 +228,11 @@ in  [ { name = "agent-declaration"
             , goldens = "api-baseline/goldens/cli"
             }
       , freeze = S.Freeze.Kernel
-      , enforcement = S.Enforcement.Report
+      , enforcement = S.Enforcement.Enforce
       }
     , { name = "flow-sdk"
       , owner = packPlan
-      , stability = S.Stability.Provisional
+      , stability = S.Stability.Stable
       , rule =
           "A name a flow body or a pack value can import stays exported with the same meaning; new names may be added."
       , check =
@@ -255,11 +257,11 @@ in  [ { name = "agent-declaration"
             , pinned = "api-baseline/goldens/exports/flow-sdk.txt"
             }
       , freeze = S.Freeze.Kernel
-      , enforcement = S.Enforcement.Report
+      , enforcement = S.Enforcement.Enforce
       }
     , { name = "pack-sdk"
       , owner = packPlan
-      , stability = S.Stability.Provisional
+      , stability = S.Stability.Stable
       , rule =
           "A name a pack interpreter can import stays exported with the same meaning; new names may be added."
       , check =
@@ -269,11 +271,11 @@ in  [ { name = "agent-declaration"
             , pinned = "api-baseline/goldens/exports/pack-sdk.txt"
             }
       , freeze = S.Freeze.Kernel
-      , enforcement = S.Enforcement.Report
+      , enforcement = S.Enforcement.Enforce
       }
     , { name = "kernel-ports"
       , owner = portsPlan
-      , stability = S.Stability.Provisional
+      , stability = S.Stability.Stable
       , rule =
           "A port type, constructor or function an adapter can name stays exported with the same meaning; new ones may be added."
       , check =
@@ -290,11 +292,11 @@ in  [ { name = "agent-declaration"
             , pinned = "api-baseline/goldens/exports/kernel-ports.txt"
             }
       , freeze = S.Freeze.Kernel
-      , enforcement = S.Enforcement.Report
+      , enforcement = S.Enforcement.Enforce
       }
     , { name = "pack-service-ports"
       , owner = bindingPlan
-      , stability = S.Stability.Provisional
+      , stability = S.Stability.Stable
       , rule =
           "A tracker-provider or conversation-channel name a pack can implement stays exported with the same meaning; new ones may be added."
       , check =
@@ -307,11 +309,13 @@ in  [ { name = "agent-declaration"
             , pinned = "api-baseline/goldens/exports/pack-service-ports.txt"
             }
       , freeze = S.Freeze.Kernel
-      , enforcement = S.Enforcement.Report
+      , enforcement = S.Enforcement.Enforce
       }
     , { name = "kikan-output-helpers"
       , owner = bindingPlan
-      , stability = S.Stability.Provisional
+      , -- Provisional at the kernel baseline: owned by the Kikan binding, whose
+      -- services' own APIs are still moving (plan 135).
+      stability = S.Stability.Provisional
       , rule =
           "A typed Kikan output configuration or helper a flow body can import stays exported with the same meaning; new ones may be added."
       , check =
@@ -321,11 +325,12 @@ in  [ { name = "agent-declaration"
             , pinned = "api-baseline/goldens/exports/kikan-output-helpers.txt"
             }
       , freeze = S.Freeze.Kernel
-      , enforcement = S.Enforcement.Report
+      , enforcement = S.Enforcement.Enforce
       }
     , { name = "kikan-output-dhall"
       , owner = bindingPlan
-      , stability = S.Stability.Provisional
+      , -- Provisional at the kernel baseline, with the helpers it mirrors.
+      stability = S.Stability.Provisional
       , rule =
           "A declaration that builds a Kikan output with the binding's Dhall helpers keeps loading; new helpers may be added."
       , check =
@@ -335,11 +340,11 @@ in  [ { name = "agent-declaration"
             , corpus = "api-baseline/corpus/kikan"
             }
       , freeze = S.Freeze.Kernel
-      , enforcement = S.Enforcement.Report
+      , enforcement = S.Enforcement.Enforce
       }
     , { name = "pack-declaration-codec"
       , owner = masterPlan
-      , stability = S.Stability.Provisional
+      , stability = S.Stability.Stable
       , rule =
           "A journaled declaration that runs a pack's flow keeps decoding to the value its Dhall file loads to."
       , check =
@@ -348,11 +353,14 @@ in  [ { name = "agent-declaration"
             , goldens = "api-baseline/goldens/packs"
             }
       , freeze = S.Freeze.Kernel
-      , enforcement = S.Enforcement.Report
+      , enforcement = S.Enforcement.Enforce
       }
     , { name = "core-exposed-modules"
       , owner = baselinePlan
-      , stability = S.Stability.Provisional
+      , -- Provisional at the kernel baseline: the stable promise is the SDK and the
+      -- ports. A module exposed only for a sibling package may still be hidden
+      -- under a Decision Log entry.
+      stability = S.Stability.Provisional
       , rule =
           "A module the core's main library exposes stays exposed; exposing another is a reviewed change."
       , check =
@@ -361,6 +369,6 @@ in  [ { name = "agent-declaration"
             , pinned = "api-baseline/goldens/exposed/shikigami-core.txt"
             }
       , freeze = S.Freeze.Kernel
-      , enforcement = S.Enforcement.Report
+      , enforcement = S.Enforcement.Enforce
       }
     ]
