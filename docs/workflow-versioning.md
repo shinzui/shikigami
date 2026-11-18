@@ -11,13 +11,33 @@ It is written for someone who has never used keiro. Every term is defined where
 it first appears.
 
 
-## Current first-release baseline exception
+## The first-release baseline exception has ended
 
-**Declaration baseline (EP-11 M2 of MasterPlan 22, 2026-11-17).** From commit `c54933b5`, the agent declaration
-(`schema/Agent.dhall`, with `schema/Routine.dhall` checked through its corpus) and its journal
-codec change only compatibly. So do the playbook bundle, the local-operator approvals file and
-the `local.report` helper. `just api-baseline` enforces this. Workflow bodies remain under the
-exception below and the drain rule until the kernel baseline (EP-11 M4).
+**The pre-release exception ended at the kernel baseline: commit `89151747`, tagged
+`api-baseline-v1`, on 2026-11-18** (EP-11 M4 of MasterPlan 22,
+[ADR-133](adr/0133-the-v1-baseline-names-every-public-surface-and-a-change-obeys-its-stability-level.md)).
+From that commit on, every rule in [The rules](#the-rules) is unconditional. A declared
+workflow body changes only behind a `patch` or a new name. A journaled value keeps decoding.
+A surface listed in `api-baseline/surfaces.dhall` changes only as its stability level allows.
+No plan may cite [ADR-27](adr/0027-the-first-release-establishes-one-clean-durable-baseline.md)
+or the paragraphs below as permission to replace a shape. The durable-wire entry of
+`just api-baseline` runs `just keiro-gate api-baseline-v1`, so each later change to
+`domain/` is compared with the baseline itself.
+
+Two facts were rechecked at that commit. Every workflow in the development database was
+terminal: 316 completed, 1 failed and 1 cancelled. The tag list was empty before the tag
+was created. Shikigami has no external wire consumer and no deployment, which is why the
+exception had been allowed to run until then.
+
+The declaration surfaces froze earlier, at `c54933b5` on 2026-11-17 (EP-11 M2): the agent
+declaration (`schema/Agent.dhall`, with `schema/Routine.dhall` checked through its corpus)
+and its journal codec, the playbook bundle, the local-operator approvals file and the
+`local.report` helper.
+
+### Changes made under the exception (history)
+
+The rest of this section records what was replaced while the exception held. It is
+evidence about those changes, not a precedent.
 
 On 2026-10-30 the user reconfirmed that Shikigami is unused. [ADR-27](adr/0027-the-first-release-establishes-one-clean-durable-baseline.md) applies to [MasterPlan 16](masterplans/16-upgrade-shikigami-to-keiro-0-22-and-retire-superseded-runtime-workarounds.md): consolidate unreleased workflow shapes and remove obsolete patch false branches instead of protecting nonexistent instances. Record exact breaking diagnostics and establish the reviewed current baseline. Same-build replay and all authority/effect boundaries still apply. The rules below govern subsequent evolution and become unconditional at first release/deployment; this exception does not authorize database deletion.
 
@@ -293,8 +313,9 @@ run `keiro-diff` against the pre-reset revision and record its exact breaking fi
 deliberate baseline reset; it is not hidden behind an undeclared label, a fake
 patch, or a weakened gate. Subsequent work compares against the new baseline.
 
-This exception expires at the first release or deployment, whichever comes
-first. Every rule below then applies without exception.
+This exception expired at the kernel baseline, commit `89151747` (tag
+`api-baseline-v1`, 2026-11-18), before any release or deployment. Every rule below
+applies without exception from that commit on.
 
 **1. Workflow names and workflow ids are permanent.** The name is the journal's
 stream name and the id is its key; changing either makes every existing instance
@@ -778,9 +799,11 @@ just keiro-gate <merge-base>
 just api-baseline
 ```
 
-`just api-baseline` checks every public surface against its pin. Since the declaration
-baseline, an enforcing surface's `BREAKING` finding exits non-zero
-([API baseline](architecture/api-baseline.md)). `just keiro-gate` runs `keiro-check`, `keiro-inspect`, `keiro-scaffold` followed by
+`just api-baseline` checks every public surface against its pin. Since the kernel
+baseline (`api-baseline-v1`), every surface enforces. Any `BREAKING` or `CHANGED` finding
+exits non-zero until the change follows its surface's level and is re-pinned
+([API baseline](architecture/api-baseline.md)). Its durable-wire check runs
+`just keiro-gate api-baseline-v1`. `just keiro-gate` runs `keiro-check`, `keiro-inspect`, `keiro-scaffold` followed by
 `git diff --exit-code`, `keiro-diff`, and the generated conformance test. A
 `BREAKING` finding exits non-zero and is a deployment gate, not an advisory.
 

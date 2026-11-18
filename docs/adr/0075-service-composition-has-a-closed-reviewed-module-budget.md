@@ -125,6 +125,9 @@ add arbitrary composition behavior.
 * Amended by [ADR 0129](0129-the-kernel-owns-primitives-and-use-cases-ship-as-declarations-or-packs.md)
   (2026-11-16) — the `kernel` section of `module-ownership.json` classifies every
   `shikigami-core` namespace and freezes the leaving ones, a second check beside this budget.
+* Referenced by [ADR 0133](0133-the-v1-baseline-names-every-public-surface-and-a-change-obeys-its-stability-level.md)
+  (2026-11-18): the v1 baseline pins the modules `shikigami-core`'s main library exposes
+  (`core-exposed-modules`), a third check beside this budget.
 
 [Package architecture](../architecture/packages.md),
 [ADR-3](0003-a-seventh-package-keeps-one-off-agent-runs-light.md),

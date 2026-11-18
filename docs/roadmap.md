@@ -106,8 +106,13 @@ MasterPlan 22 ([kernel rebuild](masterplans/22-rebuild-shikigami-as-a-kernel-whe
 moves through three adoption stages:
 - Stage 1, the pilot, is complete. The declaration baseline was reached at `c54933b5` on
   2026-11-17, after the keiro campaign upgraded koyomi.
-- Stage 2, the kernel baseline (EP-11 M4), is next.
-- Stage 3 is organizational use through the Kikan distribution.
+- Stage 2, the baseline, was reached in two named commits. The declaration baseline is
+  `c54933b5`. The kernel baseline is `89151747`, tagged `api-baseline-v1` on 2026-11-18;
+  every public surface enforces there, and the pre-release exception of ADR-27 ended
+  ([ADR-133](adr/0133-the-v1-baseline-names-every-public-surface-and-a-change-obeys-its-stability-level.md)).
+- Stage 3 is open: organizational use through the Kikan distribution, and use by anyone
+  other than the operator. It can start once Kikan-En can decide declared tools and
+  coding-agent launches (`mori://shinzui/kikan-en/improvement-requests/IR-5`).
 
 Recent completed work:
 

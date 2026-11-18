@@ -186,9 +186,12 @@ is unknown is never retried automatically.*
   committed in fsrs-hs (MasterPlan 22, Progress).
 * **Portability.** Accepted by EP-10 M6 on 2026-11-17: the two runs above, one declaration
   unchanged under both compositions with K1 to K8 holding in both.
-* **Architectural.** Not accepted. The keiro modernization campaign has not run for real on
-  two repositories: its pilot was stopped on 2026-11-16 (EP-7 M2), so the declaration baseline
-  (EP-11 M2) waits for the user's decision on the campaign.
+* **Architectural.** Not yet accepted. The keiro modernization campaign ran for real on one
+  repository: koyomi, run `aa2b77a1-…`, EP-7 M3 on 2026-11-17, with no change to
+  `shikigami-core`. The second repository comes from EP-7 M4's batches. The kizashi pilot
+  was stopped on 2026-11-16 (EP-7 M2). The declaration baseline (EP-11 M2) followed the
+  koyomi run, and the kernel baseline (EP-11 M4, 2026-11-18) does not depend on this
+  requirement.
 
 
 ## Gaps against an invariant

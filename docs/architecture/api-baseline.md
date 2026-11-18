@@ -58,9 +58,15 @@ updated in the same commit, so the next reader sees what changed.
 kernel fitness check (`just kernel-fitness`) enforces that through the SDK components.
 
 Every surface is provisional and report-only until its freeze. The declaration baseline
-freezes what an operator writes and runs: the agent declaration, its journal encoding, the
-playbook and operator files, and the local-work commands. The kernel baseline freezes the
-rest: the pack SDK, the kernel ports, the durable wire, the HTTP API and the admin command.
+(`c54933b5`, 2026-11-17) froze what an operator writes and runs: the agent declaration, its
+journal encoding, the playbook and operator files, and the local-work commands. The kernel
+baseline (`89151747`, tag `api-baseline-v1`, 2026-11-18) froze the rest: the pack SDK, the
+kernel and pack service ports, the durable wire, the HTTP API, the admin command, the pack
+declaration encoding, the Kikan output helpers and the core's exposed modules. Every
+surface now enforces, and the pre-release exception of ADR-27 has ended
+([ADR-133](../adr/0133-the-v1-baseline-names-every-public-surface-and-a-change-obeys-its-stability-level.md)).
+A surface registered later starts in report mode and enforces once its owner promises its
+shape.
 
 
 ## Running it
@@ -73,15 +79,26 @@ just api-baseline
 ```
 
 ```text
-api-baseline: 8 surfaces, 8 report-only, 0 enforcing
-  agent-declaration        provisional  clean
-  agent-journal-codec      provisional  clean
+api-baseline: 19 surfaces, 0 report-only, 19 enforcing
+  agent-declaration        stable       clean
+  agent-journal-codec      stable       clean
   cli-shikigami-agent-run  provisional  clean
-  http-api                 provisional  clean
-  durable-wire             provisional  clean
-  cli-shikigami            provisional  clean
-  flow-sdk                 provisional  clean
-  pack-sdk                 provisional  clean
+  playbook-bundle          stable       clean
+  local-operator-file      stable       clean
+  tools-ceiling            provisional  clean
+  local-output-helper      stable       clean
+  cli-shikigami-local      provisional  clean
+  http-api                 stable       clean
+  durable-wire             stable       clean
+  cli-shikigami            stable       clean
+  flow-sdk                 stable       clean
+  pack-sdk                 stable       clean
+  kernel-ports             stable       clean
+  pack-service-ports       stable       clean
+  kikan-output-helpers     provisional  clean
+  kikan-output-dhall       provisional  clean
+  pack-declaration-codec   stable       clean
+  core-exposed-modules     provisional  clean
 ```
 
 Each line ends in `clean`, `CHANGED` or `BREAKING`. A finding is printed below the table with
@@ -125,8 +142,16 @@ is not built. A check that cannot run is never reported as clean.
 
 A pin rewrites only the frozen files of one surface: goldens under `api-baseline/goldens/`,
 the frozen API description under `api-baseline/frozen/`, or a schema's hash in the
-inventory. It never changes an entry's stability or rule. The durable wire has no pin file;
-its `since` commit is set in the inventory at the freeze.
+inventory. It never changes an entry's stability or rule. The durable wire has no pin file. Its
+`since` is the tag `api-baseline-v1`, so every later change to `domain/` is compared with
+the baseline. A change that keiro reports as breaking against it either goes behind a
+`patch` or comes with an ADR that moves `since` to the commit carrying the reviewed change.
+Retiring a patch id once no instance can resume is such a change.
+
+The `OpenApi` check compares the frozen description with the one compiled into the tool
+from `shikigami-api`. The entry's `current` path names the checked-in copy, which
+`shikigami-api`'s `OpenApiSpec` keeps equal to the code. So a route is removed in code,
+and editing `docs/api/openapi.json` alone is not seen.
 
 
 ## Where things are

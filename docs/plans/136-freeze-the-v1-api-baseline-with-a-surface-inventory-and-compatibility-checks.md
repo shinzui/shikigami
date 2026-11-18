@@ -37,6 +37,11 @@ provenance:
       at: 2026-11-18T04:40:16Z
       mode: "implement"
       note: "M2 accepted: declaration baseline frozen at c54933b5; corpus loaders hardened (0e26cf31); real runs on kanmon"
+    - model: "claude-opus-5-5"
+      harness: "claude-code"
+      at: 2026-11-18T21:10:00Z
+      mode: "implement"
+      note: "M4 accepted: kernel baseline frozen at 89151747, tag api-baseline-v1, ADR-133; pre-release exception ended"
 ---
 
 # Freeze the v1 API baseline with a surface inventory and compatibility checks
@@ -159,11 +164,45 @@ It owns that plan's fourth acceptance test, "Baseline", and its "Public surfaces
     HTTP-timing flake passes alone), core postgres 549/549, workers 294 with the known Git
     flake, server 96, agent 42, api 35, client 9, migrations 9, binding 82, distribution
     44, packs 14, 79, 115 and 120; kernel fitness 10/10 and conventions pass.
-- [ ] M4 (second freeze, the kernel baseline): the pack SDK, the kernel ports, the durable
+- [x] M4 (second freeze, the kernel baseline): the pack SDK, the kernel ports, the durable
   wire, the HTTP API, the Kikan output helpers and the admin command are pinned and
   enforcing. A deliberate breaking edit to each is caught, the end of the pre-release
   exception is recorded at a named commit with the tag, the baseline ADR is accepted, and a
   pilot declaration runs for real on the frozen build in both compositions.
+  - Evidence, 2026-11-18. The freeze is `89151747`, tagged `api-baseline-v1` (annotated,
+    local). `just api-baseline` prints `api-baseline: 19 surfaces, 0 report-only, 19
+    enforcing` and 19 `clean` lines, and exits 0. The kernel surfaces needed no re-pin: each
+    was clean against its M3 pin.
+  - Breaking edits caught, each exiting 1 with the `stable` policy text, then reverted:
+    - `noTriggerHooks` dropped from `Shikigami.Flow.Sdk`, reported as
+      `Shikigami.Flow.Sdk no longer exports: noTriggerHooks`.
+    - The `preferred` field removed from the `ApprovalChannelRegistration` port record,
+      reported as `no longer exports: ApprovalChannelRegistration.preferred`.
+    - The `openapi` route removed from `ShikigamiApi`, reported as `path removed: /openapi`.
+    - The `mandates` verb removed from `shikigami`, reported as `shikigami no longer offers:
+      mandates` and its four subcommands.
+    - `step recall` removed from `domain/shikigami/agent-run.keiro`, regenerated and staged,
+      reported as `BREAKING: AgentRun workflow-body … without a new patch guard
+      [WorkflowBodyChanged]`.
+  - Additive change: a new `baselineProbe` export in `Shikigami.Flow.Sdk` reported `flow-sdk
+    stable CHANGED`. `just api-baseline-pin flow-sdk` then wrote one line and the check was
+    clean. Both were reverted.
+  - Real runs on the frozen build:
+    - The stock composition: `agents/proof/portable-note.dhall` under `shikigami-agent-run`
+      (local-operator, run `372d2be3-…`) recorded `run.admitted` (`local.report`, composition
+      default), `authority.decided emit_output` by the operator, `output.delivered` and
+      `run.finished`.
+    - The Kikan distribution: `kikan-shikigami-agent-run` (contained, fixture Kikan-En,
+      `stub-kawa`, run `a9c4175d-…`) recorded `run.admitted` (`kawa.digest`), `authority.decided`
+      by `service:kikan-en` and `run.finished`. At publish it recorded a second decision and
+      `output.delivered` (step `outbox-publish`) against the same run.
+    - `record check` reports K1 K2/K3 K4 K5 K6 K8 hold (K7 by construction) for both. These
+      ran on one disposable PostgreSQL with the stub behavior provider, by EP-10 M6's script.
+    - EP-9's routine agent `repo-digest` ran for real in kanmon (run `f270a5c4-…`, Claude Code).
+      It changed nothing, recorded 2 approved and 0 refused, and delivered its report through
+      the composition default.
+  - The end of the exception is recorded at the same commit in MasterPlan 22's Decision Log,
+    `docs/workflow-versioning.md`, ADR-133 and the tag.
 
 ## Surprises & Discoveries
 
@@ -192,11 +231,62 @@ It owns that plan's fourth acceptance test, "Baseline", and its "Public surfaces
   declaration-baseline entry for them. A playbook is run by `shikigami-agent-run` and
   `shikigami-local`. `cli-shikigami` pins the top-level help and 18 admin verbs, all in the
   kernel baseline.
+- Observation (M4): the `OpenApi` check never reads its entry's `current` path. It compares
+  the frozen copy with `renderOpenApi shikigamiOpenApi`, compiled into the tool. Deleting
+  `/agents/{agentName}/runs/{runId}` from `docs/api/openapi.json` reported `clean`. Removing
+  the route from `ShikigamiApi` reported `path removed`. `OpenApiSpec` keeps the file equal to
+  the code, so the check is sound, but the field misleads. The policy now says so (FRIC-120).
+  Evidence: `just api-baseline --only http-api` after each edit.
+- Observation (M4): rechecking the exception's facts found five unread run jobs, which "every
+  run is terminal" does not cover. They were `local-maintainer` execution-operation messages
+  from 2026-11-16, using an unchanged codec, for an attempt already settled. A stock worker
+  would have started them on its next start. They were archived by the user's decision.
+  Evidence: `select count(*) from pgmq.q_shikigami_run_jobs` printed 5, then 0.
+- Observation (M4): the outbox delivery that EP-10 M6 found missing from the run's record (K3)
+  is now recorded. The distribution run's `output.delivered` (step `outbox-publish`) carries
+  the run id.
+  Evidence: the action record of run `a9c4175d-…`.
+- Observation (M4): the first `repo-digest` attempt stopped in the new preflight
+  (`a5f59a45`). `shikigami-agent-launch` was not on PATH in a development checkout. The
+  message named the fix, and `shikigami-local doctor --agent … --workspace …` confirmed it
+  once `SHIKIGAMI_AGENT_LAUNCH` was set.
 - Observation (M1): the whole report takes about 17 seconds, because `just keiro-gate HEAD`
   finds an unchanged tree. `--only <surface>` runs one check when the gate is not wanted.
 
 
 ## Decision Log
+
+- Decision (M4 preconditions, 2026-11-18): all hold.
+  - The first freeze is accepted (`c54933b5`).
+  - EP-5, EP-6 and EP-10 are Complete in MasterPlan 22's registry.
+  - The audit's "Gaps against an invariant" lists none that blocks.
+  - Every workflow in the local database is terminal: 316 completed, 1 failed, 1 cancelled.
+  - `git tag --list` is empty.
+  - The five queued run jobs are archived (Surprises).
+  Date: 2026-11-18
+
+- Decision (M4 stability): the kernel surfaces' levels.
+  - Stable, as the plan names them: `flow-sdk`, `pack-sdk`, `kernel-ports`, `durable-wire`
+    and `http-api`.
+  - Also stable: `pack-service-ports`, which are kernel ports that a pack implements.
+  - Also stable: `cli-shikigami`. Its pending command work (FRIC-102 and FRIC-103) belongs
+    to `shikigami-local`, which stays provisional, and an added verb is a re-pin.
+  - Also stable: `pack-declaration-codec`. After the exception ends, a journaled pack
+    declaration is state that must keep decoding.
+  - Provisional: `kikan-output-helpers` and `kikan-output-dhall`, owned by the binding as the
+    plan says.
+  - Provisional: `core-exposed-modules`. Its 273 modules include ones exposed only for a
+    sibling package, and the promise is the SDK and the ports.
+  Date: 2026-11-18
+
+- Decision (M4): the durable-wire entry's `since` is the tag `api-baseline-v1`, not a hash.
+  Rationale: a commit cannot name its own hash. The tag names the freeze commit and was
+  created right after it, by the user's decision. With `since` fixed at the baseline,
+  `just keiro-gate` compares every later change with the baseline, not with the previous
+  commit, so a breaking change cannot pass as a series of small ones. `pin` still refuses
+  this kind. Moving `since` is an inventory edit that comes with an ADR, for example when a
+  patch id is retired.
+  Date: 2026-11-18
 
 - Decision (M2 preconditions, 2026-11-17): all hold. EP-1, EP-2, EP-3, EP-4, EP-8 and EP-9
   are Complete, and EP-6 accepted M1 on 2026-11-16. EP-7 accepted M3 on 2026-11-17 with the
@@ -415,7 +505,30 @@ It owns that plan's fourth acceptance test, "Baseline", and its "Public surfaces
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+The plan is complete (2026-11-18). Shikigami has one inventory of 19 public surfaces, each
+with an owner, a stability level, a rule and a check. They froze in two steps: the
+declaration baseline at `c54933b5` and the kernel baseline at `89151747`, tagged
+`api-baseline-v1`, where ADR-27's pre-release exception ended (ADR-133). `shikigami-core`
+went from 388 exposed modules, 149 of them with no consumer, to 273, all needed, behind a
+private sublibrary that the compiler enforces.
+
+What worked:
+- The two freezes. The operator's surfaces stopped moving a day before the kernel's.
+- Report mode. EP-6 and EP-10 saw drift without being blocked.
+- Checks that run the real decoders and loaders, not a second model of them. FRIC-118 was
+  found by exactly such an experiment.
+
+What to carry forward:
+- A check is worth only as much as the experiment that proves it fails. The M4 edits found
+  that the `OpenApi` entry's `current` path is never read.
+- A pin needs reviewing like code (FRIC-116).
+- "Every run is terminal" is not the whole of "nothing durable needs an old codec". The
+  queue needed its own look.
+
+Not done here, by design:
+- Haddock publication, per-surface version numbers and hosted CI.
+- Pack-owned workflow labels stay outside `just keiro-gate` until keiro IR-61.
+- The architectural acceptance needs the campaign on a second repository (EP-7 M4).
 
 
 ## Context and Orientation

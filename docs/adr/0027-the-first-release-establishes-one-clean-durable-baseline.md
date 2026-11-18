@@ -2,7 +2,8 @@
 
 Date: 2026-08-23
 
-Status: accepted
+Status: accepted. Its exception ended at the kernel baseline
+([ADR 0133](0133-the-v1-baseline-names-every-public-surface-and-a-change-obeys-its-stability-level.md)).
 
 
 ## Context
@@ -106,6 +107,9 @@ new, separately approved migration strategy covers real durable state.
   — the post-release declared-body rule.
 * [`docs/workflow-versioning.md`](../workflow-versioning.md) — the normative
   replay and release rules.
+* Ended by [ADR 0133](0133-the-v1-baseline-names-every-public-surface-and-a-change-obeys-its-stability-level.md)
+  (2026-11-18): the exception expired at the kernel baseline, commit `89151747`, tag
+  `api-baseline-v1`, before any release or deployment.
 
 
 

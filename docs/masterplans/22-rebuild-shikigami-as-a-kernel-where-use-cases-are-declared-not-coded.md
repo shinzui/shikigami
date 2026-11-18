@@ -76,6 +76,11 @@ provenance:
       at: 2026-11-18T04:40:16Z
       mode: "implement"
       note: "Declaration baseline reached at c54933b5; stage 1 complete"
+    - model: "claude-opus-5-5"
+      harness: "claude-code"
+      at: 2026-11-18T21:10:00Z
+      mode: "implement"
+      note: "Kernel baseline reached at 89151747 (tag api-baseline-v1); pre-release exception ended; EP-11 complete"
 ---
 
 # Rebuild Shikigami as a kernel where use cases are declared, not coded
@@ -433,7 +438,7 @@ rule.
 | EP-8 | Give the kernel its own action, record, output, approval and trigger contracts with local adapters | [docs/plans/133-give-the-kernel-its-own-action-record-output-approval-and-trigger-contracts-with-local-adapters.md](../plans/133-give-the-kernel-its-own-action-record-output-approval-and-trigger-contracts-with-local-adapters.md) | EP-1 (for M2 and M3) | None | Complete |
 | EP-9 | Declare and run a routine agent with one file and one command | [docs/plans/134-declare-and-run-a-routine-agent-with-one-file-and-one-command.md](../plans/134-declare-and-run-a-routine-agent-with-one-file-and-one-command.md) | EP-1; EP-8 M2; EP-2 M2b (for the scheduled milestone) | EP-3 | Complete |
 | EP-10 | Move the Kikan service bindings out of shikigami-core and compose a Kikan distribution | [docs/plans/135-move-the-kikan-service-bindings-out-of-shikigami-core-and-compose-a-kikan-distribution.md](../plans/135-move-the-kikan-service-bindings-out-of-shikigami-core-and-compose-a-kikan-distribution.md) | EP-5, EP-8 | EP-6 | Complete |
-| EP-11 | Freeze the v1 API baseline with a surface inventory and compatibility checks | [docs/plans/136-freeze-the-v1-api-baseline-with-a-surface-inventory-and-compatibility-checks.md](../plans/136-freeze-the-v1-api-baseline-with-a-surface-inventory-and-compatibility-checks.md) | EP-1 to EP-4, EP-8, EP-9; EP-6 M1; EP-7 M3 (for M2); EP-5, EP-6, EP-10 (for M3 and M4) | None | In Progress |
+| EP-11 | Freeze the v1 API baseline with a surface inventory and compatibility checks | [docs/plans/136-freeze-the-v1-api-baseline-with-a-surface-inventory-and-compatibility-checks.md](../plans/136-freeze-the-v1-api-baseline-with-a-surface-inventory-and-compatibility-checks.md) | EP-1 to EP-4, EP-8, EP-9; EP-6 M1; EP-7 M3 (for M2); EP-5, EP-6, EP-10 (for M3 and M4) | None | Complete |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their EP- prefix.
@@ -1086,6 +1091,19 @@ campaign through on this machine cost the operator-experience gaps FRIC-100 to F
 EP-11 M2 is accepted the same day: the declaration baseline is frozen at `c54933b5`, and stage 1, the
 pilot, is complete. EP-11 M4, the kernel baseline, is next.
 
+On 2026-11-18 EP-11 M4 is accepted and EP-11 is complete. The kernel baseline is frozen at
+`89151747`, tagged `api-baseline-v1`. All 19 surfaces enforce and are clean: 13 stable and
+6 provisional. A breaking edit to each kernel surface was caught and reverted: an SDK
+export, a port record field, an HTTP route, an admin verb, and a step label removed without
+a `patch`. An added SDK export reported CHANGED and re-pinned cleanly. On the frozen build,
+`portable-note` ran in both compositions and both records pass `record check`. The stock run
+is `372d2be3-…` and the distribution run is `a9c4175d-…`, whose outbox delivery is now
+recorded against its run. The routine agent `repo-digest` ran for real in kanmon (run
+`f270a5c4-…`). The pre-release exception of ADR-27 has ended (ADR-133). Stage 2, the
+baseline, is reached. Stage 3, organizational use, waits on Kikan-En deciding declared tools
+and coding-agent launches. The architectural acceptance still needs the campaign on a
+second repository (EP-7 M4).
+
 - [ ] Architectural acceptance: the keiro modernization campaign runs for real on at least
   two of the user's repositories with no change to `shikigami-core` in the commits that
   introduced it, and EP-5's fitness check passes.
@@ -1102,8 +1120,10 @@ pilot, is complete. EP-11 M4, the kernel baseline, is next.
 - [x] Declaration baseline: the declaration, playbook, operator-file and local-command
   checks enforce. (2026-11-17: EP-11 M2, freeze commit `c54933b5`; eight declaration surfaces
   enforce, and the real runs and breaking-edit checks are in plan 136.)
-- [ ] Kernel baseline: every remaining compatibility check enforces, and the end of the
-  pre-release exception is recorded.
+- [x] Kernel baseline: every remaining compatibility check enforces, and the end of the
+  pre-release exception is recorded. (2026-11-18: EP-11 M4, freeze commit `89151747`, tag
+  `api-baseline-v1`, ADR-133. All 19 surfaces enforce, and the breaking-edit checks and the
+  real runs are in plan 136.)
 
 
 ## Surprises & Discoveries
@@ -1272,6 +1292,21 @@ pilot, is complete. EP-11 M4, the kernel baseline, is next.
   default capacity of one.
 
 ## Decision Log
+
+- Decision: The kernel baseline is reached at `89151747`, tagged `api-baseline-v1` (EP-11 M4,
+  stage 2 complete), and the pre-release exception of ADR-27 ends there.
+  - From that commit, every rule of `docs/workflow-versioning.md` is unconditional, and every
+    surface in `api-baseline/surfaces.dhall` enforces at its stability level
+    (ADR-133). The durable wire is checked by `just keiro-gate api-baseline-v1`.
+  - The four facts of the exception, rechecked on 2026-11-18 before the commit:
+    - No resumable workflow journal: 316 completed, 1 failed and 1 cancelled, none running.
+    - No queued payload that needs an old codec. Five unread `local-maintainer` run jobs
+      from 2026-11-16 used the unchanged `RunJobMessage` v1 codec and named an attempt
+      already settled. By the user's decision they were moved to the queue's archive table
+      (`pgmq.archive`, messages 135 to 139).
+    - No external wire consumer.
+    - No release or deployment: `git tag --list` was empty.
+  Date: 2026-11-18
 
 - Decision: The declaration baseline is reached at `c54933b5` (EP-11 M2, stage 1 complete). From
   that commit the agent declaration and its journal codec, the playbook bundle, the

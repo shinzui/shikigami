@@ -98,7 +98,7 @@ it ships as declarations with no change to `shikigami-core`.
   to 15 (`bec8597`). R4 and R7 stay open: `seihou update exec-plan` needs an interactive
   resolution of the operator's own `.gitignore` edits, which the agent correctly refused to
   `--force`. Every run is terminal.
-- [ ] Milestone 2: a full pilot run on the pilot repository, with the operator approving every
+- [x] Milestone 2 (superseded on 2026-11-18 by Milestone 3): a full pilot run on the pilot repository, with the operator approving every
   gate. It ends with the work committed on kanmon's current branch, blueprint receipts, an
   executed MasterPlan, a green build, one recorded learning and one approved playbook
   change.
@@ -121,6 +121,10 @@ it ships as declarations with no change to `shikigami-core`.
     `failed`. A later run's `fix-build` prompt quoted the earlier run's three learnings. This
     exposed and fixed FRIC-78 (a coding agent refused a checkout path over 128 characters) and
     FRIC-79 (learnings were never recalled across runs).
+  - (2026-11-18) Superseded, by the user's decision. The pilot's purpose was a full run with
+    every gate approved and the playbook improved from what it learned. Milestone 3's koyomi
+    run `aa2b77a1-…` delivered that on the slimmed playbook. The kizashi run stays parked and
+    is not resumed. migrate-keiro-stack moves to the batches (Milestone 4).
 - [x] Milestone 3: a run on the second repository uses the improved playbook, and its
   transcript shows the repository-1 learning applied: a step skipped, reordered or given
   better instructions.
@@ -222,6 +226,13 @@ These came from read-only research on 2026-11-15, before implementation.
   Evidence: kizashi `30191f5` adds `fourmolu.yaml`; `75b4308` restyles four modules.
 
 ## Decision Log
+
+- Decision: Milestone 2 is superseded by Milestone 3 and is not run again.
+  Rationale: the user decided this on 2026-11-18. The kizashi pilot was stopped and finished by
+  hand on 2026-11-16. The koyomi run (M3) then showed the full gated campaign with a
+  repository-1 learning applied, which is what M2 was to establish. Re-running the pilot would
+  only repeat it.
+  Date: 2026-11-18
 
 - Decision: A migrate blueprint runs one release edge at a time. The select step emits one
   entry per edge, read from `seihou agent --debug`'s edge headers; edges entailed by an

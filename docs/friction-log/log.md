@@ -2,6 +2,9 @@
 
 ## 2026-11-18
 
+* **Addition**: FRIC-120 records detour tooling friction with mori://shinzui/shikigami: The OpenApi baseline entry names a current file the check never reads
+
+
 * **Update**: FRIC-115 resolved: Status set to resolved.
 
 
