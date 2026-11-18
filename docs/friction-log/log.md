@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-11-18
+* **Addition**: FRIC-112 records detour interface friction with mori://shinzui/shikigami: The campaign quoted a whole multi-edge migration window into one 64 KiB coding-agent prompt
+
 ## 2026-11-17
 
 * **Addition**: FRIC-111 records nuisance interface friction with mori://shinzui/shikigami: A campaign coding agent follows the operator's own Claude Code hooks and instructions

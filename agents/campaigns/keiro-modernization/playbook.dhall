@@ -253,9 +253,10 @@ in  { main = "keiro-modernization"
               ([] : List Text)
               90
               ''
-              In {{repo}}, blueprint {{plan.blueprint}} was just applied. Finish the ExecPlan
-              {{plan.path}} with this repository's exec-plan skill: remaining fallout and the plan's
-              Progress. Do not run blueprints. The apply step reported (evidence):
+              In {{repo}}, blueprint {{plan.blueprint}} ({{plan.window}} {{plan.target}}) was just
+              applied. With this repository's exec-plan skill, fix this edge's remaining fallout and
+              record it in the Progress of ExecPlan {{plan.path}}. A later edge of the same plan runs
+              next, so do not start it. Do not run blueprints. The apply step reported (evidence):
 
               {{steps.apply.output}}
               ''

@@ -17,9 +17,12 @@ provenance rules.
 1. Get an intention with `mina ci --json "Modernize <repo> to the current keiro stack"`,
    naming the repository, and pass its id to the init scripts.
 2. Create one MasterPlan titled "Modernize <repo> to the current keiro stack".
-3. Create one child ExecPlan for each selected blueprint, in the order given. Each one says that
-   the campaign runs `seihou agent <command> <blueprint> --batch` first. The ExecPlan covers
-   what remains after that: fallout fixes, builds and tests.
+3. Create one child ExecPlan for each selected blueprint, in the order given. Entries of the
+   same blueprint (one per release edge) share that blueprint's ExecPlan, with a milestone per
+   edge. Each ExecPlan says that, for each edge, the campaign renders the blueprint's guidance
+   with `seihou agent --debug <command> <blueprint> <window> <target>` and a coding agent
+   applies it and records the migration receipt. The ExecPlan covers what remains after that:
+   fallout fixes, builds and tests.
 4. Add a child ExecPlan for any other work you find necessary for the upgrade, only when you can
    name it concretely.
 5. Do not run blueprints, builds or tests. Shikigami commits your files.
@@ -33,4 +36,5 @@ End your answer with exactly one JSON object on its own line:
 ```
 
 Copy `key`, `command`, `blueprint`, `window`, `target` and `vars` unchanged from the selection (empty
-strings stay empty).
+strings stay empty). Report one `blueprintPlans` entry per selected entry, in selection order; entries of
+the same blueprint name the same `path`.

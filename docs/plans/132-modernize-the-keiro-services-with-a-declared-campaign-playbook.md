@@ -185,6 +185,18 @@ These came from read-only research on 2026-11-15, before implementation.
 
 ## Decision Log
 
+- Decision: A migrate blueprint runs one release edge at a time. The select step emits one
+  entry per edge, read from `seihou agent --debug`'s edge headers; edges entailed by an
+  edge run with it. The MasterPlan step gives a blueprint's edges one shared ExecPlan with a
+  milestone per edge, and the implement step fixes only the current edge's fallout.
+  Rationale: koyomi's first M3 run (`17f5c2fb-41ac-54d1-bc05-77e34ee791d0`) passed readiness,
+  selection and MasterPlan, each approved by the user. Its apply step was then refused because
+  the 0.22 to 0.25 guidance rendered 122 KB, above the 64 KiB coding-agent prompt limit
+  (FRIC-112). Seihou's per-edge guidance already tells the agent to work only on the current
+  edge, and each keiro edge renders below the limit. A new run replaces the stopped one; the
+  MasterPlan skill's step 0 reuses koyomi's MasterPlan 2 and ExecPlan 9.
+  Date: 2026-11-17
+
 - Decision: The second-repository run (M3) on koyomi uses a slimmed playbook. Readiness gains
   R8: a `seihou outdated` probe and a check that the migration blueprints are current, which
   the operator fixes with `seihou upgrade <name>` before approving readiness. The catalog
