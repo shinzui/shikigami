@@ -16,7 +16,7 @@ import Data.Text qualified as Text
 import Data.Text.IO qualified as TextIO
 import Shikigami.Agent.Command.Routine (defaultAgentsDirectory)
 import Shikigami.Agent.Decl (AgentDecl (..))
-import Shikigami.Agent.Loader (loadAgent)
+import Shikigami.Agent.Loader (loadAgentFile)
 import Shikigami.Agent.Name (agentNameText)
 import Shikigami.Agent.Preflight (Check (..), Problem (..), grantCheck, localRunChecks, passed, renderCheck)
 import Shikigami.App.Config (AppConfig (..), ProviderSelection (..), revealSecretText)
@@ -56,7 +56,7 @@ runDoctor options config = do
     if exists
       then fmap (agentsDirectory </>) . sort . filter (".dhall" `isSuffixOf`) <$> listDirectory agentsDirectory
       else pure []
-  loaded <- forM (routine <> options.agents) \path -> (path,) <$> loadAgent path
+  loaded <- forM (routine <> options.agents) \path -> (path,) <$> loadAgentFile path
   grants <- grantChecker
   catalog <- loadToolCatalog =<< defaultToolCatalogPath
   agentChecks <- forM loaded \(path, result) -> case result of

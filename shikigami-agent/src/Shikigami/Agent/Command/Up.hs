@@ -25,7 +25,7 @@ import Data.Time (UTCTime (..), addUTCTime, getCurrentTime)
 import Shikigami.Agent.Command.AgentRun (runAgentRun)
 import Shikigami.Agent.Command.Routine (defaultAgentsDirectory)
 import Shikigami.Agent.Decl (AgentDecl (..), Trigger (..))
-import Shikigami.Agent.Loader (loadAgent)
+import Shikigami.Agent.Loader (loadAgentFile)
 import Shikigami.Agent.Name (agentNameText)
 import Shikigami.App.Config (AppConfig (..))
 import Shikigami.Repository (repositoryIdText)
@@ -55,7 +55,7 @@ runUp UpOptions {forMinutes} config = do
   stateDirectory <- maybe defaultStateDirectory pure config.localOperatorStateDirectory
   grants <- openGrantStore stateDirectory >>= either (const (pure [])) (\store -> either (const []) id <$> store.list)
   decided <- forM declarations \path ->
-    loadAgent path >>= \case
+    loadAgentFile path >>= \case
       Left failure -> pure (Left ("skipped   " <> Text.pack path <> "   does not load: " <> Text.take 120 (Text.pack (show failure)) <> "; check with: shikigami-local doctor"))
       Right decl -> case decl.trigger of
         Schedule {cron} -> case parseCron (cronExpressionText cron) of

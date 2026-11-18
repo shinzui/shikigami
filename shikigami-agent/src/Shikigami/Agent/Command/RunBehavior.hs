@@ -14,7 +14,7 @@ import Data.Text.Encoding qualified as TE
 import Data.Text.Lazy.IO qualified as TLIO
 import Shikigami.Agent.Capability.OneOff (renderOneOffCapabilityError, withOneOffCapabilityOverlays)
 import Shikigami.Agent.Decl (AgentDecl (..), ProfileRequirement (..))
-import Shikigami.Agent.Loader (loadAgent)
+import Shikigami.Agent.Loader (loadAgentFile)
 import Shikigami.Agent.Payload (readPayloadArgument)
 import Shikigami.Agent.Trust (compatibilityPrincipal, lightComposition, parseWorkspaceArgument, terminalInteraction, workspaceSelector)
 import Shikigami.App.Config (AppConfig)
@@ -55,7 +55,7 @@ runRunBehavior path mpayload workspace noConfirm config = do
       Nothing -> do
         hPutStrLn stderr "run-behavior: payload input is not valid JSON"
         exitFailure
-  declE <- loadAgent path
+  declE <- loadAgentFile path
   case declE of
     Left err -> do
       hPutStrLn stderr ("run-behavior: load error in " <> path <> ": " <> show err)

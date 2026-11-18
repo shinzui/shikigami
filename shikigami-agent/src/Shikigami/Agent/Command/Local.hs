@@ -38,7 +38,7 @@ import Shikigami.Agent.Approval qualified as Approval
 import Shikigami.Agent.Approval.LocalInbox (PendingApproval (..), listPendingApprovals, localInboxDirectory, pendingToken, readPendingApproval, removePendingApproval)
 import Shikigami.Agent.Command.Routine (resolveAgent)
 import Shikigami.Agent.Decl (AgentDecl (..), codingAgentAccessOf, requestedOverlays)
-import Shikigami.Agent.Loader (loadAgent)
+import Shikigami.Agent.Loader (loadAgentFile)
 import Shikigami.Agent.Name (agentNameText)
 import Shikigami.Agent.Trust (terminalInteraction)
 import Shikigami.App (AppEnv (..), noopTracer)
@@ -113,7 +113,7 @@ runLocal command config = case command of
     if null grants then putStrLn "no stored grants" else mapM_ (TextIO.putStrLn . renderGrant) grants
   GrantDeclaration agent workspace chosen -> do
     path <- resolveAgent agent
-    decl <- loadAgent path >>= either (die . Text.pack . show) pure
+    decl <- loadAgentFile path >>= either (die . Text.pack . show) pure
     let name = agentNameText decl.name
     when (null (requestedOverlays decl) && null decl.tools && isNothing (codingAgentAccessOf decl.behavior)) do
       TextIO.putStrLn (name <> " asks for nothing to grant: no capabilities, declared tools or coding agent")
@@ -165,7 +165,7 @@ runLocal command config = case command of
           | json -> mapM_ (LazyChar8.putStrLn . Aeson.encode) events
           | otherwise -> mapM_ (TextIO.putStrLn . renderRecordEvent) events
   CheckTools path workspace -> do
-    decl <- loadAgent path >>= either (die . Text.pack . show) pure
+    decl <- loadAgentFile path >>= either (die . Text.pack . show) pure
     let declared = cliTools decl.tools
     if null declared then putStrLn "the declaration declares no tools" else pure ()
     catalogPath <- defaultToolCatalogPath

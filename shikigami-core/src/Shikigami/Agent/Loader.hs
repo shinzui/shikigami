@@ -3,6 +3,7 @@ module Shikigami.Agent.Loader
     AgentLoadEntry (..),
     AgentLoadReport (..),
     loadAgent,
+    loadAgentFile,
     loadAgentsReport,
     loadAgentsLoud,
     loadedAgents,
@@ -10,7 +11,7 @@ module Shikigami.Agent.Loader
   )
 where
 
-import Control.Exception (SomeException, try)
+import Control.Exception (IOException, SomeException, try)
 import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.Foldable (traverse_)
@@ -22,7 +23,7 @@ import Shikigami.Agent.DeclarationValue
 import Shikigami.Log qualified as Log
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.RuntimePolicy
-import System.Directory (listDirectory)
+import System.Directory (canonicalizePath, listDirectory)
 import System.Exit (exitFailure)
 import System.FilePath (isRelative, normalise, takeDirectory, (</>))
 
@@ -55,6 +56,18 @@ loadAgent path = do
       | isRelative (Text.unpack bundle) = decl {behavior = Playbook {bundle = Text.pack (normalise (takeDirectory path </> Text.unpack bundle)), provider, access, model, effort}}
     anchorBundle decl = decl
 
+-- | 'loadAgent' from the file's canonical path. A playbook bundle is anchored
+-- beside the declaration, and the anchored path is part of the declaration's
+-- journal JSON and so of its local-operator grant digest; loading the
+-- canonical path makes one file one declaration however its path was typed
+-- (@agents/x.dhall@, @./agents/x.dhall@ or an absolute path). Every command
+-- and worker loads through this; 'loadAgent' keeps the path as given, which
+-- the API baseline's repository-relative corpus relies on.
+loadAgentFile :: FilePath -> IO (Either LoadError AgentDecl)
+loadAgentFile path = do
+  canonical <- try @IOException (canonicalizePath path)
+  loadAgent (either (const path) id canonical)
+
 -- | Load every manifest once, preserving both successes and failures in
 -- filename order so callers can inspect, report, or persist the complete view.
 loadAgentsReport :: FilePath -> IO AgentLoadReport
@@ -64,7 +77,7 @@ loadAgentsReport dir = do
   entries <-
     traverse
       ( \path ->
-          loadAgent path <&> \case
+          loadAgentFile path <&> \case
             Left err -> AgentLoadFailed {path, error = err}
             Right declaration -> AgentLoaded {path, declaration}
       )

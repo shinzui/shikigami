@@ -30,6 +30,7 @@ import Shikigami.Agent.Loader
     LoadError (..),
     enabledAgentsFromReport,
     loadAgent,
+    loadAgentFile,
     loadAgentsLoud,
     loadAgentsReport,
     loadedAgents,
@@ -162,6 +163,16 @@ tests =
       testCase "every live manifest still decodes through record-completion defaults" do
         paths <- filter isLiveManifest <$> dhallFilesRecursively "../agents"
         traverse_ (fmap (const ()) . expectLoaded) paths,
+      testCase "a playbook declaration is one declaration however its path is spelled" do
+        let plain = "../agents/campaigns/keiro-modernization/keiro-modernization.dhall"
+            roundabout = "../agents/campaigns/../campaigns/keiro-modernization/keiro-modernization.dhall"
+        byPlain <- expectRight =<< loadAgentFile plain
+        byRoundabout <- expectRight =<< loadAgentFile roundabout
+        toJSON byRoundabout @?= toJSON byPlain
+        -- The path as given would anchor the bundle differently, and so give the
+        -- same file two grant digests.
+        asGiven <- expectRight =<< loadAgent roundabout
+        assertBool "loadAgent keeps the spelling" (toJSON asGiven /= toJSON byPlain),
       testCase "directory reports preserve a broken manifest" do
         report@AgentLoadReport {entries} <- loadAgentsReport "../agents"
         let broken = find isBroken entries
@@ -275,3 +286,6 @@ isLiveManifest path =
     -- A campaign directory holds one declaration named after it, beside its
     -- tools, repositories and bundle.
     && not ("/campaigns/" `isInfixOf` path && takeBaseName path /= takeFileName (takeDirectory path))
+
+expectRight :: (Show e) => Either e a -> IO a
+expectRight = either (\problem -> assertFailure (show problem) >> error "unreachable") pure

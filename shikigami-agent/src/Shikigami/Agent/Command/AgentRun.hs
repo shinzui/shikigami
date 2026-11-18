@@ -33,7 +33,7 @@ import Shikigami.Agent.Approval.LocalInbox (PendingApproval (..), listPendingApp
 import Shikigami.Agent.Approval.Workflow (approvalWorkflow, approvalWorkflowName)
 import Shikigami.Agent.Approval.Workflow qualified as ApprovalWorkflow
 import Shikigami.Agent.Decl (AgentDecl (..), Behavior (CoordinatingSkill, Skill), IdentityDecl (..))
-import Shikigami.Agent.Loader (AgentLoadEntry (..), AgentLoadReport (..), loadAgent)
+import Shikigami.Agent.Loader (AgentLoadEntry (..), AgentLoadReport (..), loadAgentFile)
 import Shikigami.Agent.Name (agentNameText)
 import Shikigami.Agent.Payload (readPayloadArgument)
 import Shikigami.Agent.Preflight (localRunChecks, passed, renderCheck)
@@ -99,7 +99,7 @@ runAgentRun packs agentArg mActivity workspace payloadArgument noConfirm resume 
   logger <- Log.newStderrLogger Log.Info
   flows <- FlowPack.composeFlowRegistryOrExit logger "shikigami-agent-run" (builtinPack : packs)
   let path = resolvePath agentArg
-  declE <- loadAgent path
+  declE <- loadAgentFile path
   case declE of
     Left err -> do
       hPutStrLn stderr ("agent-run: load error in " <> path <> ": " <> show err)
