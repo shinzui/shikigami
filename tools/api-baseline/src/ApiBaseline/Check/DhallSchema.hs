@@ -22,6 +22,9 @@ import Dhall qualified
 import Dhall.Core qualified
 import Dhall.Import qualified
 import Shikigami.Agent.Loader (LoadError (..), loadAgent)
+import Shikigami.Capability.Declared.Catalog (loadToolCatalog)
+import Shikigami.Playbook (loadBundle)
+import Shikigami.Trust.LocalOperator.Approvals (CheckoutResolver (..), loadLocalApprovals, renderApprovalsError)
 import System.Directory (doesDirectoryExist, listDirectory)
 import System.FilePath (takeExtension, (</>))
 
@@ -63,12 +66,32 @@ corpusFiles directory = do
     then map (directory </>) . sort . filter ((== ".dhall") . takeExtension) <$> listDirectory directory
     else pure []
 
--- | Load one corpus file as the runtime would. Agent declarations go through
--- the agent loader; a file of another schema is evaluated and type-checked.
+-- | Load one corpus file as the runtime would, through the loader that
+-- decodes it into its Haskell type, so that a Dhall-only "additive" field the
+-- runtime cannot decode is a breaking finding (FRIC-118). Agent declarations
+-- and the local-output corpus go through the agent loader, bundles through
+-- the playbook loader, approvals files through the approvals loader with a
+-- resolver that accepts any repository, and tool ceilings through the catalog
+-- loader. A file of another schema is evaluated and type-checked.
 loadCorpusFile :: Text -> FilePath -> IO (Either Text ())
 loadCorpusFile schema path
-  | schema == "schema/Agent.dhall" =
+  | schema `elem` ["schema/Agent.dhall", "schema/outputs/Local.dhall"] =
       loadAgent path >>= \case
         Left (LoadError problem) -> pure (Left problem)
         Right _ -> pure (Right ())
+  | schema == "schema/Playbook.dhall" = either (Left . Text.unlines) (const (Right ())) <$> loadBundle path
+  | schema == "schema/LocalOperator.dhall" = either (Left . renderApprovalsError) (const (Right ())) <$> loadLocalApprovals corpusResolver path
+  | schema == "schema/Tools.dhall" = fmap (const ()) <$> loadToolCatalog path
   | otherwise = fmap (const ()) <$> semanticHash path
+
+-- | A corpus approvals file names real repositories that need not be checked
+-- out here. Every identity resolves to the directory the check runs in (the
+-- repository root), which is its own top level, so only the file's decoding
+-- and its rules are checked.
+corpusResolver :: CheckoutResolver
+corpusResolver =
+  CheckoutResolver
+    { toplevelOf = pure . Right,
+      moriPath = const (pure (Right ".")),
+      moriIdentity = const (pure Nothing)
+    }

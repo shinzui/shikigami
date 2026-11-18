@@ -3,7 +3,7 @@
 module Main (main) where
 
 import ApiBaseline.Check.CliHelp (cliHelpFindings, helpVocabulary)
-import ApiBaseline.Check.DhallSchema (dhallSchemaFindings, excerpt)
+import ApiBaseline.Check.DhallSchema (dhallSchemaFindings, excerpt, loadCorpusFile)
 import ApiBaseline.Check.ExportList (exportListFindings, parseInterfaceExports, parsePinned, renderPinned)
 import ApiBaseline.Check.ExposedSet (exposedSetFindings, parseExposedSet, renderExposedSet)
 import ApiBaseline.Check.JournalCodec (encodeGolden, journalCodecFindings)
@@ -85,7 +85,26 @@ schemaTests =
       testCase "a Dhall error is quoted without blank lines or colour codes" do
         excerpt "\n\ESC[1;31mError\ESC[0m: Expression doesn't match annotation\n\n{ - delegationLimit : …\n" @?= "Error: Expression doesn't match annotation\n{ - delegationLimit : …\n",
       testCase "a schema that no longer evaluates is breaking" do
-        severities (dhallSchemaFindings "schema/A.dhall" "sha256:aa" (Left "parse error") []) @?= [Breaking]
+        severities (dhallSchemaFindings "schema/A.dhall" "sha256:aa" (Left "parse error") []) @?= [Breaking],
+      testCase "a corpus file is loaded as the runtime decodes it, not only evaluated" do
+        -- Each file evaluates as Dhall, but none is a value its runtime loader
+        -- decodes: the gap FRIC-118 records.
+        let scratch = "api-baseline-corpus-test.scratch"
+        createDirectoryIfMissing True scratch
+        let cases =
+              [ ("schema/LocalOperator.dhall", "approvals.dhall", "{ repositories = [ { identity = \"mori://x/y\" } ], agents = [] : List {} }"),
+                ("schema/Playbook.dhall", "bundle.dhall", "{ main = \"m\", playbooks = [] : List {} }"),
+                ("schema/Tools.dhall", "ceiling.dhall", "{ cli = [ { name = \"mori\" } ] }")
+              ]
+        results <-
+          mapM
+            ( \(schema, file, contents) -> do
+                TextIO.writeFile (scratch </> file) contents
+                (schema,) <$> loadCorpusFile schema (scratch </> file)
+            )
+            cases
+        removeDirectoryRecursive scratch
+        [schema | (schema, Right ()) <- results] @?= []
     ]
 
 codecTests :: TestTree

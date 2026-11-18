@@ -2,6 +2,9 @@
 
 ## 2026-11-18
 
+* **Addition**: FRIC-118 records detour tooling friction with mori://shinzui/shikigami: The DhallSchema check evaluated non-agent corpora instead of loading them as the runtime does
+
+
 * **Addition**: FRIC-117 records nuisance interface friction with mori://shinzui/shikigami: Several shikigami-local verbs refuse --help
 
 
