@@ -6,7 +6,7 @@ generated:
   by: "claude-code/claude-opus-5-5"
   at: "2026-11-17T23:54:46Z"
 frictionId: FRIC-102
-status: logged
+status: "resolved"
 impact: detour
 kind: interface
 origin: "mori://shinzui/shikigami"
@@ -17,6 +17,11 @@ workaround: "Opened a Rex window running the command with a real TTY; the operat
 tags:
   - "local-operator"
   - "grant"
+resolution: "Fixed in 77c7fb39: shikigami-local grant <declaration> --in <repository> confirms a grant in a terminal without starting a run, and the unattended refusal, the run prompt and doctor --workspace name that command. It still refuses without a terminal, and the refusal says why (a pipe such as tee)."
+amended:
+  - by: "claude-code/claude-opus-5-5"
+    at: "2026-11-18T21:25:00Z"
+    change: "Status set to resolved."
 ---
 # A declaration grant can be confirmed only by a run in a terminal
 
