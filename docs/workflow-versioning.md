@@ -13,6 +13,13 @@ it first appears.
 
 ## Current first-release baseline exception
 
+**Declaration baseline (EP-11 M2 of MasterPlan 22, 2026-11-17).** From the declaration
+baseline commit recorded in MasterPlan 22's Decision Log, the agent declaration
+(`schema/Agent.dhall`, with `schema/Routine.dhall` checked through its corpus) and its journal
+codec change only compatibly. So do the playbook bundle, the local-operator approvals file and
+the `local.report` helper. `just api-baseline` enforces this. Workflow bodies remain under the
+exception below and the drain rule until the kernel baseline (EP-11 M4).
+
 On 2026-10-30 the user reconfirmed that Shikigami is unused. [ADR-27](adr/0027-the-first-release-establishes-one-clean-durable-baseline.md) applies to [MasterPlan 16](masterplans/16-upgrade-shikigami-to-keiro-0-22-and-retire-superseded-runtime-workarounds.md): consolidate unreleased workflow shapes and remove obsolete patch false branches instead of protecting nonexistent instances. Record exact breaking diagnostics and establish the reviewed current baseline. Same-build replay and all authority/effect boundaries still apply. The rules below govern subsequent evolution and become unconditional at first release/deployment; this exception does not authorize database deletion.
 
 
@@ -769,9 +776,12 @@ Run the gate whenever the change touches `domain/`, the generated layer under
 
 ```bash
 just keiro-gate <merge-base>
+just api-baseline
 ```
 
-It runs `keiro-check`, `keiro-inspect`, `keiro-scaffold` followed by
+`just api-baseline` checks every public surface against its pin. Since the declaration
+baseline, an enforcing surface's `BREAKING` finding exits non-zero
+([API baseline](architecture/api-baseline.md)). `just keiro-gate` runs `keiro-check`, `keiro-inspect`, `keiro-scaffold` followed by
 `git diff --exit-code`, `keiro-diff`, and the generated conformance test. A
 `BREAKING` finding exits non-zero and is a deployment gate, not an advisory.
 

@@ -1,0 +1,5 @@
+Invalid option `--help'
+
+Usage: shikigami-local revoke DIGEST
+
+  Delete a stored confirmation

@@ -1,0 +1,5 @@
+Invalid option `--help'
+
+Usage: shikigami-local run AGENT [TASK…] [--in DIR|mori://…] [--no-confirm]
+
+  Run a routine agent in this repository under the local-operator tier

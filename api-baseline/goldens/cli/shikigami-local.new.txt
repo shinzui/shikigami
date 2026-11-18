@@ -1,0 +1,5 @@
+Invalid option `--help'
+
+Usage: shikigami-local new NAME [--coder] [--every CRON]
+
+  Write a routine agent's declaration and skill under ~/.config/shikigami/agents

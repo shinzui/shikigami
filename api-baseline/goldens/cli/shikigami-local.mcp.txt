@@ -1,0 +1,6 @@
+Invalid option `--help'
+
+Usage: shikigami-local mcp SERVER [--workspace DIR|mori://…]
+
+  Connect to a bound MCP server and list its tools as approved,
+  approved-schema-changed or not approved

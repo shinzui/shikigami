@@ -24,6 +24,36 @@ let bindingPlan =
 let baselinePlan =
       "docs/plans/136-freeze-the-v1-api-baseline-with-a-surface-inventory-and-compatibility-checks.md"
 
+let operatorPlan =
+      "docs/plans/126-run-declared-agents-on-the-operator-s-own-machine-through-a-local-operator-trust-tier.md"
+
+let toolsPlan =
+      "docs/plans/128-let-agents-declare-cli-tools-and-mcp-servers-with-authority-attached-to-the-declaration.md"
+
+let playbookPlan =
+      "docs/plans/129-execute-dhall-declared-playbooks-with-fan-out-approval-gates-and-learning-capture.md"
+
+-- shikigami-local's verbs: the local-operator commands (EP-1), the declared-tool
+-- checks (EP-3; there is no separate shikigami-tools executable), the playbook
+-- check (EP-4), the approval inbox (EP-8) and the routine-agent commands (EP-9).
+-- gate and tool-attempt are internal hooks, not operator commands.
+let localVerbs =
+      [ [] : List Text
+      , [ "new" ]
+      , [ "run" ]
+      , [ "runs" ]
+      , [ "doctor" ]
+      , [ "up" ]
+      , [ "approvals" ]
+      , [ "approvals", "pending" ]
+      , [ "approvals", "resolve" ]
+      , [ "revoke" ]
+      , [ "ledger" ]
+      , [ "tools" ]
+      , [ "mcp" ]
+      , [ "playbook", "validate" ]
+      ]
+
 let adminVerbs =
       [ [] : List Text
       , [ "validate" ]
@@ -46,7 +76,7 @@ let adminVerbs =
 
 in  [ { name = "agent-declaration"
       , owner = masterPlan
-      , stability = S.Stability.Provisional
+      , stability = S.Stability.Stable
       , rule =
           "Every declaration in the corpus keeps loading to the same value; a new field has a default."
       , check =
@@ -56,11 +86,11 @@ in  [ { name = "agent-declaration"
             , corpus = "api-baseline/corpus/agents"
             }
       , freeze = S.Freeze.Declaration
-      , enforcement = S.Enforcement.Report
+      , enforcement = S.Enforcement.Enforce
       }
     , { name = "agent-journal-codec"
       , owner = masterPlan
-      , stability = S.Stability.Provisional
+      , stability = S.Stability.Stable
       , rule =
           "A journaled declaration keeps decoding to the value its Dhall file loads to."
       , check =
@@ -69,11 +99,13 @@ in  [ { name = "agent-declaration"
             , goldens = "api-baseline/goldens/agents"
             }
       , freeze = S.Freeze.Declaration
-      , enforcement = S.Enforcement.Report
+      , enforcement = S.Enforcement.Enforce
       }
     , { name = "cli-shikigami-agent-run"
       , owner = baselinePlan
-      , stability = S.Stability.Provisional
+      , -- Provisional at the declaration baseline: the one-off command is still settling
+      -- its grant and resume options (FRIC-102, FRIC-105).
+      stability = S.Stability.Provisional
       , rule =
           "An option or command that existed keeps its name and meaning; new ones may be added."
       , check =
@@ -83,7 +115,82 @@ in  [ { name = "agent-declaration"
             , goldens = "api-baseline/goldens/cli"
             }
       , freeze = S.Freeze.Declaration
-      , enforcement = S.Enforcement.Report
+      , enforcement = S.Enforcement.Enforce
+      }
+    , { name = "playbook-bundle"
+      , owner = playbookPlan
+      , stability = S.Stability.Stable
+      , rule =
+          "Every bundle in the corpus keeps evaluating to a Bundle; a step kind, field or constructor is never removed or renamed."
+      , check =
+          S.Check.DhallSchema
+            { schema = "schema/Playbook.dhall"
+            , hash = "sha256:f5041f8c1d54a1be1c44a628a65955280bd6b74ebf12dc7a22a4a4e7c7cdade3"
+            , corpus = "api-baseline/corpus/playbooks"
+            }
+      , freeze = S.Freeze.Declaration
+      , enforcement = S.Enforcement.Enforce
+      }
+    , { name = "local-operator-file"
+      , owner = operatorPlan
+      , stability = S.Stability.Stable
+      , rule =
+          "Every approvals file in the corpus keeps evaluating; a new field has a default."
+      , check =
+          S.Check.DhallSchema
+            { schema = "schema/LocalOperator.dhall"
+            , hash = "sha256:ab6a49576b18a00f37cf17798b0c5d25286d45f5b6aad8fba8bd4a2ddad9a2f4"
+            , corpus = "api-baseline/corpus/operator"
+            }
+      , freeze = S.Freeze.Declaration
+      , enforcement = S.Enforcement.Enforce
+      }
+    , { name = "tools-ceiling"
+      , owner = toolsPlan
+      , -- Provisional at the declaration baseline: the ceiling catalog has one documented
+      -- use and no second consumer yet (plan 136, Decision Log).
+      stability = S.Stability.Provisional
+      , rule =
+          "Every tool ceiling in the corpus keeps evaluating; a new field has a default."
+      , check =
+          S.Check.DhallSchema
+            { schema = "schema/Tools.dhall"
+            , hash = "sha256:6bd44781ac052476600ed7eff3582f8b94bf5906b18bdef07d1e2061f60a7884"
+            , corpus = "api-baseline/corpus/tools"
+            }
+      , freeze = S.Freeze.Declaration
+      , enforcement = S.Enforcement.Enforce
+      }
+    , { name = "local-output-helper"
+      , owner = portsPlan
+      , stability = S.Stability.Stable
+      , rule =
+          "Local.report and Local.Format keep their names and meaning; a new format may be added."
+      , check =
+          S.Check.DhallSchema
+            { schema = "schema/outputs/Local.dhall"
+            , hash = "sha256:1bd12600ae092ea8189355ea3cf9ea0433e99e3bd7c4e23231c850422f95f6cb"
+            , corpus = "api-baseline/corpus/outputs"
+            }
+      , freeze = S.Freeze.Declaration
+      , enforcement = S.Enforcement.Enforce
+      }
+    , { name = "cli-shikigami-local"
+      , owner = operatorPlan
+      , -- Provisional at the declaration baseline: several verbs refuse --help
+      -- (FRIC-117) and the grant and placement commands are still to come
+      -- (FRIC-102, FRIC-103).
+      stability = S.Stability.Provisional
+      , rule =
+          "An option or command that existed keeps its name and meaning; new ones may be added."
+      , check =
+          S.Check.CliHelp
+            { executable = "shikigami-local"
+            , verbs = localVerbs
+            , goldens = "api-baseline/goldens/cli"
+            }
+      , freeze = S.Freeze.Declaration
+      , enforcement = S.Enforcement.Enforce
       }
     , { name = "http-api"
       , owner = baselinePlan

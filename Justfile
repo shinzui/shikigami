@@ -182,6 +182,8 @@ new-migration name="":
 # Shikigami's durable workflow identities. These recipes are the gate: run
 # `just keiro-gate` before merging anything that touches domain/, the generated
 # layer under shikigami-core/src/Shikigami/*/Generated/, or a durable identity.
+# Run `just api-baseline` before every merge: since the declaration baseline it
+# exits non-zero on a breaking change to an enforcing public surface.
 #
 # keiro-dsl is pinned to the cohort version by cabal.project (constraints +
 # extra-packages), so `cabal run keiro-dsl` is the same toolchain for everyone

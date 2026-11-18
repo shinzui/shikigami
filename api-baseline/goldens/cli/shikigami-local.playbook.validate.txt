@@ -1,0 +1,6 @@
+Usage: shikigami-local playbook validate BUNDLE.dhall
+
+  Load and check a playbook bundle and print its step tree
+
+Available options:
+  -h,--help                Show this help text

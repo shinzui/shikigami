@@ -1,0 +1,6 @@
+Invalid option `--help'
+
+Usage: shikigami-local tools AGENT.dhall [--workspace DIR|mori://…]
+
+  Check a declaration's CLI tools: located, within any ceiling, and granted
+  (exit 0), awaiting confirmation (3) or refused (1)

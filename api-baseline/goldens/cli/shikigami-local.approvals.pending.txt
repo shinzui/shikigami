@@ -1,0 +1,6 @@
+Usage: shikigami-local approvals pending 
+
+  List the asks waiting in the local approval inbox
+
+Available options:
+  -h,--help                Show this help text

@@ -1,0 +1,48 @@
+Usage: shikigami-local (COMMAND | COMMAND) [--config PATH] [--set KEY=VALUE] 
+                       [--explain-config | --explain-config-json | 
+                         --check-config | --describe-config | 
+                         --describe-config-json] [--version]
+
+  Inspect local-operator grants and the action record
+
+Configuration
+  --config PATH            Read configuration from PATH
+  --set KEY=VALUE          Override one configuration key
+
+Diagnostics
+  --explain-config         Explain the resolved configuration as text
+  --explain-config-json    Explain the resolved configuration as JSON
+  --check-config           Validate configuration and exit
+  --describe-config        Print the static configuration schema
+  --describe-config-json   Print the static configuration schema as JSON
+
+Available options:
+  -h,--help                Show this help text
+  --version                Show version
+
+Available commands:
+  new                      Write a routine agent's declaration and skill under
+                           ~/.config/shikigami/agents
+  run                      Run a routine agent in this repository under the
+                           local-operator tier
+  runs                     List recent runs with outcome, decisions and report,
+                           or show one run
+  doctor                   Check every prerequisite of routine agents; each
+                           failure names its fix
+  up                       Run scheduled routine agents on this machine: arms
+                           each agent with a stored approval and says why the
+                           others are not armed
+  approvals                Validate the approvals file and list every grant; or
+                           `pending` / `resolve` approval asks
+  revoke                   Delete a stored confirmation
+  ledger                   Print the action record, oldest first
+  tools                    Check a declaration's CLI tools: located, within any
+                           ceiling, and granted (exit 0), awaiting confirmation
+                           (3) or refused (1)
+  mcp                      Connect to a bound MCP server and list its tools as
+                           approved, approved-schema-changed or not approved
+  gate                     Claude Code's PreToolUse hook: allow or deny one call
+                           against a run's declared tools
+  tool-attempt             Internal: run one declared command for a durable step
+                           and print its result
+  playbook                 Work with playbook bundles

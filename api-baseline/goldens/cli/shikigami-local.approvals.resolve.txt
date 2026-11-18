@@ -1,0 +1,7 @@
+Usage: shikigami-local approvals resolve REVIEW-ID [--reject REASON]
+
+  Approve (or reject) one ask; then continue the run with --resume
+
+Available options:
+  --reject REASON          Reject instead of approving
+  -h,--help                Show this help text

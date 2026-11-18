@@ -2,6 +2,12 @@
 
 ## 2026-11-18
 
+* **Addition**: FRIC-117 records nuisance interface friction with mori://shinzui/shikigami: Several shikigami-local verbs refuse --help
+
+
+* **Addition**: FRIC-116 records detour tooling friction with mori://shinzui/shikigami: api-baseline-pin rewrites every entry that shares the old hash text
+
+
 * **Addition**: FRIC-115 records detour interface friction with mori://shinzui/shikigami: The Reflect step quotes the whole test output and exceeds the 64 KiB prompt limit
 
 
