@@ -6,7 +6,7 @@ generated:
   by: "claude-code/claude-opus-5-5"
   at: "2026-11-18T02:47:30Z"
 frictionId: FRIC-114
-status: logged
+status: "resolved"
 impact: detour
 kind: interface
 origin: "mori://shinzui/shikigami"
@@ -17,6 +17,14 @@ workaround: "Read the failures by hand, approved the close, and ran nix develop 
 tags:
   - "playbook"
   - "testing"
+resolution: "Fixed in a5f59a45 (corrects the previous resolution text): the campaign's tests probe runs nix develop -c just check, so a repository decides which suites its check runs; readiness R9 adds a check recipe over the existing test recipes when it is missing."
+amended:
+  - by: "claude-code/claude-opus-5-5"
+    at: "2026-11-18T12:29:04Z"
+    change: "Status set to resolved."
+  - by: "claude-code/claude-opus-5-5"
+    at: "2026-11-18T12:29:14Z"
+    change: "Status set to resolved."
 ---
 # The campaign's test probe runs bare cabal test all, which a repository's database suites cannot pass
 

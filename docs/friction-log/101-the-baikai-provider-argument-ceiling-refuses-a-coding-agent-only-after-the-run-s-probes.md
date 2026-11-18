@@ -6,7 +6,7 @@ generated:
   by: "claude-code/claude-opus-5-5"
   at: "2026-11-17T23:54:44Z"
 frictionId: FRIC-101
-status: logged
+status: "resolved"
 impact: detour
 kind: environment
 origin: "mori://shinzui/shikigami"
@@ -18,6 +18,11 @@ tags:
   - "local-operator"
   - "baikai"
   - "preflight"
+resolution: "Fixed in a5f59a45: the preflight builds the runner's job (provider args for declared tools, 32 MiB output) and checks it against the operator's Baikai ceiling before the first step; doctor --workspace also reports whether the declaration is granted there."
+amended:
+  - by: "claude-code/claude-opus-5-5"
+    at: "2026-11-18T12:29:00Z"
+    change: "Status set to resolved."
 ---
 # The Baikai provider-argument ceiling refuses a coding agent only after the run's probes
 

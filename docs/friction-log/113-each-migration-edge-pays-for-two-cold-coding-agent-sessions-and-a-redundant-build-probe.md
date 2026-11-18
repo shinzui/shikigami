@@ -6,7 +6,7 @@ generated:
   by: "claude-code/claude-opus-5-5"
   at: "2026-11-18T02:27:11Z"
 frictionId: FRIC-113
-status: logged
+status: "resolved"
 impact: slowdown
 kind: process
 origin: "mori://shinzui/shikigami"
@@ -17,6 +17,14 @@ workaround: "None in this run; candidate changes for EP-7 M4: one coding-agent s
 tags:
   - "playbook"
   - "performance"
+resolution: "Fixed in a5f59a45 (corrects the previous resolution text): each blueprint edge is one coding agent (apply) that applies the guidance, fixes the fallout, records it in the ExecPlan and ends with just check; no separate build probe or fix-build agent follows it."
+amended:
+  - by: "claude-code/claude-opus-5-5"
+    at: "2026-11-18T12:29:03Z"
+    change: "Status set to resolved."
+  - by: "claude-code/claude-opus-5-5"
+    at: "2026-11-18T12:29:13Z"
+    change: "Status set to resolved."
 ---
 # Each migration edge pays for two cold coding-agent sessions and a redundant build probe
 

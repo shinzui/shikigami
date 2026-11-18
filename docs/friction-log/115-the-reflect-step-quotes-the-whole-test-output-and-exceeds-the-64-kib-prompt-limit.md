@@ -6,7 +6,7 @@ generated:
   by: "claude-code/claude-opus-5-5"
   at: "2026-11-18T02:47:32Z"
 frictionId: FRIC-115
-status: logged
+status: "resolved"
 impact: detour
 kind: interface
 origin: "mori://shinzui/shikigami"
@@ -18,6 +18,14 @@ tags:
   - "playbook"
   - "reflect"
   - "coding-agent"
+resolution: "Fixed in a5f59a45 (corrects the previous resolution text): Reflect quotes {{steps.tests.summary}} instead of the full test output, keeping its prompt under the 64 KiB limit."
+amended:
+  - by: "claude-code/claude-opus-5-5"
+    at: "2026-11-18T12:29:05Z"
+    change: "Status set to resolved."
+  - by: "claude-code/claude-opus-5-5"
+    at: "2026-11-18T12:29:15Z"
+    change: "Status set to resolved."
 ---
 # The Reflect step quotes the whole test output and exceeds the 64 KiB prompt limit
 

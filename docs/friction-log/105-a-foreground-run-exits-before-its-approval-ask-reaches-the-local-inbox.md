@@ -6,7 +6,7 @@ generated:
   by: "claude-code/claude-opus-5-5"
   at: "2026-11-17T23:54:51Z"
 frictionId: FRIC-105
-status: logged
+status: "resolved"
 impact: detour
 kind: interface
 origin: "mori://shinzui/shikigami"
@@ -18,6 +18,11 @@ tags:
   - "approval"
   - "local-inbox"
   - "playbook"
+resolution: "Fixed in a5f59a45: a foreground local run drives its children until none progresses, so the first pass prints 'Run <ID> waits for approval: shikigami-local approvals resolve <REVIEW-ID>'; the local ask waits a day by default (trust.local_operator.approval_deadline_seconds)."
+amended:
+  - by: "claude-code/claude-opus-5-5"
+    at: "2026-11-18T12:29:02Z"
+    change: "Status set to resolved."
 ---
 # A foreground run exits before its approval ask reaches the local inbox
 

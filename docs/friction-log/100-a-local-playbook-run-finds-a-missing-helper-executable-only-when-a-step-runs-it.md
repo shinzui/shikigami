@@ -6,7 +6,7 @@ generated:
   by: "claude-code/claude-opus-5-5"
   at: "2026-11-17T23:54:42Z"
 frictionId: FRIC-100
-status: logged
+status: "resolved"
 impact: detour
 kind: tooling
 origin: "mori://shinzui/shikigami"
@@ -18,6 +18,11 @@ tags:
   - "local-operator"
   - "playbook"
   - "preflight"
+resolution: "Fixed in a5f59a45: shikigami-agent-run refuses to start a local run whose helpers (shikigami-agent-launch, shikigami-local, the vendor CLI) do not resolve, naming the fix; shikigami-local doctor --agent <declaration> runs the same checks (Shikigami.Agent.Preflight)."
+amended:
+  - by: "claude-code/claude-opus-5-5"
+    at: "2026-11-18T12:28:59Z"
+    change: "Status set to resolved."
 ---
 # A local playbook run finds a missing helper executable only when a step runs it
 

@@ -6,7 +6,7 @@ generated:
   by: "claude-code/claude-opus-5-5"
   at: "2026-11-17T23:54:50Z"
 frictionId: FRIC-104
-status: logged
+status: "resolved"
 impact: slowdown
 kind: interface
 origin: "mori://shinzui/shikigami"
@@ -18,6 +18,11 @@ tags:
   - "kioku"
   - "learnings"
   - "playbook"
+resolution: "Fixed in a5f59a45: the playbook output carries stoppedBy (environment or work); a run stopped by an unattempted step (helper that would not start, ceiling refusal, oversize prompt, refused or unstartable tool) records no learning."
+amended:
+  - by: "claude-code/claude-opus-5-5"
+    at: "2026-11-18T12:29:01Z"
+    change: "Status set to resolved."
 ---
 # A run's environment failures are stored as learnings and recalled by later runs
 

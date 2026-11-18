@@ -2,6 +2,36 @@
 
 ## 2026-11-18
 
+* **Update**: FRIC-115 resolved: Status set to resolved.
+
+
+* **Update**: FRIC-114 resolved: Status set to resolved.
+
+
+* **Update**: FRIC-113 resolved: Status set to resolved.
+
+
+* **Update**: FRIC-115 resolved: Status set to resolved.
+
+
+* **Update**: FRIC-114 resolved: Status set to resolved.
+
+
+* **Update**: FRIC-113 resolved: Status set to resolved.
+
+
+* **Update**: FRIC-105 resolved: Status set to resolved.
+
+
+* **Update**: FRIC-104 resolved: Status set to resolved.
+
+
+* **Update**: FRIC-101 resolved: Status set to resolved.
+
+
+* **Update**: FRIC-100 resolved: Status set to resolved.
+
+
 * **Addition**: FRIC-119 records nuisance interface friction with mori://shinzui/shikigami: A worktree run that changes nothing leaves its worktree and run branch behind
 
 
