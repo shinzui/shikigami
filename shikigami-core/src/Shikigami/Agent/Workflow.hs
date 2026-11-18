@@ -188,7 +188,7 @@ import Shikigami.Output qualified as Output
 import Shikigami.Pack.Setting (PackSettings)
 import Shikigami.Playbook (pinPlaybook)
 import Shikigami.Playbook qualified as Playbook
-import Shikigami.Playbook.Run (PlaybookAgent (..), runPlaybook)
+import Shikigami.Playbook.Run (PlaybookAgent (..), runPlaybook, stoppedByEnvironment)
 import Shikigami.Prelude hiding ((.=))
 import Shikigami.Program.DecisionRunner (DecisionAbort (..))
 import Shikigami.Program.DecisionRunner qualified as DecisionRunner
@@ -1817,6 +1817,11 @@ recordLearning :: (IOE :> es) => AgentRunDeps -> ResolvedAgentIdentity -> AgentD
 recordLearning deps recordedIdentity decl@AgentDecl {memory = MemoryPolicy {recordPolicy}} sid output = liftIO do
   case recordPolicy of
     Never -> pure (Right (StepProduced Nothing))
+    -- A playbook that stopped before it could attempt a step (a missing
+    -- helper, a ceiling refusal, a prompt over the limit) learned nothing
+    -- about the repository; recording it would be recalled by later runs as
+    -- a lesson (FRIC-104). The step's result type is unchanged.
+    _ | stoppedByEnvironment output -> pure (Right (StepProduced Nothing))
     OnSuccess -> recordedJust
     Always -> recordedJust
   where

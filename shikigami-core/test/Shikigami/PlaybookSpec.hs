@@ -1,10 +1,19 @@
 -- | The playbook format and its checked loader (EP-4 of MasterPlan 22).
 module Shikigami.PlaybookSpec (tests) where
 
+import Data.Aeson (Value (..))
+import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Map.Strict qualified as Map
 import Data.Text qualified as Text
+import Effectful (runPureEff)
+import Effectful.Dispatch.Dynamic (interpret)
+import Shikigami.CodingAgent.Types (CodingAgentProvider (ClaudeCode), WorkspaceAccess (EditWorkspace))
+import Shikigami.Flow.Acknowledgement (Ack (..), Acknowledgement (..))
+import Shikigami.Flow.Capability (Memory (..))
+import Shikigami.Flow.CodingAgent (unavailableCodingAgent)
+import Shikigami.Flow.DeclaredTool (unavailableDeclaredTool)
 import Shikigami.Playbook
-import Shikigami.Playbook.Run (Reflection (..), parseReflection)
+import Shikigami.Playbook.Run (PlaybookAgent (..), Reflection (..), parseReflection, runPlaybook, stoppedByEnvironment)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertFailure, testCase, (@?=))
 
@@ -63,5 +72,31 @@ tests =
         fmap (.learnings) (parseReflection message) @?= Just ["a", "b", "c"]
         fmap (fmap Text.length . (.suggestion)) (parseReflection message) @?= Just (Just 4096)
         parseReflection "no json here" @?= Nothing
-        parseReflection "{\"learnings\": [], \"playbookSuggestion\": null}" @?= Just Reflection {learnings = [], suggestion = Nothing}
+        parseReflection "{\"learnings\": [], \"playbookSuggestion\": null}" @?= Just Reflection {learnings = [], suggestion = Nothing},
+      testCase "a stop names whether the machine or the work stopped it" do
+        -- The harness's coding agents and declared tools are unavailable:
+        -- a step that never started stops the run by its environment, and
+        -- the agent run records no learning for it (FRIC-104).
+        let run :: Ack -> [PlaybookStep] -> Value
+            run answer steps =
+              runPureEff
+                . unavailableCodingAgent
+                . unavailableDeclaredTool
+                . interpret (\_ -> \case AwaitAcknowledgement {} -> pure answer; AwaitAcknowledgementWithin {} -> pure answer)
+                . interpret (\_ -> \case Recall {} -> pure []; Remember {} -> error "nothing is remembered without learnings")
+                $ runPlaybook
+                  PlaybookAgent {provider = ClaudeCode, access = EditWorkspace, model = Nothing, effort = Nothing}
+                  PinnedPlaybook {bundle = Bundle {main = "m", playbooks = [Playbook {name = "m", steps}]}, file = "bundle.dhall", repository = Nothing, relative = "bundle.dhall"}
+                  Null
+            stoppedBy output = case output of Object fields -> KeyMap.lookup "stoppedBy" fields; _ -> Nothing
+            gate = Approval {id = "gate", prompt = "Continue?"}
+            probe = Probe {id = "probe", tool = "git", args = ["status"], deadlineMinutes = 1}
+            coder = CodingAgent {id = "fix", prompt = "Fix it", workspace = "", deadlineMinutes = 5, skills = []}
+            oversized = CodingAgent {id = "fix", prompt = Text.replicate 70000 "x", workspace = "", deadlineMinutes = 5, skills = []}
+        stoppedBy (run (Acknowledged Null) [gate]) @?= Just Null
+        stoppedBy (run (Declined "not now") [gate]) @?= Just (String "work")
+        stoppedBy (run (Acknowledged Null) [gate, probe]) @?= Just (String "environment")
+        stoppedBy (run (Acknowledged Null) [coder]) @?= Just (String "environment")
+        stoppedBy (run (Acknowledged Null) [oversized]) @?= Just (String "environment")
+        fmap stoppedByEnvironment [run (Declined "no") [gate], run (Acknowledged Null) [probe]] @?= [False, True]
     ]

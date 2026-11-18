@@ -117,6 +117,12 @@ instructions. The run keeps its new learnings for later runs when it ends, as on
 next run recalls up to ten lines by that header. Learnings are shared by runs of the same
 declaration, whichever repository they work in.
 
+The run's output says why a stopped run stopped: `stoppedBy` is `environment` when the stopping
+step could not be attempted on this machine (a helper that would not start, a Baikai ceiling
+refusal, a prompt over the 64 KiB limit, a declared tool refused or unstartable) and `work`
+otherwise. A run stopped by its environment records no learning of its own, so a setup failure is
+not recalled by later runs as a lesson about the repository.
+
 `agents/playbooks/build-repair.dhall` checks this end to end in a few minutes. Run it twice on a
 small Cabal package whose build is broken: the first run repairs the build, reports failing
 tests without stopping, waits for the close approval and reflects. The second run's
@@ -171,6 +177,11 @@ You confirm the declaration for the run's repository; a step in another reposito
 for that repository too, and the grant is kept. The bundle is loaded, checked and pinned when
 the run starts, so editing the file affects only later runs.
 
+Before the first step the run checks this machine: the vendor CLI, `shikigami-agent-launch`,
+`shikigami-local` and the Baikai ceiling. It refuses to start when one is missing and names the
+fix; `shikigami-local doctor --agent <declaration> --workspace <repository>` runs the same checks
+and also says whether the declaration is granted there.
+
 When the run reaches an approval it stops and prints what to do:
 
 ```text
@@ -179,6 +190,7 @@ Run <WORKFLOW_ID> waits for approval:
 then: shikigami-agent-run --agent <the same declaration> --resume <WORKFLOW_ID>
 ```
 
+The ask waits a day for you (`trust.local_operator.approval_deadline_seconds`).
 `shikigami-local approvals pending` lists the waiting asks. After you answer, `--resume`
 continues the run; steps that finished are read from its journal and not run again. The
 report lists every step with its outcome, and `shikigami-local ledger --run <WORKFLOW_ID>`

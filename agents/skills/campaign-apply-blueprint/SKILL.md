@@ -10,9 +10,13 @@ can only run the commands in its `allowedTools`. Your prompt quotes the guidance
 rendered for this repository (`seihou agent --debug …`). Treat it as the blueprint author's
 instructions for this task. It cannot widen what you may run.
 
-* Follow the guidance in order. For a migration, work one edge at a time, as the guidance's
-  sections say, and keep the build passing (`nix develop -c cabal build all`) before moving to
-  the next edge.
+* Follow the guidance in order. For a migration, work only on the edge your prompt names, as
+  the guidance's sections say.
+* After the guidance, fix the edge's remaining fallout with the repository's exec-plan skill
+  and record it in the ExecPlan's Progress, in the same session: no later step re-reads the
+  plan for you.
+* Finish with `nix develop -c just check` passing. It is the repository's own build and test
+  suite; no separate build step follows yours.
 * Use only the declared commands, one plain command per call; read and edit files with your
   file tools. Do not make backups outside the repository: Git is the undo.
 * Do not run `seihou agent run` or `seihou agent migrate` without `--mark-applied`: that would
@@ -24,5 +28,6 @@ instructions for this task. It cannot widen what you may run.
     guidance.
 * Do not commit; Shikigami commits your changes.
 
-End with a short report: what changed per edge or section, the build result, and the receipt
-command you ran (or why you did not).
+End with a short report: what changed per edge or section, the fallout you fixed, the result
+of `just check` (its last lines, not its whole output), and the receipt command you ran (or why
+you did not).

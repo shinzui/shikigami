@@ -157,6 +157,7 @@ surfaceTests =
                 "objectives",
                 "outputs.default",
                 "scheduler.catch_up",
+                "trust.local_operator.approval_deadline_seconds",
                 "trust.local_operator.approvals_file",
                 "trust.local_operator.state_dir",
                 "trust.tier",
@@ -230,6 +231,7 @@ surfaceTests =
               ("SHIKIGAMI_SCHEDULER_CATCH_UP", "scheduler.catch_up"),
               ("SHIKIGAMI_TRUST_TIER", "trust.tier"),
               ("SHIKIGAMI_TRUST_LOCAL_OPERATOR_APPROVALS_FILE", "trust.local_operator.approvals_file"),
+              ("SHIKIGAMI_TRUST_LOCAL_OPERATOR_APPROVAL_DEADLINE_SECONDS", "trust.local_operator.approval_deadline_seconds"),
               ("SHIKIGAMI_TRUST_LOCAL_OPERATOR_STATE_DIR", "trust.local_operator.state_dir"),
               ("SHIKIGAMI_WORKER_CAPACITY", "worker.capacity"),
               ("SHIKIGAMI_RUN_TIMEOUT_SECONDS", "worker.run_timeout_seconds")

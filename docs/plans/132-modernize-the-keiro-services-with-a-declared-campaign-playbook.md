@@ -143,6 +143,20 @@ it ships as declarations with no change to `shikigami-core`.
   - The playbook's bare `cabal test all` probe exited 1 on setup alone (FRIC-114).
   - Taking the run to its first gate on this machine took four launches (FRIC-100 to
     FRIC-105). Per-edge overhead is in FRIC-113.
+- [x] DX pass before the batches (2026-11-18, user-approved): the costliest local-run friction
+  of M3 is fixed in Shikigami and in the playbook. FRIC-100 and FRIC-101: `shikigami-agent-run`
+  checks the vendor CLI, `shikigami-agent-launch`, `shikigami-local` and the Baikai ceiling
+  before a local run's first step and refuses with the fix (`Shikigami.Agent.Preflight`);
+  `shikigami-local doctor --agent … --workspace …` runs the same checks and the grant check.
+  FRIC-105: the foreground driver no longer gives up after eight child rounds, so the first
+  pass delivers an approval ask and prints `Run <ID> waits for approval`; local asks wait a
+  day (`trust.local_operator.approval_deadline_seconds`). FRIC-104: a playbook output says
+  `stoppedBy: environment` when the stopping step could not be attempted, and the run records
+  no learning for it. FRIC-113 to FRIC-115: see the Decision Log.
+  - Evidence: on a shell without the helpers on PATH, `shikigami-agent-run` on the campaign
+    declaration exits 1 before any step, naming both missing helpers and their fixes; doctor
+    reports the ceiling refusal with an empty `XDG_CONFIG_HOME`. The PlaybookSpec case "a stop
+    names whether the machine or the work stopped it" covers the stop cause.
 - [ ] Milestone 4: the remaining confirmed repositories are modernized in batches, each batch
   using the playbook as improved by the previous one. The commits that introduced the
   campaign contain no `shikigami-core/` path, and EP-5's fitness check passes. This milestone
@@ -367,6 +381,20 @@ These came from read-only research on 2026-11-15, before implementation.
   `mori://shinzui/seihou/okf/improvement-requests/concepts/IR-23`. This supersedes the earlier
   decision that blueprints run as `seihou agent run|migrate --batch` tool steps.
   Date: 2026-11-16
+
+- Decision (before M4): each migration edge is one coding agent (`apply`) that applies the
+  guidance, fixes the edge's fallout, records it in the ExecPlan and finishes with
+  `nix develop -c just check`; the per-edge `implement`, `build` and `fix-build` steps and the
+  `execute-plan` build steps are gone. The `tests` probe runs `nix develop -c just check`, and
+  readiness check R9 (with a `just --summary` probe) makes sure every repository has a `check`
+  recipe that runs its full suite, adding one over the existing test recipes when it is
+  missing. Reflect quotes `{{steps.tests.summary}}` instead of the whole test output.
+  Rationale: FRIC-113 (two cold agents and a redundant build per edge), FRIC-114 (bare
+  `cabal test all` cannot start suites the repository's scripts provide) and FRIC-115 (the full
+  test output exceeded the 64 KiB prompt limit). Of the six confirmed repositories only koyomi
+  had a `check` recipe on 2026-11-18 (kizashi and keiei have `test`), so R9 makes the probe
+  portable instead of hard-coding a per-repository command.
+  Date: 2026-11-18
 
 ## Outcomes & Retrospective
 

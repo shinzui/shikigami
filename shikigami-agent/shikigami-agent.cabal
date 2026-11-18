@@ -48,6 +48,7 @@ library
     Shikigami.Agent.Command.Routine
     Shikigami.Agent.Command.RunBehavior
     Shikigami.Agent.Command.Up
+    Shikigami.Agent.Preflight
     Shikigami.Agent.Trust
 
   build-depends:

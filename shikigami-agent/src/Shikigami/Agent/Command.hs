@@ -34,7 +34,7 @@ where
 import Data.Text qualified as Text
 import Options.Applicative
 import Shikigami.Agent.Command.AgentRun (runAgentRun)
-import Shikigami.Agent.Command.Doctor (runDoctor)
+import Shikigami.Agent.Command.Doctor (DoctorOptions (..), runDoctor)
 import Shikigami.Agent.Command.Local (LedgerOptions (..), LocalCommand (..), runLocal)
 import Shikigami.Agent.Command.LocalRuns (RunsQuery (..), runLocalRuns)
 import Shikigami.Agent.Command.Routine (NewRoutine (..), RunRoutine (..), runNewRoutine, runRoutine)
@@ -187,7 +187,19 @@ localRoleInfo =
             (runUp . UpOptions <$> optional (option auto (long "for" <> metavar "MINUTES" <> help "Stop after this many minutes")))
             (progDesc "Run scheduled routine agents on this machine: arms each agent with a stored approval and says why the others are not armed")
         )
-    doctor = command "doctor" (info (pure runDoctor) (progDesc "Check every prerequisite of routine agents; each failure names its fix"))
+    doctor =
+      command
+        "doctor"
+        ( info
+            ( fmap
+                runDoctor
+                ( DoctorOptions
+                    <$> many (strOption (long "agent" <> metavar "AGENT.dhall" <> help "Also check this declaration, for example a playbook campaign"))
+                    <*> optional (Text.pack <$> strOption (long "workspace" <> metavar "DIR|mori://…" <> help "Also check that each declaration is granted on this repository"))
+                )
+            )
+            (progDesc "Check every prerequisite of routine agents; each failure names its fix")
+        )
     runsCommand =
       command
         "runs"

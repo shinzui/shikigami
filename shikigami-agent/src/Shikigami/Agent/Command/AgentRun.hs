@@ -5,7 +5,7 @@ where
 
 import Baikai.Options qualified as Options
 import Control.Exception (finally)
-import Control.Monad (void)
+import Control.Monad (unless, void, when)
 import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
@@ -27,7 +27,6 @@ import Keiro.Workflow.Child (runChildWorkflow)
 import Kioku.Id (idText)
 import Kiroku.Store.Connection (KirokuStore (..), withStore)
 import Kiroku.Store.Effect (runStoreIO)
-import Kiroku.Store.Error (StoreError)
 import Shikigami.Activity (ActivityEnvelope)
 import Shikigami.Agent.Approval qualified as Approval
 import Shikigami.Agent.Approval.LocalInbox (PendingApproval (..), listPendingApprovals, localInboxDirectory, localInboxNotifier)
@@ -37,6 +36,7 @@ import Shikigami.Agent.Decl (AgentDecl (..), Behavior (CoordinatingSkill, Skill)
 import Shikigami.Agent.Loader (AgentLoadEntry (..), AgentLoadReport (..), loadAgent)
 import Shikigami.Agent.Name (agentNameText)
 import Shikigami.Agent.Payload (readPayloadArgument)
+import Shikigami.Agent.Preflight (localRunChecks, passed, renderCheck)
 import Shikigami.Agent.Principal (AgentIdentity, compatibilityIdentity)
 import Shikigami.Agent.Run (AgentRunResult (..), recordActivityAsMemory, renderMemoryRecord)
 import Shikigami.Agent.Run.Key (newCliRunKey)
@@ -134,6 +134,14 @@ runAgentRun packs agentArg mActivity workspace payloadArgument noConfirm resume 
             case FlowPack.flowDeclarationErrors flows decl of
               [] -> pure ()
               problems -> dieAgentRun (Text.intercalate "; " problems)
+            -- A local run checks this machine before its first step: a missing
+            -- helper or a refusing Baikai ceiling would otherwise fail a step
+            -- after the run's probes and approvals (FRIC-100, FRIC-101).
+            when (config.trustTier == LocalOperator) do
+              failures <- filter (not . passed) <$> localRunChecks decl
+              unless (null failures) do
+                mapM_ (TIO.hPutStrLn stderr . renderCheck) failures
+                dieAgentRun "this machine is not ready for the run; shikigami-local doctor --agent <declaration> checks it again"
             interaction <- terminalInteraction noConfirm
             runDurableAgent flows (concatMap (.outputs) packs) (concatMap (.authorities) packs) logger store appEnv (parseWorkspaceArgument <$> workspace) triggerPayload interaction config decl resume
 
@@ -236,7 +244,7 @@ runDurableAgent flows outputRegistrations authorities logger store@KirokuStore {
   stateDirectory <- maybe defaultStateDirectory pure config.localOperatorStateDirectory
   let localTier = config.trustTier == LocalOperator
       approvalPolicy
-        | localTier = Approval.ApprovalPolicySnapshot {requireFor = Set.fromList (rights (mkOutputKind <$> config.approvalRequiredOutputs)), channel = Approval.localInboxChannel, deadline = config.approvalDeadline}
+        | localTier = Approval.ApprovalPolicySnapshot {requireFor = Set.fromList (rights (mkOutputKind <$> config.approvalRequiredOutputs)), channel = Approval.localInboxChannel, deadline = config.localOperatorApprovalDeadline}
         | otherwise = Approval.autoApprovePolicy ((.approvalDeadline) config)
       approvalEnv
         | localTier = ApprovalWorkflow.ApprovalWorkflowEnv {notifier = localInboxNotifier (localInboxDirectory stateDirectory)}
@@ -296,32 +304,38 @@ runDurableAgent flows outputRegistrations authorities logger store@KirokuStore {
         Right Cancelled -> dieAgentRun "workflow was cancelled"
         Right Failed -> dieAgentRun "workflow journal carries a terminal failure"
         Right ContinuedAsNew -> dieAgentRun "parent advance requires a worker resume"
-  let drivePending :: Int -> Either StoreError (WorkflowOutcome (Either AgentWorkflow.AgentRunFailure AgentRunResult)) -> IO ()
-      drivePending budget current
-        | budget <= 0 = finish current
-        | otherwise = do
-            progressed <- foregroundChildren appEnv deps job
-            mapM_ (\(_, outcome) -> either (const (pure ())) (mapM_ TIO.putStrLn) outcome) progressed
-            case [problem | (_, Left problem) <- progressed] of
-              problem : _ -> dieAgentRun problem
-              []
-                | any (\(_, outcome) -> outcome /= Right Nothing) progressed ->
-                    runParent >>= \case
-                      next@(Right Suspended) -> drivePending (budget - 1) next
-                      next -> finish next
-                | otherwise -> do
-                    -- Every pending child waits on the operator.
-                    pendingAsks <- listPendingApprovals (localInboxDirectory stateDirectory)
-                    TIO.putStrLn ("Run " <> (runJobWorkflowId job).unWorkflowId <> " waits for approval:")
-                    mapM_ (\pendingAsk -> TIO.putStrLn ("  shikigami-local approvals resolve " <> pendingAsk.reviewId <> "    # " <> pendingAsk.prompt)) pendingAsks
-                    TIO.putStrLn ("then: shikigami-agent-run --agent <the same declaration> --resume " <> (runJobWorkflowId job).unWorkflowId)
+  -- Drive the pending children for as long as one of them finishes. Each
+  -- round needs a finished child, so the loop ends when the run completes or
+  -- every pending child waits on the operator. It has no round budget: a
+  -- playbook's probes and coding agents each take a round, and a fixed budget
+  -- left the run before its approval ask reached the inbox (FRIC-105).
+  let drivePending :: IO ()
+      drivePending = do
+        progressed <- foregroundChildren appEnv deps job
+        mapM_ (\(_, outcome) -> either (const (pure ())) (mapM_ TIO.putStrLn) outcome) progressed
+        case [problem | (_, Left problem) <- progressed] of
+          problem : _ -> dieAgentRun problem
+          []
+            -- Nothing to drive here: the parent waits on a timer or a
+            -- worker, which a later --resume or a worker picks up.
+            | null progressed -> finish (Right Suspended)
+            | any (\(_, outcome) -> outcome /= Right Nothing) progressed ->
+                runParent >>= \case
+                  Right Suspended -> drivePending
+                  next -> finish next
+            | otherwise -> do
+                -- Every pending child waits on the operator.
+                pendingAsks <- listPendingApprovals (localInboxDirectory stateDirectory)
+                TIO.putStrLn ("Run " <> (runJobWorkflowId job).unWorkflowId <> " waits for approval:")
+                mapM_ (\pendingAsk -> TIO.putStrLn ("  shikigami-local approvals resolve " <> pendingAsk.reviewId <> "    # " <> pendingAsk.prompt)) pendingAsks
+                TIO.putStrLn ("then: shikigami-agent-run --agent <the same declaration> --resume " <> (runJobWorkflowId job).unWorkflowId)
   (`finally` tierRuntime.release) do
     initial <- runParent
     case initial of
       -- The parent awaits a child (a coding-agent step or an approval): this
       -- command drives each pending child in the foreground and resumes the
       -- parent while that makes progress. An approval waits for the operator.
-      Right Suspended | not eligible -> drivePending 8 initial
+      Right Suspended | not eligible -> drivePending
       Right Suspended | eligible -> do
         -- The parent has released its workflow lease. Only its accepted child
         -- can perform local work, through the same fenced executor as a worker.
@@ -330,7 +344,7 @@ runDurableAgent flows outputRegistrations authorities logger store@KirokuStore {
           Right (Just _) ->
             runParent >>= \case
               -- After the behavior, an output may still wait on an approval.
-              next@(Right Suspended) -> drivePending 8 next
+              Right Suspended -> drivePending
               next -> finish next
           Right Nothing -> finish initial
           Left err -> dieAgentRun ("accepted execution requires recovery: " <> Text.pack (show err))

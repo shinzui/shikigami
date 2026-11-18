@@ -453,7 +453,7 @@ no cache to invalidate. **Needs the DB** (`database.connection_string`).
 $ shikigami-local new <NAME> [--coder] [--every <CRON>]
 $ shikigami-local run <AGENT> [TASK…] [--in <DIR|mori://…>] [--no-confirm]
 $ shikigami-local runs [RUN-ID] [--limit <N>]
-$ shikigami-local doctor
+$ shikigami-local doctor [--agent <AGENT.dhall>]… [--workspace <DIR|mori://…>]
 $ shikigami-local up [--for <MINUTES>]
 $ shikigami-local approvals
 $ shikigami-local approvals pending
@@ -470,8 +470,12 @@ agent — a declaration of a few lines built on `schema/Routine.dhall` and, for 
 checkout (its top level, or `--in`), with the words after it as the payload's `task`, asks once,
 and prints where its report went. `runs` lists recent runs with outcome, duration, allowed and
 refused decisions and report path, or one run's record; `doctor` checks the database, the model
-provider, the agents directory, each declaration and its tools and vendor CLI, and prints the fix
-for each failure; `up` runs scheduled routine agents that have a stored approval and says why the
+provider, the agents directory, each declaration and its tools and vendor CLI, the helpers
+`shikigami-agent-launch` and `shikigami-local` a coding agent or a declared tool needs, and the
+Baikai ceiling a coding agent launches under, and prints the fix for each failure (`--agent` adds
+a declaration outside the agents directory, such as a playbook campaign; `--workspace` also
+checks that each declaration is granted on that repository). `shikigami-agent-run` makes the
+same machine checks before a local run's first step and refuses to start when one fails; `up` runs scheduled routine agents that have a stored approval and says why the
 others are skipped ([Routine agents](./routine-agents.md)). `approvals` validates the
 approvals file and lists its repositories, approvals and every stored confirmation; `revoke`
 deletes a stored confirmation (give at least eight characters of its digest); `ledger` prints the

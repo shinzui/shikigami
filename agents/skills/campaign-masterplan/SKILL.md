@@ -20,9 +20,9 @@ provenance rules.
 3. Create one child ExecPlan for each selected blueprint, in the order given. Entries of the
    same blueprint (one per release edge) share that blueprint's ExecPlan, with a milestone per
    edge. Each ExecPlan says that, for each edge, the campaign renders the blueprint's guidance
-   with `seihou agent --debug <command> <blueprint> <window> <target>` and a coding agent
-   applies it and records the migration receipt. The ExecPlan covers what remains after that:
-   fallout fixes, builds and tests.
+   with `seihou agent --debug <command> <blueprint> <window> <target>`, and one coding agent
+   applies it, fixes that edge's fallout, records it in the ExecPlan's Progress and finishes
+   with `nix develop -c just check` passing. Each milestone's acceptance is that check.
 4. Add a child ExecPlan for any other work you find necessary for the upgrade, only when you can
    name it concretely.
 5. Do not run blueprints, builds or tests. Shikigami commits your files.

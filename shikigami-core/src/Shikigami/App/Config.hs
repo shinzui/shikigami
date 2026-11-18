@@ -480,7 +480,12 @@ data AppConfig = AppConfig
     localOperatorApprovalsFile :: !(Maybe FilePath),
     -- | @trust.local_operator.state_dir@; absent means
     -- @$XDG_STATE_HOME/shikigami@. Grants, worktrees and locks live here.
-    localOperatorStateDirectory :: !(Maybe FilePath)
+    localOperatorStateDirectory :: !(Maybe FilePath),
+    -- | @trust.local_operator.approval_deadline_seconds@: how long a local
+    -- run's approval ask waits in the operator's inbox. A human gate in a
+    -- playbook is answered by a person at their own pace, so it defaults to
+    -- a day rather than the deployed tier's fifteen minutes (FRIC-105).
+    localOperatorApprovalDeadline :: !(Duration "approval")
   }
   deriving stock (Generic, Eq)
 
@@ -540,6 +545,7 @@ kernelAppConfig =
     <*> withDefault trustTierSetting (constant "contained-tier" "Each executable keeps its configured authority and containment" Contained)
     <*> optional (publicSettingWithRenderer trustApprovalsFileKey "The local operator's explicit approvals file (schema/LocalOperator.dhall)" (Text.unpack <$> textDecoder) Text.pack)
     <*> optional (publicSettingWithRenderer trustStateDirectoryKey "The local operator's state directory for grants, worktrees and locks" (Text.unpack <$> textDecoder) Text.pack)
+    <*> withDefault localApprovalDeadlineSecondsSetting (constant "local-approval-deadline" "A local operator answers a human gate at their own pace" (knownDuration (secondsToNominalDiffTime 86400)))
 
 -- | Which provider runs a Skill behavior, and what the real branch needs.
 --
@@ -1093,6 +1099,14 @@ approvalDeadlineSecondsSetting =
     positiveDurationDecoder
     renderDurationSeconds
 
+localApprovalDeadlineSecondsSetting :: Setting (Duration "approval")
+localApprovalDeadlineSecondsSetting =
+  publicSettingWithRenderer
+    trustLocalApprovalDeadlineSecondsKey
+    "Maximum seconds a local-operator approval ask waits for the operator (1-86400)"
+    positiveDurationDecoder
+    renderDurationSeconds
+
 approvalRequireSetting :: Setting (Set OutputKind)
 approvalRequireSetting =
   publicSettingWithRenderer
@@ -1232,10 +1246,11 @@ trustTierSetting =
     (enumDecoder [("local-operator", LocalOperator), ("contained", Contained), ("multi-tenant", MultiTenant)])
     trustTierText
 
-trustTierKey, trustApprovalsFileKey, trustStateDirectoryKey :: Key
+trustTierKey, trustApprovalsFileKey, trustStateDirectoryKey, trustLocalApprovalDeadlineSecondsKey :: Key
 trustTierKey = stableKey "trust.tier"
 trustApprovalsFileKey = stableKey "trust.local_operator.approvals_file"
 trustStateDirectoryKey = stableKey "trust.local_operator.state_dir"
+trustLocalApprovalDeadlineSecondsKey = stableKey "trust.local_operator.approval_deadline_seconds"
 
 actionAuthorizationModeSetting :: Setting ActionAuthorizationConfig
 actionAuthorizationModeSetting =
@@ -1494,6 +1509,7 @@ kernelEnvironmentBindings =
     binding (EnvName "SHIKIGAMI_TRUST_TIER") trustTierKey,
     binding (EnvName "SHIKIGAMI_TRUST_LOCAL_OPERATOR_APPROVALS_FILE") trustApprovalsFileKey,
     binding (EnvName "SHIKIGAMI_TRUST_LOCAL_OPERATOR_STATE_DIR") trustStateDirectoryKey,
+    binding (EnvName "SHIKIGAMI_TRUST_LOCAL_OPERATOR_APPROVAL_DEADLINE_SECONDS") trustLocalApprovalDeadlineSecondsKey,
     binding (EnvName "SHIKIGAMI_ACTION_AUTHORIZATION_MODE") actionAuthorizationModeKey
   ]
 

@@ -25,6 +25,7 @@ module Shikigami.Playbook.Run
     Reflection (..),
     parseReflection,
     reflectionInstruction,
+    stoppedByEnvironment,
   )
 where
 
@@ -64,7 +65,27 @@ data PlaybookAgent = PlaybookAgent
     effort :: !(Maybe CodingAgentEffort)
   }
 
-data StepResult = StepResult {key :: !Text, outcome :: !Text, summary :: !Text}
+-- | One finished step. @environmental@ marks a failure of this machine or
+-- of the bundle's shape rather than of the work: nothing was attempted in
+-- the repository (a helper that would not start, a ceiling refusal, a prompt
+-- over the limit, a missing playbook). Such a stop is not a lesson about the
+-- repository, so the run records no learning for it (FRIC-104).
+data StepResult = StepResult {key :: !Text, outcome :: !Text, summary :: !Text, environmental :: !Bool}
+
+-- | A step that ran, or was answered, whatever its outcome.
+attempted :: Text -> Text -> Text -> StepResult
+attempted key outcome summary = StepResult {key, outcome, summary, environmental = False}
+
+-- | A step that could not be attempted on this machine.
+unattempted :: Text -> Text -> Text -> StepResult
+unattempted key outcome summary = StepResult {key, outcome, summary, environmental = True}
+
+-- | Whether a playbook run's output says it stopped before it could attempt
+-- a step (see 'StepResult'). The agent run records no learning for it.
+stoppedByEnvironment :: Value -> Bool
+stoppedByEnvironment = \case
+  Object fields -> KeyMap.lookup "outcome" fields == Just "stopped" && KeyMap.lookup "stoppedBy" fields == Just "environment"
+  _ -> False
 
 -- | What a run carries from step to step.
 data Carried = Carried
@@ -144,6 +165,7 @@ runPlaybook agent pinned payload = do
   pure
     ( object
         [ "outcome" .= (maybe "completed" (const "stopped") stopped :: Text),
+          "stoppedBy" .= (stopped >> Just (if all (.environmental) (lastResult results) then "environment" else "work" :: Text)),
           "summary" .= maybe ("playbook " <> bundle.main <> " completed " <> Text.pack (show (length results)) <> " steps") id stopped,
           "steps" .= [object ["key" .= key, "outcome" .= outcome', "summary" .= summary] | StepResult {key, outcome = outcome', summary} <- results],
           "learnings" .= remembered,
@@ -151,6 +173,9 @@ runPlaybook agent pinned payload = do
         ]
     )
   where
+    -- The stopping step is the last result; a run that stopped before any
+    -- step (a missing main playbook) has none, and counts as environmental.
+    lastResult = take 1 . reverse
     isPlaybookMemory name MemoryRecord {tags} = Set.member "playbook" tags && Set.member name tags
 
 -- | The first line of a playbook's learnings memory, and the query that recalls it.
@@ -228,26 +253,26 @@ runSteps agent base bundle payload parameters variables prefix = go []
        in case current of
             CodingAgent {prompt, workspace, deadlineMinutes, skills} ->
               coding carried key (render carried prompt) (render carried workspace) agent.access deadlineMinutes skills \outcome ->
-                let result = StepResult key (outcomeLabel outcome) (renderOutcome outcome)
+                let result = (case outcome of Failed _ -> unattempted; _ -> attempted) key (outcomeLabel outcome) (renderOutcome outcome)
                  in case outcome of
                       Completed CompletedRun {finalMessage} -> ([result], Nothing, remember key result.summary finalMessage carried {outputs = maybe carried.outputs (\value -> Map.insert key value carried.outputs) (lastJsonObject finalMessage)})
                       _ -> ([result], Just (key <> ": " <> renderOutcome outcome), carried)
             Reflect {prompt, workspace} ->
               coding carried key (reflectionInstruction <> "\n" <> render carried prompt) (render carried workspace) ReadOnly 15 [] \outcome -> case outcome of
                 Completed CompletedRun {finalMessage} -> case parseReflection finalMessage of
-                  Nothing -> ([StepResult key "completed" "the reflection named no learnings (unparsed)"], Nothing, carried)
+                  Nothing -> ([attempted key "completed" "the reflection named no learnings (unparsed)"], Nothing, carried)
                   Just Reflection {learnings, suggestion} ->
-                    ( [StepResult key "completed" (Text.pack (show (length learnings)) <> " learnings" <> maybe "" (const ", a playbook suggestion") suggestion)],
+                    ( [attempted key "completed" (Text.pack (show (length learnings)) <> " learnings" <> maybe "" (const ", a playbook suggestion") suggestion)],
                       Nothing,
                       carried {learned = carried.learned <> learnings, suggestions = carried.suggestions <> toList suggestion}
                     )
-                _ -> ([StepResult key (outcomeLabel outcome) (renderOutcome outcome)], Nothing, carried)
+                _ -> ([attempted key (outcomeLabel outcome) (renderOutcome outcome)], Nothing, carried)
             Probe {tool, args, deadlineMinutes} ->
               case mkToolName tool >>= \name -> mkToolStep name (filter (not . Text.null) (render carried <$> args)) deadlineMinutes of
-                Left problem -> pure ([StepResult key "refused" problem], Just (key <> ": " <> problem), carried)
+                Left problem -> pure ([unattempted key "refused" problem], Just (key <> ": " <> problem), carried)
                 Right requested -> do
                   outcome <- runDeclaredTool (toolStepKey key) requested
-                  let result = StepResult key (toolStepOutcomeLabel outcome) (renderToolStepOutcome outcome)
+                  let result = toolResult key outcome
                   pure case outcome of
                     ToolCompleted ToolRun {exit, stdout, stderr} ->
                       let shown = "exit " <> Text.pack (show exit) <> "\n" <> stdout <> (if exit /= 0 && not (Text.null stderr) then "\n" <> stderr else "")
@@ -255,10 +280,10 @@ runSteps agent base bundle payload parameters variables prefix = go []
                     _ -> ([result], Just (key <> ": " <> renderToolStepOutcome outcome), carried)
             Tool {tool, args, deadlineMinutes} ->
               case mkToolName tool >>= \name -> mkToolStep name (filter (not . Text.null) (render carried <$> args)) deadlineMinutes of
-                Left problem -> pure ([StepResult key "refused" problem], Just (key <> ": " <> problem), carried)
+                Left problem -> pure ([unattempted key "refused" problem], Just (key <> ": " <> problem), carried)
                 Right requested -> do
                   outcome <- runDeclaredTool (toolStepKey key) requested
-                  let result = StepResult key (toolStepOutcomeLabel outcome) (renderToolStepOutcome outcome)
+                  let result = toolResult key outcome
                   pure case outcome of
                     ToolCompleted ToolRun {exit = 0, stdout} -> ([result], Nothing, remember key result.summary stdout carried {outputs = maybe carried.outputs (\value -> Map.insert key value carried.outputs) (Aeson.decodeStrict (Text.Encoding.encodeUtf8 stdout))})
                     -- A Tool step must succeed; a nonzero exit fails it and ends the run.
@@ -267,16 +292,16 @@ runSteps agent base bundle payload parameters variables prefix = go []
             Approval {prompt} -> do
               ack <- awaitAck (StepName ("playbook-" <> key)) ApprovalRequest {prompt = render carried prompt, context = object ["step" .= key, "playbook" .= bundle.main], channel = configuredApprovalChannel}
               pure case ack of
-                Acknowledged _ -> ([StepResult key "approved" "approved"], Nothing, carried)
-                Declined reason -> ([StepResult key "declined" reason], Just (key <> ": declined" <> (if Text.null reason then "" else " (" <> reason <> ")")), carried)
-                Ack.TimedOut -> ([StepResult key "timed_out" "no answer before the deadline"], Just (key <> ": no answer before the deadline"), carried)
+                Acknowledged _ -> ([attempted key "approved" "approved"], Nothing, carried)
+                Declined reason -> ([attempted key "declined" reason], Just (key <> ": declined" <> (if Text.null reason then "" else " (" <> reason <> ")")), carried)
+                Ack.TimedOut -> ([attempted key "timed_out" "no answer before the deadline"], Just (key <> ": no answer before the deadline"), carried)
             RunPlaybook {playbook} -> nested key playbook variables carried
             ForEach {items, item, playbook} -> case itemsFor carried item items of
-              Left problem -> pure ([StepResult key "failed" problem], Just (key <> ": " <> problem), carried)
+              Left problem -> pure ([attempted key "failed" problem], Just (key <> ": " <> problem), carried)
               Right bound -> each key playbook (zip [0 ..] bound) [] carried
     coding carried key promptText target access' minutes attached settle =
       case (,,) <$> mkCodingAgentPrompt promptText <*> mkDeadlineMinutes minutes <*> traverse (mkSkillDirectory . Text.pack . (base </>) . Text.unpack) attached of
-        Left problem -> pure ([StepResult key "refused" problem], Just (key <> ": " <> problem), carried)
+        Left problem -> pure ([unattempted key "refused" problem], Just (key <> ": " <> problem), carried)
         Right (stepPrompt, deadline, skillDirectories) -> do
           let requested = CodingAgentStep {provider = agent.provider, prompt = stepPrompt, access = access', model = agent.model, effort = agent.effort, deadlineMinutes = deadline, skills = skillDirectories}
           settle
@@ -284,7 +309,7 @@ runSteps agent base bundle payload parameters variables prefix = go []
               then runCodingAgentStep (codingAgentKey key) requested payload
               else runCodingAgentStepIn target (codingAgentKey key) requested payload
     nested key name scope carried = case lookupPlaybook bundle name of
-      Nothing -> pure ([StepResult key "refused" ("no playbook " <> name)], Just (key <> ": no playbook " <> name), carried)
+      Nothing -> pure ([unattempted key "refused" ("no playbook " <> name)], Just (key <> ": no playbook " <> name), carried)
       Just child -> runSteps agent base bundle payload parameters scope (key <> ".") carried child.steps
     each _ _ [] done carried = pure (done, Nothing, carried)
     each key name ((index, bound) : rest) done carried = do
@@ -315,6 +340,12 @@ runSteps agent base bundle payload parameters variables prefix = go []
         | Just (String itemKey) <- KeyMap.lookup (Key.fromText keyField) fields ->
             Right (Map.fromList ((variable, itemKey) : [(variable <> "." <> Key.toText name, value) | (name, String value) <- KeyMap.toList fields]))
       _ -> Left ("an item has no string " <> (if Text.null keyField then "value" else "field " <> keyField))
+
+-- | A declared tool's result. A call refused by the declaration or grant,
+-- or a command that could not start, attempted nothing.
+toolResult :: Text -> ToolStepOutcome -> StepResult
+toolResult key outcome =
+  (case outcome of ToolRefused _ -> unattempted; ToolFailed _ -> unattempted; _ -> attempted) key (toolStepOutcomeLabel outcome) (renderToolStepOutcome outcome)
 
 -- | Resolve a JSON pointer (@/a/0/b@; empty for the whole value).
 jsonPointer :: Text -> Value -> Maybe Value

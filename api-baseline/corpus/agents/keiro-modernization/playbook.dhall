@@ -1,9 +1,11 @@
 -- The keiro modernization campaign (EP-7 of MasterPlan 22). One run takes the
 -- repositories named in its payload, {"repos": ["mori://shinzui/kizashi"]}.
--- For each one it probes readiness (R1-R8), fixes what it can and asks the
+-- For each one it probes readiness (R1-R9), fixes what it can and asks the
 -- operator to accept the result (declining ends the run there). Then it
 -- selects blueprints from the operator's catalog, writes a MasterPlan, runs
--- each blueprint and its ExecPlan, builds and tests, and reflects.
+-- each blueprint edge and each ExecPlan in one coding agent that finishes
+-- with the repository's `just check`, builds, tests with `just check`, and
+-- reflects.
 let P = ../../../../schema/Playbook.dhall
 
 let Blueprint = { name : Text, kind : Text, source : Text, rule : Text }
@@ -32,6 +34,11 @@ let coder =
       \(prompt : Text) ->
         P.Step.CodingAgent
           { id, prompt, workspace = "{{repo}}", deadlineMinutes = minutes, skills }
+
+-- The repository's own check, which runs suites that need its scripts
+-- (databases, fixtures) as bare `cabal test all` cannot (FRIC-114).
+-- Readiness check R9 makes sure the recipe exists.
+let check = [ "develop", "-c", "just", "check" ]
 
 let build =
       \(id : Text) ->
@@ -77,6 +84,7 @@ in  { main = "keiro-modernization"
           , probe "mori" "mori" [ "status", "--json" ]
           , probe "seihou" "seihou" [ "status" ]
           , probe "outdated" "seihou" [ "outdated" ]
+          , probe "recipes" "nix" [ "develop", "-c", "just", "--summary" ]
           , probe
               "keiro"
               "git"
@@ -101,6 +109,8 @@ in  { main = "keiro-modernization"
               {{steps.seihou.output}}
               seihou outdated:
               {{steps.outdated.output}}
+              just --summary:
+              {{steps.recipes.output}}
               keiro in the build files:
               {{steps.keiro.output}}
 
@@ -194,11 +204,7 @@ in  { main = "keiro-modernization"
               , deadlineMinutes = 120
               }
           , P.Step.Probe
-              { id = "tests"
-              , tool = "nix"
-              , args = [ "develop", "-c", "cabal", "test", "all" ]
-              , deadlineMinutes = 120
-              }
+              { id = "tests", tool = "nix", args = check, deadlineMinutes = 120 }
           , P.approval
               "close"
               ''
@@ -212,8 +218,9 @@ in  { main = "keiro-modernization"
                   ''
                   Follow the campaign-reflect guidance: what should the keiro modernization
                   playbook do differently in the next repository, given this run in {{repo}}?
-                  Tests (evidence):
-                  {{steps.tests.output}}
+                  Tests (evidence): `just check` {{steps.tests.summary}}. The operator read its
+                  full output at the close review; each ExecPlan's Progress records what its
+                  own `just check` showed.
                   ''
               , workspace = "{{repo}}"
               }
@@ -235,33 +242,25 @@ in  { main = "keiro-modernization"
                 ]
               , deadlineMinutes = 10
               }
-          , coder
+          , -- One coding agent per edge applies the guidance and fixes its
+            -- fallout in one context, and its own `just check` replaces a
+            -- separate build probe (FRIC-113).
+            coder
               "apply"
               [ "../../skills/campaign-apply-blueprint" ]
-              180
+              240
               ''
               In {{repo}}, apply blueprint {{plan.blueprint}} ({{plan.command}}, window
               "{{plan.window}}", target "{{plan.target}}") following the campaign-apply-blueprint
-              skill, as the ExecPlan {{plan.path}} describes. Seihou rendered this guidance:
+              skill, as the ExecPlan {{plan.path}} describes. Then fix this edge's remaining fallout
+              with this repository's exec-plan skill, record it in the Progress of that ExecPlan,
+              and finish with `nix develop -c just check` passing. A later edge of the same plan
+              runs next, so do not start it. Seihou rendered this guidance:
 
               {{steps.guidance.output}}
 
               {{learnings}}
               ''
-          , coder
-              "implement"
-              ([] : List Text)
-              90
-              ''
-              In {{repo}}, blueprint {{plan.blueprint}} ({{plan.window}} {{plan.target}}) was just
-              applied. With this repository's exec-plan skill, fix this edge's remaining fallout and
-              record it in the Progress of ExecPlan {{plan.path}}. A later edge of the same plan runs
-              next, so do not start it. Do not run blueprints. The apply step reported (evidence):
-
-              {{steps.apply.output}}
-              ''
-          , build "build"
-          , fixBuild "fix-build" "ExecPlan {{plan.path}}"
           ]
         }
       , { name = "execute-plan"
@@ -269,13 +268,11 @@ in  { main = "keiro-modernization"
           [ coder
               "implement"
               ([] : List Text)
-              90
+              120
               ''
               In {{repo}}, implement the ExecPlan {{plan.path}} with this repository's exec-plan
-              skill. Do not run blueprints.
+              skill, and finish with `nix develop -c just check` passing. Do not run blueprints.
               ''
-          , build "build"
-          , fixBuild "fix-build" "ExecPlan {{plan.path}}"
           ]
         }
       ]

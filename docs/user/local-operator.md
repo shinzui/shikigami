@@ -135,6 +135,7 @@ empty set of approvals.
 | `trust.tier` (`SHIKIGAMI_TRUST_TIER`) | `contained` | `local-operator`, `contained` or `multi-tenant`. |
 | `trust.local_operator.approvals_file` | `$XDG_CONFIG_HOME/shikigami/local-operator.dhall` | The explicit approvals file. |
 | `trust.local_operator.state_dir` | `$XDG_STATE_HOME/shikigami` | Stored grants, run worktrees and in-place locks. |
+| `trust.local_operator.approval_deadline_seconds` | `86400` | How long a run's approval ask waits in the local inbox (1-86400). `approval.deadline_seconds` governs the other tiers. |
 
 ## Queued coding agents in a worker
 
