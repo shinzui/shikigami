@@ -2,6 +2,9 @@
 
 ## 2026-11-18
 
+* **Addition**: FRIC-121 records detour interface friction with mori://shinzui/shikigami: A declaration's grant digest depended on how its path was spelled (resolved in 77933ad0)
+
+
 * **Update**: FRIC-103 resolved: Status set to resolved.
 
 
