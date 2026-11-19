@@ -12,6 +12,7 @@ module Shikigami.CodingAgent.Local
     localCodingAgentRunner,
     settleEnvelope,
     finalMessageOf,
+    commitSubject,
   )
 where
 
@@ -23,7 +24,7 @@ import Data.Aeson.Key qualified as Key
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.ByteString qualified as ByteString
 import Data.ByteString.Lazy qualified as LazyByteString
-import Data.Char (isAlphaNum)
+import Data.Char (isAlphaNum, isAsciiLower)
 import Data.Maybe (fromMaybe, mapMaybe)
 import Data.Scientific (toBoundedInteger)
 import Data.Text (Text)
@@ -281,7 +282,7 @@ settleEnvelope local admission envelope evidence = case (exitCode, outcomeText) 
   (Just code, Just outcome)
     | outcome /= "ran", code `elem` [64, 69, 77, 78] -> pure (Failed (failure code))
   (Just code, _) -> do
-    committed <- commitChanges local admission
+    committed <- commitChanges local admission (finalMessageOf envelope)
     changes <- changeSummary admission.root admission.base
     pure (Completed CompletedRun {exit = code, changes, result = committed, finalMessage = finalMessageOf envelope, evidence})
   (Nothing, _) -> pure (Failed (Misconfigured "the Baikai envelope carries no exit code"))
@@ -303,14 +304,16 @@ settleEnvelope local admission envelope evidence = case (exitCode, outcomeText) 
       69 -> Unstartable message
       _ -> Misconfigured message
 
--- | Commit everything the agent changed, only when something changed.
-commitChanges :: LocalWorkspace -> CodingAgentAdmission -> IO ResultCommit
-commitChanges local admission = do
+-- | Commit everything the agent changed, only when something changed. The
+-- subject is the one the agent proposed in its final message (see
+-- 'commitSubject').
+commitChanges :: LocalWorkspace -> CodingAgentAdmission -> Text -> IO ResultCommit
+commitChanges local admission finalMessage = do
   status <- gitIn admission.root ["status", "--porcelain"]
   case status of
     Right porcelain | not (Text.null porcelain) -> do
       _ <- gitIn admission.root ["add", "-A"]
-      let message = "shikigami(" <> agentNameText local.agent <> "): coding-agent behavior\n\nShikigami-Run: " <> parentOf admission.child <> "\nShikigami-Agent: " <> agentNameText local.agent
+      let message = commitSubject (agentNameText local.agent) (stepOf admission.child) finalMessage <> "\n\nShikigami-Run: " <> parentOf admission.child <> "\nShikigami-Agent: " <> agentNameText local.agent
       _ <- gitIn admission.root ["-c", "commit.gpgsign=false", "commit", "--no-verify", "--quiet", "-m", message]
       head' <- gitIn admission.root ["rev-parse", "HEAD"]
       pure (either (const (Unchanged admission.base)) Committed head')
@@ -319,6 +322,32 @@ commitChanges local admission = do
       pure (if either (const True) (== admission.base) head' then Unchanged admission.base else either (const (Unchanged admission.base)) Committed head')
   where
     parentOf = fst . Text.breakOn ":coding-agent:"
+    -- The child is PARENT:coding-agent:GENERATION:KEY.
+    stepOf child = Text.drop 1 (Text.dropWhile (/= ':') (Text.drop (Text.length ":coding-agent:") (snd (Text.breakOn ":coding-agent:" child))))
+
+-- | The commit subject for a coding agent's change. An agent may end its
+-- answer with a line @Commit: <Conventional Commit subject>@ (the agent has
+-- no @git commit@; the run commits for it). The last such line is used when
+-- it is one line of at most 100 characters shaped @type(scope)!: summary@;
+-- otherwise the subject names the agent and the step,
+-- @chore(AGENT): STEP@.
+commitSubject :: Text -> Text -> Text -> Text
+commitSubject agent step finalMessage =
+  case reverse [Text.strip rest | line <- Text.lines finalMessage, Just rest <- [Text.stripPrefix "Commit:" (Text.strip (Text.dropWhile (`elem` ("`*" :: String)) (Text.strip line)))]] of
+    proposed : _
+      | let subject = Text.dropAround (`elem` ("`* " :: String)) proposed,
+        conventional subject,
+        Text.length subject <= 100 ->
+          subject
+    _ -> "chore(" <> agent <> "): " <> (if Text.null step then "coding-agent step" else step)
+  where
+    conventional subject =
+      let (kind, afterKind) = Text.span isAsciiLower subject
+          afterScope = case Text.uncons afterKind of
+            Just ('(', scoped) | (scope, closing) <- Text.breakOn ")" scoped, not (Text.null scope), not (Text.null closing) -> Text.drop 1 closing
+            _ -> afterKind
+          afterBang = maybe afterScope id (Text.stripPrefix "!" afterScope)
+       in not (Text.null kind) && maybe False (not . Text.null . Text.strip) (Text.stripPrefix ": " afterBang)
 
 changeSummary :: FilePath -> Text -> IO ChangeSummary
 changeSummary root base = do

@@ -191,6 +191,27 @@ it ships as declarations with no change to `shikigami-core`.
   workspace, a Probe or Tool in the run's"; `shikigami-local playbook validate` on the bundle
   prints `in {{repo}}` for every probe; `just api-baseline` is clean after the additive
   playbook-bundle re-pin.
+- [x] Batch A, danwa (2026-11-19): run b75450d4-83c5-534b-a3b3-3e6e6d6d8aae, workspace danwa
+  alone, modernized danwa from 54b4381 to 44be1de (keiro 0.22 → 0.25, kiroku-store 0.13.0.1,
+  shibuya-core 0.13.0.1, shibuya-kiroku-adapter 0.8.0.0, shibuya-pgmq-adapter 0.19.0.0) in
+  three edges; each edge's `just check`, the final build and the `tests` probe passed, and
+  the close review was approved. Its probes ran in danwa (FRIC-122 fixed). A first start was
+  refused because batch A's run still held danwa's in-place lock (FRIC-123, fixed in
+  dffe2e88).
+- [x] Playbook improvements between batches A and B (2026-11-19), from both runs' reflections:
+  - A coding agent's commit takes the subject it proposes on a `Commit:` line, or
+    `chore(<agent>): <step key>`; every `coder` prompt asks for the line. Batch A's commits
+    were all `coding-agent behavior`.
+  - A `close-plans` step after the tests updates the MasterPlan's registry, Progress,
+    Surprises and Outcomes and each ExecPlan's Outcomes; both repositories' MasterPlans were
+    left at Not Started.
+  - Readiness R9 requires `check` to include CI's offline gates (danwa's `dependencies-check`
+    caught a warp move that `just check` missed).
+  - Selection names an entailed blueprint in `skipped` with the edge that carries it (keiei's
+    separate adapter entry found no guidance, its FRIC-8).
+  - `start` is a ToolIn, so a gate quotes the commit without the probe's exit line.
+  - Not done: the run's own bundle proposal needs a grant for the campaign on
+    mori://shinzui/shikigami, which neither run had; both suggestions were applied by hand.
 - [ ] Milestone 4: the remaining confirmed repositories are modernized in batches, each batch
   using the playbook as improved by the previous one. The commits that introduced the
   campaign contain no `shikigami-core/` path, and EP-5's fitness check passes. This milestone

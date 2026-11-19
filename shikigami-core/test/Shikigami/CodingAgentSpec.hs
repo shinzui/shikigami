@@ -4,12 +4,13 @@ import Data.Aeson (Value, object, (.=))
 import Data.Aeson qualified as Aeson
 import Data.Either (isLeft, isRight)
 import Data.Text (Text)
+import Data.Text qualified as Text
 import Data.Time (UTCTime (..), addUTCTime, fromGregorian)
 import Shikigami.Agent.Decl (AgentDecl (..), codingAgentStepOf)
 import Shikigami.Agent.DeclarationValue (declarationCoordinate)
 import Shikigami.Agent.Loader (loadAgent)
 import Shikigami.Agent.Principal (compatibilityIdentity)
-import Shikigami.CodingAgent.Local (finalMessageOf)
+import Shikigami.CodingAgent.Local (commitSubject, finalMessageOf)
 import Shikigami.CodingAgent.Types
 import Shikigami.CodingAgent.Workflow (CodingAgentStepInput (..))
 import Shikigami.Process.Attempt
@@ -80,6 +81,15 @@ tests =
         finalMessageOf (envelope claude) @?= "Added one comment."
         finalMessageOf (envelope codex) @?= "Created the file."
         finalMessageOf (envelope "plain text\nlast line\n") @?= "last line",
+      testCase "a change is committed under the subject the agent proposed, or one naming its step" do
+        let subject = commitSubject "keiro-modernization" "repos.0.modernize.blueprint-plans.1.apply"
+        subject "Done.\n\nCommit: feat(deps): move to the Keiro 0.24 cohort\n" @?= "feat(deps): move to the Keiro 0.24 cohort"
+        subject "**Commit:** `fix(server)!: map a compaction conflict to 503`\n{\"ok\": true}" @?= "fix(server)!: map a compaction conflict to 503"
+        subject "Commit: first: one\nCommit: docs: the last one wins" @?= "docs: the last one wins"
+        subject "Commit: moved the cohort" @?= "chore(keiro-modernization): repos.0.modernize.blueprint-plans.1.apply"
+        subject ("Commit: feat: " <> Text.replicate 100 "x") @?= "chore(keiro-modernization): repos.0.modernize.blueprint-plans.1.apply"
+        subject "no proposal" @?= "chore(keiro-modernization): repos.0.modernize.blueprint-plans.1.apply"
+        commitSubject "a" "" "" @?= "chore(a): coding-agent step",
       testCase "outcomes keep their codec" do
         let outcome = Uncertain UncertainRun {reason = LauncherGoneWithoutResult, uncommitted = ChangeSummary [ChangedFile "src/A.hs" Modified] 0, launcherPid = Just 42}
         Aeson.decode (Aeson.encode outcome) @?= Just outcome

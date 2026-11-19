@@ -27,6 +27,11 @@ adds anything to the catalog.
    guidance for one edge says to work only on that edge, and guidance for several edges can
    exceed the 64 KiB a coding-agent prompt may hold (koyomi's 0.22 to 0.25 window rendered
    122 KB).
+   Do not select a blueprint on its own when every edge it needs is entailed by an edge you
+   selected (the Shibuya adapter edges are entailed by keiro-upgrade 0.24 -> 0.25): it runs
+   with that edge, and the edge records its receipt, so a separate entry would run it twice,
+   in the wrong order, or find no guidance left to render (keiei FRIC-8). Name it in
+   `skipped` with the edge that carries it.
 3. Set `vars` to the variables the catalog rule names, as one word
    (`--var=database.policy=disposable`), or leave it empty.
 4. Change no file.

@@ -23,7 +23,7 @@ files.
 | R6 build plan | `dist-newstyle/cache/plan.json` exists | `nix develop -c cabal build all --dry-run` |
 | R7 friction log | `docs/friction-log/profile.dhall` exists | `bun agents/skills/exec-plan/record-friction.ts init` (after R4, which installs it) |
 | R8 migration blueprints current | `seihou outdated` lists `keiro-upgrade`, `kiroku-upgrade`, `shibuya-kiroku-adapter-upgrade` and `shibuya-pgmq-adapter-upgrade` as up to date, or does not list them | None: `seihou upgrade` refreshes the operator's shared cache. Report `not fixed` and name each outdated blueprint with its installed and available versions, so the operator runs `seihou upgrade <name>` before approving. |
-| R9 check recipe | `just --summary` lists `check`, and the recipe runs the repository's whole build and test suite the way its developers run it (database and fixture suites through their scripts) | Add a `check` recipe to the existing Justfile that runs the recipes already there for the full test suite (for example `check: test`); never invent test commands the repository does not already have, and report `not fixed` when it has none. |
+| R9 check recipe | `just --summary` lists `check`, and the recipe runs the repository's whole build and test suite the way its developers run it (database and fixture suites through their scripts), plus every offline gate its CI runs (read `.github/workflows/` or the CI file: dependency, generated-code, pattern and format checks) | Add a `check` recipe, or extend the existing one, to run the recipes already there for the full test suite and each offline CI gate (for example `check: build test dependencies-check generated-check fmt-check`); never invent commands the repository does not already have, leave out gates that need the network, and report `not fixed` when it has no test recipe. |
 
 Rules:
 
@@ -34,7 +34,8 @@ Rules:
 * If a fix fails, leave it, and report the command and the error.
 * R9 exists because the campaign tests and finishes every edge with `nix develop -c just check`:
   bare `cabal test all` cannot start suites whose databases or fixtures the repository's own
-  scripts provide (FRIC-114).
+  scripts provide (FRIC-114). It includes CI's offline gates because in danwa a `check`
+  without `dependencies-check` passed an edge whose index-state had moved warp.
 * R8 exists because the kizashi pilot stopped halfway through its upgrade: the installed
   keiro-upgrade had no migration edge to the target version, which nobody saw until the
   blueprint ran. An outdated migration blueprint must surface here, before any planning.
