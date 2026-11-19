@@ -1,6 +1,9 @@
 # Bundle Update Log
 
 ## 2026-11-19
+
+* **Addition**: FRIC-123 records detour interface friction with mori://shinzui/shikigami: A run kept the in-place lock of every other repository it worked in
+
 * **Addition**: FRIC-122 records detour interface friction with mori://shinzui/shikigami: A multi-repository playbook probed and checked the run's workspace for every item
 
 ## 2026-11-18

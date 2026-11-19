@@ -23,6 +23,7 @@ where
 import Control.Exception (IOException, try)
 import Data.Bifunctor (first)
 import Data.Functor ((<&>))
+import Data.IORef (atomicModifyIORef', newIORef, readIORef)
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Maybe (isJust)
 import Data.Text (Text)
@@ -221,6 +222,10 @@ lightComposition config organization organizationAuthority interaction record =
                           Right (local, worktree) -> do
                             launcherPath <- codingAgentLauncher
                             gatePath <- gateExecutable
+                            -- Worktrees opened in other repositories, released
+                            -- with the run's own when this process ends (an
+                            -- in-place one holds its checkout's lock).
+                            elsewhere <- newIORef []
                             let config' = LocalCodingAgentConfig {launcher = launcherPath, gate = gatePath}
                                 -- A playbook step may name another repository: it
                                 -- is selected through the same approvals, granted
@@ -238,9 +243,11 @@ lightComposition config organization organizationAuthority interaction record =
                                             resolveGrant interaction approvals grants (recordGrantIn record principal (Just (WorkflowId parent)) decl.name) decl other >>= \case
                                               Left refusal -> pure (Left (TierRefused (renderGrantRefusal refusal)))
                                               Right otherGrant ->
-                                                openLocalRun stateDirectory record decl (localRunAuthority record decl (Just (WorkflowId parent)) otherGrant) otherGrant other (WorkflowId parent) <&> \case
-                                                  Left problem -> Left (WorkspaceUnavailable problem)
-                                                  Right (otherLocal, _) -> Right otherLocal
+                                                openLocalRun stateDirectory record decl (localRunAuthority record decl (Just (WorkflowId parent)) otherGrant) otherGrant other (WorkflowId parent) >>= \case
+                                                  Left problem -> pure (Left (WorkspaceUnavailable problem))
+                                                  Right (otherLocal, otherWorktree) -> do
+                                                    atomicModifyIORef' elsewhere \held -> (otherWorktree : filter (/= otherWorktree) held, ())
+                                                    pure (Right otherLocal)
                                 runners (input :: CodingAgentStepInput) = fmap (localCodingAgentRunner config') <$> workspaceFor input.parent input.repository
                                 toolRunners (input :: DeclaredToolStepInput) = either (Left . failureText) (Right . localDeclaredToolRunner gatePath) <$> workspaceFor input.parent input.repository
                                 failureText = \case
@@ -249,7 +256,7 @@ lightComposition config organization organizationAuthority interaction record =
                                   other -> Text.pack (show other)
                             localCapabilityRuntime (worktreeRootPath worktree.root) local (toolsIn (worktreeRootPath worktree.root)) <&> \case
                               Left problem -> Left (CompositionFailed problem)
-                              Right capabilities -> done capabilities (Just (localWorkspaceHost local capabilities)) runners toolRunners (releaseRunWorktree stateDirectory runId worktree)
+                              Right capabilities -> done capabilities (Just (localWorkspaceHost local capabilities)) runners toolRunners (releaseRunWorktree stateDirectory runId worktree >> readIORef elsewhere >>= mapM_ (releaseRunWorktree stateDirectory runId))
 
 containedCodingAgents :: Text
 containedCodingAgents = "coding agents run only under trust.tier=local-operator until the batch qualification of ADR-40 passes"
