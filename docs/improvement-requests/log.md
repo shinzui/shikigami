@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-11-18
+* **Update**: Widen IR-22 beyond workspace Skills: a run whose behavior reports it stopped, such as a playbook with `"outcome": "stopped"`, must not be `succeeded`, with failure kinds that tell a work stop from an environment stop, for `mori://shinzui/mori/okf/use-cases/concepts/UC-2`.
+
 ## 2026-11-12
 
 * **Addition**: IR-26 requests a registered product-review Flow generalized from the practice-review ports: payload-supplied commit-pinned evidence, a validated draft report, TypeSafe judgments per item, review memory, Kawa history and coalesced Kizashi attention, for `mori://tan/tan-product-management/plans/11-run-recurring-product-reviews-with-durable-history-and-delivery`.

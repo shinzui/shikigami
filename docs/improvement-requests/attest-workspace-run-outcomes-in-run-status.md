@@ -1,17 +1,17 @@
 ---
 type: Improvement Request
-title: Attest workspace run outcomes in run status
-description: Let a declared workspace agent require a validated commit for success, fail the run when that outcome is missing, and expose the commit and validation facts recorded by Shikigami's own tools on the public status response.
+title: Attest run outcomes in run status
+description: Let a declared workspace agent require a validated commit for success, never report succeeded for a run whose behavior says it stopped, such as a stopped playbook, and expose the outcome facts recorded by Shikigami itself on the public status response.
 timestamp: "2026-11-11T18:18:36Z"
 generated:
   by: process:claude-code
-  at: "2026-11-11T18:18:36Z"
+  at: "2026-11-18T23:58:00Z"
 requestId: IR-22
 status: proposed
 origin: mori://shinzui/mori
 ---
 
-# Attest workspace run outcomes in run status
+# Attest run outcomes in run status
 
 ## Status
 
@@ -20,6 +20,11 @@ origin: mori://shinzui/mori
 which reviewed Shikigami at commit `86f31b08`. It is a hard gate on
 `mori://shinzui/mori/plans/283-prove-agent-driven-dependency-upgrades-and-close-uc-2` and therefore
 on `mori://shinzui/mori/okf/use-cases/concepts/UC-2`.
+
+Widened on 2026-11-18 after a review of Shikigami at commit `1c98508d`. That review found a second way
+for `succeeded` to hide a task that did not finish: a playbook that stops. The request now covers any
+behavior whose own result says it stopped, not only workspace Skills. The workspace part is unchanged,
+and the file name is kept so existing links resolve.
 
 ## Problem and current coverage
 
@@ -40,7 +45,22 @@ Today the status does not say whether the upgrade worked.
   summary `agent-run completed`. The status response carries no commit or validation fact.
 
 So a model that runs a failing build and then stops produces `succeeded`, and Mori starts the
-dependents. [IR-11](provide-governed-mutable-repository-workspaces.md) asked for "structured terminal
+dependents.
+
+Playbooks have the same gap, and there no model text is involved at all:
+
+- `runPlaybook` in `shikigami-core/src/Shikigami/Playbook/Run.hs` returns an ordinary JSON value
+  when a step stops the run. The value carries `"outcome": "stopped"` and a `stoppedBy` of `work`
+  (for example a failed Tool or Probe step, or a declined approval) or `environment` (for example a
+  missing helper or a ceiling refusal).
+- The durable agent-run workflow runs a `Playbook` behavior like any other
+  (`shikigami-core/src/Shikigami/Agent/Workflow.hs`, where the behavior dispatch admits `Playbook {}`),
+  so that value is a normal behavior result. The workflow records and completes, and `classifyRun`
+  reports `succeeded`.
+- The only code that reads `stopped` is the learning step, which skips recording a lesson when
+  `stoppedByEnvironment` holds. Nothing connects it to the run status.
+
+So the playbook already knows it did not finish, and the public status says the opposite. [IR-11](provide-governed-mutable-repository-workspaces.md) asked for "structured terminal
 evidence from the run" in its sixth requested change. That evidence exists in workspace receipts and
 tool results, but it does not reach the public status response or influence the status.
 
@@ -62,9 +82,19 @@ HTTP. They do not solve this: the model asserts that evidence, and it does not c
    outcomes: repository identity, base revision, commit id, parent, tree id, and each required
    validation rule with its exit status. Keep it bounded and free of command output, patches, tool
    inputs, and credentials.
-5. Document the contract in `docs/user/http-api.md` and `docs/api/openapi.json`, including the new
-   failure kind and the response members. Existing agents with no required outcome keep today's
-   behavior and response.
+5. Never report `succeeded` for a run whose behavior's own structured result says it did not finish.
+   For a playbook that is `"outcome": "stopped"`. Such a run is `failed`, with a failure kind that
+   tells a stop caused by the work (`stoppedBy: work`) from one caused by the machine
+   (`stoppedBy: environment`); whether those are one kind with a detail member or two kinds is
+   Shikigami's to choose. Expose the stopping step's declared key and `stoppedBy` on the status
+   response, not the step's free-text summary. Apply the same rule to any later behavior kind that
+   returns such a verdict, so the guarantee does not depend on which behavior a declaration uses.
+   This should be the default, because a stopped playbook did not do its task. If the stability
+   rules of the v1 baseline (ADR 133) require an opt-in, a declaration-level switch is acceptable.
+6. Document the contract in `docs/user/http-api.md` and `docs/api/openapi.json`, including the new
+   failure kinds and the response members. Existing workspace agents with no required outcome keep
+   today's behavior and response, and the learning step's handling of environmental stops is
+   unchanged.
 
 The declaration syntax, member names, and failure-kind name are Shikigami's to choose.
 
@@ -82,6 +112,11 @@ The declaration syntax, member names, and failure-kind name are Shikigami's to c
    its final text does not alter cases 1 to 3.
 6. An agent with no required outcome behaves and responds exactly as before.
 7. The status response for a replayed or restarted run reports the same facts.
+8. A playbook run in which a Tool or Probe step fails, or an approval is declined, ends `failed`
+   with the work-stop failure kind, and the status response names the stopping step's key.
+9. A playbook run that stops because a required helper is missing ends `failed` with the
+   environment-stop failure kind, and still records no learning.
+10. A playbook run whose steps all complete ends `succeeded`, exactly as before.
 
 ## Dependencies and scope
 
@@ -89,5 +124,7 @@ This builds on the workspace receipts delivered by
 [IR-11](provide-governed-mutable-repository-workspaces.md) and the status endpoint delivered by
 [IR-10](expose-agent-run-status-over-http.md). It does not ask for publication of the commit, which
 is [IR-23](publish-workspace-commits-to-the-source-repository.md), and it does not ask for HTTP
-cancellation or callbacks. Mori will store the attested facts uninterpreted and keep gating on the
+cancellation or callbacks. The playbook part needs no workspace and can be delivered on its own,
+before or after the workspace part. The new failure kinds are additive enumeration values under the
+v1 baseline's rules for the stable `http-api` surface. Mori will store the attested facts uninterpreted and keep gating on the
 status alone.
