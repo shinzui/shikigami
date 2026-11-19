@@ -5,10 +5,13 @@
 -- 22). Each call names a stable key; each key is its own child workflow, so a
 -- replay reads the journaled outcome instead of running the command again.
 module Shikigami.Flow.DeclaredTool
-  ( DeclaredTool,
+  ( -- | The constructor is exported for interpreters outside a run, such
+    -- as tests; a flow body uses 'runDeclaredTool' or 'runDeclaredToolIn'.
+    DeclaredTool (..),
     DeclaredToolEnv (..),
     toolStepKey,
     runDeclaredTool,
+    runDeclaredToolIn,
     runDeclaredToolCapability,
     unavailableDeclaredTool,
   )
@@ -26,7 +29,8 @@ import Shikigami.Capability.Declared (ToolDecl)
 import Shikigami.DeclaredTool.Workflow (ToolStep, ToolStepOutcome (ToolFailed), runDeclaredToolChild)
 
 data DeclaredTool :: Effect where
-  RunToolStep :: DeclarationCoordinate "tool-step-key" -> ToolStep -> DeclaredTool m ToolStepOutcome
+  -- | A step, in the named repository or (with 'Nothing') the run's own.
+  RunToolStep :: Maybe Text -> DeclarationCoordinate "tool-step-key" -> ToolStep -> DeclaredTool m ToolStepOutcome
 
 type instance DispatchOf DeclaredTool = Dynamic
 
@@ -41,12 +45,17 @@ toolStepKey :: Text -> DeclarationCoordinate "tool-step-key"
 toolStepKey = declarationCoordinate
 
 runDeclaredTool :: (DeclaredTool :> es) => DeclarationCoordinate "tool-step-key" -> ToolStep -> Eff es ToolStepOutcome
-runDeclaredTool key requested = send (RunToolStep key requested)
+runDeclaredTool key requested = send (RunToolStep Nothing key requested)
+
+-- | A step in another repository (a mori URI or a path the operator's
+-- approvals file names), run in that repository's worktree of this run.
+runDeclaredToolIn :: (DeclaredTool :> es) => Text -> DeclarationCoordinate "tool-step-key" -> ToolStep -> Eff es ToolStepOutcome
+runDeclaredToolIn repository key requested = send (RunToolStep (Just repository) key requested)
 
 runDeclaredToolCapability :: (Workflow :> es, Store :> es, IOE :> es) => DeclaredToolEnv -> Eff (DeclaredTool : es) a -> Eff es a
 runDeclaredToolCapability DeclaredToolEnv {agent, identity, tools, repository} =
   interpret \_ -> \case
-    RunToolStep key requested -> runDeclaredToolChild agent identity key requested tools repository
+    RunToolStep elsewhere key requested -> runDeclaredToolChild agent identity key requested tools (maybe repository Just elsewhere)
 
 unavailableDeclaredTool :: Eff (DeclaredTool : es) a -> Eff es a
 unavailableDeclaredTool =

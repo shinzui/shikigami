@@ -179,6 +179,18 @@ it ships as declarations with no change to `shikigami-core`.
     - LocalOperatorSpec covers a placement that replaces an earlier confirmation, the prompt
       showing the placement and the refusal naming the command. LocalHostSpec covers
       "a run works under the placement its grant holds, not the repository entry's".
+- [x] Batch A, keiei (2026-11-18): run 1290d348-df05-547e-9578-4862f762034a modernized
+  keiei from a9b0f90 to c53c66d (keiro-dsl 0.22 → 0.25, nix-haskell-flake 0.40.0,
+  shibuya-kiroku-adapter 0.8.0.0) and its close review passed with `just check` exit 0. The
+  run stopped at danwa's readiness review, which was declined (FRIC-122); danwa's readiness
+  commit 82738d0 is kept.
+- [x] Steps that name a workspace (2026-11-18, user-approved): `ToolIn` and `ProbeIn` are
+  `Tool` and `Probe` with a `workspace`, routed by the local operator tier to that
+  repository's worktree under its own grant, and the campaign uses them for every probe and
+  check. Evidence: the PlaybookSpec case "a ProbeIn or ToolIn step runs in its rendered
+  workspace, a Probe or Tool in the run's"; `shikigami-local playbook validate` on the bundle
+  prints `in {{repo}}` for every probe; `just api-baseline` is clean after the additive
+  playbook-bundle re-pin.
 - [ ] Milestone 4: the remaining confirmed repositories are modernized in batches, each batch
   using the playbook as improved by the previous one. The commits that introduced the
   campaign contain no `shikigami-core/` path, and EP-5's fitness check passes. This milestone
@@ -242,6 +254,16 @@ These came from read-only research on 2026-11-15, before implementation.
   (2-space, trailing commas) into a tree formatted with fourmolu's defaults, so the pre-commit
   hook restyles every file a later change touches.
   Evidence: kizashi `30191f5` adds `fourmolu.yaml`; `75b4308` restyles four modules.
+
+- Observation: in a run over several repositories, every `Probe` and `Tool` step ran in the
+  run's own workspace (keiei), so danwa's readiness probes quoted keiei's state and its
+  builds and `just check` would have checked keiei (FRIC-122).
+  Evidence: danwa's readiness review offered keiei's c53c66d as danwa's reset point; the
+  readiness agent's reply says the probe outputs came from keiei.
+- Observation: a playbook step's commit subject is always
+  `shikigami(keiro-modernization): coding-agent behavior`, which says nothing about the work
+  and is not a Conventional Commit.
+  Evidence: keiei a9b0f90..c53c66d, seven commits with that subject.
 
 ## Decision Log
 
@@ -423,6 +445,15 @@ These came from read-only research on 2026-11-15, before implementation.
   test output exceeded the 64 KiB prompt limit). Of the six confirmed repositories only koyomi
   had a `check` recipe on 2026-11-18 (kizashi and keiei have `test`), so R9 makes the probe
   portable instead of hard-coding a per-repository command.
+  Date: 2026-11-18
+
+- Decision: a Tool or Probe step can name its workspace, as new step kinds `ToolIn` and
+  `ProbeIn` rather than a new field on `Tool` and `Probe`.
+  Rationale: the playbook bundle is a stable surface, so a new field on an existing
+  alternative would break every bundle that writes one; a new alternative is additive and
+  needs only the re-pin. The pinned bundle a running workflow journaled keeps decoding,
+  because `Tool` and `Probe` are unchanged. The user chose the kernel fix over running each
+  repository as its own run.
   Date: 2026-11-18
 
 ## Outcomes & Retrospective

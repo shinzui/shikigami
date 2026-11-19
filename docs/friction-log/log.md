@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-11-19
+* **Addition**: FRIC-122 records detour interface friction with mori://shinzui/shikigami: A multi-repository playbook probed and checked the run's workspace for every item
+
 ## 2026-11-18
 
 * **Addition**: FRIC-121 records detour interface friction with mori://shinzui/shikigami: A declaration's grant digest depended on how its path was spelled (resolved in 77933ad0)

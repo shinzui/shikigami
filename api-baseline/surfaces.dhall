@@ -126,7 +126,7 @@ in  [ { name = "agent-declaration"
       , check =
           S.Check.DhallSchema
             { schema = "schema/Playbook.dhall"
-            , hash = "sha256:f5041f8c1d54a1be1c44a628a65955280bd6b74ebf12dc7a22a4a4e7c7cdade3"
+            , hash = "sha256:d9d0aea51e9b8f9c41585fabdd90bc5b796329e2d75b7bad10a7c8024c79ef9e"
             , corpus = "api-baseline/corpus/playbooks"
             }
       , freeze = S.Freeze.Declaration

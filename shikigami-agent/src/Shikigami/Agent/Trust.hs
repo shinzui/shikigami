@@ -47,7 +47,7 @@ import Shikigami.CodingAgent.Local (LocalCodingAgentConfig (..), localCodingAgen
 import Shikigami.CodingAgent.Types (FailureReason (TierRefused, WorkspaceUnavailable))
 import Shikigami.CodingAgent.Workflow (CodingAgentStepInput (..), fixedCodingAgentRunner, refusingCodingAgentRunner)
 import Shikigami.DeclaredTool.Local (localDeclaredToolRunner)
-import Shikigami.DeclaredTool.Workflow (noDeclaredTools)
+import Shikigami.DeclaredTool.Workflow (DeclaredToolStepInput (..), noDeclaredTools)
 import Shikigami.Output (DefaultOutput (..), OutputRegistry, mkOutputRegistry, renderOutputLoadError, validateOutputs)
 import Shikigami.Output.Local (defaultLocalReport, localReportAdapter)
 import Shikigami.Record (ActionRecord (..))
@@ -222,28 +222,34 @@ lightComposition config organization organizationAuthority interaction record =
                             launcherPath <- codingAgentLauncher
                             gatePath <- gateExecutable
                             let config' = LocalCodingAgentConfig {launcher = launcherPath, gate = gatePath}
-                                runner = localCodingAgentRunner config' local
                                 -- A playbook step may name another repository: it
                                 -- is selected through the same approvals, granted
                                 -- for this declaration (asked once, then stored)
-                                -- and worked in its own worktree of this run.
-                                runners input = case input.repository of
+                                -- and worked in its own worktree of this run. The
+                                -- step's coding agent or declared tool works there.
+                                workspaceFor parent = \case
+                                  Nothing -> pure (Right local)
                                   Just named ->
                                     selectRepository processCheckoutResolver approvals (repositorySelectorText named) >>= \case
                                       Left problem -> pure (Left (WorkspaceUnavailable (renderApprovalsError problem)))
                                       Right other
-                                        | other.identity == repo.identity -> pure (Right runner)
+                                        | other.identity == repo.identity -> pure (Right local)
                                         | otherwise ->
-                                            resolveGrant interaction approvals grants (recordGrantIn record principal (Just (WorkflowId input.parent)) decl.name) decl other >>= \case
+                                            resolveGrant interaction approvals grants (recordGrantIn record principal (Just (WorkflowId parent)) decl.name) decl other >>= \case
                                               Left refusal -> pure (Left (TierRefused (renderGrantRefusal refusal)))
                                               Right otherGrant ->
-                                                openLocalRun stateDirectory record decl (localRunAuthority record decl (Just (WorkflowId input.parent)) otherGrant) otherGrant other (WorkflowId input.parent) <&> \case
+                                                openLocalRun stateDirectory record decl (localRunAuthority record decl (Just (WorkflowId parent)) otherGrant) otherGrant other (WorkflowId parent) <&> \case
                                                   Left problem -> Left (WorkspaceUnavailable problem)
-                                                  Right (otherLocal, _) -> Right (localCodingAgentRunner config' otherLocal)
-                                  Nothing -> pure (Right runner)
+                                                  Right (otherLocal, _) -> Right otherLocal
+                                runners (input :: CodingAgentStepInput) = fmap (localCodingAgentRunner config') <$> workspaceFor input.parent input.repository
+                                toolRunners (input :: DeclaredToolStepInput) = either (Left . failureText) (Right . localDeclaredToolRunner gatePath) <$> workspaceFor input.parent input.repository
+                                failureText = \case
+                                  TierRefused detail -> detail
+                                  WorkspaceUnavailable detail -> detail
+                                  other -> Text.pack (show other)
                             localCapabilityRuntime (worktreeRootPath worktree.root) local (toolsIn (worktreeRootPath worktree.root)) <&> \case
                               Left problem -> Left (CompositionFailed problem)
-                              Right capabilities -> done capabilities (Just (localWorkspaceHost local capabilities)) runners (\_ -> pure (Right (localDeclaredToolRunner gatePath local))) (releaseRunWorktree stateDirectory runId worktree)
+                              Right capabilities -> done capabilities (Just (localWorkspaceHost local capabilities)) runners toolRunners (releaseRunWorktree stateDirectory runId worktree)
 
 containedCodingAgents :: Text
 containedCodingAgents = "coding agents run only under trust.tier=local-operator until the batch qualification of ADR-40 passes"

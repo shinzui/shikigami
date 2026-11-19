@@ -53,7 +53,7 @@ import Shikigami.Flow.Acknowledgement (Ack (Acknowledged, Declined), Acknowledge
 import Shikigami.Flow.Acknowledgement qualified as Ack
 import Shikigami.Flow.Capability (Memory, MemoryQuery (..), RememberOptions (..), defaultRememberOptions, recall, rememberWith)
 import Shikigami.Flow.CodingAgent (CodingAgent, codingAgentKey, runCodingAgentStep, runCodingAgentStepIn)
-import Shikigami.Flow.DeclaredTool (DeclaredTool, runDeclaredTool, toolStepKey)
+import Shikigami.Flow.DeclaredTool (DeclaredTool, runDeclaredTool, runDeclaredToolIn, toolStepKey)
 import Shikigami.Playbook
 import System.FilePath (takeDirectory, (</>))
 
@@ -267,28 +267,10 @@ runSteps agent base bundle payload parameters variables prefix = go []
                       carried {learned = carried.learned <> learnings, suggestions = carried.suggestions <> toList suggestion}
                     )
                 _ -> ([attempted key (outcomeLabel outcome) (renderOutcome outcome)], Nothing, carried)
-            Probe {tool, args, deadlineMinutes} ->
-              case mkToolName tool >>= \name -> mkToolStep name (filter (not . Text.null) (render carried <$> args)) deadlineMinutes of
-                Left problem -> pure ([unattempted key "refused" problem], Just (key <> ": " <> problem), carried)
-                Right requested -> do
-                  outcome <- runDeclaredTool (toolStepKey key) requested
-                  let result = toolResult key outcome
-                  pure case outcome of
-                    ToolCompleted ToolRun {exit, stdout, stderr} ->
-                      let shown = "exit " <> Text.pack (show exit) <> "\n" <> stdout <> (if exit /= 0 && not (Text.null stderr) then "\n" <> stderr else "")
-                       in ([result], Nothing, remember key result.summary shown carried {outputs = maybe carried.outputs (\value -> Map.insert key value carried.outputs) (Aeson.decodeStrict (Text.Encoding.encodeUtf8 stdout))})
-                    _ -> ([result], Just (key <> ": " <> renderToolStepOutcome outcome), carried)
-            Tool {tool, args, deadlineMinutes} ->
-              case mkToolName tool >>= \name -> mkToolStep name (filter (not . Text.null) (render carried <$> args)) deadlineMinutes of
-                Left problem -> pure ([unattempted key "refused" problem], Just (key <> ": " <> problem), carried)
-                Right requested -> do
-                  outcome <- runDeclaredTool (toolStepKey key) requested
-                  let result = toolResult key outcome
-                  pure case outcome of
-                    ToolCompleted ToolRun {exit = 0, stdout} -> ([result], Nothing, remember key result.summary stdout carried {outputs = maybe carried.outputs (\value -> Map.insert key value carried.outputs) (Aeson.decodeStrict (Text.Encoding.encodeUtf8 stdout))})
-                    -- A Tool step must succeed; a nonzero exit fails it and ends the run.
-                    ToolCompleted ToolRun {} -> ([result {outcome = "failed"}], Just (key <> ": " <> renderToolStepOutcome outcome), carried)
-                    _ -> ([result], Just (key <> ": " <> renderToolStepOutcome outcome), carried)
+            Probe {tool, args, deadlineMinutes} -> probe carried key "" tool args deadlineMinutes
+            ProbeIn {tool, args, deadlineMinutes, workspace} -> probe carried key workspace tool args deadlineMinutes
+            Tool {tool, args, deadlineMinutes} -> declaredTool carried key "" tool args deadlineMinutes
+            ToolIn {tool, args, deadlineMinutes, workspace} -> declaredTool carried key workspace tool args deadlineMinutes
             Approval {prompt} -> do
               ack <- awaitAck (StepName ("playbook-" <> key)) ApprovalRequest {prompt = render carried prompt, context = object ["step" .= key, "playbook" .= bundle.main], channel = configuredApprovalChannel}
               pure case ack of
@@ -299,6 +281,27 @@ runSteps agent base bundle payload parameters variables prefix = go []
             ForEach {items, item, playbook} -> case itemsFor carried item items of
               Left problem -> pure ([attempted key "failed" problem], Just (key <> ": " <> problem), carried)
               Right bound -> each key playbook (zip [0 ..] bound) [] carried
+    -- A declared tool in @target@ (the run's repository when empty).
+    toolIn carried key target tool args deadlineMinutes run' =
+      case mkToolName tool >>= \name -> mkToolStep name (filter (not . Text.null) (render carried <$> args)) deadlineMinutes of
+        Left problem -> pure ([unattempted key "refused" problem], Just (key <> ": " <> problem), carried)
+        Right requested -> do
+          let rendered = render carried target
+          outcome <-
+            if Text.null rendered
+              then runDeclaredTool (toolStepKey key) requested
+              else runDeclaredToolIn rendered (toolStepKey key) requested
+          pure (run' (toolResult key outcome) outcome)
+    probe carried key target tool args deadlineMinutes = toolIn carried key target tool args deadlineMinutes \result outcome -> case outcome of
+      ToolCompleted ToolRun {exit, stdout, stderr} ->
+        let shown = "exit " <> Text.pack (show exit) <> "\n" <> stdout <> (if exit /= 0 && not (Text.null stderr) then "\n" <> stderr else "")
+         in ([result], Nothing, remember key result.summary shown carried {outputs = maybe carried.outputs (\value -> Map.insert key value carried.outputs) (Aeson.decodeStrict (Text.Encoding.encodeUtf8 stdout))})
+      _ -> ([result], Just (key <> ": " <> renderToolStepOutcome outcome), carried)
+    declaredTool carried key target tool args deadlineMinutes = toolIn carried key target tool args deadlineMinutes \result outcome -> case outcome of
+      ToolCompleted ToolRun {exit = 0, stdout} -> ([result], Nothing, remember key result.summary stdout carried {outputs = maybe carried.outputs (\value -> Map.insert key value carried.outputs) (Aeson.decodeStrict (Text.Encoding.encodeUtf8 stdout))})
+      -- A Tool step must succeed; a nonzero exit fails it and ends the run.
+      ToolCompleted ToolRun {} -> ([result {outcome = "failed"}], Just (key <> ": " <> renderToolStepOutcome outcome), carried)
+      _ -> ([result], Just (key <> ": " <> renderToolStepOutcome outcome), carried)
     coding carried key promptText target access' minutes attached settle =
       case (,,) <$> mkCodingAgentPrompt promptText <*> mkDeadlineMinutes minutes <*> traverse (mkSkillDirectory . Text.pack . (base </>) . Text.unpack) attached of
         Left problem -> pure ([unattempted key "refused" problem], Just (key <> ": " <> problem), carried)

@@ -85,6 +85,12 @@ data PlaybookStep
     -- only a refusal, a failure to start, a timeout or an uncertain outcome
     -- ends the run.
     Probe {id :: !Text, tool :: !Text, args :: ![Text], deadlineMinutes :: !Natural}
+  | -- | A 'Tool' step that runs in @workspace@ (the run's repository when
+    -- empty), in that repository's worktree of this run, under the grant the
+    -- declaration holds for it.
+    ToolIn {id :: !Text, tool :: !Text, args :: ![Text], deadlineMinutes :: !Natural, workspace :: !Text}
+  | -- | A 'Probe' step that runs in @workspace@, as 'ToolIn' does.
+    ProbeIn {id :: !Text, tool :: !Text, args :: ![Text], deadlineMinutes :: !Natural, workspace :: !Text}
   | -- | Wait for the operator (the local inbox under the local operator).
     Approval {id :: !Text, prompt :: !Text}
   | -- | Run a sibling playbook once per item, binding the item to the
@@ -104,6 +110,8 @@ stepId = \case
   CodingAgent {id = value} -> value
   Tool {id = value} -> value
   Probe {id = value} -> value
+  ToolIn {id = value} -> value
+  ProbeIn {id = value} -> value
   Approval {id = value} -> value
   ForEach {id = value} -> value
   RunPlaybook {id = value} -> value
@@ -171,6 +179,8 @@ validateBundle bundle@Bundle {main, playbooks} =
     workspaceReferences = \case
       CodingAgent {workspace} -> templateReferences workspace
       Reflect {workspace} -> templateReferences workspace
+      ToolIn {workspace} -> templateReferences workspace
+      ProbeIn {workspace} -> templateReferences workspace
       _ -> []
     variableOf reference = fst (Text.breakOn "." reference)
     observed variables reference = maybe False id (lookup (variableOf reference) variables)
@@ -192,6 +202,8 @@ validateBundle bundle@Bundle {main, playbooks} =
       CodingAgent {prompt, workspace} -> templateReferences prompt <> templateReferences workspace
       Tool {args} -> concatMap templateReferences args
       Probe {args} -> concatMap templateReferences args
+      ToolIn {args, workspace} -> concatMap templateReferences args <> templateReferences workspace
+      ProbeIn {args, workspace} -> concatMap templateReferences args <> templateReferences workspace
       Approval {prompt} -> templateReferences prompt
       Reflect {prompt, workspace} -> templateReferences prompt <> templateReferences workspace
       _ -> []
@@ -234,6 +246,8 @@ renderStepTree bundle@Bundle {main} = maybe [] (go 0 []) (lookupPlaybook bundle 
       CodingAgent {deadlineMinutes, workspace} -> "coding agent, " <> Text.pack (show deadlineMinutes) <> " min" <> (if Text.null workspace then "" else " in " <> workspace)
       Tool {tool, args} -> "tool " <> tool <> " " <> Text.unwords args
       Probe {tool, args} -> "probe " <> tool <> " " <> Text.unwords args
+      ToolIn {tool, args, workspace} -> "tool " <> tool <> " " <> Text.unwords args <> inWorkspace workspace
+      ProbeIn {tool, args, workspace} -> "probe " <> tool <> " " <> Text.unwords args <> inWorkspace workspace
       Approval {} -> "approval"
       ForEach {items, item, playbook} -> "for each " <> item <> " in " <> itemsText items <> " run " <> playbook
       RunPlaybook {playbook} -> "run " <> playbook
@@ -243,6 +257,7 @@ renderStepTree bundle@Bundle {main} = maybe [] (go 0 []) (lookupPlaybook bundle 
       FromPayload field -> "run." <> field
       FromStep {step, at} -> step <> " output" <> (if Text.null at then "" else " at " <> at)
     indent depth = Text.replicate (2 * depth) " "
+    inWorkspace workspace = if Text.null workspace then "" else " in " <> workspace
 
 -- | Load and check a bundle file: a Dhall error, or every validation error.
 loadBundle :: FilePath -> IO (Either [Text] Bundle)

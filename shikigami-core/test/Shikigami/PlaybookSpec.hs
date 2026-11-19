@@ -7,11 +7,13 @@ import Data.Map.Strict qualified as Map
 import Data.Text qualified as Text
 import Effectful (runPureEff)
 import Effectful.Dispatch.Dynamic (interpret)
+import Effectful.State.Static.Local (execState, modify)
 import Shikigami.CodingAgent.Types (CodingAgentProvider (ClaudeCode), WorkspaceAccess (EditWorkspace))
+import Shikigami.DeclaredTool.Workflow (ToolRun (..), ToolStepOutcome (..))
 import Shikigami.Flow.Acknowledgement (Ack (..), Acknowledgement (..))
 import Shikigami.Flow.Capability (Memory (..))
 import Shikigami.Flow.CodingAgent (unavailableCodingAgent)
-import Shikigami.Flow.DeclaredTool (unavailableDeclaredTool)
+import Shikigami.Flow.DeclaredTool (DeclaredTool (..), unavailableDeclaredTool)
 import Shikigami.Playbook
 import Shikigami.Playbook.Run (PlaybookAgent (..), Reflection (..), parseReflection, runPlaybook, stoppedByEnvironment)
 import Test.Tasty (TestTree, testGroup)
@@ -98,5 +100,42 @@ tests =
         stoppedBy (run (Acknowledged Null) [gate, probe]) @?= Just (String "environment")
         stoppedBy (run (Acknowledged Null) [coder]) @?= Just (String "environment")
         stoppedBy (run (Acknowledged Null) [oversized]) @?= Just (String "environment")
-        fmap stoppedByEnvironment [run (Declined "no") [gate], run (Acknowledged Null) [probe]] @?= [False, True]
+        fmap stoppedByEnvironment [run (Declined "no") [gate], run (Acknowledged Null) [probe]] @?= [False, True],
+      testCase "a ProbeIn or ToolIn step runs in its rendered workspace, a Probe or Tool in the run's" do
+        -- Each item of a multi-repository run probes and checks its own
+        -- repository, not the run's workspace.
+        let workspaces :: [Value] -> [PlaybookStep] -> [Maybe Text.Text]
+            workspaces repos body =
+              reverse
+                . runPureEff
+                . execState []
+                . unavailableCodingAgent
+                . interpret (\_ -> \case RunToolStep elsewhere _ _ -> modify (elsewhere :) >> pure (ToolCompleted ToolRun {exit = 0, stdout = "", stderr = "", droppedBytes = 0, elapsedMs = 0}))
+                . interpret (\_ -> \case AwaitAcknowledgement {} -> pure (Acknowledged Null); AwaitAcknowledgementWithin {} -> pure (Acknowledged Null))
+                . interpret (\_ -> \case Recall {} -> pure []; Remember {} -> error "nothing is remembered without learnings")
+                $ runPlaybook
+                  PlaybookAgent {provider = ClaudeCode, access = EditWorkspace, model = Nothing, effort = Nothing}
+                  PinnedPlaybook
+                    { bundle =
+                        Bundle
+                          { main = "m",
+                            playbooks =
+                              [ Playbook {name = "m", steps = [ForEach {id = "each", items = FromPayload "repos", item = "repo", playbook = "one"}]},
+                                Playbook {name = "one", steps = body}
+                              ]
+                          },
+                      file = "bundle.dhall",
+                      repository = Nothing,
+                      relative = "bundle.dhall"
+                    }
+                  (Object (KeyMap.singleton "repos" (Array (foldMap pure repos))))
+            perRepository =
+              [ ProbeIn {id = "start", tool = "git", args = ["rev-parse", "HEAD"], deadlineMinutes = 1, workspace = "{{repo}}"},
+                ToolIn {id = "check", tool = "nix", args = ["develop"], deadlineMinutes = 1, workspace = "{{repo}}"},
+                Probe {id = "here", tool = "git", args = ["status"], deadlineMinutes = 1}
+              ]
+        workspaces [String "mori://x/a", String "mori://x/b"] perRepository
+          @?= [Just "mori://x/a", Just "mori://x/a", Nothing, Just "mori://x/b", Just "mori://x/b", Nothing]
+        validateBundle Bundle {main = "m", playbooks = [Playbook {name = "m", steps = [Probe {id = "p", tool = "git", args = [], deadlineMinutes = 1}, ProbeIn {id = "q", tool = "git", args = [], deadlineMinutes = 1, workspace = "{{steps.p.output}}"}]}]}
+          @?= [ObservedWorkspace "m" "q" "steps.p.output"]
     ]

@@ -1,7 +1,9 @@
 -- Playbook bundles (EP-4 of MasterPlan 22). A bundle names its main playbook
 -- and holds sibling playbooks; ForEach and RunPlaybook name a sibling. Text
 -- fields are templates: {{run.NAME}} reads a top-level string of the run's
--- payload, {{NAME}} a variable bound by an enclosing ForEach.
+-- payload, {{NAME}} a variable bound by an enclosing ForEach. A workspace
+-- (CodingAgent, Reflect, ToolIn, ProbeIn) names a repository, empty for the
+-- run's own; ToolIn and ProbeIn are Tool and Probe run in that repository.
 let Items =
       < Literal : List Text
       | FromPayload : Text
@@ -20,6 +22,20 @@ let Step =
           { id : Text, tool : Text, args : List Text, deadlineMinutes : Natural }
       | Probe :
           { id : Text, tool : Text, args : List Text, deadlineMinutes : Natural }
+      | ToolIn :
+          { id : Text
+          , tool : Text
+          , args : List Text
+          , deadlineMinutes : Natural
+          , workspace : Text
+          }
+      | ProbeIn :
+          { id : Text
+          , tool : Text
+          , args : List Text
+          , deadlineMinutes : Natural
+          , workspace : Text
+          }
       | Approval : { id : Text, prompt : Text }
       | ForEach : { id : Text, items : Items, item : Text, playbook : Text }
       | RunPlaybook : { id : Text, playbook : Text }

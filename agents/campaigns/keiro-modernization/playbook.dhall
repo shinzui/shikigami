@@ -25,7 +25,7 @@ let probe =
       \(id : Text) ->
       \(tool : Text) ->
       \(args : List Text) ->
-        P.Step.Probe { id, tool, args, deadlineMinutes = 10 }
+        P.Step.ProbeIn { id, tool, args, deadlineMinutes = 10, workspace = "{{repo}}" }
 
 let coder =
       \(id : Text) ->
@@ -42,11 +42,12 @@ let check = [ "develop", "-c", "just", "check" ]
 
 let build =
       \(id : Text) ->
-        P.Step.Probe
+        P.Step.ProbeIn
           { id
           , tool = "nix"
           , args = [ "develop", "-c", "cabal", "build", "all" ]
           , deadlineMinutes = 120
+          , workspace = "{{repo}}"
           }
 
 let fixBuild =
@@ -197,14 +198,20 @@ in  { main = "keiro-modernization"
               }
           , build "build"
           , fixBuild "fix-build" "every ExecPlan"
-          , P.Step.Tool
+          , P.Step.ToolIn
               { id = "final-build"
               , tool = "nix"
               , args = [ "develop", "-c", "cabal", "build", "all" ]
               , deadlineMinutes = 120
+              , workspace = "{{repo}}"
               }
-          , P.Step.Probe
-              { id = "tests", tool = "nix", args = check, deadlineMinutes = 120 }
+          , P.Step.ProbeIn
+              { id = "tests"
+              , tool = "nix"
+              , args = check
+              , deadlineMinutes = 120
+              , workspace = "{{repo}}"
+              }
           , P.approval
               "close"
               ''
@@ -228,7 +235,7 @@ in  { main = "keiro-modernization"
         }
       , { name = "execute-blueprint-plan"
         , steps =
-          [ P.Step.Probe
+          [ P.Step.ProbeIn
               { id = "guidance"
               , tool = "seihou"
               , args =
@@ -241,6 +248,7 @@ in  { main = "keiro-modernization"
                 , "{{plan.vars}}"
                 ]
               , deadlineMinutes = 10
+              , workspace = "{{repo}}"
               }
           , -- One coding agent per edge applies the guidance and fixes its
             -- fallout in one context, and its own `just check` replaces a

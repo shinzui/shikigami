@@ -64,6 +64,13 @@ The steps are:
 * `Probe` — a declared tool whose exit code is its answer (for example `mori status --json`,
   which exits 1 for a stale schema): any exit is recorded and quoted through
   `{{steps.ID.output}}` with the exit code, and the run continues.
+* `ToolIn` and `ProbeIn` — a `Tool` or `Probe` with a `workspace`, named as a coding agent's
+  is. The tool runs in that repository's worktree of this run, under the grant the
+  declaration holds for it, exactly as a coding agent in another repository does; an empty
+  workspace is the run's repository. A playbook that runs once per repository should probe and
+  check with these, as `agents/campaigns/keiro-modernization/playbook.dhall` does: a plain
+  `Tool` or `Probe` always runs in the run's own workspace, whichever item is current
+  (FRIC-122).
 * `Approval` — the run waits for you in the local approval inbox.
 * `Reflect` — a read-only coding agent looks at the work in `workspace` and answers with up
   to three learnings and an optional suggestion for the bundle (see below).
