@@ -83,8 +83,10 @@ Text fields are templates: `{{run.NAME}}` reads a top-level string of the payloa
 `{{NAME}}` a variable bound by an enclosing `ForEach`, `{{steps.ID.summary}}` and
 `{{steps.ID.output}}` an earlier step of the same playbook (a tool's standard output or a
 coding agent's final message, at most 128 KiB, observed like step-sourced items), and
-`{{learnings}}` the learnings so far. The first step that does not succeed (a failed coding agent, a declared tool that does
-not exit 0, a declined approval) ends the run.
+`{{learnings}}` the learnings so far. The first step that does not succeed (a coding agent that fails or exits nonzero, a declared tool
+that does not exit 0, a declined approval) ends the run. A coding agent's nonzero exit means
+it did not finish (an expired login, a crash), so its last message is not passed on as
+output (FRIC-124); any change it made is still committed.
 
 ## Fanning out over a step's output
 

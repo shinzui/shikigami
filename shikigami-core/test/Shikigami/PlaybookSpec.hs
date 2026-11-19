@@ -7,12 +7,13 @@ import Data.Map.Strict qualified as Map
 import Data.Text qualified as Text
 import Effectful (runPureEff)
 import Effectful.Dispatch.Dynamic (interpret)
-import Effectful.State.Static.Local (execState, modify)
-import Shikigami.CodingAgent.Types (CodingAgentProvider (ClaudeCode), WorkspaceAccess (EditWorkspace))
+import Effectful.State.Static.Local (execState, modify, runState)
+import Shikigami.Agent.Approval (ApprovalRequest (..))
+import Shikigami.CodingAgent.Types (ChangeSummary (..), CodingAgentOutcome (..), CodingAgentProvider (ClaudeCode), CompletedRun (..), ResultCommit (..), WorkspaceAccess (EditWorkspace))
 import Shikigami.DeclaredTool.Workflow (ToolRun (..), ToolStepOutcome (..))
 import Shikigami.Flow.Acknowledgement (Ack (..), Acknowledgement (..))
 import Shikigami.Flow.Capability (Memory (..))
-import Shikigami.Flow.CodingAgent (unavailableCodingAgent)
+import Shikigami.Flow.CodingAgent (CodingAgent (..), unavailableCodingAgent)
 import Shikigami.Flow.DeclaredTool (DeclaredTool (..), unavailableDeclaredTool)
 import Shikigami.Playbook
 import Shikigami.Playbook.Run (PlaybookAgent (..), Reflection (..), parseReflection, runPlaybook, stoppedByEnvironment)
@@ -137,5 +138,28 @@ tests =
         workspaces [String "mori://x/a", String "mori://x/b"] perRepository
           @?= [Just "mori://x/a", Just "mori://x/a", Nothing, Just "mori://x/b", Just "mori://x/b", Nothing]
         validateBundle Bundle {main = "m", playbooks = [Playbook {name = "m", steps = [Probe {id = "p", tool = "git", args = [], deadlineMinutes = 1}, ProbeIn {id = "q", tool = "git", args = [], deadlineMinutes = 1, workspace = "{{steps.p.output}}"}]}]}
-          @?= [ObservedWorkspace "m" "q" "steps.p.output"]
+          @?= [ObservedWorkspace "m" "q" "steps.p.output"],
+      testCase "a coding agent that exits nonzero stops the run before the step after it" do
+        -- An expired login ended the select step with exit 1, and its error
+        -- became the selection a gate asked the operator to approve (FRIC-124).
+        let run :: Int -> (Value, [Text.Text])
+            run exit =
+              runPureEff
+                . runState []
+                . interpret (\_ -> \case RunCodingAgentStep {} -> pure (Completed CompletedRun {exit, changes = ChangeSummary {files = [], omitted = 0}, result = Unchanged "abc", finalMessage = "\nFailed to authenticate: this login reached its time limit\nthen: resume", evidence = Nothing}))
+                . unavailableDeclaredTool
+                . interpret (\_ -> \case AwaitAcknowledgement _ request -> modify ((request.prompt :: Text.Text) :) >> pure (Acknowledged Null); AwaitAcknowledgementWithin _ _ request -> modify ((request.prompt :: Text.Text) :) >> pure (Acknowledged Null))
+                . interpret (\_ -> \case Recall {} -> pure []; Remember {} -> error "nothing is remembered without learnings")
+                $ runPlaybook
+                  PlaybookAgent {provider = ClaudeCode, access = EditWorkspace, model = Nothing, effort = Nothing}
+                  PinnedPlaybook {bundle = Bundle {main = "m", playbooks = [Playbook {name = "m", steps = [select, review]}]}, file = "bundle.dhall", repository = Nothing, relative = "bundle.dhall"}
+                  Null
+            select = CodingAgent {id = "select", prompt = "Select", workspace = "", deadlineMinutes = 5, skills = []}
+            review = Approval {id = "review", prompt = "Run {{steps.select.output}}?"}
+            field name output = case output of Object fields -> KeyMap.lookup name fields; _ -> Nothing
+        let (failed, asked) = run 1
+        asked @?= []
+        field "stoppedBy" failed @?= Just (String "work")
+        field "summary" failed @?= Just (String "select: the coding agent exited 1: Failed to authenticate: this login reached its time limit")
+        snd (run 0) @?= ["Run \nFailed to authenticate: this login reached its time limit\nthen: resume?"]
     ]

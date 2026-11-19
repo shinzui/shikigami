@@ -32,6 +32,7 @@ import Shikigami.Agent.Decl (AgentDecl (..), ProfileRequirement (..), Trigger (.
 import Shikigami.Agent.Decl qualified as Agent
 import Shikigami.Agent.DeclarationValue
 import Shikigami.Agent.Name (AgentName, mkAgentName)
+import Shikigami.Agent.Preflight (claudeLogin)
 import Shikigami.Agent.Trust (WorkspaceArgument (..), parseWorkspaceArgument)
 import Shikigami.App.Config (Role (..))
 import Shikigami.Attestation.Profile (ProfileId (..), ProfileVersion (..))
@@ -56,7 +57,11 @@ tests :: TestTree
 tests =
   testGroup
     "one-off command lines"
-    [ testCase "every one-off executable renders --help" $
+    [ testCase "preflight reads claude's login from its JSON, which exits 0 either way (FRIC-124)" do
+        claudeLogin "{\"loggedIn\": false, \"authMethod\": \"none\"}" @?= Just (False, Nothing)
+        claudeLogin "{\"loggedIn\": true, \"loginExpiresAt\": \"2026-12-18T21:59:10.259Z\"}" @?= Just (True, Just "2026-12-18T21:59:10.259Z")
+        claudeLogin "Logged in" @?= Nothing,
+      testCase "every one-off executable renders --help" $
         mapM_
           ( \info -> do
               let rendered = helpTextOf info

@@ -212,6 +212,18 @@ it ships as declarations with no change to `shikigami-core`.
   - `start` is a ToolIn, so a gate quotes the commit without the probe's exit line.
   - Not done: the run's own bundle proposal needs a grant for the campaign on
     mori://shinzui/shikigami, which neither run had; both suggestions were applied by hand.
+- [x] Batch B, first start (2026-11-19): run f2dac461-0743-556d-9e88-e8e47cc6de17 over meibo
+  and jinmyaku. meibo's readiness committed 90b0adf; the operator committed the
+  nix-haskell-flake 0.40.0 formatter output (ca2516d) and a `check` recipe running CI's
+  offline gates (77bfbee), and ran `seihou upgrade keiro-upgrade` (0.14.1 → 0.15.0). The
+  readiness review was approved. The `select` agent then exited 1 on an expired Claude login,
+  and its gate offered the error as the selection; the gate was rejected, which ended the run
+  (FRIC-124). The run released meibo's lock.
+- [x] FRIC-124 fixed (2026-11-19): a coding agent that exits nonzero stops the run, and a
+  local run's preflight checks that the vendor CLI is logged in. Evidence: the PlaybookSpec
+  case "a coding agent that exits nonzero stops the run before the step after it"; the
+  CommandSpec case for `claudeLogin`; `shikigami-local doctor` prints
+  `keiro-modernization: claude logged in, until …`.
 - [ ] Milestone 4: the remaining confirmed repositories are modernized in batches, each batch
   using the playbook as improved by the previous one. The commits that introduced the
   campaign contain no `shikigami-core/` path, and EP-5's fitness check passes. This milestone
@@ -285,6 +297,12 @@ These came from read-only research on 2026-11-15, before implementation.
   `shikigami(keiro-modernization): coding-agent behavior`, which says nothing about the work
   and is not a Conventional Commit.
   Evidence: keiei a9b0f90..c53c66d, seven commits with that subject.
+
+- Observation: a coding agent that exits nonzero still counted as a completed step, so its
+  error became `{{steps.select.output}}` and the next gate asked to approve it; and
+  `claude auth status` exits 0 when logged out, so preflight's `claude` on `PATH` check
+  could not catch an expired login (FRIC-124).
+  Evidence: run f2dac461, `repos.0.modernize.select` "coding agent completed with exit 1".
 
 ## Decision Log
 

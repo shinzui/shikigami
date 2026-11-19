@@ -12,11 +12,15 @@ module Shikigami.Agent.Preflight
     -- * Local runs
     localRunChecks,
     grantCheck,
+    claudeLogin,
   )
 where
 
 import Baikai.Agent (AgentRunRequest, CeilingViolation (TimeoutExceeded), ceilingViolations, parseAgentCapability, parseAgentProvider, renderCeilingViolation)
 import Baikai.Agent.Config (AgentConfigPaths (..), AgentJob (..), agentJob, agentJobRequest, defaultAgentConfigPaths, emptyAgentConfigPaths, loadAgentCeiling, renderAgentConfigError)
+import Data.Aeson (Value (..))
+import Data.Aeson qualified as Aeson
+import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Maybe (isJust)
 import Data.Text (Text)
 import Data.Text qualified as Text
@@ -32,6 +36,8 @@ import Shikigami.Trust.LocalOperator.Host (codingAgentLauncher, gateExecutable)
 import Shikigami.Workspace.Local.Checkout (processCheckoutResolver)
 import System.Directory (doesFileExist, findExecutable, getPermissions)
 import System.Directory qualified as Directory
+import System.Exit (ExitCode (..))
+import System.Process (readProcessWithExitCode)
 
 -- | One prerequisite: a label, and what is wrong with it, if anything.
 data Check = Check {label :: !Text, problem :: !(Maybe Problem)}
@@ -60,7 +66,9 @@ renderCheck Check {label, problem} = case problem of
 --   agent's shell calls;
 -- * the operator's Baikai ceiling, which must admit the provider, its access
 --   and, when the declaration has tools, the provider arguments that carry
---   them to the vendor CLI.
+--   them to the vendor CLI;
+-- * a logged-in vendor CLI: an expired login fails a coding-agent step
+--   with exit 1, after the run's probes and approvals (FRIC-124).
 --
 -- A declaration with no coding agent and no declared tools needs none of
 -- these and gets no checks.
@@ -77,16 +85,46 @@ localRunChecks decl = do
       launcher <- codingAgentLauncher
       launcherCheck <- helperCheck name "shikigami-agent-launch" "SHIKIGAMI_AGENT_LAUNCH" launcher
       ceiling' <- ceilingCheck name provider access (not (null decl.tools))
+      login <- maybe (pure []) (fmap (: []) . loginCheck name provider) found
       pure
-        [ Check (name <> ": " <> Text.pack vendorExecutable <> " on PATH") (if isJust found then Nothing else Just (Problem "not found" ("install " <> vendor <> " and log in"))),
-          launcherCheck,
-          ceiling'
-        ]
+        ( [ Check (name <> ": " <> Text.pack vendorExecutable <> " on PATH") (if isJust found then Nothing else Just (Problem "not found" ("install " <> vendor <> " and log in"))),
+            launcherCheck,
+            ceiling'
+          ]
+            <> login
+        )
   gate <-
     if tooled
       then (: []) <$> (gateExecutable >>= helperCheck name "shikigami-local" "SHIKIGAMI_LOCAL")
       else pure []
   pure (coder <> gate)
+
+-- | The vendor CLI is logged in. @claude auth status@ exits 0 either way, so
+-- its JSON decides; @codex login status@ exits nonzero when logged out. An
+-- answer this check cannot read passes: the step reports it if it matters.
+loginCheck :: Text -> CodingAgentProvider -> FilePath -> IO Check
+loginCheck name provider executable = case provider of
+  ClaudeCode -> do
+    (_, out, _) <- readProcessWithExitCode executable ["auth", "status", "--json"] ""
+    pure case claudeLogin (Text.pack out) of
+      Just (False, _) -> Check (label "") (Just (Problem "not logged in" "run: claude auth login (or set CLAUDE_CODE_OAUTH_TOKEN from claude setup-token)"))
+      Just (True, Just until') -> Check (label (", until " <> until')) Nothing
+      _ -> Check (label "") Nothing
+  Codex -> do
+    (code, _, err) <- readProcessWithExitCode executable ["login", "status"] ""
+    pure case code of
+      ExitSuccess -> Check (label "") Nothing
+      ExitFailure _ -> Check (label "") (Just (Problem (Text.take 200 (Text.strip (Text.pack err))) "run: codex login"))
+  where
+    label suffix = name <> ": " <> providerText provider <> " logged in" <> suffix
+
+-- | Whether @claude auth status --json@ reports a login, and when it expires.
+claudeLogin :: Text -> Maybe (Bool, Maybe Text)
+claudeLogin out = case Aeson.decodeStrictText out of
+  Just (Object fields)
+    | Just (Bool loggedIn) <- KeyMap.lookup "loggedIn" fields ->
+        Just (loggedIn, case KeyMap.lookup "loginExpiresAt" fields of Just (String at) -> Just at; _ -> Nothing)
+  _ -> Nothing
 
 -- | A helper executable resolves to a file this process may run. The
 -- resolver returns the bare name when it found nothing beside this

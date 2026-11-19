@@ -248,6 +248,10 @@ runSteps agent base bundle payload parameters variables prefix = go []
             ]
         )
     remember key summary' output carried = carried {texts = Map.insert key (summary', Text.take 131072 output) carried.texts}
+    -- ": <the first nonblank line, at most 200 characters>", or nothing.
+    firstLine message = case filter (not . Text.null) (Text.strip <$> Text.lines message) of
+      line : _ -> ": " <> Text.take 200 line
+      [] -> ""
     runOne carried current =
       let key = prefix <> stepId current
        in case current of
@@ -255,6 +259,16 @@ runSteps agent base bundle payload parameters variables prefix = go []
               coding carried key (render carried prompt) (render carried workspace) agent.access deadlineMinutes skills \outcome ->
                 let result = (case outcome of Failed _ -> unattempted; _ -> attempted) key (outcomeLabel outcome) (renderOutcome outcome)
                  in case outcome of
+                      -- A nonzero exit means the agent did not finish its
+                      -- work (an expired login, a crash); its last message is
+                      -- the error, not output a later step may act on
+                      -- (FRIC-124). Any change it made is already committed.
+                      Completed CompletedRun {exit, finalMessage}
+                        | exit /= 0 ->
+                            ( [attempted key "failed" (renderOutcome outcome)],
+                              Just (key <> ": the coding agent exited " <> Text.pack (show exit) <> firstLine finalMessage),
+                              carried
+                            )
                       Completed CompletedRun {finalMessage} -> ([result], Nothing, remember key result.summary finalMessage carried {outputs = maybe carried.outputs (\value -> Map.insert key value carried.outputs) (lastJsonObject finalMessage)})
                       _ -> ([result], Just (key <> ": " <> renderOutcome outcome), carried)
             Reflect {prompt, workspace} ->

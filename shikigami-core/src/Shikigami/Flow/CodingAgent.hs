@@ -10,7 +10,9 @@
 -- the child, and the tier's runner (resolved by the composition that drives
 -- the child) decides, launches and settles it.
 module Shikigami.Flow.CodingAgent
-  ( CodingAgent,
+  ( -- | The constructor is exported for interpreters outside a run, such
+    -- as tests; a flow body uses 'runCodingAgentStep' or 'runCodingAgentStepIn'.
+    CodingAgent (..),
     CodingAgentEnv (..),
     codingAgentKey,
     runCodingAgentStep,
