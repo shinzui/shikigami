@@ -247,7 +247,7 @@ runSteps agent base bundle payload parameters variables prefix = go []
               not (Text.isInfixOf "." local)
             ]
         )
-    remember key summary' output carried = carried {texts = Map.insert key (summary', Text.take 131072 output) carried.texts}
+    remember key summary' output carried = carried {texts = Map.insert key (summary', Text.take 262144 output) carried.texts}
     -- ": <the first nonblank line, at most 200 characters>", or nothing.
     firstLine message = case filter (not . Text.null) (Text.strip <$> Text.lines message) of
       line : _ -> ": " <> Text.take 200 line

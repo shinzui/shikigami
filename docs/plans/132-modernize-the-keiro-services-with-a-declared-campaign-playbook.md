@@ -224,6 +224,13 @@ it ships as declarations with no change to `shikigami-core`.
   case "a coding agent that exits nonzero stops the run before the step after it"; the
   CommandSpec case for `claudeLogin`; `shikigami-local doctor` prints
   `keiro-modernization: claude logged in, until …`.
+- [x] Batch B, second start (2026-11-19): run 44500c5b-3407-5077-9d0a-4a6c3ef0fbe3. meibo's
+  readiness changed nothing (all nine checks ready at 77bfbee) and was approved. The
+  selection named nine keiro-upgrade edges, 0.16.0.0 to 0.25.0.0, with the kiroku and
+  Shibuya edges entailed inside them.
+- [x] FRIC-125 fixed (2026-11-20), while the select-review gate waited: the 0.19.0.1 to 0.20.0.0
+  guidance is 65,261 bytes, over the 64 KiB coding-agent prompt cap; the cap and a step's
+  quoted output are now 256 KiB. Evidence: CodingAgentSpec bounds at 262,144 bytes.
 - [ ] Milestone 4: the remaining confirmed repositories are modernized in batches, each batch
   using the playbook as improved by the previous one. The commits that introduced the
   campaign contain no `shikigami-core/` path, and EP-5's fitness check passes. This milestone
@@ -303,6 +310,10 @@ These came from read-only research on 2026-11-15, before implementation.
   `claude auth status` exits 0 when logged out, so preflight's `claude` on `PATH` check
   could not catch an expired login (FRIC-124).
   Evidence: run f2dac461, `repos.0.modernize.select` "coding agent completed with exit 1".
+- Observation: a single keiro-upgrade edge can need more than 64 KiB of guidance: meibo's
+  0.19.0.1 to 0.20.0.0 edge carries two entailed kiroku edges and renders 65,261 bytes, and
+  an edge cannot be split further (FRIC-125).
+  Evidence: `seihou agent --debug migrate keiro-upgrade --from=0.19.0.1 --to=0.20.0.0 | wc -c`.
 
 ## Decision Log
 

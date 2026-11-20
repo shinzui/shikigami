@@ -1,5 +1,9 @@
 # Bundle Update Log
 
+## 2026-11-20
+
+* **Addition**: FRIC-125 records detour interface friction with mori://shinzui/shikigami: One keiro-upgrade edge's guidance did not fit a coding-agent prompt
+
 ## 2026-11-19
 
 * **Addition**: FRIC-124 records detour interface friction with mori://shinzui/shikigami: A coding agent that exited 1 fed its error to the next approval

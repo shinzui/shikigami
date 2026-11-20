@@ -95,7 +95,7 @@ tests =
             gate = Approval {id = "gate", prompt = "Continue?"}
             probe = Probe {id = "probe", tool = "git", args = ["status"], deadlineMinutes = 1}
             coder = CodingAgent {id = "fix", prompt = "Fix it", workspace = "", deadlineMinutes = 5, skills = []}
-            oversized = CodingAgent {id = "fix", prompt = Text.replicate 70000 "x", workspace = "", deadlineMinutes = 5, skills = []}
+            oversized = CodingAgent {id = "fix", prompt = Text.replicate 270000 "x", workspace = "", deadlineMinutes = 5, skills = []}
         stoppedBy (run (Acknowledged Null) [gate]) @?= Just Null
         stoppedBy (run (Declined "not now") [gate]) @?= Just (String "work")
         stoppedBy (run (Acknowledged Null) [gate, probe]) @?= Just (String "environment")

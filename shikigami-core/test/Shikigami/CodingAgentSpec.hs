@@ -26,6 +26,9 @@ tests =
     [ testCase "checked values refuse what the declaration may not say" do
         isLeft (mkCodingAgentPrompt "   ") @?= True
         isRight (mkCodingAgentPrompt "add a Haddock comment") @?= True
+        -- One keiro-upgrade edge's guidance is 65 KB (FRIC-125).
+        isRight (mkCodingAgentPrompt (Text.replicate 262144 "x")) @?= True
+        isLeft (mkCodingAgentPrompt (Text.replicate 262145 "x")) @?= True
         isLeft (mkDeadlineMinutes 0) @?= True
         isLeft (mkDeadlineMinutes 721) @?= True
         isRight (mkDeadlineMinutes 720) @?= True

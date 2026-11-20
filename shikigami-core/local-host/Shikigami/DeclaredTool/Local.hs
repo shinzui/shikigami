@@ -54,7 +54,8 @@ data ToolAttemptResult = ToolAttemptResult
   deriving anyclass (ToJSON, FromJSON)
 
 -- | Per-stream bytes kept in the outcome. A rendered Seihou migration chain
--- (EP-7) is about 64 KiB, and playbooks quote tool output in later prompts.
+-- (EP-7) is about 64 KiB per edge, and playbooks quote tool output in later
+-- prompts, which hold as much (FRIC-125).
 keptOutput :: Natural
 keptOutput = 262144
 

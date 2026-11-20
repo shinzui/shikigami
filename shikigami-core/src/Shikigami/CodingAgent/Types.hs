@@ -88,14 +88,16 @@ effortText = \case
   EffortXHigh -> "xhigh"
   EffortMax -> "max"
 
--- | Nonblank, at most 64 KiB of UTF-8.
+-- | Nonblank, at most 256 KiB of UTF-8: the same as a declared tool's kept
+-- output, since playbooks quote it (one keiro-upgrade edge's guidance is
+-- 65 KB, FRIC-125). Baikai passes the prompt on standard input.
 newtype CodingAgentPrompt = CodingAgentPrompt Text
   deriving stock (Eq, Show)
 
 mkCodingAgentPrompt :: Text -> Either Text CodingAgentPrompt
 mkCodingAgentPrompt value
   | Text.null (Text.strip value) = Left "a coding-agent prompt must not be blank"
-  | ByteString.length (Text.Encoding.encodeUtf8 value) > 65536 = Left "a coding-agent prompt is at most 64 KiB"
+  | ByteString.length (Text.Encoding.encodeUtf8 value) > 262144 = Left "a coding-agent prompt is at most 256 KiB"
   | otherwise = Right (CodingAgentPrompt value)
 
 codingAgentPromptText :: CodingAgentPrompt -> Text

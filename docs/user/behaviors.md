@@ -137,7 +137,7 @@ outcome, the commit, the changed files and the evidence summary.
   `EffortLow`, `EffortMedium`, `EffortHigh`, `EffortXHigh` or `EffortMax`; `None` leaves
   it to the vendor.
 * `deadlineMinutes` (1–720) is enforced by Baikai, which ends the agent and reports
-  `timed_out`. The prompt is at most 64 KiB.
+  `timed_out`. The prompt is at most 256 KiB.
 * `skills` lists skill directories next to the declaration. Each is copied for the
   attempt, and its `SKILL.md` is given to the agent with the prompt.
 

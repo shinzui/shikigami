@@ -82,7 +82,7 @@ The steps are:
 Text fields are templates: `{{run.NAME}}` reads a top-level string of the payload,
 `{{NAME}}` a variable bound by an enclosing `ForEach`, `{{steps.ID.summary}}` and
 `{{steps.ID.output}}` an earlier step of the same playbook (a tool's standard output or a
-coding agent's final message, at most 128 KiB, observed like step-sourced items), and
+coding agent's final message, at most 256 KiB, observed like step-sourced items), and
 `{{learnings}}` the learnings so far. The first step that does not succeed (a coding agent that fails or exits nonzero, a declared tool
 that does not exit 0, a declined approval) ends the run. A coding agent's nonzero exit means
 it did not finish (an expired login, a crash), so its last message is not passed on as
@@ -128,7 +128,7 @@ declaration, whichever repository they work in.
 
 The run's output says why a stopped run stopped: `stoppedBy` is `environment` when the stopping
 step could not be attempted on this machine (a helper that would not start, a Baikai ceiling
-refusal, a prompt over the 64 KiB limit, a declared tool refused or unstartable) and `work`
+refusal, a prompt over the 256 KiB limit, a declared tool refused or unstartable) and `work`
 otherwise. A run stopped by its environment records no learning of its own, so a setup failure is
 not recalled by later runs as a lesson about the repository.
 
