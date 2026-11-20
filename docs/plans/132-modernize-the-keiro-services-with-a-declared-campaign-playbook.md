@@ -231,6 +231,28 @@ it ships as declarations with no change to `shikigami-core`.
 - [x] FRIC-125 fixed (2026-11-20), while the select-review gate waited: the 0.19.0.1 to 0.20.0.0
   guidance is 65,261 bytes, over the 64 KiB coding-agent prompt cap; the cap and a step's
   quoted output are now 256 KiB. Evidence: CodingAgentSpec bounds at 262,144 bytes.
+- [x] Batch B, meibo (2026-11-20): run 44500c5b modernized meibo from 77bfbee to 6830863 (keiro
+  0.16 → 0.25, kiroku-store 0.13.0.2, shibuya-core 0.13.0.1, shibuya-kiroku-adapter 0.8.0.0,
+  shibuya-pgmq-adapter 0.19.0.0) in nine edges, each committed under its own subject; EP-30
+  added a keiro-dsl drift gate to `just check` and CI; the final build and the tests probe
+  passed, close-plans marked MasterPlan 4 Complete, and the close review was approved. jose
+  moved from the sumo/hs-jose fork to Hackage's 0.13 (the fork capped ram below kiroku-store
+  0.13's bound). Open for the operator: meibo's MasterPlan 3 (plan 22, keiro 0.22) is superseded.
+- [x] Batch B, jinmyaku (2026-11-20): the same run routed to jinmyaku and modernized it from
+  eeb296b to 5e0815f (keiro 0.22 → 0.25, the same cohort) after fix-nix-haskell-flake-customizations
+  moved it to nix-haskell-flake 0.40.0 keeping its PostgreSQL 18, librdkafka and fourmolu edits.
+  EP-11 proved the cohort end to end with a new `just http-conformance` recipe. Before
+  approving readiness, the operator's session made jinmyaku's generated-drift and OpenAPI gates
+  compare with the working tree (eeb296b) and created its mina root intention. The run released
+  both repositories' locks (FRIC-123 holds for a routed repository).
+- [x] Playbook and kernel improvements after batch B (2026-11-20):
+  - A `pre-plans` ForEach runs the MasterPlan's `prePlans` before the edges (meibo's EP-30 ran
+    after all nine edges); the masterplan skill always reports `prePlans` and `otherPlans`.
+  - Plans write every agent step as a `just` or `cabal` call the declared tools can run
+    (jinmyaku's EP-11 had to add recipes for `rm`, `bash -c` and a background server).
+  - Readiness makes a regenerate-then-`git diff` gate compare with the working tree.
+  - A coding-agent step measures its change from its own starting HEAD (FRIC-126).
+  - Not done: the run's own bundle proposal still needs a grant on mori://shinzui/shikigami.
 - [ ] Milestone 4: the remaining confirmed repositories are modernized in batches, each batch
   using the playbook as improved by the previous one. The commits that introduced the
   campaign contain no `shikigami-core/` path, and EP-5's fitness check passes. This milestone
@@ -314,6 +336,15 @@ These came from read-only research on 2026-11-15, before implementation.
   0.19.0.1 to 0.20.0.0 edge carries two entailed kiroku edges and renders 65,261 bytes, and
   an edge cannot be split further (FRIC-125).
   Evidence: `seihou agent --debug migrate keiro-upgrade --from=0.19.0.1 --to=0.20.0.0 | wc -c`.
+- Observation: a campaign agent cannot stage, so a repository gate that regenerates and runs
+  `git diff --exit-code` fails every edge that regenerates; jinmyaku's two such gates would
+  have failed all three edges. Meibo's EP-30 agent built its gate against the working tree
+  for the same reason.
+  Evidence: jinmyaku's readiness report (R9 risk); jinmyaku eeb296b.
+- Observation: an extra plan's dependency on running before the edges was written only in its
+  text; the playbook ran `otherPlans` after every edge, so the edges were unprotected by it.
+  Evidence: meibo MasterPlan 4 (EP-30 hard-depends nothing, EP-31 hard-depends EP-30) and the
+  run's step order.
 
 ## Decision Log
 

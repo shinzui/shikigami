@@ -25,8 +25,9 @@ adds anything to the catalog.
    "entailed by <blueprint> <a> -> <b>") runs with that edge. Give each entry its own
    `--from=<a>` and `--to=<b>` and a key with the edge's end (`keiro-upgrade-0-23`). Seihou's
    guidance for one edge says to work only on that edge, and guidance for several edges can
-   exceed the 64 KiB a coding-agent prompt may hold (koyomi's 0.22 to 0.25 window rendered
-   122 KB).
+   be more than one agent should take on at once (koyomi's 0.22 to 0.25 window rendered 122 KB,
+   meibo's 0.16 to 0.25 window 349 KB; a coding-agent prompt holds at most 256 KiB, and one
+   edge's guidance can reach 65 KB).
    Do not select a blueprint on its own when every edge it needs is entailed by an edge you
    selected (the Shibuya adapter edges are entailed by keiro-upgrade 0.24 -> 0.25): it runs
    with that edge, and the edge records its receipt, so a separate entry would run it twice,

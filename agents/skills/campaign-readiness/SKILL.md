@@ -36,6 +36,11 @@ Rules:
   bare `cabal test all` cannot start suites whose databases or fixtures the repository's own
   scripts provide (FRIC-114). It includes CI's offline gates because in danwa a `check`
   without `dependencies-check` passed an edge whose index-state had moved warp.
+* Under R9, a gate that regenerates files and then runs `git diff --exit-code` (generated
+  code, OpenAPI) compares with the Git index, and a campaign agent cannot stage: every edge
+  that regenerates would fail its own `check`. Make such a gate compare with a copy of the
+  working tree taken before regenerating (jinmyaku eeb296b, meibo 0122f8c); CI is unchanged,
+  since its tree is its commit. Report it as `fixed`.
 * R8 exists because the kizashi pilot stopped halfway through its upgrade: the installed
   keiro-upgrade had no migration edge to the target version, which nobody saw until the
   blueprint ran. An outdated migration blueprint must surface here, before any planning.

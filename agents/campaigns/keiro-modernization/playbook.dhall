@@ -203,6 +203,17 @@ in  { main = "keiro-modernization"
 
               {{steps.masterplan.output}}
               ''
+          , -- Gate plans the edges rely on run first: meibo's drift gate
+            -- (EP-30) ran after all nine edges when it could only be an
+            -- `otherPlans` entry.
+            P.Step.ForEach
+              { id = "pre-plans"
+              , items =
+                  P.Items.FromStep
+                    { step = "masterplan", at = "/prePlans", key = "key" }
+              , item = "plan"
+              , playbook = "execute-plan"
+              }
           , P.Step.ForEach
               { id = "blueprint-plans"
               , items =
