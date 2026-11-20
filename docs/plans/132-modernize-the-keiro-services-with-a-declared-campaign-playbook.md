@@ -37,6 +37,11 @@ provenance:
       at: 2026-11-18T02:50:27Z
       mode: "implement"
       note: "M3 accepted on koyomi: R8 readiness, per-edge selection, independent just check green; FRIC-100 to FRIC-115"
+    - model: "claude-opus-5-5"
+      harness: "claude-code"
+      at: 2026-11-20T20:07:04Z
+      mode: "implement"
+      note: "M4 accepted and plan complete: batches A and B, amended shikigami-core check, kernel fitness, per-repo acceptance, retrospective"
 ---
 
 # Modernize the keiro services with a declared campaign playbook
@@ -253,10 +258,17 @@ it ships as declarations with no change to `shikigami-core`.
   - Readiness makes a regenerate-then-`git diff` gate compare with the working tree.
   - A coding-agent step measures its change from its own starting HEAD (FRIC-126).
   - Not done: the run's own bundle proposal still needs a grant on mori://shinzui/shikigami.
-- [ ] Milestone 4: the remaining confirmed repositories are modernized in batches, each batch
-  using the playbook as improved by the previous one. The commits that introduced the
+- [x] Milestone 4 (2026-11-20): the remaining confirmed repositories are modernized in batches, each
+  batch using the playbook as improved by the previous one. The commits that introduced the
   campaign contain no `shikigami-core/` path, and EP-5's fitness check passes. This milestone
   may finish after EP-11's baseline gate; EP-11 depends only on Milestone 3.
+  - Evidence: batch A (keiei, danwa) and batch B (meibo, jinmyaku) are above. `just
+    kernel-fitness` passes all 10 tests. The `shikigami-core` check, amended by the user's
+    decision of 2026-11-20 to accept four named kernel fixes, prints nothing. All six
+    repositories show `mori status` registration current (koyomi and keiei re-registered)
+    and resolve keiro 0.25.0.0. kizashi's migrate-keiro-stack is deferred. The four
+    batch-A-era MasterPlans were reconciled in their repositories. See Outcomes &
+    Retrospective.
 
 
 ## Surprises & Discoveries
@@ -449,6 +461,9 @@ These came from read-only research on 2026-11-15, before implementation.
   suites that load agent files live in that package. A kernel gap is recorded against the
   owning child plan instead (see Validation and Acceptance).
   Date: 2026-11-15
+  Amended on 2026-11-20: the campaign's declarations add no Haskell, but four commits under
+  this plan's trailer changed `shikigami-core` to fix gaps the campaign surfaced; see the
+  Decision Log entry of that date.
 - Decision: The campaign does not end the ADR-27 pre-release exception. Its runs are pilot
   runs under MasterPlan 22's drain rule: every campaign run reaches a terminal state before a
   change to a workflow or declaration shape lands. The exception ends at EP-11's baseline gate
@@ -537,9 +552,105 @@ These came from read-only research on 2026-11-15, before implementation.
   repository as its own run.
   Date: 2026-11-18
 
+- Decision: The architectural acceptance means the campaign's own declarations never needed
+  a `shikigami-core` change. Kernel gaps the campaign surfaced were fixed in the kernel, each
+  traced to its owning plan and a friction entry. Four of those fixes carry this plan's
+  `ExecPlan:` trailer and are accepted by name:
+  - a36c54ca: the manifest-walk test in `AgentLoaderSpec` skips a campaign directory's
+    non-declaration files (EP-4; Decision (M1) above).
+  - 80a7586f: learnings recalled across runs, and agents launched in long checkout paths
+    (EP-4 and EP-2; FRIC-78, FRIC-79).
+  - 77c7fb39: `shikigami-local grant` and grant placement (EP-1; FRIC-102,
+    FRIC-103).
+  - 77933ad0: one grant digest however a declaration's path is spelled (EP-1).
+  The acceptance command in Validation and Acceptance now lists these four and must print
+  nothing else. It only sees commits that carry this plan's trailer. Most campaign-surfaced
+  fixes carry their owning plan's trailer (f37a3d55, e0a8645a and 04628a12 for EP-4;
+  a8c2ce76 for EP-2). Others carry no `ExecPlan:` trailer at all: a5f59a45 (FRIC-100,
+  FRIC-101, FRIC-104, FRIC-105, FRIC-113 to FRIC-115), dd0e51a0 (FRIC-122), 6cb3a3af,
+  ffafc9a8 (FRIC-124), 9b19c361 (FRIC-125) and 448ae8a9 (FRIC-126). The check is therefore a
+  record of this
+  plan's own commits, not proof that the campaign caused no kernel change; the friction log
+  is that record.
+  Rationale: The user decided on 2026-11-20 to accept the fixes rather than leave M4 open.
+  Every one is a kernel defect or missing surface that a real run exposed, not campaign
+  logic moved into the core. No campaign step, skill or prompt is written in Haskell.
+  EP-5's fitness check passes on the same tree.
+  Date: 2026-11-20
+- Decision: kizashi's EP-4 (plan 49, migrate-keiro-stack) is deferred. It is outside this
+  campaign's acceptance and is recorded as an approved deferral in kizashi's MasterPlan 9.
+  Rationale: The user decided this on 2026-11-20. The pilot was finished by hand after
+  keiro-upgrade, koyomi's run skipped migrate-keiro-stack as deferred, and no batch selected
+  it.
+  Date: 2026-11-20
+
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Completed 2026-11-20. Six of the seven confirmed repositories now resolve keiro 0.25.0.0.
+kanmon left the campaign after its readiness run showed no keiro dependency. In order:
+
+| Repository | Run | Range | From | Notes |
+|---|---|---|---|---|
+| mori://shinzui/kizashi | c4341273 (pilot) | ff18f7e..75b4308 | 0.22 | stopped at 0.24 on an old keiro-upgrade; finished by hand; migrate-keiro-stack deferred |
+| mori://shinzui/koyomi | aa2b77a1 (M3) | 02f933f..1fe7bb7 | 0.22 | first full gated run; per-edge selection |
+| mori://shinzui/keiei | 1290d348 (batch A) | a9b0f90..c53c66d | 0.22 | nix-haskell-flake 0.40.0 |
+| mori://shinzui/danwa | b75450d4 (batch A) | 54b4381..44be1de | 0.22 | three edges; still on nix-haskell-flake 0.26 |
+| mori://shinzui/meibo | 44500c5b (batch B) | 77bfbee..6830863 | 0.16 | nine edges; jose moved to Hackage 0.13 |
+| mori://shinzui/jinmyaku | 44500c5b (batch B) | eeb296b..5e0815f | 0.22 | nix-haskell-flake 0.40.0; `just http-conformance` |
+
+Acceptance, checked on 2026-11-20:
+- Per repository: `mori status` shows each registration current. koyomi's and keiei's were
+  stale and were re-registered with `mori register --local`. Each `dist-newstyle` plan
+  resolves `keiro-0.25.0.0`, and every `.seihou/manifest.json` carries the keiro-upgrade
+  migrations. Builds and tests are the runs' own evidence: each run's per-edge
+  `just check` and its final `tests` probe; koyomi's independent `just check`; kizashi's
+  `All 234 tests passed` at 75b4308. The four MasterPlans written before batch B were left
+  Not Started, because `close-plans` did not exist yet. On 2026-11-20 they were reconciled
+  against each repository's commits and receipts:
+  - mori://shinzui/koyomi 974c6b3: MasterPlan 2 Complete.
+  - mori://shinzui/keiei 4eabc73: MasterPlan 2 Complete. No `just check` was recorded on the 0.23 tree;
+    the 0.24 and 0.25 trees passed.
+  - mori://shinzui/danwa 72a7113: MasterPlan 4 Complete.
+  - mori://shinzui/kizashi 8db19ce: plan 47 Complete and plan 49 Deferred. MasterPlan 9 stays open on plan
+    46's manual `process-compose up` acceptance, which was never run.
+- Learnings: batch B's run recorded six under `keiro-modernization`, and earlier runs
+  recorded theirs (the Milestone 2 build-repair runs show the recall). Playbook changes were
+  approved between every pair of runs (Progress).
+- Kernel: `just kernel-fitness` passes (10 tests). The amended `shikigami-core` check prints
+  nothing. Four kernel fixes under this plan's trailer are accepted by name (Decision Log,
+  2026-11-20).
+
+What worked:
+- The declaration surface held. Readiness, selection, per-edge migration, MasterPlan
+  execution, close-plans and reflection are all Dhall, skills and declared tools.
+- Each run started from the playbook the previous run had improved. Examples: R8's
+  `seihou outdated` check after the kizashi pilot; per-edge selection after FRIC-112; R9's
+  CI-gate `check` after danwa; `pre-plans` and working-tree drift gates after batch B.
+- Seihou's per-edge receipts and entailed edges let one keiro-upgrade selection carry the
+  kiroku and Shibuya upgrades. meibo's nine edges needed no separate kiroku blueprint.
+
+What did not:
+- Getting runs through on one Mac cost the 25 friction entries filed against this plan
+  (FRIC-78 to FRIC-126). Most were kernel defects that only a real multi-hour run exposes:
+  prompt and output caps, grant digests and placement, approval delivery, workspace routing,
+  lock release, nonzero agent exits, and change attribution. They were fixed in the kernel,
+  so "no `shikigami-core` change" held for the campaign's logic but not for the commits made
+  during it.
+- The run's own playbook proposal never landed. The campaign has no grant on
+  mori://shinzui/shikigami, so every suggestion was applied by hand.
+- The trailer-based acceptance check is weak evidence. It cannot see fixes committed under
+  another plan's trailer or none.
+
+Open for the operator (not part of this plan's acceptance):
+- meibo's MasterPlan 3 (plan 22, keiro 0.22) is superseded by MasterPlan 4; cancel or
+  retarget it.
+- Grant the campaign on mori://shinzui/shikigami so bundle proposals can run.
+- danwa is still on nix-haskell-flake 0.26.
+- Confirm FRIC-126's fix in a later run's step summaries.
+- kizashi's migrate-keiro-stack (its plan 49) is deferred.
+- Run `process-compose up` once for mori://shinzui/kizashi/plans/46-remediate-kizashi-s-nix-haskell-flake-customizations
+  to close kizashi's MasterPlan 9.
+- keiro 0.26.0.0 has been released upstream, so 0.25 is no longer the newest.
 
 
 ## Context and Orientation
@@ -1010,12 +1121,19 @@ with a `Blueprint:` trailer.
 
 Required for the campaign: at least one Kioku learning is recorded under the playbook scope
 `keiro-modernization`. At least one playbook change is merged through approval
-before Milestone 3, and the Milestone 3 transcript cites it. There must be no
-`shikigami-core` change. From the Shikigami checkout, this command must print nothing:
+before Milestone 3, and the Milestone 3 transcript cites it. The campaign's declarations need
+no `shikigami-core` change. The four kernel fixes committed under this plan's trailer are
+accepted by name (Decision Log, 2026-11-20). From the Shikigami checkout, this command must
+print nothing:
 
 ```bash
-git log --format=%H --grep='ExecPlan: docs/plans/132-' | xargs -n1 git diff-tree --no-commit-id --name-only -r | grep '^shikigami-core/'
+git log --format=%H --grep='ExecPlan: docs/plans/132-' \
+  | while read -r c; do git diff-tree --no-commit-id --name-only -r "$c" | grep -q '^shikigami-core/' && echo "$c"; done \
+  | grep -v -E '^(a36c54ca|80a7586f|77c7fb39|77933ad0)'
 ```
+
+The check sees only commits that carry this plan's trailer. Kernel fixes under another
+trailer, or under none, are traced through their friction entries instead.
 
 EP-5's fitness check must also pass with the command EP-5 documents.
 

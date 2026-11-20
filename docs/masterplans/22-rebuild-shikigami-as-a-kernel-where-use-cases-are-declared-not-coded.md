@@ -81,6 +81,11 @@ provenance:
       at: 2026-11-18T21:10:00Z
       mode: "implement"
       note: "Kernel baseline reached at 89151747 (tag api-baseline-v1); pre-release exception ended; EP-11 complete"
+    - model: "claude-opus-5-5"
+      harness: "claude-code"
+      at: 2026-11-20T20:07:17Z
+      mode: "implement"
+      note: "EP-7 complete; architectural acceptance met with four named kernel fixes accepted; every child Complete"
 ---
 
 # Rebuild Shikigami as a kernel where use cases are declared, not coded
@@ -434,7 +439,7 @@ rule.
 | EP-4 | Execute Dhall-declared playbooks with fan-out, approval gates, and learning capture | [docs/plans/129-execute-dhall-declared-playbooks-with-fan-out-approval-gates-and-learning-capture.md](../plans/129-execute-dhall-declared-playbooks-with-fan-out-approval-gates-and-learning-capture.md) | EP-2; EP-8 M2 (for M2); EP-3 M4 (for M4) | EP-3 | Complete |
 | EP-5 | Move the extension boundary out of shikigami-core with flow packs and an architecture fitness check | [docs/plans/130-move-the-extension-boundary-out-of-shikigami-core-with-flow-packs-and-an-architecture-fitness-check.md](../plans/130-move-the-extension-boundary-out-of-shikigami-core-with-flow-packs-and-an-architecture-fitness-check.md) | None | None | Complete |
 | EP-6 | Shrink shikigami-core to the kernel by moving or retiring use-case subsystems | [docs/plans/131-shrink-shikigami-core-to-the-kernel-by-moving-or-retiring-use-case-subsystems.md](../plans/131-shrink-shikigami-core-to-the-kernel-by-moving-or-retiring-use-case-subsystems.md) | EP-5 | None | Complete |
-| EP-7 | Modernize the keiro services with a declared campaign playbook | [docs/plans/132-modernize-the-keiro-services-with-a-declared-campaign-playbook.md](../plans/132-modernize-the-keiro-services-with-a-declared-campaign-playbook.md) | EP-3, EP-4 | EP-5 | In Progress |
+| EP-7 | Modernize the keiro services with a declared campaign playbook | [docs/plans/132-modernize-the-keiro-services-with-a-declared-campaign-playbook.md](../plans/132-modernize-the-keiro-services-with-a-declared-campaign-playbook.md) | EP-3, EP-4 | EP-5 | Complete |
 | EP-8 | Give the kernel its own action, record, output, approval and trigger contracts with local adapters | [docs/plans/133-give-the-kernel-its-own-action-record-output-approval-and-trigger-contracts-with-local-adapters.md](../plans/133-give-the-kernel-its-own-action-record-output-approval-and-trigger-contracts-with-local-adapters.md) | EP-1 (for M2 and M3) | None | Complete |
 | EP-9 | Declare and run a routine agent with one file and one command | [docs/plans/134-declare-and-run-a-routine-agent-with-one-file-and-one-command.md](../plans/134-declare-and-run-a-routine-agent-with-one-file-and-one-command.md) | EP-1; EP-8 M2; EP-2 M2b (for the scheduled milestone) | EP-3 | Complete |
 | EP-10 | Move the Kikan service bindings out of shikigami-core and compose a Kikan distribution | [docs/plans/135-move-the-kikan-service-bindings-out-of-shikigami-core-and-compose-a-kikan-distribution.md](../plans/135-move-the-kikan-service-bindings-out-of-shikigami-core-and-compose-a-kikan-distribution.md) | EP-5, EP-8 | EP-6 | Complete |
@@ -1104,9 +1109,22 @@ baseline, is reached. Stage 3, organizational use, waits on Kikan-En deciding de
 and coding-agent launches. The architectural acceptance still needs the campaign on a
 second repository (EP-7 M4).
 
-- [ ] Architectural acceptance: the keiro modernization campaign runs for real on at least
+On 2026-11-20 EP-7 M4 is accepted and EP-7 is complete, so every child plan is Complete.
+Batch A (run `1290d348-…` on keiei, `b75450d4-…` on danwa) and batch B (run `44500c5b-…` on
+meibo and jinmyaku) finished the campaign. Each started from the playbook the previous run
+had improved. kizashi, koyomi, keiei, danwa, meibo and jinmyaku resolve keiro 0.25.0.0, and
+meibo came from 0.16. `just kernel-fitness` passes. The `shikigami-core` check found four
+kernel fixes under EP-7's trailer, gaps the runs surfaced (FRIC-78, FRIC-79, FRIC-102,
+FRIC-103 and the grant digest). The user accepted them by name rather than reading the
+acceptance as "no kernel commit during the campaign". Other campaign-surfaced fixes, such as
+FRIC-100 to FRIC-126, went in under their owning plan's trailer or none.
+
+- [x] Architectural acceptance: the keiro modernization campaign runs for real on at least
   two of the user's repositories with no change to `shikigami-core` in the commits that
-  introduced it, and EP-5's fitness check passes.
+  introduced it, and EP-5's fitness check passes. (2026-11-20: EP-7 M4. Six repositories
+  resolve keiro 0.25.0.0 through five runs; `just kernel-fitness` passes. The campaign's
+  declarations needed no kernel code. Four kernel fixes the runs surfaced carry EP-7's
+  trailer and are accepted by name, by the user's decision; see plan 132's Decision Log.)
 - [x] Routine-agent acceptance: EP-9's one-file, one-command, confirm-once agent runs by
   hand and on a local schedule on this Mac. (2026-11-15: `repo-digest` by hand in keiro and
   three scheduled runs under `shikigami-local up`; `readme-keeper` committed in fsrs-hs.)
