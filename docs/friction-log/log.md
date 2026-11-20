@@ -2,6 +2,8 @@
 
 ## 2026-11-20
 
+* **Addition**: FRIC-126 records cosmetic interface friction with mori://shinzui/shikigami: A coding-agent step reported the run's changes as its own
+
 * **Addition**: FRIC-125 records detour interface friction with mori://shinzui/shikigami: One keiro-upgrade edge's guidance did not fit a coding-agent prompt
 
 ## 2026-11-19

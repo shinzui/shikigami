@@ -85,6 +85,10 @@ admitStep config local input@CodingAgentStepInput {parent, step = requested, too
             Left problem -> pure (Left (WorkspaceUnavailable (renderWorktreeError problem)))
             Right worktree -> do
               now <- getCurrentTime
+              -- The step's own starting commit: an earlier step of the run
+              -- may have committed on this worktree since it opened, and the
+              -- step's change and "unchanged" are measured from here (FRIC-126).
+              head' <- gitIn (worktreeRootPath worktree.root) ["rev-parse", "HEAD"]
               let child = (codingAgentStepWorkflowId input).unWorkflowId
                   directory = local.stateDirectory </> "attempts" </> Text.unpack (safeName child)
               createDirectoryIfMissing True directory
@@ -101,7 +105,7 @@ admitStep config local input@CodingAgentStepInput {parent, step = requested, too
                         repository = repositoryIdText worktree.repository,
                         root = worktreeRootPath worktree.root,
                         branch = worktree.branch,
-                        base = worktree.base,
+                        base = either (const worktree.base) id head',
                         deadline = addUTCTime (fromIntegral (deadlineMinutesValue requested.deadlineMinutes * 60)) now,
                         attemptDirectory = directory,
                         skills,
