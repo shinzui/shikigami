@@ -7,8 +7,8 @@ provider: "mori://shinzui/shikigami"
 status: "shipped"
 stability: "experimental"
 since: "unreleased"
-packages: ["shikigami-core", "shikigami-workers"]
-interface: ["Shikigami.Action.Authorization", "authorization.actions.mode", "Shikigami.Capability.Provider"]
+packages: ["shikigami-core", "shikigami-agent", "kikan-shikigami-binding"]
+interface: ["Shikigami.Authority", "authorization.actions.mode", "Shikigami.Capability.Provider"]
 tags: ["exact-action-authorization"]
 generated:
   by: "process:shikigami-capabilities-bootstrap"
@@ -17,7 +17,7 @@ requires: ["CAP-6"]
 evidence:
   - kind: module
     resource: "shikigami-core/src/Shikigami/Authority.hs"
-    proves: "Production authorizer, locally checked decision coordinates, distinct failure classes, and deny-all default."
+    proves: "Kernel action vocabulary, fail-closed authority and recording of decisions."
   - kind: test
     resource: "shikigami-core/test/Shikigami/BehaviorToolSpec.hs"
     proves: "An exact tool denial prevents the leased tool callback from running."
@@ -30,22 +30,22 @@ evidence:
 
 ## Provides
 
-Shikigami submits a concrete principal/action/resource request through the configured policy client and retains bounded decision coordinates after proof verification. Provider acquisition and each logical tool call are separate checks. Sink enqueue and publication check lifecycle, sink-kind permission, and the exact target. Policy denial, unavailable authorization, and rejected proofs remain distinguishable.
+Every protected effect passes its principal, action and target to the run’s kernel authority. The local adapter checks the operator grant. The Kikan binding verifies the policy service’s decision proof. Provider acquisition and each logical tool call are separate checks. Sink enqueue and publication check lifecycle, sink-kind permission, and the exact target. Policy denial, unavailable authorization, and rejected proofs remain distinguishable.
 
 ## Adopt
 
-Configure the complete action-authorization trust group documented in [Per-action authorization operations](../operations/action-authorization.md). Supply the resulting authorizer at each execution boundary.
+For personal repositories, configure [local operator grants](local-operator-runs.md). For the Kikan distribution, configure the trust group in [per-action authorization operations](../operations/action-authorization.md). Inspect [the action record](run-action-record.md) to see who decided.
 
 Builds on [CAP-6: Principal lifecycle and continuity](principal-lifecycle-and-continuity.md).
 
 ## Evidence
 
-- [Authority.hs](../../shikigami-core/src/Shikigami/Authority.hs): The kernel authority port, locally checked decision coordinates, distinct failure classes, and deny-all default.
+- [Authority.hs](../../shikigami-core/src/Shikigami/Authority.hs): Kernel action vocabulary, fail-closed authority and recording of decisions.
 - [BehaviorToolSpec.hs](../../shikigami-core/test/Shikigami/BehaviorToolSpec.hs): An exact tool denial prevents the leased tool callback from running.
 - [action-authorization.md](../../docs/operations/action-authorization.md): Trust configuration, boundary gate order, outages, revocation, and key rotation.
 
 ## Limits
 
-The default and current one-off composition roots deny protected actions. A lease, manifest, or sink-kind grant does not confer exact-action permission. Deployment requires [the policy service](mori://shinzui/kikan-en), [the credential issuer](mori://shinzui/shomei), and configured verifier trust; this repository supplies the enforcing client boundaries.
+An unconfigured deployment authority denies protected actions. Kikan-En currently refuses declared tools and coding-agent launches. The Kikan adapter requires [the policy service](mori://shinzui/kikan-en), [the credential issuer](mori://shinzui/shomei), and configured verifier trust; this repository supplies the enforcing client boundaries.
 
 The available implementation is unreleased. No Shikigami release tags or published releases were present when this catalog was authored; the Cabal package version alone does not establish a released compatibility promise.

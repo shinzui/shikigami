@@ -1,13 +1,13 @@
 # Shikigami domain inventory
 
-This census was refreshed on 2026-10-30 under
-[MasterPlan 16](../masterplans/16-upgrade-shikigami-to-keiro-0-22-and-retire-superseded-runtime-workarounds.md)
-and [plan 93](../plans/93-adopt-guarded-catalog-commands-and-qualify-current-dsl-consumer-contracts.md).
-A declaration counts only when production executes its generated contract (ADR-1).
-The workspace has twelve explicit Language 6 members: agent-run, approval,
-conversation, execution-driver, execution, RunEvidence, run-jobs, worker-session,
-continuing-worker, adaptive-delivery, objective and objective-tracker. Four aggregates own catalogs and query models.
-Keiro/DSL 0.22 is released; Language 6 remains the opt-in candidate language.
+The [workspace](../../domain/shikigami.keiro-workspace) lists fifteen Language 6
+specifications. It includes the coding-agent and declared-tool child workflows
+and the recurring mandate alongside the agent, approval, conversation,
+execution, evidence, job, worker, coordination, objective and tracker contracts.
+Five persisted aggregates appear in the generated [domain atlas](domain-atlas.md).
+Each pack owns its use-case Flows and their journal labels. The rules for changing
+any baselined wire are in [workflow versioning](../workflow-versioning.md) and
+the [API baseline](api-baseline.md).
 
 ## Workflows and identities
 
@@ -18,6 +18,8 @@ Paths in this section are relative to `shikigami-core/src/`.
 | `shikigami.agent-run` | `domain/shikigami/agent-run.keiro`; `Shikigami/Agent/Workflow.hs`; generated AgentRun runtime | Job idempotency key identifies the run. WorkflowVersioningSpec, ApprovalWorkflowSpec, BehaviorRetrySpec and memory/router replay suites exercise it. Current leaf Skills await execution children directly; no obsolete patch branch remains. |
 | `shikigami.approval` | `domain/shikigami/approval.keiro`; `Shikigami/Agent/Approval/Workflow.hs`; generated Approval runtime | ApprovalWorkflowSpec covers a durable child with `ingest-approval`, `notify`, and `decision`. Publication and resolution use the allocated opaque AwakeableId, distinct from the review-request key. |
 | `shikigami.conversation` | `domain/shikigami/conversation.keiro`; `Shikigami/Agent/Conversation.hs`; generated Conversation runtime | Conversation tests cover restoreSeed, one turn per continueAsNew generation, timeout and wake tokens. The baseline uses only the rotating workflow and static labels. |
+| `shikigami.coding-agent-step` | [Specification](../../domain/shikigami/coding-agent.keiro), [workflow](../../shikigami-core/src/Shikigami/CodingAgent/Workflow.hs) | Admits, attempts and settles the vendor launch. Recovery reattaches or reports an uncertain result. |
+| `shikigami.declared-tool-step` | [Specification](../../domain/shikigami/declared-tool.keiro), [workflow](../../shikigami-core/src/Shikigami/DeclaredTool/Workflow.hs) | A durable CLI step journals its admission, attempt and settlement under the tool grant. |
 | Delegated runs | `Shikigami/Agent/Delegate.hs` and `Shikigami/Agent/Delegate/Context.hs` | Deterministic UUIDv5 child identities and reservation ledger are technical deduplication identities. Preserve their derivation; do not relabel them TypeID-v7. |
 | `shikigami.execution` | `domain/shikigami/execution-driver.keiro`; `Shikigami/Execution/Driver.hs`; generated ExecutionDriver runtime | Transcript and selection workflow tests cover bounded generations, accepted-reference queue repair, protected replay, Approval, cancellation and parent completion after provider retirement. |
 | `shikigami.worker-session` | `domain/shikigami/continuing-worker.keiro`; `Shikigami/WorkerSession/Workflow.hs`; generated ContinuingWorker runtime | Session suites cover one assignment per generation, durable idle wakes, original governed child mappings, missing-input repair and retained result acknowledgement after handoff. |
@@ -118,10 +120,10 @@ unused enum guard is invented. Mapped identity registers copy complete typed
 command values; there is no scalar-to-mapped write or transition resetting them
 to an initial value that would justify an unused write-lift.
 
-`Shikigami.Workflow.Registry` in core composes all five families: agent runs,
-approval children, conversations, execution drivers and continuing workers. The
-worker consumes this exact registry; the approval integration case verifies all
-five names. Bounded resume stops on zero durable advances and
+The [workflow registry](../../shikigami-core/src/Shikigami/Workflow/Registry.hs)
+composes agent-run (including approval, coding-agent and declared-tool children),
+conversation, execution, adaptive delivery, mandate and continuing-worker
+registries. The worker uses the same registry for restart recovery. Bounded resume stops on zero durable advances and
 exports all summary fields. Generated facts describe the current static workflow
 bodies; the synthetic versioning test preserves future patch-gate coverage.
 
@@ -212,7 +214,7 @@ the production declaration's values.
 
 | Boundary | Owner | Why it remains hand-owned; proof |
 |---|---|---|
-| Open Kafka agent matching | `shikigami-workers/src/Shikigami/Trigger/Consumer.hs` | Matching configured agents over ActivityEnvelope/open integration payloads is not a finite declared typed-event intake. Preserve inbox transaction dispositions and Kafka offset advancement only after durable disposition; consumer tests exercise failure/redelivery. |
+| Open Kafka agent matching | [Kafka transport](../../packs/kikan-shikigami-binding/intake/Kikan/Shikigami/Binding/Intake.hs) and `Shikigami.Trigger.Intake` | Matching configured agents over ActivityEnvelope/open integration payloads is not a finite declared typed-event intake. Preserve inbox transaction dispositions and Kafka offset advancement only after durable disposition; consumer tests exercise failure/redelivery. |
 | Danwa addressed message | `packs/kikan-shikigami-binding/src/Kikan/Shikigami/Binding/Conversation.hs` (the Danwa conversation channel, plan 135 M5) | Upstream AddressedMessage is a bare object without the generated contract discriminator. The channel decodes it into the kernel's `InboundMessage`; preserve upstream bytes and explicit decoding tests. |
 | HTTP sink outbox | `shikigami-core/src/Shikigami/Sink/Intent.hs`, `Shikigami/Flow/SinkOutbox.hs`, `Shikigami/Agent/Workflow.hs`; worker `Shikigami/Flow/SinkOutbox/Publisher.hs` | HTTP dispatch is not a DSL Kafka publisher. One hand-owned SinkIntent replaced the former duplicate. Preserve deterministic intent IDs, delivery receipts and remote deduplication keys. SinkIntentSpec, SinkDeliverySpec and worker tests prove transient retry, permanent rejection and redelivery. |
 | Sink grants | `shikigami-core/src/Shikigami/Sink/Permission.hs`, `Sink/GrantStore.hs` | Authorization policy tables are not an event-sourced aggregate or an unused generated enum. Permission/grant tests own the boundary. |

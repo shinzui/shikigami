@@ -30,7 +30,7 @@ so neither could run. See [Behaviors](./behaviors.md) and [Flows](./flows.md).
 1. Author a manifest using [the canonical schema](../../schema/Agent.dhall).
    Select an existing program, Skill, or Flow; new compiled behavior requires a
    registry entry and rebuild.
-2. Validate it with `cabal run shikigami -- validate <file>.dhall`. Validation
+2. Validate it with `cabal run kikan-shikigami:exe:kikan-shikigami -- validate <file>.dhall`. Validation
    refuses a Flow the executable was not composed with; it does not prove that a
    program task can execute.
 3. Point both `kikan-shikigami-worker` and `kikan-shikigami-consume-stream` at the directory

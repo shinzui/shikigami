@@ -15,7 +15,7 @@ A declaration can name the command-line tools its agent may call: the executable
 argument patterns it may be called with, the working directory and an operation class.
 Under the `local-operator` trust tier ([local operator](local-operator.md)) your one-time
 confirmation of the declaration is the grant, and every call, admitted or refused, lands in
-the action record. Declared tools work for `Skill` and `CodingAgent` agents; a tool can be a
+the action record. Skills and coding agents can use declared tools. Flows and playbooks can run declared CLI tools as durable steps. A tool can be a
 CLI command or an approved tool of an MCP server bound in your tools file.
 
 ## Declaring tools
@@ -48,7 +48,7 @@ in  A.Agent::{
   `NoTrailing`, `AnyTrailing` or `AtMostTrailing n`. A call matches when one pattern does.
 * `workingDirectory` defaults to `WorkspaceRoot` (the repository the run works in);
   `WorkspaceSubdirectory "path"` names a directory below it.
-* `operationClass` defaults to `Observation`. Durable runs admit only observations.
+* `operationClass` defaults to `Observation`. The durable Skill tool loop admits observations. A durable CLI step can also perform a granted mutation, as described below.
 * `limits` defaults to 60 seconds and 256 KiB per stream; set
   `Some { timeoutSeconds = …, outputBytes = … }` (up to 600 seconds and 4 MiB).
 * A declaration with tools needs an `identity`.
@@ -177,6 +177,7 @@ change the repository. The registered flow `run-declared-tool` runs one, named b
 ```dhall
 A.Agent::{
 , name = "build-step"
+, identity = Some { principal = "principal_build_step" }
 , behavior = A.Behavior.Flow { name = "run-declared-tool" }
 , tools =
   [ A.Tool.CliTool

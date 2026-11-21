@@ -35,6 +35,8 @@ in  R.skill "repo-digest" "/Users/you/.config/shikigami/agents/skills/repo-diges
          }
 ```
 
+The generated Skill requests workspace reads. Configure a [real model provider](local-operator.md#one-command-one-confirmation) for a repository summary. The default stub is enough to exercise the run and report lifecycle.
+
 Run it in a checkout; the words after the name become the run's `task`:
 
 ```bash
@@ -42,15 +44,14 @@ cd ~/src/keiro
 shikigami-local run repo-digest "focus on the release"
 ```
 
-The first run asks once, listing the repository, tools and budget; later runs do not, until
-you change the declaration. The run ends with the report's path:
+The first run asks once, listing the repository, tools and budget; later runs do not, for the same repository and declaration digest. A new repository or changed declaration needs its own grant. The run ends with the report's path:
 
 ```text
 report  ~/.local/state/shikigami/reports/repo-digest/4b2ca292-…-0.md
 ```
 
 `R.coder NAME PROMPT` (or `shikigami-local new NAME --coder`) is a Claude Code coding agent
-instead: it works in its own worktree and commits its change on a run branch for you to review.
+that commits a change on a run branch with the default separate-worktree placement. The [local operator](local-operator.md) can also grant in-place placement.
 
 ## Schedule it
 

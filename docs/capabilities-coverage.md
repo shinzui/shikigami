@@ -1,12 +1,25 @@
 # Capability coverage census
 
+## Kernel and distribution coverage
+
+The [catalog](capabilities/index.md) now covers [local runs and grants](capabilities/local-operator-runs.md),
+[durable coding agents](capabilities/durable-coding-agents.md), [declared CLI and MCP tools](capabilities/declared-tools.md),
+[playbooks](capabilities/declared-playbooks.md), [pack composition](capabilities/flow-pack-composition.md)
+and the [action record](capabilities/run-action-record.md). Registered output delivery,
+approval channels and manual intake are covered by [CAP-9](capabilities/authorized-sink-outbox.md),
+[CAP-10](capabilities/durable-human-approval.md) and [CAP-2](capabilities/durable-trigger-intake.md).
+For current package and executable ownership use the [package map](architecture/packages.md).
+The [API baseline](architecture/api-baseline.md) identifies the compatibility rule for each public surface.
+
+## Historical module census, 2026-10-29
+
 This census was checked on 2026-10-29 against the Cabal manifests, public module
 exports, executable entry points, administrative parser, implementation, tests,
 and current user/operations documentation. It maps **seven packages, 226 exposed
 modules, twelve executables, and seventeen repository-owned administrative command
 families** to the capability catalog or an explicit supporting-surface exclusion.
 
-This is a coverage audit of the current consumer surface, not a declaration that
+This was a coverage audit of the consumer surface at that revision, not a declaration that
 every function is a separate capability or that all runtime behavior was tested.
 The listed tests were inspected as evidence; they were not rerun for this
 documentation change. Private implementation and generated modules support the

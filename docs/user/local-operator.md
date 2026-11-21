@@ -11,10 +11,10 @@ generated:
 
 # Running agents on your own machine
 
-Under the `local-operator` trust tier you are the authority. A declared agent runs against a
-repository on your own machine, does only what you granted it, and leaves a record of every
-grant and decision. No Kikan service is needed: only the local PostgreSQL that
-`shikigami-agent-run` already uses and your model credential.
+Under the `local-operator` trust tier you authorize a declared agent to work in a repository
+on your machine. Shikigami checks protected actions against the repository grant and records
+each decision. Local processes run as your OS user. Durable local runs need migrated PostgreSQL.
+A real model also needs its provider credential or vendor CLI login.
 [ADR-124](../adr/0124-authority-is-selected-by-trust-tier-and-the-local-operator-grants-a-declaration-once.md)
 records the design.
 
@@ -68,11 +68,11 @@ refuses rather than ask. It prints `already granted` when the stored grant alrea
 placement, and leaves an approvals-file grant to the file. `shikigami-local doctor --agent <file>
 --workspace <repository>` shows each grant's placement and the `grant` command for a missing one.
 
-Until local outputs exist (EP-8 M2 of MasterPlan 22), a declaration that lists a Kikan sink is
-refused when it is resolved, before any model call:
+The local runner writes a [local report](outputs.md) by default. It refuses a declaration
+that explicitly names a Kikan output before the first model call. For example:
 
 ```text
-agent-run: the declaration lists outputs this composition cannot deliver: kizashi.signal
+output kind kizashi.signal is not registered here (registered: local.report)
 ```
 
 ## Editing, running and committing
@@ -92,7 +92,7 @@ is refused and a replay is harmless); `..`, absolute paths, `.git` and symbolic 
 process group; any other rule is refused and recorded. `workspace.git` shows `status` and `diff`
 and makes one commit against the `HEAD` the agent last saw, with `Shikigami-Run:` and
 `Shikigami-Agent:` trailers and without signing or hooks (the branch is a proposal you review).
-Your checkout and its current branch are untouched. Review with
+With the default `SeparateWorktree` placement your checkout stays on its current branch. Review with
 `git log shikigami/local-maintainer/<suffix>`; discard with `git worktree remove <root>` and
 `git branch -D <branch>`.
 

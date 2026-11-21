@@ -186,13 +186,18 @@ is unknown is never retried automatically.*
   committed in fsrs-hs (MasterPlan 22, Progress).
 * **Portability.** Accepted by EP-10 M6 on 2026-11-17: the two runs above, one declaration
   unchanged under both compositions with K1 to K8 holding in both.
-* **Architectural.** Not yet accepted. The keiro modernization campaign ran for real on one
-  repository: koyomi, run `aa2b77a1-…`, EP-7 M3 on 2026-11-17, with no change to
-  `shikigami-core`. The second repository comes from EP-7 M4's batches. The kizashi pilot
-  was stopped on 2026-11-16 (EP-7 M2). The declaration baseline (EP-11 M2) followed the
-  koyomi run, and the kernel baseline (EP-11 M4, 2026-11-18) does not depend on this
-  requirement.
+* **Architectural.** Accepted on 2026-11-20. The [campaign bundle](../../agents/campaigns/keiro-modernization/playbook.dhall)
+  expressed the modernization procedure in declarations, Skills and tools. Five runs
+  covered six repositories, including a stopped pilot completed by hand. The
+  campaign exposed kernel defects. The operator accepted four fixes bearing the
+  campaign plan's trailer, and `just kernel-fitness` passed. The [campaign
+  retrospective](../plans/132-modernize-the-keiro-services-with-a-declared-campaign-playbook.md#outcomes--retrospective)
+  records the per-repository evidence and exceptions.
 
+All eleven children of [MasterPlan 22](../masterplans/22-rebuild-shikigami-as-a-kernel-where-use-cases-are-declared-not-coded.md#progress)
+are complete. The [v1 API baseline](api-baseline.md) enforces 19 surfaces. The portability
+runs used fixture Kikan authority. Organizational adoption of declared tools and coding
+agents still needs actions the Kikan binding can authorize.
 
 ## Gaps against an invariant
 

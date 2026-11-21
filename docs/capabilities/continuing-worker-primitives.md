@@ -42,6 +42,6 @@ Builds on [CAP-1: Typed agent declarations](typed-agent-declarations.md).
 
 ## Limits
 
-Plan 84 is complete. The [consumer acceptance matrix](../evidence/plan-84/acceptance.md) combines retained mechanics with qualified real objective/checkpoint and workspace providers and native administrative recovery. Protected commands still require enabled tracking, admitted associations and, for repository transfer, the process-backed supervisor. File-only configuration supplies no process fence. Adaptive coordination, integrated live coding and recurrence remain in plans 85–87.
+Plan 84 is complete. The [consumer acceptance matrix](../evidence/plan-84/acceptance.md) combines retained mechanics with qualified real objective/checkpoint and workspace providers and native administrative recovery. Protected commands still require enabled tracking, admitted associations and, for repository transfer, the process-backed supervisor. File-only configuration supplies no process fence. The kernel provides [finite adaptive coordination](../user/adaptive-delivery.md) and [recurring checkpoint mandates](../operations/recurring-objectives.md). The actual-model adaptive trial remains open.
 
 This implementation is experimental and unreleased; no released compatibility promise is asserted.

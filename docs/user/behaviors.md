@@ -1,7 +1,7 @@
 ---
 type: "Reference"
 title: "Behaviors — what an agent does"
-description: "Compare deterministic, ShikumiProgram, Skill, CoordinatingSkill, CodingAgent, and Flow behavior declarations."
+description: "Choose between ShikumiProgram, Skill, CoordinatingSkill, CodingAgent, Playbook and Flow."
 docId: "DOC-5"
 timestamp: "2026-11-15T12:00:00Z"
 tags: ["behaviors"]
@@ -12,8 +12,7 @@ generated:
 
 # Behaviors — *what* an agent does
 
-A behavior is the work an agent performs when its trigger fires. Its declaration
-has five arms:
+A behavior is the work an agent performs when its trigger fires. The [canonical schema](../../schema/Agent.dhall) defines six arms:
 
 ```dhall
 let Behavior =
@@ -27,6 +26,9 @@ let Behavior =
           , access : WorkspaceAccess, model : Optional Text
           , effort : Optional CodingAgentEffort
           , deadlineMinutes : Natural, skills : List Text }
+      | Playbook :
+          { bundle : Text, provider : CodingAgentProvider, access : WorkspaceAccess
+          , model : Optional Text, effort : Optional CodingAgentEffort }
       >
 ```
 
@@ -37,6 +39,7 @@ let Behavior =
 | **CoordinatingSkill** | admitted durable execution | When the selected provider requires one | instructions controlling a bounded set of continuing workers |
 | **Flow** | `mori://shinzui/keiro` durable workflow | Only if the flow body calls a model | lifecycle-backed work that can park, resume, and escalate |
 | **CodingAgent** | Claude Code or Codex through `mori://shinzui/baikai`, as a durable child workflow | The vendor CLI's own login | "change this repository and commit the result", under the local-operator tier |
+| **Playbook** | generic durable interpreter under `local-operator` | Vendor login for coding steps | a pinned procedure across steps and repositories |
 
 Supported behaviors return JSON to the shared session, memory, and sink lifecycle.
 Flows execute through the durable agent workflow, while the synchronous runner
@@ -126,9 +129,9 @@ behavior = A.Behavior.CodingAgent
 
 A `CodingAgent` behavior runs Claude Code (`ClaudeCode`) or Codex (`Codex`) on the run's
 repository through Baikai's unattended agent command. It works in the run's own worktree
-and branch, and when it completes Shikigami commits its changes there with the trailers
-`Shikigami-Run` and `Shikigami-Agent`. The step is a durable child workflow: its launch,
-its attempt and its settlement are journaled, so `shikigami runs show <id>` prints the
+and branch by default (or in the checkout for an `in-place` grant), and when it completes Shikigami commits its changes there with the trailers
+`Shikigami-Run` and `Shikigami-Agent`. The agent may propose a Conventional Commit subject on a `Commit: …` line in its final message. The step is a durable child workflow: its launch,
+its attempt and its settlement are journaled, so `shikigami runs show shikigami.agent-run <id>` prints the
 outcome, the commit, the changed files and the evidence summary.
 
 * `access` is Baikai's capability: `ReadOnly`, `EditWorkspace` (edit inside the
@@ -162,6 +165,13 @@ shikigami-agent-run --set trust.tier=local-operator \
 
 `run-behavior` does not run a `CodingAgent`; it needs a durable agent run.
 
+## Playbook — a declared procedure
+
+Set `behavior = A.Behavior.Playbook` with a bundle path, coding provider,
+workspace access, optional model and effort. The interpreter pins the bundle
+and journals coding, tool, approval, iteration and reflection steps. Start with
+the [bundle example and validation command](playbooks.md).
+
 ## Flow — the durable lifecycle path
 
 ```dhall
@@ -178,7 +188,7 @@ The registered `shikumi-decision-example` Flow demonstrates triage followed by
 investigation and optional governed specialist delegation. See
 [Typed decisions in Flows](typed-decisions.md) for configuration and replay limits.
 
-Other registered Flows include [finite adaptive delivery](adaptive-delivery.md),
+The builtin pack includes [finite adaptive delivery](adaptive-delivery.md). The Kikan distribution adds
 [unrequested-work proposals](unrequested-work.md), and the
 [active-work watchdog](watchdog.md). Each requires its own configured admission,
 identity and allowance; naming a Flow does not grant those prerequisites.
@@ -192,8 +202,8 @@ acknowledgement, and escalates on timeout. See **[Flows](./flows.md)**.
 The synchronous arms are provable with deterministic stubs:
 
 ```bash
-$ cabal run shikigami-run-behavior -- --agent agents/heartbeat.dhall
-{"summary":"..."}
+$ cabal run shikigami-run-behavior -- --agent agents/proof/code-researcher.dhall
+{"agent":"code-researcher","finding":"The code path should spawn child workflows before awaiting their results."}
 ```
 
 `run-behavior` runs only the behavior (no DB, no sinks) and prints its JSON output — the
@@ -208,5 +218,6 @@ quickest way to iterate on what an agent produces.
 | natural-language instructions, optionally with tools | `Skill` |
 | instructions controlling admitted continuing workers | `CoordinatingSkill` after provider qualification |
 | a change to a repository made by Claude Code or Codex | `CodingAgent` under `local-operator` |
-| a durable process that must wait or resume | `Flow` |
+| a declared sequence of coding, CLI, approval or reflection steps | [`Playbook`](playbooks.md) |
+| a durable process that needs custom Haskell logic | `Flow` |
 | typed decisions that branch into governed actions and survive restart | `Flow` with the `Decision` capability |

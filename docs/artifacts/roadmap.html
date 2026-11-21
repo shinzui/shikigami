@@ -232,26 +232,19 @@
 <body>
   <header>
     <div class="shell">
-      <div class="eyebrow">Architecture + delivery review · snapshot 2026-11-06 UTC</div>
-      <h1>Shikigami: from durable runs to adaptive, recoverable delivery.</h1>
-      <p class="lede">An engineering map of the delivered runtime and the portfolio through plan 124 and IR-21: safety closeout, local qualification, typed Flow decisions, recoverable workers, adaptive delivery, independent watchdog observation, governed work proposals, and planned machine daemons/recurring mandates.</p>
-      <div class="meta">
-        <span class="pill good">124 ExecPlans · current delivery gates</span>
-        <span class="pill warn">6 MasterPlans with remaining work</span>
-        <span class="pill stop">4 change-requesting reviews open</span>
-        <span class="pill warn">5 improvement requests in progress</span>
-        <span class="pill">1 accepted improvement request</span>
-        <span class="pill good">11 completed improvement requests</span>
-        <span class="pill">4 proposed improvement requests</span>
-      </div>
+      <div class="eyebrow">Delivery roadmap · 21 November 2026</div>
+      <h1>Shikigami’s declared-agent kernel</h1>
+      <p class="lede">The stock runtime runs personal agents. The Kikan distribution adds organizational integrations and Flows. Both use the same durable kernel.</p>
     </div>
   </header>
 
   <div class="shell layout">
     <nav aria-label="Contents">
-      <a href="#answer">Roadmap thesis</a>
+      <a href="#kernel-delivery">Kernel delivery</a>
+      <a href="#november-archive">6 November portfolio snapshot</a>
+      <a href="#answer">Earlier roadmap thesis</a>
       <a href="#north-star">Product contract</a>
-      <a href="#baseline">Current baseline</a>
+      <a href="#baseline">Earlier baseline</a>
       <a href="#architecture">System boundaries</a>
       <a href="#decisions">Architecture decisions</a>
       <a href="#safety">Safety sequence</a>
@@ -271,7 +264,19 @@
       <a href="#sources">Source ledger</a>
     </nav>
 
-    <main><section aria-label="Current implementation boundary"><h2>Current boundary · 6 November 2026</h2>
+    <main>
+      <section id="kernel-delivery">
+        <h2>Kernel delivery · 20 November 2026</h2>
+        <p>All eleven children of <a href="../masterplans/22-rebuild-shikigami-as-a-kernel-where-use-cases-are-declared-not-coded.md#progress">MasterPlan 22</a> are complete. The declaration baseline landed at <code>c54933b5</code>. The kernel baseline at <code>api-baseline-v1</code> enforces 19 public surfaces, 13 stable and six provisional.</p>
+        <table><thead><tr><th>Delivered</th><th>What a consumer can use</th><th>Evidence</th></tr></thead><tbody>
+          <tr><td>Personal agents</td><td>Scaffold a Skill or coding agent, grant it a repository, run it by hand or on a local schedule, and inspect its report.</td><td><a href="../user/routine-agents.md">Routine agents</a></td></tr>
+          <tr><td>Multi-repository procedures</td><td>A pinned playbook combines coding workers, declared tools, approval gates and learning. The modernization campaign covered six repositories, including a pilot completed by hand.</td><td><a href="../user/playbooks.md#a-campaign-that-uses-these-steps">Campaign and results</a></td></tr>
+          <tr><td>Composed distributions</td><td>The kernel owns authority, journals and the action record. Packs supply service adapters and organizational Flows. The same portable declaration produced a local report and a Kawa digest in the two tested compositions.</td><td><a href="../architecture/kernel-invariants.md">Portability and audit limits</a></td></tr>
+        </tbody></table>
+        <p>Organizational adoption of declared tools and coding-agent launches awaits matching Kikan-En actions. The actual-model adaptive trial remains open. Recurring checkpoint mandates are available under their own authority. <a href="../architecture/api-baseline.md">Compatibility policy</a> · <a href="../operations/recurring-objectives.md">Recurring objectives</a></p>
+      </section>
+      <details id="november-archive"><summary>Historical portfolio, 6 November 2026 · plans 1–124</summary>
+      <section aria-label="Historical implementation boundary"><h2>State at 6 November 2026</h2>
 <p>Plans 81–83 deliver root accounting, pinned assignment models and recoverable Skill operations. Plan 96 is complete: configured durable workers have governed repository allocation, edit/process/Git tools, independent process fences, integration and successor recovery. Its full 25-case native Linux matrix includes real objective ownership and supervisor/controller restart. Plan 84 completes continuing-worker consumer acceptance, including compaction/replay and actual native operator recovery; plan 85 completes native adaptive coordination, shared capacity and inspection; plan 86 passes the full native repository/recovery matrix with its actual-model trial still open; plan 87 recurrence is not started.</p>
 <p>MasterPlan 17 completes authoritative objectives, trusted checkpoint/ownership/scope providers, API/CLI and no-Rei continuity. MasterPlan 18 completes provider-neutral external tracker synchronization with the Rei adapter. IR-11 and IR-13 are complete; plan 97 is superseded.</p>
 <p>The configured cohort selects Keiro 0.22, Baikai 0.10, Shikumi 0.5.1 and Kioku 0.12.0.2. MasterPlan 16 is complete for its bounded macOS profile, and standalone plan 108 closes the domain census. Plan 80 adds structured judgments, public complete/stream parity and durable replay; its remaining wire/error matrix, Linux CLI, deadline/output/confinement and fresh immutable packaging gates remain open.</p>
@@ -822,6 +827,7 @@
           <p>When an ExecPlan completes, update its parent MasterPlan in the same change. When an improvement request changes lifecycle, update its frontmatter, Status prose, bundle log, and review provenance together. Never rewrite a historical review outcome to describe later work.</p>
         </details>
       </section>
+    </details>
     </main>
   </div>
 

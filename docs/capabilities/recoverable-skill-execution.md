@@ -42,6 +42,6 @@ Builds on [CAP-1: Typed agent declarations](typed-agent-declarations.md).
 
 ## Limits
 
-The no-database behavior command uses an ephemeral recording. Unknown unsafe effects require reconciliation; a retry does not erase the earlier reservation. Protected transcript bodies are excluded from inspection. No mutable repository provider or adaptive coordinator is supplied.
+The no-database behavior command uses an ephemeral recording. Unknown unsafe effects require reconciliation; a retry does not erase the earlier reservation. Protected transcript bodies are excluded from inspection. Repository mutation requires a configured workspace provider. [Adaptive delivery](../user/adaptive-delivery.md) composes continuing workers at the objective level.
 
 This implementation is experimental and unreleased; no released compatibility promise is asserted.

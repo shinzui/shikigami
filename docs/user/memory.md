@@ -20,8 +20,7 @@ behavior output mandatory memory.
 
 > kioku replaces the design's original bespoke `agent_runs` SQL table. A run is a kioku
 > **Session**; a learning is a kioku **Memory**. Verified durable runs use their
-> recorded Meibo principal as the agent scope. Directory-disabled and one-off runs
-> use an explicit compatibility identity derived from the agent name. Legacy
+> recorded Meibo principal as the agent scope. Deployment-tier one-off runs also apply configured directory admission. With the directory disabled, runs use a compatibility identity derived from the agent name. Legacy
 > name scopes remain readable through operator-managed aliases; see
 > [the operator CLI](../operations/operator-cli.md).
 
@@ -32,7 +31,7 @@ behavior output mandatory memory.
 ```text
 1. open session     ── scoped to the recorded identity; focus = the behavior arm
 2. recall            ── fetch the agent's prior learnings for this scope
-3. run behavior      ── registered ShikumiProgram / Skill / durable Flow
+3. run behavior      ── the behavior pinned for this run
 4. apply record policy ── optionally persist the success or failure as memory
 5. complete session    ── or fail the session on a behavior error
 ```
@@ -84,7 +83,7 @@ bookkeeping.
 ## Run an agent with memory
 
 ```bash
-$ cabal run shikigami-agent-run -- --agent heartbeat
+$ cabal run shikigami-agent-run -- --agent tests/hurl/agents/heartbeat.dhall
 agent "heartbeat" run run_01k…
 recalled 0 prior memories:
 recorded learning mem_01k…
@@ -93,7 +92,7 @@ recorded learning mem_01k…
 Run it again and `recalled` grows — the previous run's learning comes back:
 
 ```bash
-$ cabal run shikigami-agent-run -- --agent heartbeat
+$ cabal run shikigami-agent-run -- --agent tests/hurl/agents/heartbeat.dhall
 agent "heartbeat" run run_01k…
 recalled 1 prior memories:
   - mem_01k… [Pattern/Medium] <the prior run's summary>
@@ -113,7 +112,7 @@ agent's memory** with `--from-activity`. The envelope's `payload` becomes the me
 and its `verb`/`subject.type` become searchable tags:
 
 ```bash
-$ cabal run shikigami-agent-run -- --agent triage-note --from-activity fixtures/envelope.json
+$ cabal run shikigami-agent-run -- --agent tests/hurl/agents/heartbeat.dhall --from-activity fixtures/envelope.json
 recorded activity memory mem_01k…
 ```
 

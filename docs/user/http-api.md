@@ -31,11 +31,11 @@ export SHIKIGAMI_HTTP_AUTH_CALLER=local-operator
 export SHIKIGAMI_API_TOKEN=local-development-token-change-me
 ```
 
-Start these roles in separate terminals:
+Start these roles in separate terminals. The HTTP fixture catalog includes a stock-compatible heartbeat and an intentionally invalid manifest. Use non-strict directory loading for this example.
 
 ```sh
-cabal run shikigami-server:exe:shikigami-server -- --set agents.directory=agents
-cabal run shikigami-worker -- --agents agents
+cabal run shikigami-server:exe:shikigami-server -- --set agents.directory=tests/hurl/agents
+cabal run shikigami-worker -- --agents tests/hurl/agents
 ```
 
 The default server URL is `http://localhost:8080`. Each client subcommand accepts
@@ -58,8 +58,8 @@ cabal run shikigami-client -- agents show heartbeat
 
 `GET /agents` returns a Relay connection with `edges` and `pageInfo`.
 `GET /agents/{agentName}` returns one agent. Views include description,
-enablement, trigger/behavior kinds, sink kinds, delegates, declared principal,
-lifecycle, and `runnable`.
+enablement, trigger and behavior kinds, `outputs`, delegates, declared principal,
+lifecycle and `runnable`. The output list contains the declaration’s explicit kinds. An empty list leaves the choice to the execution composition.
 
 Declarations are loaded at server boot, including disabled manifests; restart
 the server to reload edits. Lifecycle comes from the current directory. With

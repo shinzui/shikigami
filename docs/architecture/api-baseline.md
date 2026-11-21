@@ -74,9 +74,11 @@ shape.
 Build what the checks read, then run them from the repository root:
 
 ```sh
-cabal build api-baseline shikigami shikigami-agent-run shikigami-core
+cabal build exe:api-baseline exe:shikigami exe:shikigami-agent-run exe:shikigami-local shikigami-core kikan-shikigami-binding
 just api-baseline
 ```
+
+At the kernel freeze the report was:
 
 ```text
 api-baseline: 19 surfaces, 0 report-only, 19 enforcing
@@ -105,14 +107,15 @@ Each line ends in `clean`, `CHANGED` or `BREAKING`. A finding is printed below t
 the rule it is held to and the path for a deliberate change:
 
 ```text
-agent-declaration (provisional): BREAKING
+agent-declaration (stable): BREAKING
   api-baseline/corpus/agents/repo-inventory.dhall no longer loads:
     Error: Expression doesn't match annotation
     { - delegationLimit : …
     , + delegationBudget : …
   Rule: Every declaration in the corpus keeps loading to the same value; a new field has a default.
-  This surface is provisional. A breaking change needs a Decision Log entry in its owning
-  plan and an updated corpus in the same commit, then: just api-baseline-pin agent-declaration
+  This surface is stable. A breaking change needs a new ADR, a compatibility path and a
+  re-pin in the same commit; an additive change needs only the re-pin:
+    just api-baseline-pin agent-declaration
   Policy: docs/architecture/api-baseline.md
 ```
 

@@ -1,13 +1,13 @@
 ---
 type: "Capability"
 title: "Durable trigger intake"
-description: "Turn cron ticks, matching activity envelopes, and addressed integration events into durable run jobs."
+description: "Admit manual runs, cron ticks, matching activity envelopes and addressed integration events."
 capabilityId: "CAP-2"
 provider: "mori://shinzui/shikigami"
 status: "shipped"
 stability: "experimental"
 since: "unreleased"
-packages: ["shikigami-core", "shikigami-workers", "shikigami-migrations"]
+packages: ["shikigami-core", "shikigami-workers", "shikigami-migrations", "kikan-shikigami-binding", "kikan-shikigami"]
 interface: ["shikigami-scheduler", "kikan-shikigami-consume-stream", "kikan-shikigami-consume-events", "shikigami enqueue-run", "Shikigami.RunJobs", "Shikigami.Trigger.Enqueue"]
 tags: ["durable-trigger-intake"]
 generated:
@@ -33,7 +33,7 @@ evidence:
 
 ## Provides
 
-The scheduler arms durable timers from five-field cron declarations. Stream and integration consumers record intake disposition before advancing delivery, and enqueue through the checked run-job envelope. Duplicate intake and failed transactions have distinct outcomes; malformed records enter a durable dead-letter path.
+Manual declarations skip automatic intake. An operator can explicitly enqueue them or use a [local run](local-operator-runs.md). The scheduler arms durable timers from five-field cron declarations. Stream and integration consumers record intake disposition before advancing delivery, and enqueue through the checked run-job envelope. Duplicate intake and failed transactions have distinct outcomes; malformed records enter a durable dead-letter path.
 
 ## Adopt
 
@@ -50,6 +50,6 @@ Builds on [CAP-1: Typed agent declarations](typed-agent-declarations.md).
 
 ## Limits
 
-Stream triggers observe `activity.v1`; they do not subscribe to arbitrary service topics. Agent actors are excluded by default unless explicitly enabled. Kafka intake requires a broker and PostgreSQL. The separate [HTTP run acceptance capability](idempotent-http-agent-runs.md) atomically records addressed requests and queues them without a broker.
+Stream triggers observe `activity.v1`; they do not subscribe to arbitrary service topics. Agent actors are excluded by default unless explicitly enabled. Kafka intake requires the Kikan distribution’s consumers, a broker and PostgreSQL. The separate [HTTP run acceptance capability](idempotent-http-agent-runs.md) atomically records addressed requests and queues them without a broker.
 
 The available implementation is unreleased. No Shikigami release tags or published releases were present when this catalog was authored; the Cabal package version alone does not establish a released compatibility promise.

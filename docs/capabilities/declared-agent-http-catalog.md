@@ -27,7 +27,7 @@ evidence:
 
 ## Provides
 
-Clients can list or inspect the server deployment's valid declarations, including disabled agents, without reading its filesystem. Views expose enablement, behavior/trigger/sink kinds, delegates, declared principal, current lifecycle, and `runnable`. Pages use Relay connections ordered by name, with a default size of 50 and maximum of 200.
+Clients can list or inspect the server deployment's valid declarations, including disabled agents, without reading its filesystem. Views expose enablement, behavior and trigger kinds, explicit output kinds, delegates, declared principal, current lifecycle, and `runnable`. Pages use Relay connections ordered by name, with a default size of 50 and maximum of 200.
 
 ## Adopt
 

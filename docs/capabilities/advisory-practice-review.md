@@ -1,7 +1,7 @@
 ---
 type: "Capability"
 title: "Advisory practice-review orchestration"
-description: "Run a registered advisory review flow with pinned evidence contracts, validated verdicts, review memory, and deduplicated attention."
+description: "In the Kikan distribution, run a registered advisory review flow with pinned evidence contracts, validated verdicts, review memory, and deduplicated attention."
 capabilityId: "CAP-15"
 provider: "mori://shinzui/shikigami"
 status: "shipped"

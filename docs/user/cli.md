@@ -27,6 +27,7 @@ $ cabal run <binary> -- [command] [options]
 ```text
 shikigami validate <FILE>
 shikigami render-lifecycle <FILE>
+shikigami flows
 shikigami enqueue-run <AGENT> [--payload <JSON>] [--conversation] [--key <TEXT>] [--workspace <DIR|mori://…>]
 shikigami resolve-approval <TOKEN> (--approve | --reject <REASON>)
 shikigami grants list [--limit <N>] [--after <AGENT:KIND>]
@@ -68,7 +69,7 @@ shikigami-run-behavior --agent <FILE> [--payload <JSON>] [--workspace <DIR>]
 shikigami-agent-run --agent <NAME|FILE> [--from-activity <FILE>] [--workspace <DIR>] [--resume <WORKFLOW_ID>]
 ```
 
-**Long-running roles** — from `shikigami-workers`:
+**Long-running roles** — stock worker and scheduler, plus Kafka intake from the Kikan distribution:
 
 ```text
 shikigami-worker [--agents <DIR>]
@@ -89,7 +90,7 @@ package and one of that package's two executables. Disambiguate it:
 $ cabal run shikigami-server:exe:shikigami-server
 ```
 
-Every other binary is unambiguous, because no other executable shares its package's name.
+For the Kikan admin command use `cabal run kikan-shikigami:exe:kikan-shikigami -- …`.
 
 Binaries that record sessions, use the run queue, or use the Keiro inbox
 (`shikigami-agent-run`, `shikigami enqueue-run`, `shikigami resolve-approval`, `kikan-shikigami-consume-stream`,
@@ -161,11 +162,11 @@ metadata; follow both page cursors as described in
 [finite adaptive delivery](adaptive-delivery.md).
 
 ```bash
-shikigami --config config.json proposals inspect --fail-when-exhausted --json
-shikigami --config config.json proposals list --status pending --json
-shikigami --config config.json proposals candidates --principal agent_shikigami_proposer --json
-shikigami --config config.json proposals admissions --json
-shikigami --config config.json proposals policy list --json
+kikan-shikigami --config config.json proposals inspect --fail-when-exhausted --json
+kikan-shikigami --config config.json proposals list --status pending --json
+kikan-shikigami --config config.json proposals candidates --principal agent_shikigami_proposer --json
+kikan-shikigami --config config.json proposals admissions --json
+kikan-shikigami --config config.json proposals policy list --json
 ```
 
 Proposal inspection includes configured observers even when they have no usage,
@@ -178,9 +179,9 @@ documents, filtering and pruning, and [unrequested work](unrequested-work.md) fo
 the person's acceptance path.
 
 ```bash
-shikigami --config config.json watchdog inspect --agents agents --fail-when-overdue --json
-shikigami --config config.json watchdog episodes --open --limit 20 --json
-shikigami --config config.json watchdog findings EPISODE_ID --limit 20 --json
+kikan-shikigami --config config.json watchdog inspect --agents packs/flow-pack-watchdog/agents --fail-when-overdue --json
+kikan-shikigami --config config.json watchdog episodes --open --limit 20 --json
+kikan-shikigami --config config.json watchdog findings EPISODE_ID --limit 20 --json
 ```
 
 Watchdog reads use the configured principal and observation scope. `inspect`
@@ -204,7 +205,7 @@ $ shikigami validate <FILE>
 
 Parse a `.dhall` manifest, decode it into the typed `AgentDecl`, and pretty-print it. For a
 **skill-agent** it also loads `SKILL.md` and requires `name` and `description`
-frontmatter keys. It does not enforce the full skill specification. Exits 0 on
+frontmatter keys, a directory-matching name and a nonempty description. The command also checks output registrations and Flow names against the executable’s composition. Exits 0 on
 success, non-zero with a typed error on any load/skill failure. **No DB or key.**
 
 → See [Getting Started](./getting-started.md), [Writing Agents](./writing-agents.md).
@@ -267,24 +268,24 @@ Run an agent through the full **kioku** lifecycle — open session, recall prior
 behavior, record the new learning, complete — and print the across-run report. A bare `<NAME>`
 resolves to `agents/<NAME>.dhall`; a path (contains `/` or ends in `.dhall`) is used as-is.
 
-With `--from-activity <FILE>`, instead of running the behavior it folds an `activity.v1`
+With `--from-activity <FILE>`, it folds an `activity.v1`
 envelope (JSON) directly into the agent's memory (payload → content; verb/subject → tags).
 **Needs the DB** (`database.connection_string`).
 
-For a normal behavior run, `--workspace` requests the same opt-in `workspace.read` overlay as
-`shikigami-run-behavior`. Its provider lease is scoped to the behavior call:
-the acquisition boundary is after memory recall and release precedes learning
-recording. The deny-all authorizer currently prevents acquisition. The activity-ingest
-branch does not resolve or use a workspace. One-off runs use compatibility identity
-and also deny protected sink actions; they do not publish an agent's sinks to services.
+For a normal run, `--payload JSON|-` supplies the trigger payload. Under
+`local-operator` the runner checks the repository grant, can acquire the
+declared tools, and writes a local report. It can run a durable `CodingAgent`
+or `Playbook`. Under deployment tiers the selected composition supplies the
+directory, authority and output registrations. Activity ingestion uses
+`--from-activity` separately.
 
 `--resume <WORKFLOW_ID>` continues an interrupted run of the same agent from its journal,
-for example after the command was killed. Give the same `--agent` and `--workspace` as the
-first invocation; the workflow id is the one `shikigami-local ledger --run` prints. Completed
-steps are read back, not repeated, and a `CodingAgent` step whose launcher is still running
-is reattached and waited for. A coding agent is never launched a second time: if its
+for example after the command was killed. Use the original agent and trust tier. Omit
+`--workspace` to use the repository recorded in the journal, or pass the same workspace
+explicitly. Find the workflow ID with `shikigami-local runs`. The runner reads completed steps
+from the journal and reattaches to a `CodingAgent` launcher that is still running. If the
 launcher is gone without a result, the run ends `uncertain` and leaves the worktree for you
-to inspect. Resuming a finished run prints its result again without doing anything.
+to inspect. Resuming a finished run prints its recorded result.
 
 → See [Memory & Sessions](./memory.md).
 
@@ -295,9 +296,9 @@ $ shikigami enqueue-run <AGENT> [--payload <JSON>] [--conversation] [--key <TEXT
 ```
 
 Enqueue an **addressed run job** for a named agent onto the worker's `shikigami_run_jobs`
-queue — the Event trigger class. `--payload` is the addressed run payload as JSON. A running
-`worker` drains and executes it. `--conversation` selects the Danwa conversation
-route explicitly; `--key` overrides the idempotency key. By default that key is
+queue, independently of its declared trigger. `--payload` is the addressed run payload as JSON. A running
+`worker` drains and executes it. `--conversation` selects the conversation
+route explicitly (the Kikan binding supplies the Danwa channel); `--key` overrides the idempotency key. By default that key is
 derived from the agent and payload, so repeat submissions can deduplicate.
 `--workspace` names the repository the run works in, as a Mori identity or an absolute
 path; it joins the derived key, so the same request against two repositories is two runs.
@@ -462,6 +463,7 @@ $ shikigami-local grant <AGENT> [--in <DIR|mori://…>] [--placement in-place|se
 $ shikigami-local revoke <DIGEST>
 $ shikigami-local ledger [--run <WORKFLOW-ID>] [--refusals] [--limit <N>] [--json]
 $ shikigami-local tools <AGENT.dhall> [--workspace <DIR|mori://…>]
+$ shikigami-local playbook validate <BUNDLE.dhall>
 $ shikigami-local mcp <SERVER> [--workspace <DIR|mori://…>]
 ```
 

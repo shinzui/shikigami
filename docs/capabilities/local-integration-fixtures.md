@@ -21,7 +21,7 @@ evidence:
     resource: "packs/kikan-shikigami/test/Kikan/Stub/KanmonSpec.hs"
     proves: "The channel fixture validates routes and destinations and deduplicates keyed accepted effects."
   - kind: module
-    resource: "shikigami-server/src/Shikigami/Server/Command/PublishFixture.hs"
+    resource: "packs/kikan-shikigami/admin/Kikan/Shikigami/Stub/Publish.hs"
     proves: "A JSON activity envelope is decoded and published through the configured Kafka producer."
   - kind: module
     resource: "packs/kikan-shikigami/admin/Kikan/Shikigami/Stub/Kawa/Republish.hs"
@@ -32,8 +32,7 @@ evidence:
 
 ## Provides
 
-The administrative binary publishes JSON activity fixtures. The Kikan
-distribution's administrative binary, `kikan-shikigami`, hosts local HTTP stubs
+The Kikan distribution’s administrative binary, `kikan-shikigami`, publishes JSON activity fixtures and hosts local HTTP stubs
 for digest ingest and channel egress (plan 135, M3); the stock binary does not. The stubs can require configured
 bearer credentials and deduplicate keyed requests in memory. Digest ingest can
 optionally republish accepted envelopes into a Kafka fixture topic to exercise
@@ -52,7 +51,7 @@ expecting protected agent outputs to reach a stub.
 
 - [KawaSpec.hs](../../packs/kikan-shikigami/test/Kikan/Stub/KawaSpec.hs): authenticated fixture ingest.
 - [KanmonSpec.hs](../../packs/kikan-shikigami/test/Kikan/Stub/KanmonSpec.hs): routing, destination policy, and idempotency.
-- [PublishFixture.hs](../../shikigami-server/src/Shikigami/Server/Command/PublishFixture.hs): fixture publication.
+- [Publish.hs](../../packs/kikan-shikigami/admin/Kikan/Shikigami/Stub/Publish.hs): fixture publication.
 - [Republish.hs](../../packs/kikan-shikigami/admin/Kikan/Shikigami/Stub/Kawa/Republish.hs): optional feedback publication.
 
 ## Limits

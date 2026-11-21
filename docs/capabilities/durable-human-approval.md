@@ -34,7 +34,7 @@ The parent requests a durable approval child that journals intake, notification,
 
 ## Adopt
 
-Configure approval policy and a production notifier, then deliver an answer with `shikigami resolve-approval` using the recorded decision token. See [Flows](../user/flows.md) and [operator commands](../operations/operator-cli.md).
+For a [local approval](../user/outputs.md#approving-before-delivery), list and resolve the request with `shikigami-local approvals pending` and `approvals resolve REVIEW-ID`, then resume the run. In the Kikan distribution, configure the Danwa or Kizashi channel and answer with `shikigami resolve-approval` using the recorded token. See [Flows](../user/flows.md) and [operator commands](../operations/operator-cli.md).
 
 Builds on [CAP-4: Durable agent runs and Flows](durable-agent-flows.md).
 

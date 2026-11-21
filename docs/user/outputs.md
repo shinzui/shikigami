@@ -13,16 +13,16 @@ generated:
 
 A declaration can say where its result goes with `outputs`, a list of registered output kinds
 and their JSON configuration. A declaration that lists none receives the composition's
-default output; under the `local-operator` tier that is a Markdown report. The choice is
-journaled when the run delivers, so a run keeps its destination across a restart. The
-smallest declaration needs no trigger and no outputs:
+default output. For a local operator run that is a Markdown report. Admission
+records the output choice. Delivery journals the resolved destinations for replay.
+A minimal declaration can omit both its trigger and its outputs.
 
 ```dhall
 let A = ../schema/Agent.dhall
 
 in  A.Agent::{
     , name = "plain-note"
-    , behavior = A.Behavior.Skill { path = "agents/skills/plain-note" }
+    , behavior = A.Behavior.Skill { path = "agents/skills/portable-note" }
     }
 ```
 
@@ -46,11 +46,16 @@ authority and appears in `shikigami-local ledger`; the local operator's authorit
 `local.*` outputs, which only write on your machine. Each delivered output also appends an
 `output.delivered` record entry naming the exact action that was allowed.
 
-`kawa.digest` publishes the result to the Kawa doorway as one activity envelope, with the
-configuration `{"subjectKind": …, "verb": …}`. A `shikigami-worker` registers it, and gives it
-to a declaration with no outputs when `outputs.default` is `kawa.digest` (the default is `none`:
-the result stays in the journal). The other Kikan sinks (`sinks`) keep their own path until
-they move to output adapters.
+| Running composition | Result when `outputs` is empty |
+| --- | --- |
+| `shikigami-local run` or `shikigami-agent-run` with `local-operator` | A private Markdown `local.report` |
+| Configured stock worker | The journal retains the result. Its builtin pack registers no default output. |
+| Kikan distribution with `outputs.default=composition` | The binding prefers `kawa.digest`. A Kikan worker publishes the authorized outbox intent. |
+
+For a configured worker, `outputs.default=none` keeps the result in the journal.
+The Kikan binding registers all five [service output kinds](sinks.md). Its
+[typed helpers](../../packs/kikan-shikigami-binding/dhall/Outputs.dhall) construct the
+configuration, including `subjectType` and `verb` for a Kawa digest.
 
 ## One declaration, two compositions
 
@@ -68,16 +73,18 @@ for it.
 
 ```bash
 shikigami-agent-run --set trust.tier=local-operator --set approval.require_outputs=local.report \
-  --agent agents/plain-note.dhall --payload '{"topic":"durable execution journals"}'
+  --agent agents/proof/portable-note.dhall --payload '{"topic":"durable execution journals"}'
 ```
 
 The run stops at the ask and prints what to do:
 
 ```text
 Run 41854ae1-… waits for approval:
-  shikigami-local approvals resolve review_9f4f…    # Deliver the local.report output of agent plain-note?
+  shikigami-local approvals resolve review_9f4f…    # Deliver the local.report output of agent portable-note?
 then: shikigami-agent-run --agent <the same declaration> --resume 41854ae1-…
 ```
+
+Resume under the same trust tier as the original run. If you selected it on the command line, pass `--set trust.tier=local-operator` again.
 
 Under the local operator the ask is a file in `<state_dir>/approvals/` (mode 0600), the only
 place that holds its token. `shikigami-local approvals pending` lists open asks;

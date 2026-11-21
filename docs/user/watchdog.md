@@ -36,9 +36,9 @@ With the watchdog configured and its scheduled declaration loaded, an operator
 can inspect the ledger without waiting for another sweep:
 
 ```bash
-shikigami --config config.json watchdog inspect --agents agents --json
-shikigami --config config.json watchdog episodes --open --limit 20 --json
-shikigami --config config.json watchdog findings EPISODE_ID --limit 20 --json
+kikan-shikigami --config config.json watchdog inspect --agents packs/flow-pack-watchdog/agents --json
+kikan-shikigami --config config.json watchdog episodes --open --limit 20 --json
+kikan-shikigami --config config.json watchdog findings EPISODE_ID --limit 20 --json
 ```
 
 Replace `EPISODE_ID` with an identity from the episode page. Episode pages accept

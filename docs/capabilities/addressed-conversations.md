@@ -7,7 +7,7 @@ provider: "mori://shinzui/shikigami"
 status: "shipped"
 stability: "experimental"
 since: "unreleased"
-packages: ["shikigami-core", "shikigami-workers", "shikigami-migrations"]
+packages: ["shikigami-core", "shikigami-workers", "shikigami-migrations", "kikan-shikigami-binding", "kikan-shikigami"]
 interface: ["Shikigami.Agent.Conversation", "Shikigami.Agent.Conversation.Channel", "Kikan.Shikigami.Binding.Conversation", "kikan-shikigami-consume-events"]
 tags: ["addressed-conversations"]
 generated:

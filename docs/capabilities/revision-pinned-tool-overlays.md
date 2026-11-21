@@ -50,6 +50,6 @@ Builds on [CAP-3: Program and Skill execution](program-and-skill-execution.md), 
 
 ## Limits
 
-Only Skill behaviors admit overlays. Durable overlays allow observation operations, not arbitrary mutation. The empty default runtime installs no providers, and current one-off CLI commands use the deny-all action authorizer, so `--workspace` alone cannot grant reads. Workspace editing, validation commands, Git mutation, and a live Kubernetes observation provider are not supplied.
+The default deployment authority denies protected calls. For a personal checkout, [local operator grants](local-operator-runs.md) can authorize workspace reads, edits, approved command rules and Git operations. The [declared-tool hosts](declared-tools.md) have their own operation limits. Live Kubernetes observation still needs a provider.
 
 The available implementation is unreleased. No Shikigami release tags or published releases were present when this catalog was authored; the Cabal package version alone does not establish a released compatibility promise.

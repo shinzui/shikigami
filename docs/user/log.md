@@ -1,5 +1,10 @@
 # Bundle Update Log
 
+## 2026-11-21
+
+- Updated the first-run, declaration and CLI examples for stock and Kikan execution. Documented manual triggers, composition defaults, the six behaviors, playbook recovery and the roles that own the organizational packs.
+- Checked a scaffolded Skill through first confirmation, report delivery and a second unattended run against disposable PostgreSQL. The typed-decision example completed with the stub provider, and the stock HTTP heartbeat progressed from acceptance to success. Validated the campaign bundle and the stock/Kikan heartbeat output boundary.
+
 ## 2026-11-16
 * **Addition**: DOC-13 documents `shikigami record check` and the `run.admitted`, `run.finished` and `output.delivered` entries; DOC-23 explains the `kawa.digest` output, the worker's `outputs.default` and the portability check (EP-8 M3).
 

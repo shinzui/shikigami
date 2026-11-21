@@ -1,7 +1,7 @@
 ---
 type: Capability
 title: "Independent active-work watchdog"
-description: "Observe retained active work with bounded read authority and deliver coalesced quiet-work and cited drift advisories."
+description: "In the Kikan distribution, observe retained active work with bounded read authority and deliver coalesced quiet-work and cited drift advisories."
 capabilityId: CAP-32
 provider: mori://shinzui/shikigami
 status: shipped

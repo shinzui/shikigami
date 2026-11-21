@@ -1,7 +1,7 @@
 ---
 type: "Reference"
-title: "Sinks — what an agent produces"
-description: "Look up sink declarations, delivery behavior, and permission requirements."
+title: "Kikan service outputs and sink grants"
+description: "Look up Kikan output declarations, delivery behavior, and permission requirements."
 docId: "DOC-9"
 tags: ["sinks", "permissions"]
 generated:
@@ -9,19 +9,14 @@ generated:
   at: 2026-09-07T14:41:30Z
 ---
 
-# Sinks — *what* an agent produces
+# Kikan service outputs and sink grants
 
-Agents are **producers, not just reactors**. A sink is an outward action the agent takes with
-its behavior's output. An agent declares zero or more sinks; each is considered after the
-behavior runs and is **gated by lifecycle, sink-kind permission, and exact action
-authorization**. Default `authorization.actions.mode=disabled` allows no protected
-external action, including delivery to a stub.
-
-An agent lists them in `outputs`. Each output is a registered kind and its JSON
-configuration; the Kikan binding owns the five kinds below and a typed Dhall helper per kind,
-`packs/kikan-shikigami-binding/dhall/Outputs.dhall`. They load only in an executable composed
-with the binding (the `kikan-shikigami-*` distribution); a stock executable refuses them at
-load and names the kinds it does register (plan 135, M3).
+Use the Kikan distribution when the result of a run should reach Kawa,
+Kizashi, Rei, Danwa or Kanmon. Declare the destination in `outputs` using
+the binding's [Dhall helpers](../../packs/kikan-shikigami-binding/dhall/Outputs.dhall).
+Delivery checks lifecycle, the grant for the output kind and authorization
+for the exact target. For a local report or to understand an empty `outputs`
+list, see [where a run's result goes](outputs.md).
 
 ```dhall
 let A = ./schema/Agent.dhall
@@ -36,13 +31,13 @@ in  A.Agent::{
     }
 ```
 
-| Output kind | Produces | Status in this runtime |
+| Registered kind | Helper | Delivery |
 | --- | --- | --- |
-| **KawaDigest** (`kawa.digest`) | a digest activity written back into the stream | fully implemented (against the kawa stub) |
-| **KizashiSignal** (`kizashi.signal`) | an awareness signal | fully implemented (against the kizashi client/stub) |
-| **ReiAction** (`rei.action`) | an action recorded against a `rei` intention | implemented when a Rei endpoint is configured; otherwise fails visibly |
-| **DanwaConversation** (`danwa.conversation`) | an opened/attached conversation | fully implemented through the Danwa client |
-| **ChannelEgress** (`channel.egress`) | a reply or other approved action on an external conversation | fully implemented through Kanmon |
+| `kawa.digest` | `K.kawaDigest` | Write an activity to the Kawa ingest doorway. |
+| `kizashi.signal` | `K.kizashiSignal` | Raise a signal for the resolved recipient. |
+| `rei.action` | `K.reiAction` | Record an action against a specified Rei intention. |
+| `danwa.conversation` | `K.danwaConversation` | Open a thread or reply in an existing one. |
+| `channel.egress` | `K.channelEgress` | Send an approved channel action through Kanmon. |
 
 ## KawaDigest — write back to the stream
 
@@ -180,7 +175,7 @@ revocation after enqueue still prevents the external effect. A denial is journal
 After that C11 sink-kind check, Kikan-En C13 authorizes the exact fully resolved target: Kawa
 source, Kizashi recipient, Rei intention, Danwa thread/topic, or channel plus conversation key.
 It is checked before enqueue and checked again before publication; no proof is stored in the
-journal or outbox. Exact target identifiers reject reserved tuple separators such as `:` and `#`.
+journal or outbox. The adapter validates the resolved target for its service before it requests authorization.
 An authorization-service outage or rejected proof is reported as `AuthorizationFailed`, creates
 no enqueue row, and performs no delivery IO. See
 [Per-action authorization operations](../operations/action-authorization.md).
@@ -189,12 +184,6 @@ This means you can **declare** sinks freely and control which ones an agent is a
 permitted to fire through the grant layer — declaration and authorization are separate
 concerns.
 
-Flow-owned emissions are permission-gated even when the declaration's `sinks` list is empty. The
-OpenTelemetry practice reviewer deliberately uses this form so Kawa history and coalesced Kizashi
-attention occur at explicit lifecycle points rather than generic post-behavior dispatch.
-
-## A sink-free agent
-
-`sinks` defaults to `[]`, so an agent can run its behavior and record a session while
-producing nothing outward — useful for an agent whose only job is to **learn** (record memory)
-for its future runs. See **[Memory & Sessions](./memory.md)**.
+Flow-owned emissions also pass these checks. A Flow can enqueue a specific
+output at a lifecycle step. Its returned result is separately subject to the
+composition's [default output](outputs.md).

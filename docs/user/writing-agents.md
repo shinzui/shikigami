@@ -1,7 +1,7 @@
 ---
 type: "Guide"
 title: "Writing Agents"
-description: "Declare agent identity, behavior, triggers, sinks, memory policy, and routing in Dhall."
+description: "Declare agent identity, behavior, triggers, outputs, tools, memory policy, and routing in Dhall."
 docId: "DOC-3"
 tags: ["agents", "dhall"]
 generated:
@@ -12,80 +12,33 @@ generated:
 # Writing Agents
 
 An agent is a value in the typed Dhall schema at [`schema/Agent.dhall`](../../schema/Agent.dhall).
-Every manifest imports that schema and produces one `Agent` record. Its trigger, behavior,
-and sinks describe execution; identity, memory policy, and enablement describe how that
-execution is governed:
+A manifest produces one `Agent.Type` record. Only `name` and `behavior` are
+required. Record completion (`A.Agent::{ … }`) supplies the defaults. This
+example assumes the file lives directly under `agents/`.
 
 ```dhall
 let A = ../schema/Agent.dhall
 in  A.Agent::{
-    , name = "my-agent"                 -- a human label (required)
-    , description = "what it does"       -- optional, defaults to ""
-    , trigger  = A.Trigger.Schedule { cron = "* * * * *" }   -- WHEN it runs
-    , behavior = A.Behavior.ShikumiProgram { … }             -- WHAT it does
-    , sinks    = [ A.Sink.KawaDigest { … } ]                 -- WHAT it produces
-    , identity = Some { principal = "principal_my_agent" }   -- WHO authorizes it
-    , memory =
-        { scope = A.MemoryScope.AgentScope
-        , recallLimit = 25
-        , recordPolicy = A.RecordPolicy.OnSuccess
-        }
-    , enabled = True
+    , name = "summary"
+    , behavior = A.Behavior.ShikumiProgram
+        { task = "noop-summary", preferEnrichment = False, grounding = None Text }
     }
 ```
 
-`A.Agent::{ … }` uses Dhall's record-completion syntax: it merges your fields over the
-schema's defaults, so you only write the fields you care about.
+The declaration can run on demand. Its result goes to the destination chosen by
+the composition. For a short Skill or coding-agent declaration, the
+[routine prelude](../../schema/Routine.dhall) supplies helpers.
 
 ## The schema at a glance
-
-```dhall
-let Agent =
-      { Type =
-          { name : Text
-          , description : Text
-          , trigger : Trigger          -- one of three classes
-          , behavior : Behavior         -- four schema arms; see runtime support below
-          , sinks : List Sink           -- zero or more producer outputs
-          , delegates : List Text
-          , delegationBudget : Optional Natural
-          , sanctionedProfile : Optional ProfileRequirement.Type
-          , capabilityOverlays : List Text
-          , decisionModels : List Text
-          , identity : Optional Identity
-          , memory : MemoryPolicy
-          , enabled : Bool
-          , expertise : List Expertise
-          , routing : Optional RouterPolicy
-          }
-      , default =
-          { description = ""
-          , sinks = [] : List Sink
-          , delegates = [] : List Text
-          , delegationBudget = None Natural
-          , sanctionedProfile = None ProfileRequirement.Type
-          , capabilityOverlays = [] : List Text
-          , decisionModels = [] : List Text
-          , identity = None Identity
-          , memory =
-              { scope = MemoryScope.AgentScope
-              , recallLimit = 10
-              , recordPolicy = RecordPolicy.OnSuccess
-              }
-          , enabled = True
-          , expertise = [] : List Expertise
-          , routing = None RouterPolicy
-          }
-      }
-```
 
 | Field | Type | Meaning | Default |
 | --- | --- | --- | --- |
 | `name` | `Text` | Human label; also resolves `agents/<name>.dhall` for the CLI | — (required) |
 | `description` | `Text` | Free-text summary | `""` |
-| `trigger` | `Trigger` | When the agent fires — see **[Triggers](./triggers.md)** | — (required) |
+| `trigger` | `Trigger` | When the agent fires — see **[Triggers](./triggers.md)** | `Manual` |
 | `behavior` | `Behavior` | What the agent does — see **[Behaviors](./behaviors.md)** | — (required) |
-| `sinks` | `List Sink` | What the agent produces — see **[Sinks](./sinks.md)** | `[]` |
+| `outputs` | `List Output` | Registered kinds and their JSON configurations. [Outputs](outputs.md) describes composition defaults. | `[]` |
+| `tools` | `List Tool` | [Declared CLI commands or MCP tools](declared-tools.md) | `[]` |
 | `delegates` | `List Text` | Exact allow-list of child agents this declaration may launch | `[]` |
 | `delegationBudget` | `Optional Natural` | Optional root-run-wide child budget | platform default |
 | `sanctionedProfile` | `Optional ProfileRequirement` | Execution profile the run must resolve and satisfy | `None` |
@@ -93,24 +46,21 @@ let Agent =
 | `execution` | `Optional Execution` | Default and permitted immutable whole-assignment model aliases | `None` |
 | `harness` | `Optional Harness.Type` | Narrow operator Skill policy ceilings and restrictions | `None` |
 | `decisionModels` | `List Text` | Operator model aliases this agent permits typed Flow decisions to use | `[]` |
-| `identity` | `Optional Identity` | Stable meibo principal whose authority the agent will use | `None` |
+| `identity` | `Optional Identity` | Principal reference for directory admission. Required when requesting local tools or overlays | `None` |
 | `memory` | `MemoryPolicy` | Recall scope, recall bound, and automatic recording policy | agent scope, 10 results, record on success |
 | `enabled` | `Bool` | Whether long-running worker roles load the agent | `True` |
 | `expertise` | `List Expertise` | Routing metadata describing a specialist's knowledge | `[]` |
 | `routing` | `Optional RouterPolicy` | Bounded semantic-selection policy over `delegates` | `None` |
 
-The five sink variants are `KawaDigest`, `KizashiSignal`, `ReiAction`,
-`DanwaConversation`, and `ChannelEgress`. `ChannelEgress` sends an external conversation
-action through Kanmon; see [Sinks](./sinks.md#channelegress--act-through-kanmon) for its
-destination precedence and grant requirements.
-
-Because `sinks` defaults to `[]`, an agent with no sinks is legal — it runs its behavior and
-records a session, producing nothing outward. That's useful for a behavior whose only job is
-to learn (record memory) for later runs.
+To migrate a declaration with a `sinks` field, replace that field with `outputs`.
+For Kikan service destinations, import the [binding helpers](../../packs/kikan-shikigami-binding/dhall/Outputs.dhall).
+For example, `K.kawaDigest { subjectType = "heartbeat", verb = "heartbeat.tick" }`
+produces one output entry. The [Kikan outputs reference](sinks.md) covers the five
+kinds and the authority required to deliver each.
 
 ## Identity
 
-Declare an identity when the agent already has a stable principal in meibo:
+Local runs authorize the declaration for a repository and retain a name-keyed compatibility identity. Declare an `identity` when requesting tools or capability overlays. For a Kikan deployment using a directory, name the agent’s stable Meibo principal:
 
 ```dhall
 , identity = Some { principal = "agent_01h000000000000000heartbeat" }
@@ -231,7 +181,7 @@ The schema keeps three concerns independent, but execution also requires a suppo
 behavior and any necessary grants and action authorization:
 
 ```text
-behavior  ×  trigger  ×  sinks
+behavior  ×  trigger  ×  outputs
 ( what )     ( when )    ( produces )
 ```
 
@@ -246,8 +196,9 @@ registered programs and Skills. See [Behaviors](./behaviors.md).
 ## A worked example
 
 ```dhall
--- agents/triage-note.dhall — a skill-agent that watches the stream and raises a signal
 let A = ../schema/Agent.dhall
+
+let K = ../packs/kikan-shikigami-binding/dhall/Outputs.dhall
 in  A.Agent::{
     , name = "triage-note"
     , behavior = A.Behavior.Skill { path = "agents/skills/triage-note" }
@@ -260,14 +211,14 @@ in  A.Agent::{
               , verbs = [] : List Text
               }
           }
-    , sinks =
-        [ A.Sink.KizashiSignal
+    , outputs =
+        [ K.kizashiSignal K.KizashiSignal::
             { source = "shinzui/shikigami"
-            , signalType = A.SignalType.TaskCandidate
-            , priority = A.Priority.Normal
+            , signalType = K.SignalType.TaskCandidate
+            , priority = K.Priority.Normal
             , importance = 45
-            , recipientFrom = A.RecipientFrom.SubjectOwner
-            , defaultRecipient = Some "person_nadeem"
+            , recipientFrom = K.RecipientFrom.SubjectOwner
+            , defaultRecipient = Some "person:nadeem"
             , intentTemplate = "triage this ticket"
             , extraContextTags = [ "verb:ticket.received", "subject:ticket" ]
             }
@@ -293,7 +244,7 @@ This says: *when a `ticket.received` activity about a `ticket` subject arrives o
 Every manifest should round-trip through `validate` before you wire it into the worker:
 
 ```bash
-$ cabal run shikigami -- validate agents/triage-note.dhall
+$ cabal run kikan-shikigami:exe:kikan-shikigami -- validate agents/triage-note.dhall
 ```
 
 A typed Dhall error points at the exact field that doesn't conform — the schema is your

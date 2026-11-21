@@ -1,13 +1,11 @@
 # Shikigami package architecture
 
-Shikigami is a deployed service, so the repository follows the fleet's six-package
-deployed-service layout — **plus one**, `shikigami-agent`, for the one-off runs described
-under [Two ways to use Shikigami](#two-ways-to-use-shikigami). This document is the
-authoritative statement of which package owns what, which dependency arrows are legal, where a new module belongs, and which
-executable owns each user-facing command. It is owned by
-`docs/plans/36-align-shikigami-with-the-six-package-deployed-service-architecture.md`;
-change it only through a plan revision.
-
+Shikigami is a durable kernel shared by the stock executables and the Kikan
+distribution. Use cases ship as agent declarations, Skills and playbooks.
+A use case that needs Haskell ships in a [flow pack](#flow-packs). This map
+covers package ownership and runtime entry points. The [invariant audit](kernel-invariants.md)
+describes what a composition must preserve, and the [API baseline](api-baseline.md)
+defines the compatibility rules.
 
 ## Vocabulary
 
@@ -31,26 +29,21 @@ modules are the one place technical names are allowed, and only from a fixed all
 
 ## Two ways to use Shikigami
 
-Shikigami is deliberately usable two ways, and the second is a requirement rather than a
-side effect.
+The **stock composition** includes the portable commands, a server, worker
+and scheduler. `shikigami-local run` selects local-operator authority, resolves a
+grant for this declaration and repository, and writes a report. Durable runs use
+PostgreSQL. `shikigami-run-behavior` can execute a synchronous behavior without
+a database. The local host machinery used by the agent and worker lives in the
+[local-host component](../../shikigami-core/shikigami-core.cabal).
 
-The **deployed service** is the one the six-package layout is built for: a server, supervised
-background loops, Kafka, PGMQ, Postgres, and the Kikan platform around it.
-
-A **one-off agent run** is the other. Someone who is *not* running Kikan takes a declared
-agent and runs it once, from a command line, against a payload or a repository. This is what
-makes Shikigami versatile to consumers with simpler needs, and **Kikan itself does not use
-it**. It is served by `shikigami-agent`, which depends on `shikigami-core` and the migration library for its read-only startup check,
-so a consumer building it acquires none of the platform's messaging, queueing, or
-telemetry-export stack — in particular not `librdkafka`, the C library behind
-`hw-kafka-client`.
-
-Treat that as a constraint on future changes, not a convenience. It has been lost once: plan
-36 deleted the `shikigami-cli` package in 2026-07-30 as an umbrella dispatcher, correctly on
-the architecture, without knowing the package also carried this use case — because the use
-case was written down nowhere. It is written down here now so the next architecture change has
-to argue against it explicitly.
-
+The **Kikan distribution** composes the same kernel with the Kikan binding
+and four use-case packs. It provides both one-off and deployed roles. The
+binding supplies Kikan-En authority, service outputs, approval and conversation
+channels, Rei tracker access and Kafka transport. Choosing an executable
+selects the available adapters. Choosing a trust tier selects how that run
+obtains authority and executes processes. The binding currently refuses
+declared-tool and coding-agent actions. Organizational adoption of these
+features awaits matching Kikan-En actions.
 
 ## The seven packages
 
@@ -59,8 +52,8 @@ to argue against it explicitly.
 | `shikigami-core` | Domain: declarations, agent runs, behaviors, flows, sinks, memory, durable workflow logic | none |
 | `shikigami-agent` | One-off agent runs for consumers not operating the platform | `shikigami-core`, `shikigami-migrations` |
 | `shikigami-api` | Public HTTP contract: Servant route records, DTOs, problem details, OpenAPI generation | `shikigami-core` |
-| `shikigami-server` | Servant/WAI execution, HTTP provider lifetimes, administrative and test-stub commands | `shikigami-core`, `shikigami-api`, `shikigami-migrations` |
-| `shikigami-workers` | Supervised background loops: queue processing, stream subscriptions, scheduler, outbox, timers, resume | `shikigami-core`, `shikigami-migrations` |
+| `shikigami-server` | Servant/WAI execution, HTTP provider lifetimes, administrative commands | `shikigami-core`, `shikigami-api`, `shikigami-migrations` |
+| `shikigami-workers` | Supervised background loops: queue processing, scheduling, outbox, timers, resume | `shikigami-core`, `shikigami-migrations` |
 | `shikigami-migrations` | Database evolution and the public `test-support` sublibrary | none |
 | `shikigami-client` | Typed HTTP client derived from the served route type | `shikigami-api` |
 
@@ -127,8 +120,8 @@ no library; each `main` passes its packs to `agentRunRoleInfoWith`, `workerRoleI
 
 `packs/kikan-shikigami` is the distribution for organizational use. It composes the Kikan
 binding and every pack into `kikan-shikigami-worker`, `kikan-shikigami-server`, `kikan-shikigami-scheduler`, `kikan-shikigami-consume-stream`, `kikan-shikigami-consume-events`,
-the `kikan-shikigami` admin command and `kikan-shikigami-agent-run`, all reading one list in
-`src-shared/Packs.hs`. The two consumers are the only stream consumers there are: their Kafka
+`kikan-shikigami-workspace-supervisor`, the `kikan-shikigami` admin command and
+`kikan-shikigami-agent-run`. The composed roles share the [distribution pack list](../../packs/kikan-shikigami/src-shared/Packs.hs). The two consumers are the only stream consumers there are: their Kafka
 transport and roles are the binding's `intake` library (`Kikan.Shikigami.Binding.Intake`), kept
 apart from the binding so nothing else links a Kafka client, and the record processing they
 hand each delivery to is the kernel's `Shikigami.Trigger.Intake` in `shikigami-workers`
@@ -269,7 +262,7 @@ overlay registry and cannot be replaced by an adapter.
    not rename it; it is still the trigger vertical (`Shikigami.Trigger.Intake`).
 2. Technical composition module names are limited to this allowlist:
    - `Shikigami.Runtime`, `Shikigami.Workflow.Registry` — validated runtime startup
-     wiring and the shared five-family workflow registry (plan 65 / ADR 0038).
+     wiring and the shared [workflow registry](../../shikigami-core/src/Shikigami/Workflow/Registry.hs).
    - `Shikigami.App.Config`, `Shikigami.App.Config.Load` — the one process-configuration
      declaration and its loader, in `shikigami-core`. Application-configured executables
      resolve their settings from these two modules. The migration CLI owns its
@@ -318,11 +311,14 @@ their role and live in the package that owns that role.
 | Executable | Package | What it does |
 |---|---|---|
 | `shikigami-server` | `shikigami-server` | Serves the public HTTP API, including the declared-agent catalog, and refreshes its lifecycle directory. Starts no background workers. |
-| `shikigami` | `shikigami-server` | Administrative, validation, enqueue, approval-resolution, and fixture commands: `validate`, `render-lifecycle`, `enqueue-run`, `resolve-approval`, `flows`, `grants`, `agents`, and `runs` (plus the mounted Keiro operator tree). |
+| `shikigami` | `shikigami-server` | Administrative, validation, enqueue and approval-resolution commands including `validate`, `render-lifecycle`, `enqueue-run`, `resolve-approval`, `flows`, `grants`, `agents`, and `runs` (plus the mounted Keiro operator tree). |
 | `shikigami-worker` | `shikigami-workers` | Drains `shikigami_run_jobs`, runs agents, dispatches sinks, publishes the outbox, resumes workflows, fires timers. Opens no application HTTP listener. |
 | `shikigami-scheduler` | `shikigami-workers` | Arms Schedule triggers and drives keiro timer firing. |
-| `shikigami-run-behavior` | `shikigami-agent` | Runs a registered program or Skill without a database; the provider defaults to a stub. Workspace requests currently fail action authorization. |
-| `shikigami-agent-run` | `shikigami-agent` | Runs one agent through the kioku session/memory lifecycle; a workspace overlay lease covers only the behavior call. |
+| `shikigami-run-behavior` | `shikigami-agent` | Runs a registered program or Skill without a database; the provider defaults to a stub. Local-operator grants can authorize workspace tools. |
+| `shikigami-agent-run` | `shikigami-agent` | Runs or resumes a durable agent with memory, tier-specific authority and outputs. |
+| `shikigami-local` | `shikigami-agent` | Scaffolds, grants, runs and schedules local agents. Inspects the record, tools, playbooks and approval inbox. |
+| `shikigami-agent-launch` | `shikigami-agent` | Runs a foreground vendor CLI or mounts the unattended Baikai launcher used by durable coding steps. |
+| `shikigami-workspace-supervisor`, `shikigami-workspace-collector` | `shikigami-workers` | Supervise contained workspace processes and collect bounded output. |
 | `shikigami-migrate` | `shikigami-migrations` | Applies database migrations. |
 | `shikigami-client` | `shikigami-client` | Calls a running server through the typed client. |
 | `shikigami-openapi` | `shikigami-api` | Regenerates `docs/api/openapi.json` from the served route proxy. |
@@ -409,7 +405,6 @@ accepted operations, continuing-session state, coordination commands and reposit
 catalog validation. Workers compose submit/observe executors, workflow runners,
 durable event waits and timer recovery. Server owns bounded metadata inspection
 through `resources`, `executions` and `workers`; API/client packages retain the
-implemented agent/run HTTP contract. Objective API/CLI routes remain planned in
-MasterPlan 17. The pure repository catalog does not allocate worktrees or install
+implemented agent/run HTTP contract. Objective API and CLI commands operate on the authoritative objective store. The optional Rei adapter belongs to the Kikan binding. The pure repository catalog does not allocate worktrees or install
 mutation providers. See [the current domain inventory](shikigami-domain-inventory.md)
 and [capability census](../capabilities-coverage.md).

@@ -1,7 +1,7 @@
 ---
 type: "Capability"
 title: "Unrequested work proposals"
-description: "Observe activity under an allowance, propose actionable work through durable human acceptance, and admit bounded objectives only under an explicit, revocable standing policy."
+description: "In the Kikan distribution, observe activity under an allowance, propose actionable work through durable human acceptance, and admit bounded objectives only under an explicit, revocable standing policy."
 capabilityId: "CAP-31"
 provider: "mori://shinzui/shikigami"
 status: "shipped"

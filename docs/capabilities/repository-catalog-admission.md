@@ -42,6 +42,6 @@ Builds on [CAP-1: Typed agent declarations](typed-agent-declarations.md).
 
 ## Limits
 
-This is only plan 96's admission slice. It does not open the repository, verify Git object existence, allocate an isolated worktree, persist assignment bindings, edit files or fence processes. Durable mutable workspaces remain unimplemented.
+The catalog validates policy and resolves an approved target. The [workspace runtime](../operations/workspaces.md) owns allocation, edits and process fencing. Personal runs use [local repository grants](local-operator-runs.md).
 
 This implementation is experimental and unreleased; no released compatibility promise is asserted.

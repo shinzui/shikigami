@@ -136,6 +136,7 @@ A body that needs kernel capabilities alone is wrapped with `kernelCapabilityFlo
 module FlowPack.Examples (examplesPack) where
 
 import FlowPack.Examples.Body.AtRiskCustomer (atRiskCustomerFlow, atRiskCustomerFlowName)
+import FlowPack.Examples.Lifecycle.AtRiskCustomer (atRiskCustomerMermaid)
 import Shikigami.Flow.Sdk
 
 examplesPack :: FlowPack
@@ -149,7 +150,12 @@ examplesPack =
       settings = [],
       triggers = noTriggerHooks,
       adminVerbs = [],
-      gauges = []
+      gauges = [],
+      authorities = [],
+      outputs = [],
+      approvalChannels = [],
+      trackerProviders = [],
+      conversationChannels = []
     }
 
 atRiskCustomerDefinition :: FlowDef
@@ -320,13 +326,11 @@ main :: IO ()
 main = runAdminWith [examplesPack]                      -- shikigami-examples
 ```
 
-`packs/kikan-shikigami` is the distribution for organizational use: the worker, scheduler,
-stream consumer, admin command and one-off command, all composed from one list of all four
-packs.
-
-The entry points are `agentRunRoleInfoWith` (`Shikigami.Agent.Command`),
-`workerRoleInfoWith` and `consumeStreamRoleInfoWith` (`Shikigami.Workers.Command`) and
-`runAdminWith` (`Shikigami.Server.Command`). Composition happens once at process start. Two packs with the
+The [Kikan distribution](../../packs/kikan-shikigami/src-shared/Packs.hs) shares
+the Kikan binding and four use-case packs across its roles. Its admin command
+also installs the fixture verbs. The worker and one-off entry points accept
+these packs, and the binding supplies the Kafka intake roles. Composition
+happens once at process start. Two packs with the
 same name, flow name, task name or setting key refuse the start and name both owners, and a successful
 start logs `flow.registry.composed` with each pack and its flows.
 
@@ -397,13 +401,10 @@ in  Schema.Agent::{
               }
           }
     , behavior = Schema.Behavior.Flow { name = "at-risk-customer" }
-    , sinks = [] : List Schema.Sink
     }
 ```
 
-Use an empty `sinks` list when the flow emits all side effects at lifecycle points with
-`emitSignal`. Keep ordinary sinks in Dhall when the final returned JSON should be dispatched
-after the flow completes.
+This Flow issues its alert at an explicit lifecycle point with `emitSignal`. The returned JSON follows the usual [output rules](outputs.md), including the default when `outputs` is empty.
 
 ## Combinators
 
@@ -437,9 +438,7 @@ approves, rejects, or the configured deadline fires. It returns:
 data Ack = Acknowledged Value | Declined Text | TimedOut
 ```
 
-This is the point where Flow goes beyond Dhall: Dhall can name an agent, but it cannot
-express "suspend this run for 15 minutes, resume on either a human answer or timer, then
-choose a different branch."
+Use a playbook `Approval` step for a simple continue-or-stop gate. Use `awaitAck` in a Flow when approval, refusal and timeout need distinct branches.
 
 ## Lifecycle diagrams
 
@@ -475,6 +474,7 @@ from an executable composed with that pack, such as the `kikan-shikigami` distri
 
 | Flow | Owner | Guide | Admission boundary |
 | --- | --- | --- | --- |
+| `run-declared-tool` | kernel (builtin) | [Durable CLI steps](declared-tools.md#tools-as-durable-steps) | Local-operator grant, matching CLI tool and arguments, bounded deadline |
 | `adaptive-delivery` | kernel (builtin) | [Finite adaptive delivery](adaptive-delivery.md) | Objective/assignment association, finite root and cutoff, permitted worker catalog |
 | `shikumi-decision-example` | `flow-pack-examples` | [Typed decisions](typed-decisions.md) | Admitted model aliases and per-decision permissions |
 | `architecture-practice-router`, `opentelemetry-practice-review` | `flow-pack-practice-review` | [Architecture-practice reviews](architecture-practice-reviews.md) | Declared delegation catalog, sanctioned profile, pinned evidence |
@@ -504,4 +504,4 @@ Validate the manifest with:
 cabal run shikigami-examples -- validate packs/flow-pack-examples/agents/at-risk-customer-flow.dhall
 ```
 
-The stock `shikigami validate` refuses it, because the stock command composes no pack.
+The stock `shikigami validate` refuses it, because the stock command composes only the builtin pack.

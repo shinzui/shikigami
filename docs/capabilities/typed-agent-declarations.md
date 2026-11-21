@@ -1,11 +1,11 @@
 ---
 type: "Capability"
 title: "Typed agent declarations"
-description: "Load typed Dhall manifests with identity, behavior, triggers, sinks, memory, delegation, and overlay policy."
+description: "Load typed Dhall manifests with identity, behavior, manual or automatic triggers, registered outputs, tools, memory and delegation."
 capabilityId: "CAP-1"
 provider: "mori://shinzui/shikigami"
 status: "shipped"
-stability: "experimental"
+stability: "stable"
 since: "unreleased"
 packages: ["shikigami-core", "shikigami-server"]
 interface: ["schema/Agent.dhall", "Shikigami.Agent.Loader", "shikigami validate"]
@@ -34,7 +34,7 @@ retains disabled declarations for inspection without admitting their execution.
 
 ## Adopt
 
-Start with [Writing Agents](../user/writing-agents.md), then run `shikigami validate agents/heartbeat.dhall`. Select a behavior the build actually registers.
+Start with [Writing Agents](../user/writing-agents.md), then run `shikigami validate agents/proof/portable-note.dhall`. Select a behavior the build actually registers.
 
 ## Evidence
 
@@ -45,7 +45,7 @@ Start with [Writing Agents](../user/writing-agents.md), then run `shikigami vali
 
 Parsing does not establish executability or authorization. `ShikumiProgram` enrichment and grounding fields are metadata unless the selected program implements them.
 
-The available implementation is unreleased. No Shikigami release tags or published releases were present when this catalog was authored; the Cabal package version alone does not establish a released compatibility promise.
+The declaration schema and its journal encoding are stable surfaces under the [API baseline](../architecture/api-baseline.md). A declaration may omit `trigger` (manual) and `outputs` (use the composition default). The heartbeat example uses a Kikan helper and requires the Kikan validator for its output.
 
 ## Assignment policy additions
 

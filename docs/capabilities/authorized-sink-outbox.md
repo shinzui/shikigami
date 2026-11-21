@@ -7,7 +7,7 @@ provider: "mori://shinzui/shikigami"
 status: "shipped"
 stability: "experimental"
 since: "unreleased"
-packages: ["shikigami-core", "shikigami-workers", "shikigami-migrations"]
+packages: ["shikigami-core", "shikigami-workers", "shikigami-migrations", "kikan-shikigami-binding", "kikan-shikigami"]
 interface: ["Shikigami.Sink", "Shikigami.Agent.Workflow.publishSinkIntent", "shikigami grants", "shikigami-worker"]
 tags: ["authorized-sink-outbox"]
 generated:
@@ -30,7 +30,7 @@ evidence:
 
 ## Provides
 
-Consumers declare Kawa digests, Kizashi signals, Rei actions, Danwa conversations, or channel egress. The durable path stores deterministic sink intents and publishes them through checked HTTP clients with outcome receipts. Flow bodies can emit intents before final completion. Publication rechecks current permission, so an earlier enqueue does not bypass revocation.
+The kernel resolves the declaration’s `outputs` against the running composition. Local runs deliver [reports](../user/outputs.md) directly. In the Kikan distribution consumers declare Kawa digests, Kizashi signals, Rei actions, Danwa conversations, or channel egress. The durable path stores deterministic sink intents and publishes them through checked HTTP clients with outcome receipts. Flow bodies can emit intents before final completion. Publication rechecks current permission, so an earlier enqueue does not bypass revocation.
 
 ## Adopt
 

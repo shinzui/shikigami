@@ -19,8 +19,7 @@ effective instructions/parameters, input, model binding, and policy so restart
 cannot silently select a different implementation or model.
 
 This is a capability inside `Behavior.Flow`. The synchronous `ShikumiProgram`
-behavior still selects its ordinary task registry. Whole-assignment model
-selection and recoverable intermediate Skill turns remain planned.
+behavior still selects its ordinary task registry. See [assignment policy](writing-agents.md#assignment-execution-and-harness-policy) for whole-assignment selection and [execution recovery](../operations/durable-execution.md) for retained Skill operations.
 
 ## Run the example without a model key
 
@@ -56,24 +55,23 @@ behavior:
       timeout_ms: 30000
 ```
 
-Enqueue the request, then start the worker against the same database:
+Run the example with the executable composed with the examples pack.
 
 ```sh
-export SHIKIGAMI_AGENTS_DIRECTORY=agents/proof
-cabal run shikigami -- --config decision-models.yaml enqueue-run shikumi-decision-example \
-  --payload '{"request":"Review the architecture practice"}' --key decision-example-1
-cabal run shikigami-worker -- --config decision-models.yaml
+cabal run shikigami-examples-agent-run -- --config decision-models.yaml \
+  --agent packs/flow-pack-examples/agents/shikumi-decision-example.dhall \
+  --payload '{"request":"Review the architecture practice"}'
 ```
 
-Set that directory in both terminals. The private deterministic stub exercises
+The private deterministic stub exercises
 actual Shikumi dispatch and returns typed JSON. Its investigation branch
 records one triage call and two investigation calls under distinct model
 descriptors. This proves the local dispatch path; its requested-model evidence
 does not identify an independently observed remote model.
 
-The request-taking example needs a payload from the queue or
-[HTTP run API](http-api.md). `shikigami-agent-run` currently supplies a null
-trigger payload; `shikigami-run-behavior` cannot interpret durable Flows.
+For queued execution, load the declaration into a `kikan-shikigami-worker`
+using the same model catalog. Supply the payload through the queue or the
+[HTTP run API](http-api.md).
 
 ## Configure authority and live execution
 

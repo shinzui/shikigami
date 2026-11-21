@@ -15,7 +15,7 @@ okf_version: "0.2"
 - [Finite adaptive delivery](adaptive-delivery.md) - Run one objective through the compiled adaptive-delivery Flow with a finite resource root and cutoff.
 - [Give an agent your command-line tools](declared-tools.md) - Declare the CLI tools and MCP server tools an agent may call, grant the declaration once, bind MCP servers and bound CLI tools in the operator tools file, and read every call in the action record.
 - [Detectors — the intelligence layer as declared agents](detectors.md) - Check detector execution support and configure supported agents.
-- [Flows](flows.md) - Implement, register, and inspect durable lifecycle-backed Flow behaviors.
+- [Flows](flows.md) - Implement durable Flow behaviors in a flow pack, compose them into an executable, and inspect them.
 - [HTTP API — agents and runs](http-api.md) - Authenticate, discover declared agents, request an idempotent run, and follow its lifecycle through the typed client or HTTP.
 - [Run agents on your own machine](local-operator.md) - Run a declared agent against your own repository under the local-operator trust tier, confirm its grant once, and read the action record.
 - [Link objectives to external trackers](objective-trackers.md) - Bind an existing Rei intention, review external proposals, and recover uncertain publication without duplicate actions.
@@ -27,7 +27,7 @@ okf_version: "0.2"
 - [Typed decisions in Flows](typed-decisions.md) - Configure model aliases, run the typed decision example, and preserve governed results and attempt evidence on replay.
 - [Unrequested work](unrequested-work.md) - What a person sees when an agent proposes work nobody asked for, and what answering does.
 - [Active-work watchdog notices](watchdog.md) - Understand quiet-work and drift notices and inspect their bounded evidence before acting.
-- [Writing Agents](writing-agents.md) - Declare agent identity, behavior, triggers, sinks, memory policy, and routing in Dhall.
+- [Writing Agents](writing-agents.md) - Declare agent identity, behavior, triggers, outputs, tools, memory policy, and routing in Dhall.
 
 # Navigation
 
@@ -35,10 +35,10 @@ okf_version: "0.2"
 
 # Reference
 
-- [Behaviors — what an agent does](behaviors.md) - Compare deterministic, ShikumiProgram, Skill, CoordinatingSkill, CodingAgent, and Flow behavior declarations.
+- [Behaviors — what an agent does](behaviors.md) - Choose between ShikumiProgram, Skill, CoordinatingSkill, CodingAgent, Playbook and Flow.
 - [CLI Reference](cli.md) - Look up Shikigami commands, options, and database recipes.
-- [Sinks — what an agent produces](sinks.md) - Look up sink declarations, delivery behavior, and permission requirements.
-- [Triggers — when an agent fires](triggers.md) - Look up schedule, stream, and addressed-event triggers and their feedback guards.
+- [Kikan service outputs and sink grants](sinks.md) - Look up Kikan output declarations, delivery behavior, and permission requirements.
+- [Triggers — when an agent fires](triggers.md) - Look up manual, schedule, stream, and addressed-event triggers and their feedback guards.
 
 # Runbook
 
@@ -46,5 +46,5 @@ okf_version: "0.2"
 
 # Tutorial
 
-- [Getting Started](getting-started.md) - Build Shikigami, validate a first agent, and run it with memory.
+- [Getting Started](getting-started.md) - Try a stock declaration without services, then run a local agent with a migrated database.
 - [The Living Loop — running agents end to end](living-loop.md) - Exercise the worker, stream feedback loop, addressed conversations, and delegation.

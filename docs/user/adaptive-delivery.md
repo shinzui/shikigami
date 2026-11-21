@@ -76,5 +76,4 @@ An independently scheduled [watchdog](watchdog.md) can report quiet work or drif
 using its own allowance. It has no authority to cancel or reorganize your workers.
 [Unrequested-work proposals](unrequested-work.md) use a separate admission path;
 only a configured standing policy can fund and dispatch their coordinator
-automatically. Neither path enables recurring objective mandates, which remain
-planned under plan 87.
+automatically. Recurring supervision requires a separately admitted [objective mandate](../operations/recurring-objectives.md).

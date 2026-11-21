@@ -82,7 +82,7 @@ The steps are:
 Text fields are templates: `{{run.NAME}}` reads a top-level string of the payload,
 `{{NAME}}` a variable bound by an enclosing `ForEach`, `{{steps.ID.summary}}` and
 `{{steps.ID.output}}` an earlier step of the same playbook (a tool's standard output or a
-coding agent's final message, at most 256 KiB, observed like step-sourced items), and
+coding agent's retained final message, observed like step-sourced items), and
 `{{learnings}}` the learnings so far. The first step that does not succeed (a coding agent that fails or exits nonzero, a declared tool
 that does not exit 0, a declined approval) ends the run. A coding agent's nonzero exit means
 it did not finish (an expired login, a crash), so its last message is not passed on as
@@ -202,8 +202,19 @@ Run <WORKFLOW_ID> waits for approval:
 then: shikigami-agent-run --agent <the same declaration> --resume <WORKFLOW_ID>
 ```
 
+Resume under the same trust tier as the original run. If you selected it on the command line, pass `--set trust.tier=local-operator` again.
+
 The ask waits a day for you (`trust.local_operator.approval_deadline_seconds`).
 `shikigami-local approvals pending` lists the waiting asks. After you answer, `--resume`
 continues the run; steps that finished are read from its journal and not run again. The
 report lists every step with its outcome, and `shikigami-local ledger --run <WORKFLOW_ID>`
 shows each decision.
+
+## A campaign that uses these steps
+
+The [modernization bundle](../../agents/campaigns/keiro-modernization/playbook.dhall)
+uses repository-specific probes and checks, coding steps, human gates and
+reflection. Six repositories reached the target Keiro version. The first pilot
+was completed by hand, and the operator applied playbook improvements between
+runs. The [campaign retrospective](../plans/132-modernize-the-keiro-services-with-a-declared-campaign-playbook.md#outcomes--retrospective)
+identifies what each run actually verified.

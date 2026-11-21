@@ -37,7 +37,7 @@ The synchronous runner supplies trigger payload and recalled memory to registere
 
 ## Adopt
 
-Run `shikigami-run-behavior --agent agents/heartbeat.dhall` for a behavior-only invocation without memory or sinks. Follow [Behaviors](../user/behaviors.md) and [provider configuration](../operations/baikai-execution.md) for Skills and live HTTP models.
+Run `shikigami-run-behavior --agent agents/proof/code-researcher.dhall` for a behavior-only invocation without memory or sinks. Follow [Behaviors](../user/behaviors.md) and [provider configuration](../operations/baikai-execution.md) for Skills and live HTTP models.
 
 Builds on [CAP-1: Typed agent declarations](typed-agent-declarations.md).
 
@@ -56,6 +56,6 @@ the synchronous behavior task registry. Intermediate Skill model/tool turns now 
 [recoverable execution capability](recoverable-skill-execution.md) in durable runs;
 the synchronous command uses an ephemeral recording.
 
-The built-in researcher programs return fixed proof findings; they do not perform live research. Skill `allowed-tools` is not enforced and Skill scripts are not executed. Tools require an installed registry and authorization. Flow and durable supervisor behavior require the workflow path. Background Claude/Codex CLI responses are currently refused because the released adapters fail the cancellation contract.
+The built-in researcher programs return fixed proof findings; they do not perform live research. Skill `allowed-tools` is not enforced and Skill scripts are not executed. Tools require an installed registry and authorization. Flow and durable supervisor behavior require the workflow path. Vendor CLI execution in a durable run uses the separate [CodingAgent behavior](durable-coding-agents.md).
 
 The available implementation is unreleased. No Shikigami release tags or published releases were present when this catalog was authored; the Cabal package version alone does not establish a released compatibility promise.

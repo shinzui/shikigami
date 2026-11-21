@@ -12,7 +12,7 @@ generated:
 # Unrequested work
 
 An agent can read a channel it was pointed at, notice something that looks like work, and
-propose it even though nobody asked. Operators turn this on and set its limits; see
+propose it even though nobody asked. The Kikan distribution supplies this behavior through the `flow-pack-initiative` pack. Operators turn this on and set its limits; see
 [Operating unrequested work](../operations/unrequested-work.md).
 
 ## What you see

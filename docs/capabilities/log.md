@@ -1,5 +1,9 @@
 # Bundle Update Log
 
+## 2026-11-21
+
+- Added CAP-33 through CAP-38 for local runs, coding agents, declared tools, playbooks, pack composition and the action record. Updated the declaration, authorization, trigger, output and approval records and corrected the fixture publisher evidence path.
+
 ## 2026-11-06
 * **Addition**: CAP-32 documents the independently funded advisory watchdog, bounded observation, scoped inspection and independent completion-age telemetry.
 

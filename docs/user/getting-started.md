@@ -1,7 +1,7 @@
 ---
 type: "Tutorial"
 title: "Getting Started"
-description: "Build Shikigami, validate a first agent, and run it with memory."
+description: "Try a stock declaration without services, then run a local agent with a migrated database."
 docId: "DOC-2"
 tags: ["getting-started", "installation"]
 generated:
@@ -27,68 +27,43 @@ The dev shell provides GHC, `cabal`, `psql`/`createdb`, and the `PG*` environmen
 (`PGHOST` is a Unix-socket directory inside the repo; `PGDATABASE=shikigami`). Everything
 below assumes you are **inside the dev shell**.
 
-The current `cabal.project` includes co-developed contract and client packages from
-`mori://shinzui/kikan-en/packages/kikan-en-contract` and
-`mori://shinzui/kikan-en/packages/kikan-en-client`. The checkout must occupy the sibling
-location recorded in `cabal.project`. A standalone Shikigami checkout is not yet
-sufficient to resolve the whole project. See the
-[dependency cohort](../dependency-cohort.md) for the current selections and
-qualification status.
-
-Build everything once:
+Cabal resolves the pinned dependencies from [cabal.project](../../cabal.project).
+Build the commands for this tutorial from the repository root.
 
 ```bash
-$ cabal build all
+cabal build exe:shikigami exe:shikigami-run-behavior exe:shikigami-local
 ```
 
-## Your first agent: validate
+## Validate a stock declaration
 
-The repository ships sample agents under `agents/`. Validate one:
+[Portable note](../../agents/proof/portable-note.dhall) declares a Skill and a
+principal. Omitting `trigger` gives it a manual trigger. Omitting `outputs` lets
+the running composition choose the destination.
 
 ```bash
-$ cabal run shikigami -- validate agents/heartbeat.dhall
-AgentDecl {name = "heartbeat", behavior = ShikumiProgram {...}, trigger = ScheduleTrigger {...}, ...}
-OK: 1 agent parsed.
+cabal run shikigami -- validate agents/proof/portable-note.dhall
 ```
 
-`validate` parses the Dhall manifest, decodes it into the typed `AgentDecl` record, and
-pretty-prints it. For a **skill-agent** it additionally checks the skill directory and its
-`SKILL.md` frontmatter:
+The stock validator prints the decoded declaration, its output choice and
+`OK: 1 agent parsed (skill agents/skills/portable-note valid).` A malformed
+manifest such as `agents/broken.dhall` exits nonzero. To validate a declaration
+that explicitly requests Kawa, use the Kikan distribution's validator.
 
 ```bash
-$ cabal run shikigami -- validate agents/triage-note.dhall
-AgentDecl {name = "triage-note", behavior = Skill {path = "agents/skills/triage-note"}, ...}
-OK: 1 agent parsed (skill agents/skills/triage-note valid).
+cabal run kikan-shikigami:exe:kikan-shikigami -- validate agents/heartbeat.dhall
 ```
 
-A malformed manifest exits non-zero with a typed error:
+## Run a behavior without services
+
+The synchronous runner can execute a registered program or a Skill and print its
+JSON result. Try this deterministic program with the default stub provider.
 
 ```bash
-$ cabal run shikigami -- validate agents/broken.dhall
-validate: load error in agents/broken.dhall:
-  <typed Dhall error>
+cabal run shikigami-run-behavior -- --agent agents/proof/code-researcher.dhall
 ```
 
-## Run a behavior (no DB, no key)
-
-`run-behavior` loads a manifest, runs *only* its behavior with deterministic stubs, and
-prints the output JSON. It does not touch the database or dispatch sinks — the fastest way
-to see what an agent produces:
-
-```bash
-$ cabal run shikigami-run-behavior -- --agent agents/heartbeat.dhall
-{"summary":"...","...":"..."}
-```
-
-Pass a trigger payload as JSON with `--payload`:
-
-```bash
-$ cabal run shikigami-run-behavior -- --agent agents/triage-note.dhall \
-    --payload '{"text":"customer is furious about the outage"}'
-```
-
-The `noop-summary` program and the stub `baikai` provider both run **without a model key**,
-so this works in CI and on a fresh checkout.
+Its output names `code-researcher` and includes a `finding`. This checks the
+behavior locally. The next path adds durable execution and memory.
 
 ## Set up the database (for sessions, queues, and consumers)
 
@@ -114,21 +89,20 @@ dependency order and reconciles Keiro's read-model registry. The connection stri
 [Configuration](../operations/configuration.md) for the full surface and for the
 `--check-config` / `--explain-config` diagnostics application-configured binaries offer.
 
-## Run an agent end to end with memory
+## Run a local agent with memory
 
-With the database up, `agent-run` runs the full lifecycle — open a session, recall prior
-learnings, run the behavior, record the new learning, complete the session — and prints an
-across-run report:
+From the checkout, run the portable declaration with an explicit task.
 
 ```bash
-$ cabal run shikigami-agent-run -- --agent heartbeat
-agent "heartbeat" run run_01k…
-recalled 0 prior memories:
-recorded learning mem_01k…
+cabal run shikigami-local -- run agents/proof/portable-note.dhall "Summarize this note: the build passed."
+cabal run shikigami-local -- runs
 ```
 
-Run it again and watch `recalled` climb: the agent accumulates knowledge across runs instead
-of starting blank each time. See **[Memory & Sessions](./memory.md)** for details.
+At the first interactive run, review the declaration and repository and confirm
+the grant. The run opens a session, applies its memory policy and reports the
+path of its local output. The default model stub exercises this lifecycle. Use
+the [local-operator guide](local-operator.md) to configure a real provider,
+or [create your own routine agent](routine-agents.md).
 
 ## Next steps
 

@@ -1,7 +1,7 @@
 ---
 type: "Capability"
 title: "Durable agent runs and Flows"
-description: "Resume agent lifecycles and compiled Haskell Flows from journaled steps after suspension or restart."
+description: "Resume agent lifecycles and composed Haskell Flows from journaled steps after suspension or restart."
 capabilityId: "CAP-4"
 provider: "mori://shinzui/shikigami"
 status: "shipped"
@@ -62,6 +62,4 @@ The available implementation is unreleased. No Shikigami release tags or publish
 
 Leaf Skill runs now await a separate [durable execution child](recoverable-skill-execution.md)
 that retains model/tool operations. [Continuing worker primitives](continuing-worker-primitives.md)
-retain assignments and results across generations. Their real checkpoint/workspace
-providers remain incomplete. Existing journal populations retain their declared
-patch branches; see [workflow versioning](../workflow-versioning.md).
+retain assignments and results across generations. Configured objective/checkpoint and fenced workspace providers support governed handoffs. Changes to journaled steps must obey the durable wire baseline; see [workflow versioning](../workflow-versioning.md).

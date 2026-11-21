@@ -32,9 +32,9 @@ agents/skills/triage-note/
   assets/          -- optional templates / data
 ```
 
-At minimum a skill is a folder with a `SKILL.md`. For portable skill authoring,
-match the folder name to the `name` field. Shikigami's current loader only requires
-the presence of `name` and `description`; it does not enforce the full specification.
+Put `SKILL.md` in a directory whose basename matches its `name`. The validator
+checks the YAML frontmatter. The behavior loader reads the name and description
+as flat fields, so use single-line text for both.
 
 ## The `SKILL.md` file
 
@@ -53,8 +53,8 @@ Read the ticket text in the trigger payload and produce a concise triage note.
 
 | Field | Current Shikigami handling |
 | --- | --- |
-| `name` | Required flat frontmatter key; length, spelling, and directory-name match are not validated. |
-| `description` | Required flat frontmatter key; supplied as the system prompt. |
+| `name` | Required. The validator compares it with the directory basename. |
+| `description` | Required, nonempty text. The behavior supplies it as the system prompt. |
 | `license`, `compatibility`, `metadata` | Not interpreted. |
 | `allowed-tools` | Ignored by the current parser; does not restrict or grant tools. |
 
@@ -85,8 +85,7 @@ When a skill-agent fires, the runtime:
 
 The default **stub provider** needs no model key. Setting `behavior.provider=anthropic`
 and supplying its credential enables real model calls. Tool-using Skills additionally
-need installed tools and action authorization. The one-off workspace limitation is
-documented in the [CLI reference](./cli.md).
+need installed tools and action authorization. For a personal repository, configure [local grants](local-operator.md) and [declared tools](declared-tools.md).
 
 > **Sandbox note.** Instructions are supplied to the model; tools come from the runtime registry. Executing a skill's
 > `scripts/` (arbitrary executable code) needs a sandbox and is a **deferred** concern — this
@@ -103,11 +102,10 @@ a `ShikumiProgram.grounding` field, but the current dispatcher does not resolve 
 ## Validate a skill
 
 `validate` checks that the skill-agent's `SKILL.md` can be loaded and contains
-`name` and `description` fields. It does not validate name/directory matching or
-the full Agent Skills specification:
+`name` and `description` fields. The name must match the directory basename and the description must be nonempty. Validate the Kikan example with the distribution command:
 
 ```bash
-$ cabal run shikigami -- validate agents/triage-note.dhall
+$ cabal run kikan-shikigami:exe:kikan-shikigami -- validate agents/triage-note.dhall
 AgentDecl {name = "triage-note", behavior = Skill {path = "agents/skills/triage-note"}, ...}
 OK: 1 agent parsed (skill agents/skills/triage-note valid).
 ```

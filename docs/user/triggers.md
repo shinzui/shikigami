@@ -1,7 +1,7 @@
 ---
 type: "Reference"
 title: "Triggers — when an agent fires"
-description: "Look up schedule, stream, and addressed-event triggers and their feedback guards."
+description: "Look up manual, schedule, stream, and addressed-event triggers and their feedback guards."
 docId: "DOC-4"
 tags: ["triggers", "scheduling", "events"]
 generated:
@@ -11,22 +11,31 @@ generated:
 
 # Triggers — *when* an agent fires
 
-A trigger is one of three classes. They cover the whole space of "when should this agent
-run": on a clock, when the world changes, or when something addresses the agent directly.
+An agent defaults to `Manual`. Select one of the other three trigger classes
+when a scheduler or an intake adapter should start runs automatically.
 
 ```dhall
 let Trigger =
       < Schedule : { cron : Text }
       | Stream   : { match : StreamMatch }
       | Event    : { eventType : Text }
+      | Manual
       >
 ```
 
 | Class | Constructor | Fires when… | Reaches the agent via… |
 | --- | --- | --- | --- |
+| **Manual** | `Trigger.Manual` | an operator requests a run | `shikigami-local run` or explicit admission |
 | **Schedule** | `Trigger.Schedule` | the clock matches a cron expression | a due-time job on the worker queue |
 | **Stream** | `Trigger.Stream` | a matching `activity.v1` envelope is published | the Kafka stream consumer |
 | **Event** | `Trigger.Event` | a public integration event or direct command addresses the agent | the integration-event consumer or run queue |
+
+## Manual — on demand
+
+Omit `trigger` or write `trigger = A.Trigger.Manual`. Schedulers and consumers
+skip a manual declaration. For a local cron agent, use `trigger = R.every "0 7 * * *"`
+for a daily run and start `shikigami-local up` after granting access to
+the repository. See [routine agents](routine-agents.md).
 
 ## Schedule — the clock
 
@@ -41,8 +50,7 @@ minute, a weekly rollup.
 The [active-work watchdog](watchdog.md) uses this schedule path with its own
 verified principal and operator-funded allowance for each admitted tick. Configure
 the same watchdog settings in scheduler and worker; the declaration alone grants
-no spend. Scheduled observation does not enable recurring objective mandates,
-which remain planned separately from ordinary cron agents.
+no spend. Recurring objective supervision requires a separate [mandate](../operations/recurring-objectives.md).
 
 ## Stream — observe `activity.v1`
 
@@ -151,4 +159,5 @@ See the [HTTP API guide](http-api.md) for authentication and status polling.
 | --- | --- |
 | on a fixed cadence | `Schedule` |
 | whenever something happens in the system | `Stream` |
-| only when explicitly invoked / addressed | `Event` |
+| when a person requests it | `Manual` |
+| when a matching public integration event addresses it | `Event` |

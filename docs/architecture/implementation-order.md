@@ -7,9 +7,18 @@
 > for current behavior, package boundaries, and migration qualification.
 
 
-## Current reading order — 2026-10-29
+## Kernel delivery, 2026-11-20
 
-Use [the roadmap](../roadmap.md) for current cross-plan status. MasterPlans 13 and
+[MasterPlan 22](../masterplans/22-rebuild-shikigami-as-a-kernel-where-use-cases-are-declared-not-coded.md#progress)
+completed the kernel rebuild and the real modernization campaign. Begin new use
+cases with a declaration and consider a pack for a custom Flow. The
+[package map](packages.md), [19-surface compatibility baseline](api-baseline.md)
+and [acceptance evidence](kernel-invariants.md#the-three-requirements) describe
+the current boundaries. The pre-release workflow exception ended at `api-baseline-v1`.
+
+## Historical October assessment — 2026-10-29
+
+At this checkpoint the [roadmap](../roadmap.md) recorded the following cross-plan status. MasterPlans 13 and
 15 are complete; MasterPlan 14 has completed plans 81–83 and an in-progress plan
 84. Plans 85–87 remain unimplemented. MasterPlan 16 (Keiro 0.22) and MasterPlan 17
 (objectives/checkpoints) are planned; plan 96 has only repository catalog admission.

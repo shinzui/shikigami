@@ -71,8 +71,8 @@ The proof manifests need matching directory handles or declared principal ids.
 With the shared environment configured, bind the heartbeat grant before starting:
 
 ```bash
-$ cabal run shikigami -- grants grant heartbeat kawa.digest --by operator
-$ cabal run shikigami -- --set agents.directory=agents/proof agents sync
+$ cabal run kikan-shikigami:exe:kikan-shikigami -- grants grant heartbeat kawa.digest --by operator
+$ cabal run kikan-shikigami:exe:kikan-shikigami -- --set agents.directory=agents/proof agents sync
 ```
 
 ## Walkthrough
@@ -93,12 +93,13 @@ each accepted `KawaDigest` back onto the stream (exactly what real kawa's outbox
 
 ```bash
 $ cabal run kikan-shikigami-worker -- --agents agents/proof \
+    --set outputs.default=none \
     --set sinks.kawa.base_url=http://localhost:8088 \
     --set sinks.kizashi.base_url=http://localhost:8089
 {"event":"agents.manifest.loaded", ...}
 ```
 
-The loop runs under the Kikan distribution: its stub is a verb of `kikan-shikigami`, and
+With `outputs.default=none`, only declarations with explicit outputs publish a result. The heartbeat still requests `kawa.digest` and the watcher keeps its own result in the journal. The loop runs under the Kikan distribution: its stub is a verb of `kikan-shikigami`, and
 its worker, `kikan-shikigami-worker`, registers the Kikan outputs the proof agents declare.
 The stock `shikigami-worker` registers no Kikan output (plan 135, M3). The service
 endpoints are the binding's settings, set here with `--set` (or their
@@ -121,7 +122,7 @@ $ cabal run kikan-shikigami-consume-stream -- --agents agents/proof \
 Then enqueue the producer (the worker alone does not arm Schedule triggers):
 
 ```bash
-$ cabal run shikigami -- enqueue-run heartbeat --payload '{}' --key living-loop-1
+$ cabal run kikan-shikigami:exe:kikan-shikigami -- enqueue-run heartbeat --payload '{}' --key living-loop-1
 ```
 
 Use a new `--key` when deliberately starting another run. To test ordinary stream
@@ -153,12 +154,11 @@ flag fires nothing — the guard in action.
 You don't need the stream to exercise the worker. Enqueue an addressed run directly:
 
 ```bash
-$ cabal run shikigami -- enqueue-run heartbeat --payload '{}'
+$ cabal run kikan-shikigami:exe:kikan-shikigami -- enqueue-run heartbeat --payload '{}'
 # the running worker drains the job and runs `heartbeat`
 ```
 
-This is the **Event** trigger class — the path a `mori` automation action or a `kanmon`
-channel-inbound event uses to address an agent directly.
+Direct enqueue addresses the agent by name, independently of its declared trigger. Here it requests the scheduled heartbeat between ticks. A public integration event uses the separate `Event` matcher.
 
 ## Danwa addressed conversations (public topic)
 
@@ -200,13 +200,13 @@ agent starts two named specialists, parks durably while they run, and resumes wi
 Start the worker against the proof manifests:
 
 ```bash
-$ cabal run shikigami-worker -- --agents agents/proof
+$ cabal run kikan-shikigami-worker -- --agents agents/proof
 ```
 
 In another shell, enqueue the supervisor:
 
 ```bash
-$ cabal run shikigami -- enqueue-run research-supervisor \
+$ cabal run kikan-shikigami:exe:kikan-shikigami -- enqueue-run research-supervisor \
     --payload '{"topic":"durable workflows"}'
 ```
 
@@ -217,8 +217,8 @@ result is recorded in kioku as the supervisor run's behavior output.
 To inspect the parent and child runs, use the supported operator commands:
 
 ```bash
-$ cabal run shikigami -- wf list --name shikigami.agent-run
-$ cabal run shikigami -- runs show shikigami.agent-run <workflow-id> --json
+$ cabal run kikan-shikigami:exe:kikan-shikigami -- wf list --name shikigami.agent-run
+$ cabal run kikan-shikigami:exe:kikan-shikigami -- runs show shikigami.agent-run <workflow-id> --json
 ```
 
 The run/session evidence records parent session identity and delegation depth.

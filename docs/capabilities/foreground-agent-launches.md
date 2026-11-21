@@ -39,6 +39,6 @@ Configure `launch` and its safety policy and run the attended command from a ter
 
 ## Limits
 
-These launches create no Shikigami workflow, memory session, or sink receipt. Attended launches need stdin/stdout terminals, a real directory, vendor executable, and login. Named unattended jobs use their separate mounted launcher; their availability does not enable the refused background CLI response providers in agent runs.
+These launches create no Shikigami workflow, memory session, or sink receipt. Attended launches need stdin/stdout terminals, a real directory, vendor executable, and login. To run a coding tool as a journaled step, declare a [durable coding-agent worker](durable-coding-agents.md) under local-operator authority.
 
 The available implementation is unreleased. No Shikigami release tags or published releases were present when this catalog was authored; the Cabal package version alone does not establish a released compatibility promise.
