@@ -70,9 +70,9 @@ and it fails closed.*
   (`toAgentAction` over every `Action` constructor).
 * **Evidence:** the stock run's `authority.decided emit_output` is `decidedBy: operator`; the
   distribution run's two are `decidedBy: service:kikan-en`, at enqueue and at publish.
-* **Partial:** Kikan-En names no action for a declared tool or a coding-agent launch, so the
-  distribution refuses them (`mori://shinzui/kikan-en/improvement-requests/IR-5`). This is
-  fail-closed, not a hole.
+* **Partial:** The binding maps capability connections and tool invocations to exact Kikan-En actions.
+  The declared-tool runtime admits only local-operator runs. A coding-agent launch has no
+  Kikan-En action and the binding refuses it. [Binding action mapping](../../packs/kikan-shikigami-binding/src/Kikan/Shikigami/Binding/Authority.hs) · [Kikan-En launch request](mori://shinzui/kikan-en/okf/improvement-requests/concepts/IR-5).
 
 
 ## K3 Record
@@ -196,8 +196,8 @@ is unknown is never retried automatically.*
 
 All eleven children of [MasterPlan 22](../masterplans/22-rebuild-shikigami-as-a-kernel-where-use-cases-are-declared-not-coded.md#progress)
 are complete. The [v1 API baseline](api-baseline.md) enforces 19 surfaces. The portability
-runs used fixture Kikan authority. Organizational adoption of declared tools and coding
-agents still needs actions the Kikan binding can authorize.
+runs used fixture Kikan authority. The local-operator restriction on declared tools and the missing
+Kikan-En launch action still limit organizational adoption.
 
 ## Gaps against an invariant
 

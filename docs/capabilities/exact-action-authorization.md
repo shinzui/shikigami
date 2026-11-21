@@ -46,6 +46,6 @@ Builds on [CAP-6: Principal lifecycle and continuity](principal-lifecycle-and-co
 
 ## Limits
 
-An unconfigured deployment authority denies protected actions. Kikan-En currently refuses declared tools and coding-agent launches. The Kikan adapter requires [the policy service](mori://shinzui/kikan-en), [the credential issuer](mori://shinzui/shomei), and configured verifier trust; this repository supplies the enforcing client boundaries.
+An unconfigured deployment authority denies protected actions. The binding maps capability connections and tool invocations to Kikan-En. Declared tools require the local-operator tier. The binding refuses coding-agent launches because Kikan-En lacks a launch action. The Kikan adapter requires [the policy service](mori://shinzui/kikan-en), [the credential issuer](mori://shinzui/shomei), and configured verifier trust; this repository supplies the enforcing client boundaries.
 
 The available implementation is unreleased. No Shikigami release tags or published releases were present when this catalog was authored; the Cabal package version alone does not establish a released compatibility promise.

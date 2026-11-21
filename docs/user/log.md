@@ -2,6 +2,8 @@
 
 ## 2026-11-21
 
+- Clarified which local-operator features need a new Kikan-En launch action.
+
 - Updated the first-run, declaration and CLI examples for stock and Kikan execution. Documented manual triggers, composition defaults, the six behaviors, playbook recovery and the roles that own the organizational packs.
 - Checked a scaffolded Skill through first confirmation, report delivery and a second unattended run against disposable PostgreSQL. The typed-decision example completed with the stub provider, and the stock HTTP heartbeat progressed from acceptance to success. Validated the campaign bundle and the stock/Kikan heartbeat output boundary.
 

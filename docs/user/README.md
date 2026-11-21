@@ -59,8 +59,8 @@ Kikan output or Flow needs an executable composed with its pack. Use
 `shikigami flows` or `kikan-shikigami flows` to inspect the composition.
 
 Durable coding-agent launches and declared CLI/MCP tools currently require
-local-operator authority. Organizational adoption of those actions is gated on
-support in the Kikan-En binding. The [portability example](outputs.md#one-declaration-two-compositions)
+local-operator authority. The deployed Kikan binding also needs a new action
+to authorize coding-agent launches. The [portability example](outputs.md#one-declaration-two-compositions)
 shows the common subset, and the [invariant audit](../architecture/kernel-invariants.md)
 records what was checked under each composition.
 

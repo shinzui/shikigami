@@ -41,9 +41,10 @@ and four use-case packs. It provides both one-off and deployed roles. The
 binding supplies Kikan-En authority, service outputs, approval and conversation
 channels, Rei tracker access and Kafka transport. Choosing an executable
 selects the available adapters. Choosing a trust tier selects how that run
-obtains authority and executes processes. The binding currently refuses
-declared-tool and coding-agent actions. Organizational adoption of these
-features awaits matching Kikan-En actions.
+obtains authority and executes processes. The binding maps capability connections and tool
+invocations to exact Kikan-En actions. The declared-tool runtime restricts tools
+to the local-operator tier. The binding refuses coding-agent launches pending a
+[Kikan-En launch action](mori://shinzui/kikan-en/okf/improvement-requests/concepts/IR-5).
 
 ## The seven packages
 
