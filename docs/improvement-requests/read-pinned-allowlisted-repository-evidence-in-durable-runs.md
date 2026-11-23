@@ -9,6 +9,7 @@ generated:
 requestId: IR-24
 status: proposed
 origin: mori://tan/tan-product-management
+originPlan: mori://tan/tan-product-management/masterplans/2-add-shikigami-product-management-reviews-and-follow-up
 ---
 
 # Read pinned, allowlisted repository evidence in durable runs
@@ -125,14 +126,11 @@ payload bound. Which paths a review selects stays with the consumer. It can keep
 committed selection manifest in its own repository, which the Flow reads first at the
 pinned commit.
 
-## Related question on IR-18
+## Relationship to IR-18
 
-[IR-18](support-recurring-objective-supervision.md) lists as its sixth acceptance case
-that "a later relevant event resumes useful authorized work". Plan 87 shipped mandates
-as read-only checkpoint supervision that "dispatches no model, worker, tool, external
-publication or user notification"
-(`docs/operations/recurring-objectives.md`). Is dispatching work from a mandate
-intended future scope, or is IR-18 closed at the read-only boundary on purpose? It
-matters to this consumer only in combination with this request. A `Schedule` trigger
-already covers a fixed weekly cadence once repository reads exist. A mandate that
-starts one addressed run per changed checkpoint would add event-driven reviews on top.
+[IR-18](support-recurring-objective-supervision.md) closed with read-only checkpoint
+supervision. [Plan 87's acceptance evidence](../evidence/plan-87/acceptance.md) shows
+that a later relevant event resumes supervision and accepts a changed checkpoint
+once. Starting an addressed review on a changed checkpoint would require separate
+dispatch authority. A `Schedule` trigger already covers the fixed weekly cadence
+once repository reads exist.

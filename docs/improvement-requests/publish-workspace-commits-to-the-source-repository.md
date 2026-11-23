@@ -9,6 +9,7 @@ generated:
 requestId: IR-23
 status: proposed
 origin: mori://shinzui/mori
+originPlan: mori://shinzui/mori/masterplans/38-close-uc-2-with-constraint-aware-agent-driven-dependency-upgrades
 ---
 
 # Publish workspace commits to the source repository

@@ -9,6 +9,7 @@ generated:
 requestId: IR-25
 status: proposed
 origin: mori://tan/tan-product-management
+originPlan: mori://tan/tan-product-management/masterplans/2-add-shikigami-product-management-reviews-and-follow-up
 ---
 
 # Run subscription-backed generative steps in durable Flows

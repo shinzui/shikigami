@@ -1,5 +1,22 @@
 # Bundle Update Log
 
+## 2026-11-23
+* **Audit**: Reviewed all 26 requests. IR-21 moves from completed to in-progress.
+  The retained [plan 118 case 3](../evidence/plan-118/case-3.json) ends at admission
+  with a pending assignment. The acceptance criterion still requires a reviewable
+  artifact and no publication. The report records the historical 2026-11-05 closure.
+* **Links**: Linked IR-20 to [MasterPlan 21](../masterplans/21-execute-governed-work-through-enrolled-machine-daemons.md)
+  as its implementation plan. IR-20 remains proposed. Added source-plan links for
+  IR-8, IR-10, IR-11 and IR-22 through IR-26 to the Mori and TAN plans that raised
+  those requests.
+* **Evidence**: Recorded the 2026-11-09 completion timestamp and
+  [plan 87 evidence](../evidence/plan-87/acceptance.md) for IR-18. Added resolution
+  evidence to IR-8, IR-13, IR-15 and IR-19. Updated IR-11 from the
+  [25-case qualification](../evidence/plan-96/joint-native-qualification.json),
+  and refreshed the adaptive requests using the
+  [plan 86 native results](../evidence/adaptive-delivery/native-qualification.md)
+  and its open live gate.
+
 ## 2026-11-18
 * **Update**: Widen IR-22 beyond workspace Skills: a run whose behavior reports it stopped, such as a playbook with `"outcome": "stopped"`, must not be `succeeded`, with failure kinds that tell a work stop from an environment stop, for `mori://shinzui/mori/okf/use-cases/concepts/UC-2`.
 

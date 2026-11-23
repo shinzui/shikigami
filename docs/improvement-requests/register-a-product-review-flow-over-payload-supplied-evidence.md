@@ -9,6 +9,7 @@ generated:
 requestId: IR-26
 status: proposed
 origin: mori://tan/tan-product-management
+originPlan: mori://tan/tan-product-management/plans/11-run-recurring-product-reviews-with-durable-history-and-delivery
 ---
 
 # Register a product-review Flow over payload-supplied evidence

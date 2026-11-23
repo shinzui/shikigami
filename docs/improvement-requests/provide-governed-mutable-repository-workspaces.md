@@ -12,6 +12,7 @@ completedAt: "2026-11-02T19:57:20Z"
 resolution: "Implemented by plan 96; all 25 native cases and final host checks pass, including real ownership receipt recovery, accepted successor effects and exact integrated artifacts."
 targetPlan: docs/plans/96-provide-governed-mutable-repository-workspaces-for-durable-agents.md
 origin: mori://shinzui/mori
+originPlan: mori://shinzui/mori/plans/283-prove-agent-driven-dependency-upgrades-and-close-uc-2
 reviews:
   - kind: model
     reviewer: process:codex
@@ -29,20 +30,13 @@ reviews:
 
 ## Status
 
-**In progress under [plan 96](../plans/96-provide-governed-mutable-repository-workspaces-for-durable-agents.md).**
+**Completed on 2026-11-02 under [plan 96](../plans/96-provide-governed-mutable-repository-workspaces-for-durable-agents.md).**
 The configured durable worker now admits isolated workspaces, freezes scoped
 repository instructions, applies governed edits, runs contained validation and
-returns exact local commits. The fourteen-case native matrix proves the normal
-parent/child upgrade across worker restart and independent file/process/Git
-recovery. Operator listing and terminal cleanup are implemented. Concrete
-workspace fencing, retained successor/followup authority and exact-artifact
-integration planning pass the complete 22-case workspace-owned native matrix,
-including exact combined-tree validation and a combined-only failure.
-[Bounded native facts](../evidence/plan-96/native-workspace-facts.json) retain
-the artifacts, statuses, follow-up ownership and fence. Production remains on
-the qualified earlier adapter revisions until
-native successor-write/handoff gates pass. Full reassignment acceptance remains
-open alongside the separately owned real objective ownership provider from
+returns exact local commits. The [25-case native matrix](../evidence/plan-96/joint-native-qualification.json)
+qualifies worker restart, independent file/process/Git receipt recovery, terminal
+cleanup, successor writes after fencing, and validation of the exact integrated
+tree. The reassignment cases use the real objective ownership provider from
 [plan 99](../plans/99-supply-trusted-objective-associations-and-the-real-checkpoint-ownership-and-scope-providers.md).
 
 This request supplies the execution capability needed by the agent-driven
@@ -64,7 +58,7 @@ acceptance can pass; they do not implement this workspace provider.
 [Plan 78: Run external operations from durable Flows through idempotent shiki jobs](../plans/78-run-external-operations-from-durable-flows-through-idempotent-shiki-jobs.md)
 is related external-executor work, not a selected mutable-workspace implementation.
 
-## Context
+## Original context
 
 An addressed Shikigami agent can receive Mori's release and workflow payload, but an instruction
 alone does not grant access to the dependent repository. A dependency-upgrade agent needs a real,
@@ -74,7 +68,7 @@ allow concurrent runs to corrupt one checkout, and bypass Shikigami's declared c
 per-action authorization model.
 
 Shikigami already separates a declared capability catalog from runtime providers and requires a
-fresh exact authorization decision immediately before protected external IO. The missing piece is
+fresh exact authorization decision immediately before protected external IO. The missing piece was
 an operator-owned durable-run provider for repository work that preserves those boundaries.
 
 ## Requested Change

@@ -9,6 +9,7 @@ generated:
 requestId: IR-15
 status: completed
 completedAt: "2026-11-03T19:51:00Z"
+resolution: "Plan 84 qualified all six cases with real ownership providers, including ordered follow-ups, replay and fenced handoff across restart."
 targetPlan: docs/plans/84-coordinate-continuing-worker-sessions-and-fenced-handoffs.md
 origin: mori://shinzui/shikigami
 ---
@@ -29,8 +30,8 @@ Linux ownership/restart cases exercising actual administrative recovery.
 supplies the qualified objective/checkpoint, ownership and scope providers.
 [Plan 96](../plans/96-provide-governed-mutable-repository-workspaces-for-durable-agents.md)
 supplies workspace/process fences and its full 25-case real-owner matrix.
-Plan 85 owns adaptive coordination, plan 86 integrated live coding qualification
-and plan 87 recurrence; those separate outcomes remain open. See
+Plan 85 delivered adaptive coordination and plan 87 qualified recurring checkpoint
+supervision. Plan 86 retains the live coding trial and trusted billing reconciliation. See
 [worker operations](../operations/operator-cli.md) for configuration and refusals.
 
 ## Problem and current coverage

@@ -28,9 +28,9 @@ Completed [plan 85](../plans/85-adapt-durable-delivery-through-validated-coordin
 qualifies coordinator-proposed escalation reaching the actual specialist model in
 the same native session and the real IR-12 Flow permission regression. Its
 [acceptance evidence](../evidence/plan-85/acceptance.md) retains those boundaries.
-[plan 86](../plans/86-qualify-integrated-adaptive-autonomous-delivery.md) has not
-started and still owns integrated distinct-model repository delivery and the live
-trial. These remaining integrated gates do not indicate missing selection primitives.
+[Plan 86](../plans/86-qualify-integrated-adaptive-autonomous-delivery.md) qualified
+integrated repository delivery with recorded fixture selections and retained
+accounting. The actual-model trial and trusted billing reconciliation remain open.
 The declaration fields and operator model catalog are documented in
 [Writing agents](../user/writing-agents.md).
 

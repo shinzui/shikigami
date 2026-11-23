@@ -12,6 +12,7 @@ completedAt: "2026-10-26T02:23:58Z"
 resolution: "Plan 91 under MasterPlan 15 serves the typed lifecycle/history API and client. Real worker, PostgreSQL and HTTP tests verify success, permanent failure, cancellation, refusal and automatic pre-workflow dead-letter reconciliation; durable receipts survive later cleanup under the documented retention policy."
 targetPlan: docs/masterplans/15-expose-declared-agents-and-agent-runs-over-the-public-http-api.md
 origin: mori://shinzui/mori
+originPlan: mori://shinzui/mori/plans/282-track-agent-runs-to-terminal-workflow-outcomes
 reviews:
   - kind: model
     reviewer: process:codex
@@ -47,17 +48,17 @@ is verified before cleanup; the operator runbook documents that condition.
 See [ADR 0050](../adr/0050-run-status-reconciles-retained-dead-letters-through-the-released-read-api.md)
 and resolved [FRIC-7](../friction-log/7-automatic-pgmq-exhaustion-bypasses-the-domain-disposition-hook.md).
 
-## Context
+## Original context
 
 Mori's dependency-cascade workflow must not release downstream repositories merely because
 Shikigami accepted an upgrade-agent request. It must wait until the agent has actually completed
 the constraint change and build repair, then close the corresponding workflow step as succeeded or
 failed.
 
-Shikigami already owns the required durable truth. `shikigami runs show` joins the Keiro workflow
+Before plan 91, Shikigami already owned the required durable truth. `shikigami runs show` joins the Keiro workflow
 instance to the Kioku session through the recorded `open-session` step and reports workflow status,
-session status, summary, and error. The public `ShikigamiApi` still exposes only health, however,
-so a service caller cannot perform that supported join. Reading Keiro or Kioku tables from Mori
+session status, summary, and error. The public API had no supported run-status read for service
+callers. Reading Keiro or Kioku tables from Mori
 would violate both projects' ownership boundaries.
 
 ## Requested Change

@@ -7,8 +7,7 @@ generated:
   by: process:claude-code
   at: "2026-11-04T04:09:59Z"
 requestId: IR-21
-status: completed
-completedAt: "2026-11-05T03:30:00Z"
+status: in-progress
 targetPlan: docs/masterplans/20-propose-unrequested-work-from-observed-activity-under-governed-standing-policies.md
 origin: mori://shinzui/shikigami
 ---
@@ -17,7 +16,15 @@ origin: mori://shinzui/shikigami
 
 ## Status
 
-**Accepted; implementation planned but not started.**
+**In progress.** Proposal intake, human acceptance and standing-policy admission
+are implemented and exercised by the [plan 118 fixture](../evidence/plan-118/acceptance.md).
+The completion recorded at `2026-11-05T03:30:00Z` treated case 3 as passed. Its
+[retained result](../evidence/plan-118/case-3.json) shows an admitted objective
+with a pending assignment and zero workspace bindings. The
+[fixture](../../packs/flow-pack-initiative/test/FlowPack/Initiative/AcceptanceSpec.hs)
+checks the objective's instructions to stop at a reviewable artifact. Case 3 still needs
+evidence that the admitted objective reaches that artifact without publishing it.
+
 [MasterPlan 20](../masterplans/20-propose-unrequested-work-from-observed-activity-under-governed-standing-policies.md)
 coordinates this request through five child plans: bounded observation with observer
 allowances, closed source adapters, a deterministic pre-filter and the proposal ledger
@@ -28,9 +35,9 @@ the stream-triggered `propose-work` Flow with durable human acceptance and trust
 links ([plan 116](../plans/116-propose-work-through-a-stream-triggered-flow-with-durable-human-acceptance-and-trusted-origin-links.md)),
 standing policies and autonomous admission of bounded objectives
 ([plan 117](../plans/117-admit-bounded-objectives-autonomously-under-explicit-revocable-standing-policies.md)),
-and operator observability with the integrated acceptance runner that closes this request
-([plan 118](../plans/118-make-proposals-observable-to-operators-and-qualify-ir-21.md)). No child has
-started. The MasterPlan records why the pre-filter runs at the trigger and only the Flow
+and operator observability with the integrated acceptance runner
+([plan 118](../plans/118-make-proposals-observable-to-operators-and-qualify-ir-21.md)).
+The MasterPlan records why the pre-filter runs at the trigger and only the Flow
 calls a model, why a proposal is keyed by observer principal and source subject, why model
 output is validated into a sealed assessment that cannot express authority, why standing
 policies are revocable durable rows read fresh at every admission, and why admitted work is

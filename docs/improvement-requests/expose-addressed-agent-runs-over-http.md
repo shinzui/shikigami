@@ -9,8 +9,10 @@ generated:
 requestId: IR-8
 status: completed
 completedAt: "2026-10-25T23:36:13Z"
+resolution: "Plan 90 qualified authenticated addressed runs, atomic acceptance and queueing, concurrent idempotency, and conflict handling through database and live HTTP tests."
 targetPlan: docs/masterplans/15-expose-declared-agents-and-agent-runs-over-the-public-http-api.md
 origin: mori://shinzui/mori
+originPlan: mori://shinzui/mori/plans/150-add-an-agent-automation-action-that-invokes-shikigami-agents-from-reactions
 reviews:
   - kind: model
     reviewer: process:codex

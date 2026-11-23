@@ -9,6 +9,7 @@ generated:
 requestId: IR-22
 status: proposed
 origin: mori://shinzui/mori
+originPlan: mori://shinzui/mori/masterplans/38-close-uc-2-with-constraint-aware-agent-driven-dependency-upgrades
 ---
 
 # Attest run outcomes in run status
@@ -59,6 +60,11 @@ Playbooks have the same gap, and there no model text is involved at all:
   reports `succeeded`.
 - The only code that reads `stopped` is the learning step, which skips recording a lesson when
   `stoppedByEnvironment` holds. Nothing connects it to the run status.
+
+The playbook correction in `ffafc9a8` makes a nonzero coding-agent exit produce a
+stop inside the playbook. The public run status still classifies the durable workflow outcome.
+[Plan 132](../plans/132-modernize-the-keiro-services-with-a-declared-campaign-playbook.md)
+records the correction and its regression check.
 
 So the playbook already knows it did not finish, and the public status says the opposite. [IR-11](provide-governed-mutable-repository-workspaces.md) asked for "structured terminal
 evidence from the run" in its sixth requested change. That evidence exists in workspace receipts and

@@ -27,10 +27,11 @@ attempt evidence are also complete; decision evidence remains distinct from Skil
 completed on 2026-11-03 and establishes acceptance 8's continuing-assignment,
 compaction, crash/replay, pinned-selection and shared-accounting behavior. Its
 [consumer acceptance matrix](../evidence/plan-84/acceptance.md) retains the proof.
-This request remains in progress for the integrated
-[UC-1](../use-cases/adaptive-autonomous-delivery.md) recheck owned by
-[plan 86](../plans/86-qualify-integrated-adaptive-autonomous-delivery.md), which has
-not started. Component completion does not close that integrated gate.
+The [plan 86](../plans/86-qualify-integrated-adaptive-autonomous-delivery.md)
+[native fixture](../evidence/adaptive-delivery/native-qualification.md) exercised
+accepted follow-up and committed-tool recovery in the integrated repository scenario.
+The final integrated [UC-1](../use-cases/adaptive-autonomous-delivery.md) gate still
+requires trusted billing reconciliation and the actual-model trial.
 
 ## Original problem
 
@@ -59,8 +60,8 @@ See [execution recovery](../operations/durable-execution.md).
 Durable overlay admission still permits observations only; this request does not install
 mutable workspace providers or conversation overlays. Human harness permission is followed
 by fresh exact-action authorization before protected dispatch. Unknown unsafe effects remain
-unresolved until reconciliation, with their resource reservations held. Continued-assignment
-and integrated qualification remains assigned to plans 84/86 as stated above.
+unresolved until reconciliation, with their resource reservations held. Plans 84
+and 86 supply the continuing-assignment and integrated evidence described above.
 
 ## Requested change
 

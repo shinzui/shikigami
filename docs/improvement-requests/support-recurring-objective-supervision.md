@@ -8,6 +8,8 @@ generated:
   at: "2026-10-29T13:33:46Z"
 requestId: IR-18
 status: completed
+completedAt: "2026-11-09T02:36:16Z"
+resolution: "Plan 87 qualified both native recurrence modes with the real checkpoint owner, including coalescing, restart recovery, authority stops, retained root limits and resumption on changed evidence."
 targetPlan: docs/plans/87-supervise-recurring-objectives-from-current-durable-checkpoints.md
 origin: mori://shinzui/shikigami
 ---
@@ -20,8 +22,9 @@ origin: mori://shinzui/shikigami
 Explicit finite mandates, current-checkpoint cycles, event/timer coalescing,
 restart recovery, idle backoff, stop controls and retained root usage are
 implemented. Both continuing and fresh native modes provide read-only checkpoint
-supervision against the real objective owner. They do not install model/tool or
-workspace authority. [Acceptance evidence](../evidence/plan-87/acceptance.md)
+supervision against the real objective owner. In acceptance case 6, a relevant
+event resumes supervision and accepts the changed checkpoint once. Mandates
+carry read-only checkpoint authority. [Acceptance evidence](../evidence/plan-87/acceptance.md)
 records native recovery, separate expiry/revocation/cancellation trials,
 uncertain holds, full package checks and compatible evolution. See
 [operator usage](../operations/recurring-objectives.md). Recurrence remains an

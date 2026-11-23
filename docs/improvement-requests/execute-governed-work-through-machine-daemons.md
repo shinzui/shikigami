@@ -8,6 +8,7 @@ generated:
   at: "2026-11-04T04:09:59Z"
 requestId: IR-20
 status: proposed
+targetPlan: mori://shinzui/shikigami/masterplans/21-execute-governed-work-through-enrolled-machine-daemons
 origin: mori://shinzui/shikigami
 ---
 
@@ -15,7 +16,12 @@ origin: mori://shinzui/shikigami
 
 ## Status
 
-**Proposed; no implementation plan selected.** This request adopts the machine-daemon element
+**Proposed.** [MasterPlan 21](../masterplans/21-execute-governed-work-through-enrolled-machine-daemons.md)
+owns delivery through plans 119–123, covering enrollment, local policy, workspace
+hosting, durable command relay and qualification across severable machines. All
+five plans are unstarted.
+
+This request adopts the machine-daemon element
 of DeepSeek Harness's "Exploring Super-agent Design" notes (1 November 2026), read from a
 summary diagram rather than the source text. Those notes leave one security question open: a
 hijacked cloud agent could reach every connected machine. This request treats that question as
